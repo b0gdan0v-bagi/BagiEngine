@@ -374,9 +374,9 @@ namespace BECore::Tests {
         ArtGenAcceptAnswer ungrouped;
         AddAtlasKeysToReply(ungrouped, "", Optional<AtlasWritten>{});
 
-        const Json text = AnswerText(ungrouped);
-        EXPECT_EQ(FindJsonMember(text, "atlasGroup"), nullptr);
-        EXPECT_EQ(FindJsonMember(text, "atlas"), nullptr);
+        const ControlReply text = AnswerReply(ungrouped);
+        EXPECT_FALSE(text.View().Find("atlasGroup").has_value());
+        EXPECT_FALSE(text.View().Find("atlas").has_value());
     }
 
 }  // namespace BECore::Tests

@@ -1,6 +1,6 @@
+#include <BECore/ArtGenAnswerText.h>
 #include <BECore/Audio/AudioDecode.h>
 #include <BECore/AudioTestSupport.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <Common/JsonDoc.h>
@@ -217,13 +217,13 @@ namespace BECore::Tests {
 
         const auto text = ReadTextFile(written->provenanceFile);
         ASSERT_TRUE(text.has_value()) << text.error().c_str();
-        const auto provenance = ParseJson(*text);
-        ASSERT_TRUE(provenance.has_value());
-        EXPECT_EQ(GetJsonInt(*provenance, "seed"), Optional<int64_t>(4)) << "the generation's record is kept";
-        const Json* accepted = FindJsonMember(*provenance, "accepted");
-        ASSERT_NE(accepted, nullptr);
-        EXPECT_EQ(GetJsonString(*accepted, "clip"), Optional<String>("assets/artgen/knock.wav"));
-        EXPECT_EQ(DumpJson(Require(FindJsonMember(*accepted, "processing"))), SoundSettingsText(ArtGenSoundSettings{}));
+        const JsonDoc provenance{StringView(*text)};
+        ASSERT_TRUE(provenance.IsParsed());
+        EXPECT_EQ(IntOf(provenance.Root(), "seed"), Optional<int64_t>(4)) << "the generation's record is kept";
+        const JsonView accepted = MemberOf(provenance.Root(), "accepted");
+        ASSERT_TRUE(accepted.IsObject());
+        EXPECT_EQ(StringOf(accepted, "clip"), "assets/artgen/knock.wav");
+        EXPECT_EQ(SortedTextOf(MemberOf(accepted, "processing")), SoundSettingsText(ArtGenSoundSettings{}));
     }
 
     TEST_F(ArtGenSoundAcceptTest, TheRecordIsWrittenSortedAndMeasuresAreDoublesNotShortestFloats) {

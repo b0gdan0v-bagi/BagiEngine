@@ -1,9 +1,11 @@
 #include <BECore/ArtGenAnswerText.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonViewOps.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/JsonDoc.h>
+#include <Common/JsonEdit.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
@@ -20,32 +22,34 @@ namespace BECore::Tests {
 
         constexpr int kFrameGuard = 100;
 
-        Json Object() {
-            return Json::object();
+        constexpr StringView kReadyPoll = R"({"generator":"fake","presets":[{"name":"wood","title":"wood"},{"error":"no workflow 'x'","name":"broken","title":"broken"}],"state":"ready"})";
+
+        constexpr StringView kDraftPreset = R"({"params":{"steps":9},"preset":1,"prompt":"a {subject}","workflow":"sdxl_basic"})";
+
+        /// Two presets (the game's `wood` with its content, the engine's `sprite`) and two workflows (one broken)
+        constexpr StringView kCatalogPoll =
+            R"({"generator":"fake","presets":[{"name":"wood","preset":{"preset":1,"prompt":"carved {subject}","title":"Wood","workflow":"sdxl_basic"},"source":"game","title":"wood"},)"
+            R"({"name":"sprite","preset":{"preset":1,"prompt":"{subject}","workflow":"sdxl_cutout"},"source":"engine","title":"sprite"}],"state":"ready",)"
+            R"("workflows":[{"inputs":{"sampler":{"choices":["euler","ddim"],"default":"euler"},"steps":{"default":25}},"name":"sdxl_basic","source":"engine"},)"
+            R"({"error":"no inputs","name":"broken","source":"game"}]})";
+
+        /// The catalog poll with the members @p raw (JSON text) of the saved preset `wood` at @p key (`accept`, `atlas`)
+        String CatalogWithWood(StringView key, StringView raw) {
+            return JsonWith(kCatalogPoll, Format("/presets/0/preset/{}", key), raw);
         }
 
-        Json Preset(StringView name, StringView error = {}) {
-            Json item = Json::object();
-            item["name"] = ToStdString(name);
-            item["title"] = ToStdString(name);
-            if (!error.empty()) {
-                item["error"] = ToStdString(error);
-            }
-            return item;
+        bool HasResult(const ControlReply& reply) {
+            return reply.View().Find("result").has_value();
         }
 
-        Json ReadyPoll() {
-            Json params = Json::object();
-            params["state"] = "ready";
-            params["generator"] = "fake";
-            params["presets"] = Json::array({Preset("wood"), Preset("broken", "no workflow 'x'")});
-            return params;
+        /// The params of `artgen_accept` for the variant @p seed as the sprite `icon`, with the members @p more (`"atlas":"a"`)
+        String AcceptParams(int64_t seed, StringView more = {}) {
+            return more.empty() ? Format(R"({{"seed":{},"sprite":"icon"}})", seed) : Format(R"({{"seed":{},"sprite":"icon",{}}})", seed, more);
         }
 
-        Json Report(uint32_t id) {
-            Json params = Json::object();
-            params["id"] = id;
-            return params;
+        /// A report of the service about the run @p id with the members @p members (`"seed":1,"path":"x.png"`)
+        String Report(uint32_t id, StringView members = {}) {
+            return members.empty() ? Format(R"({{"id":{}}})", id) : Format(R"({{"id":{},{}}})", id, members);
         }
 
         /// What the fake acceptor was called with (a function pointer cannot capture, so the test reads it here)
@@ -99,44 +103,38 @@ namespace BECore::Tests {
     protected:
         ArtGenSessionTest() : session([this] { return now; }) {}
 
-        /// One control call through the service, as the bridge makes it; the parsed response
-        Json Call(StringView method, const Json& params = Json::object()) {
-            Json request = Json::object();
-            request["id"] = ++_nextId;
-            request["method"] = ToStdString(method);
-            request["params"] = params;
-            Optional<Json> response;
-            service.Post(DumpJson(request), [&response](String reply) {
-                auto parsed = ParseJson(reply);
-                response = parsed ? std::move(*parsed) : Json();
+        /// One control call through the service, as the bridge makes it; the answer, empty when none came
+        ControlReply Call(StringView method, StringView params = "{}") {
+            ControlReply response;
+            bool answered = false;
+            service.Post(MakeRequestText(++_nextId, method, params), [&](const String& reply) {
+                response = ControlReply(StringView(reply.c_str(), reply.size()));
+                answered = true;
             });
-            for (int frame = 0; !response && frame < kFrameGuard; ++frame) {
+            for (int frame = 0; !answered && frame < kFrameGuard; ++frame) {
                 service.Drain();
                 service.EndFrame();
             }
-            return response ? std::move(*response) : Json();
+            return response;
+        }
+
+        ControlReply Call(StringView method, const char* params) {
+            return Call(method, StringView(params));
+        }
+
+        ControlReply Call(StringView method, const String& params) {
+            return Call(method, StringView(params.c_str(), params.size()));
         }
 
         /// Runs a request to its end with images of @p seeds, as the service would
         uint32_t RunWithImages(std::initializer_list<int64_t> seeds, bool keep = false) {
             const uint32_t id = Require(session.Request("wood", "queen", static_cast<int32_t>(seeds.size()), *seeds.begin(), keep));
-            Call("artgen_poll", ReadyPoll());
+            Call("artgen_poll", kReadyPoll);
             for (int64_t seed : seeds) {
-                Json image = Report(id);
-                image["seed"] = seed;
-                image["path"] = Format("D:/out/queen_{}.png", seed).c_str();
-                Call("artgen_image", image);
+                Call("artgen_image", Report(id, Format(R"("path":"D:/out/queen_{}.png","seed":{})", seed, seed)));
             }
-            Json done = Report(id);
-            done["status"] = "ok";
-            Call("artgen_done", done);
+            Call("artgen_done", Report(id, R"("status":"ok")"));
             return id;
-        }
-
-        static const Json& Result(const Json& response) {
-            static const Json kNull;
-            const Json* result = FindJsonMember(response, "result");
-            return result != nullptr ? *result : kNull;
         }
 
         void SetUp() override {
@@ -156,99 +154,75 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSessionTest, APollReportsTheServiceAndHandsTheRequestOverOnce) {
         EXPECT_FALSE(session.IsServiceConnected());
-        Json poll = Call("artgen_poll", ReadyPoll());
-        EXPECT_EQ(GetJsonString(Result(poll), "gameRoot"), Optional<String>("D:/Games/Chess"));
-        EXPECT_EQ(FindJsonMember(Result(poll), "request"), nullptr);
+        ControlReply poll = Call("artgen_poll", kReadyPoll);
+        EXPECT_EQ(StringOf(poll.Result(), "gameRoot"), "D:/Games/Chess");
+        EXPECT_FALSE(poll.Result().Find("request").has_value());
         EXPECT_TRUE(session.IsServiceConnected());
         ASSERT_EQ(session.GetServiceStatus().presets.size(), 2u);
 
-        Json params = Object();
-        params["preset"] = "wood";
-        params["subject"] = "white knight";
-        params["count"] = 2;
-        params["seed"] = 7;
-        Json generated = Call("artgen_generate", params);
-        const auto id = GetJsonInt(Result(generated), "id");
+        const ControlReply generated = Call("artgen_generate", R"({"count":2,"preset":"wood","seed":7,"subject":"white knight"})");
+        const auto id = IntOf(generated.Result(), "id");
         ASSERT_TRUE(id.has_value());
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Queued);
 
-        poll = Call("artgen_poll", ReadyPoll());
-        const Json* request = FindJsonMember(Result(poll), "request");
-        ASSERT_NE(request, nullptr);
-        EXPECT_EQ(GetJsonInt(*request, "id"), id);
-        EXPECT_EQ(GetJsonString(*request, "preset"), Optional<String>("wood"));
-        EXPECT_EQ(GetJsonString(*request, "subject"), Optional<String>("white knight"));
-        EXPECT_EQ(GetJsonInt(*request, "count"), Optional<int64_t>(2));
-        EXPECT_EQ(GetJsonInt(*request, "seed"), Optional<int64_t>(7));
+        poll = Call("artgen_poll", kReadyPoll);
+        const JsonView request = MemberOf(poll.Result(), "request");
+        ASSERT_TRUE(request.IsObject());
+        EXPECT_EQ(IntOf(request, "id"), id);
+        EXPECT_EQ(StringOf(request, "preset"), "wood");
+        EXPECT_EQ(StringOf(request, "subject"), "white knight");
+        EXPECT_EQ(IntOf(request, "count"), Optional<int64_t>(2));
+        EXPECT_EQ(IntOf(request, "seed"), Optional<int64_t>(7));
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Running);
 
-        poll = Call("artgen_poll", ReadyPoll());
-        EXPECT_EQ(FindJsonMember(Result(poll), "request"), nullptr);
+        poll = Call("artgen_poll", kReadyPoll);
+        EXPECT_FALSE(poll.Result().Find("request").has_value());
     }
 
     TEST_F(ArtGenSessionTest, ProgressImagesAndDoneFillTheRun) {
         const uint32_t id = Require(session.Request("wood", "rook", 2, Optional<int64_t>()));
-        Call("artgen_poll", ReadyPoll());
-        const Json request = Result(Call("artgen_poll", ReadyPoll()));
-        EXPECT_EQ(FindJsonMember(request, "request"), nullptr);
+        Call("artgen_poll", kReadyPoll);
+        EXPECT_FALSE(Call("artgen_poll", kReadyPoll).Result().Find("request").has_value());
 
-        Json progress = Report(id);
-        progress["image"] = 0;
-        progress["step"] = 5;
-        progress["steps"] = 25;
-        EXPECT_EQ(GetJsonBool(Result(Call("artgen_progress", progress)), "stale"), Optional<bool>(false));
+        EXPECT_EQ(BoolOf(Call("artgen_progress", Report(id, R"("image":0,"step":5,"steps":25)")).Result(), "stale"), Optional<bool>(false));
         EXPECT_EQ(session.GetRun().step, 5);
         EXPECT_EQ(session.GetRun().steps, 25);
 
         for (int64_t seed : {11, 12}) {
-            Json image = Report(id);
-            image["seed"] = seed;
-            image["path"] = Format("D:/Games/Chess/artgen/out/rook_{}.png", seed).c_str();
-            image["provenance"] = Format("D:/Games/Chess/artgen/out/rook_{}.artgen.json", seed).c_str();
-            Call("artgen_image", image);
+            Call("artgen_image", Report(id, Format(R"("path":"D:/Games/Chess/artgen/out/rook_{}.png","provenance":"D:/Games/Chess/artgen/out/rook_{}.artgen.json","seed":{})", seed, seed, seed)));
         }
         ASSERT_EQ(session.GetRun().variants.size(), 2u);
         EXPECT_EQ(session.GetRun().variants[1].seed, 12);
         EXPECT_EQ(session.GetRun().variants[1].path, "D:/Games/Chess/artgen/out/rook_12.png");
 
-        Json done = Report(id);
-        done["status"] = "ok";
-        Call("artgen_done", done);
+        Call("artgen_done", Report(id, R"("status":"ok")"));
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Done);
         EXPECT_FALSE(session.IsBusy());
 
-        const Json state = Result(Call("artgen_state"));
-        const Json* run = FindJsonMember(state, "run");
-        ASSERT_NE(run, nullptr);
-        EXPECT_EQ(GetJsonString(*run, "state"), Optional<String>("Done"));
-        EXPECT_EQ(Require(FindJsonMember(*run, "variants")).size(), 2u);
+        const ControlReply state = Call("artgen_state");
+        const JsonView run = MemberOf(state.Result(), "run");
+        ASSERT_TRUE(run.IsObject());
+        EXPECT_EQ(StringOf(run, "state"), "Done");
+        EXPECT_EQ(MemberOf(run, "variants").Size(), 2u);
     }
 
     TEST_F(ArtGenSessionTest, AFailureKeepsItsReason) {
         const uint32_t id = Require(session.Request("wood", "rook", 1, 3));
-        Call("artgen_poll", ReadyPoll());
-        Json done = Report(id);
-        done["status"] = "failed";
-        done["error"] = "ComfyUI failed: out of memory";
-        Call("artgen_done", done);
+        Call("artgen_poll", kReadyPoll);
+        Call("artgen_done", Report(id, R"("error":"ComfyUI failed: out of memory","status":"failed")"));
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Failed);
         EXPECT_EQ(session.GetRun().error, "ComfyUI failed: out of memory");
     }
 
     TEST_F(ArtGenSessionTest, ReportsAboutAnOlderRunAreStale) {
         const uint32_t first = Require(session.Request("wood", "a", 1, 1));
-        Call("artgen_poll", ReadyPoll());
-        Json done = Report(first);
-        done["status"] = "cancelled";
-        Call("artgen_done", done);
+        Call("artgen_poll", kReadyPoll);
+        Call("artgen_done", Report(first, R"("status":"cancelled")"));
         const uint32_t second = Require(session.Request("wood", "b", 1, 1));
         EXPECT_NE(first, second);
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
 
-        Json late = Report(first);
-        late["seed"] = 1;
-        late["path"] = "x.png";
-        EXPECT_EQ(GetJsonBool(Result(Call("artgen_image", late)), "stale"), Optional<bool>(true));
+        EXPECT_EQ(BoolOf(Call("artgen_image", Report(first, R"("path":"x.png","seed":1)")).Result(), "stale"), Optional<bool>(true));
         EXPECT_TRUE(session.GetRun().variants.empty());
         EXPECT_EQ(session.GetRun().subject, "b");
     }
@@ -257,53 +231,47 @@ namespace BECore::Tests {
         Require(session.Request("wood", "a", 1, 1));
         Call("artgen_cancel");
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Cancelled);
-        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "request"), nullptr);
+        EXPECT_FALSE(Call("artgen_poll", kReadyPoll).Result().Find("request").has_value());
     }
 
     TEST_F(ArtGenSessionTest, CancelOfTheRunAnswersAnEmptyObject) {
         Require(session.Request("wood", "a", 1, 1));
-        const Json response = Call("artgen_cancel");
-        ASSERT_TRUE(Result(response).is_object());
-        EXPECT_TRUE(Result(response).empty());
-        EXPECT_EQ(AnswerText(ArtGenCancelAnswer{}), Json::object()) << "an answer of Optionals only writes {}";
+        const ControlReply response = Call("artgen_cancel");
+        ASSERT_TRUE(response.Result().IsObject());
+        EXPECT_EQ(response.Result().Size(), 0u);
+        EXPECT_EQ(AnswerString(ArtGenCancelAnswer{}), "{}") << "an answer of Optionals only writes {}";
     }
 
     TEST_F(ArtGenSessionTest, CancelOfARunningRequestGoesToTheServiceOnTheNextPoll) {
         const uint32_t id = Require(session.Request("wood", "a", 3, 1));
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         session.Cancel();
         EXPECT_TRUE(session.GetRun().cancelRequested);
-        EXPECT_EQ(GetJsonInt(Result(Call("artgen_poll", ReadyPoll())), "cancel"), Optional<int64_t>(id));
+        EXPECT_EQ(IntOf(Call("artgen_poll", kReadyPoll).Result(), "cancel"), Optional<int64_t>(id));
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Running);  // until the service says it stopped
-        Json done = Report(id);
-        done["status"] = "cancelled";
-        Call("artgen_done", done);
+        Call("artgen_done", Report(id, R"("status":"cancelled")"));
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Cancelled);
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel")), "artgen_no_run");
+        EXPECT_EQ(Call("artgen_cancel").ErrorCode(), "artgen_no_run");
     }
 
     TEST_F(ArtGenSessionTest, RequestsThatCannotRunAreRefused) {
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         EXPECT_FALSE(session.Request("wood", "a", 0, 1).has_value());
         EXPECT_FALSE(session.Request("wood", "a", ArtGenSession::kMaxCount + 1, 1).has_value());
         EXPECT_FALSE(session.Request("wood", "a", 1, -1).has_value());
         EXPECT_FALSE(session.Request("", "a", 1, 1).has_value());
         EXPECT_FALSE(session.Request("broken", "a", 1, 1).has_value());
 
-        Json params = Object();
-        params["preset"] = "wood";
-        EXPECT_EQ(ErrorCode(Call("artgen_generate", params)), "invalid_params");
-        params["subject"] = "a";
-        params["count"] = "four";
-        EXPECT_EQ(ErrorCode(Call("artgen_generate", params)), "invalid_params");
-        params.erase("count");
-        EXPECT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
+        EXPECT_EQ(Call("artgen_generate", R"({"preset":"wood"})").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("artgen_generate", R"({"count":"four","preset":"wood","subject":"a"})").ErrorCode(), "invalid_params");
+        constexpr StringView kWithoutCount = R"({"preset":"wood","subject":"a"})";
+        EXPECT_TRUE(IntOf(Call("artgen_generate", kWithoutCount).Result(), "id").has_value());
         EXPECT_EQ(session.GetRun().count, 4);
-        EXPECT_EQ(ErrorCode(Call("artgen_generate", params)), "artgen_busy");
+        EXPECT_EQ(Call("artgen_generate", kWithoutCount).ErrorCode(), "artgen_busy");
     }
 
     TEST_F(ArtGenSessionTest, TheServiceIsGoneWhenItStopsPolling) {
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         now += ArtGenSession::kServiceTimeoutSeconds - 0.5;
         EXPECT_TRUE(session.IsServiceConnected());
         now += 1.0;
@@ -311,11 +279,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ANotReadyGeneratorIsShownWithItsReason) {
-        Json params = Object();
-        params["state"] = "not_running";
-        params["reason"] = "ComfyUI is installed in D:/ComfyUI but not started";
         const uint64_t before = session.Version();
-        Call("artgen_poll", params);
+        Call("artgen_poll", R"({"reason":"ComfyUI is installed in D:/ComfyUI but not started","state":"not_running"})");
         EXPECT_GT(session.Version(), before);
         EXPECT_EQ(session.GetServiceStatus().state, "not_running");
         EXPECT_EQ(session.GetServiceStatus().reason, "ComfyUI is installed in D:/ComfyUI but not started");
@@ -324,20 +289,18 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSessionTest, ASecondRegistrationOnTheSameServiceChangesNothing) {
         session.RegisterControl(service);
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         EXPECT_EQ(session.PollCount(), 1u);
-        EXPECT_NE(FindJsonMember(Result(Call("artgen_state")), "service"), nullptr);
+        EXPECT_TRUE(Call("artgen_state").Result().Find("service").has_value());
     }
 
     TEST_F(ArtGenSessionTest, AcceptGoesToTheAcceptorWithTheVariantOfThatSeed) {
         RunWithImages({21, 22});
-        Json params = Object();
-        params["seed"] = 22;
-        params["sprite"] = "white_queen";
-        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_accept_failed");  // no acceptor yet
+        constexpr StringView kParams = R"({"seed":22,"sprite":"white_queen"})";
+        EXPECT_EQ(Call("artgen_accept", kParams).ErrorCode(), "artgen_accept_failed");  // no acceptor yet
         session.SetAcceptor(&FakeAcceptor);
-        const Json reply = Call("artgen_accept", params);
-        EXPECT_EQ(GetJsonString(Result(reply), "sprite"), Optional<String>("white_queen"));
+        const ControlReply reply = Call("artgen_accept", kParams);
+        EXPECT_EQ(StringOf(reply.Result(), "sprite"), "white_queen");
         EXPECT_EQ(gAccepted.seed, 22);
         EXPECT_EQ(gAccepted.sprite, "white_queen");
         EXPECT_FALSE(gAccepted.withNode);
@@ -346,17 +309,10 @@ namespace BECore::Tests {
     TEST_F(ArtGenSessionTest, AcceptRefusesAnUnknownSeedOrAMissingSelection) {
         session.SetAcceptor(&FakeAcceptor);
         RunWithImages({5});
-        Json params = Object();
-        params["seed"] = 6;
-        params["sprite"] = "q";
-        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_no_variant");
-        params["seed"] = 5;
-        params["useOnSelected"] = true;
-        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_accept_failed");
-        params["useOnSelected"] = "yes";
-        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params");
-        params.erase("sprite");
-        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params");
+        EXPECT_EQ(Call("artgen_accept", R"({"seed":6,"sprite":"q"})").ErrorCode(), "artgen_no_variant");
+        EXPECT_EQ(Call("artgen_accept", R"({"seed":5,"sprite":"q","useOnSelected":true})").ErrorCode(), "artgen_accept_failed");
+        EXPECT_EQ(Call("artgen_accept", R"({"seed":5,"sprite":"q","useOnSelected":"yes"})").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("artgen_accept", R"({"seed":5,"useOnSelected":"yes"})").ErrorCode(), "invalid_params");
         EXPECT_EQ(gAccepted.calls, 0);
     }
 
@@ -373,36 +329,22 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ASetupActionIsHandedOverOnceAndItsReportsFillIt) {
-        Json asked = Object();
-        asked["action"] = "Plan";
-        const auto id = GetJsonInt(Result(Call("artgen_setup", asked)), "id");
+        const auto id = IntOf(Call("artgen_setup", R"({"action":"Plan"})").Result(), "id");
         ASSERT_TRUE(id.has_value());
         EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Queued);
 
-        Json poll = Call("artgen_poll", ReadyPoll());
-        const Json* setup = FindJsonMember(Result(poll), "setup");
-        ASSERT_NE(setup, nullptr);
-        EXPECT_EQ(GetJsonInt(*setup, "id"), id);
-        EXPECT_EQ(GetJsonString(*setup, "action"), Optional<String>("Plan"));
+        const ControlReply poll = Call("artgen_poll", kReadyPoll);
+        const JsonView setup = MemberOf(poll.Result(), "setup");
+        ASSERT_TRUE(setup.IsObject());
+        EXPECT_EQ(IntOf(setup, "id"), id);
+        EXPECT_EQ(StringOf(setup, "action"), "Plan");
         EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Running);
-        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "setup"), nullptr);
+        EXPECT_FALSE(Call("artgen_poll", kReadyPoll).Result().Find("setup").has_value());
 
-        Json plan = Report(static_cast<uint32_t>(*id));
-        plan["event"] = "plan";
-        plan["platform"] = "windows-nvidia";
-        plan["root"] = "D:/ComfyUI";
-        plan["downloadBytes"] = 9000;
-        Json step = Object();
-        step["what"] = "checkpoints/sd_xl_base_1.0.safetensors";
-        step["state"] = "download";
-        step["size"] = 9000;
-        step["licence"] = "OpenRAIL++-M";
-        plan["steps"] = Json::array({step});
-        EXPECT_EQ(GetJsonBool(Result(Call("artgen_setup_report", plan)), "stale"), Optional<bool>(false));
-        Json done = Report(static_cast<uint32_t>(*id));
-        done["event"] = "done";
-        done["ok"] = true;
-        Call("artgen_setup_report", done);
+        const auto plan = Report(static_cast<uint32_t>(*id), R"("downloadBytes":9000,"event":"plan","platform":"windows-nvidia","root":"D:/ComfyUI",)"
+                                                             R"("steps":[{"licence":"OpenRAIL++-M","size":9000,"state":"download","what":"checkpoints/sd_xl_base_1.0.safetensors"}])");
+        EXPECT_EQ(BoolOf(Call("artgen_setup_report", plan).Result(), "stale"), Optional<bool>(false));
+        Call("artgen_setup_report", Report(static_cast<uint32_t>(*id), R"("event":"done","ok":true)"));
         EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Done);
         ASSERT_EQ(session.GetSetup().plan.size(), 1u);
         EXPECT_EQ(session.GetSetup().plan[0].size, 9000);
@@ -411,34 +353,21 @@ namespace BECore::Tests {
         // The install keeps the plan the owner saw on screen, and reports its progress
         const uint32_t install = Require(session.RequestSetup(ArtGenSetupAction::Install));
         EXPECT_EQ(session.GetSetup().plan.size(), 1u);
-        Call("artgen_poll", ReadyPoll());
-        Json progress = Report(install);
-        progress["event"] = "progress";
-        progress["done"] = 4500;
-        progress["total"] = 9000;
-        Call("artgen_setup_report", progress);
+        Call("artgen_poll", kReadyPoll);
+        Call("artgen_setup_report", Report(install, R"("done":4500,"event":"progress","total":9000)"));
         EXPECT_EQ(session.GetSetup().done, 4500);
-        Json failed = Report(install);
-        failed["event"] = "done";
-        failed["ok"] = false;
-        failed["error"] = "the download stopped; run again to resume";
-        Call("artgen_setup_report", failed);
+        Call("artgen_setup_report", Report(install, R"("error":"the download stopped; run again to resume","event":"done","ok":false)"));
         EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Failed);
         EXPECT_EQ(session.GetSetup().error, "the download stopped; run again to resume");
     }
 
     TEST_F(ArtGenSessionTest, ASetupAndARunNeverRunTogether) {
         const uint32_t setup = Require(session.RequestSetup(ArtGenSetupAction::Start));
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         EXPECT_FALSE(session.Request("wood", "a", 1, 1).has_value());
         EXPECT_FALSE(session.RequestSetup(ArtGenSetupAction::Stop).has_value());
-        Json asked = Object();
-        asked["action"] = "Stop";
-        EXPECT_EQ(ErrorCode(Call("artgen_setup", asked)), "artgen_busy");
-        Json done = Report(setup);
-        done["event"] = "done";
-        done["ok"] = true;
-        Call("artgen_setup_report", done);
+        EXPECT_EQ(Call("artgen_setup", R"({"action":"Stop"})").ErrorCode(), "artgen_busy");
+        Call("artgen_setup_report", Report(setup, R"("event":"done","ok":true)"));
 
         ASSERT_TRUE(session.Request("wood", "a", 1, 1).has_value());
         EXPECT_FALSE(session.RequestSetup(ArtGenSetupAction::Plan).has_value());
@@ -446,81 +375,50 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSessionTest, ACancelOfASetupGoesToTheServiceAndOldReportsAreStale) {
         const uint32_t first = Require(session.RequestSetup(ArtGenSetupAction::Install));
-        Json cancel = Object();
-        cancel["action"] = "cancel";
-        EXPECT_EQ(FindJsonMember(Call("artgen_setup", cancel), "error"), nullptr);
+        EXPECT_FALSE(Call("artgen_setup", R"({"action":"cancel"})").View().Find("error").has_value());
         EXPECT_EQ(session.GetSetup().state, ArtGenSetupState::Failed);  // queued: the service never saw it
 
         const uint32_t second = Require(session.RequestSetup(ArtGenSetupAction::Install));
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         session.CancelSetup();
-        EXPECT_EQ(GetJsonInt(Result(Call("artgen_poll", ReadyPoll())), "setupCancel"), Optional<int64_t>(second));
+        EXPECT_EQ(IntOf(Call("artgen_poll", kReadyPoll).Result(), "setupCancel"), Optional<int64_t>(second));
 
-        Json old = Report(first);
-        old["event"] = "log";
-        old["text"] = "late";
-        EXPECT_EQ(GetJsonBool(Result(Call("artgen_setup_report", old)), "stale"), Optional<bool>(true));
+        EXPECT_EQ(BoolOf(Call("artgen_setup_report", Report(first, R"("event":"log","text":"late")")).Result(), "stale"), Optional<bool>(true));
         EXPECT_TRUE(session.GetSetup().log.empty());
 
-        Json bad = Object();
-        bad["action"] = "Dance";
-        EXPECT_EQ(ErrorCode(Call("artgen_setup", bad)), "invalid_params");
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(Result(Call("artgen_state")), "setup")), "state"), Optional<String>("Running"));
+        EXPECT_EQ(Call("artgen_setup", R"({"action":"Dance"})").ErrorCode(), "invalid_params");
+        EXPECT_EQ(StringOf(MemberOf(Call("artgen_state").Result(), "setup"), "state"), "Running");
     }
 
     TEST_F(ArtGenSessionTest, ThePollSaysWhetherTheGeneratorWasStartedHere) {
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         EXPECT_FALSE(session.GetServiceStatus().startedHere);
-        Json poll = ReadyPoll();
-        poll["startedHere"] = true;
         const uint64_t before = session.Version();
-        Call("artgen_poll", poll);
+        Call("artgen_poll", JsonWith(kReadyPoll, "/startedHere", "true"));
         EXPECT_TRUE(session.GetServiceStatus().startedHere);
         EXPECT_GT(session.Version(), before);
     }
 
     TEST_F(ArtGenSessionTest, DisconnectTellsTheServiceToExitAndEndsWhatItWasDoing) {
         session.RequestServiceStop();  // not connected: nothing to tell
-        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "shutdown"), nullptr);
+        EXPECT_FALSE(Call("artgen_poll", kReadyPoll).Result().Find("shutdown").has_value());
 
         ASSERT_TRUE(session.Request("wood", "queen", 1, 1).has_value());
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         ASSERT_EQ(session.GetRun().state, ArtGenRunState::Running);
         session.RequestServiceStop();
-        const Json answer = Call("artgen_poll", ReadyPoll());
-        EXPECT_EQ(GetJsonBool(Result(answer), "shutdown"), Optional<bool>(true));
+        const ControlReply answer = Call("artgen_poll", kReadyPoll);
+        EXPECT_EQ(BoolOf(answer.Result(), "shutdown"), Optional<bool>(true));
         EXPECT_FALSE(session.IsServiceConnected());
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Cancelled);
 
         // Started again, the service is told nothing more
-        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", ReadyPoll())), "shutdown"), nullptr);
+        EXPECT_FALSE(Call("artgen_poll", kReadyPoll).Result().Find("shutdown").has_value());
         EXPECT_TRUE(session.IsServiceConnected());
     }
 
-    namespace {
-
-        Json DraftPreset() {
-            return Json{{"preset", 1}, {"workflow", "sdxl_basic"}, {"prompt", "a {subject}"}, {"params", Json{{"steps", 9}}}};
-        }
-
-        Json CatalogPoll() {
-            Json params = ReadyPoll();
-            Json wood = Preset("wood");
-            wood["source"] = "game";
-            wood["preset"] = Json{{"preset", 1}, {"title", "Wood"}, {"workflow", "sdxl_basic"}, {"prompt", "carved {subject}"}};
-            Json sprite = Preset("sprite");
-            sprite["source"] = "engine";
-            sprite["preset"] = Json{{"preset", 1}, {"workflow", "sdxl_cutout"}, {"prompt", "{subject}"}};
-            params["presets"] = Json::array({wood, sprite});
-            Json inputs = Json{{"steps", Json{{"default", 25}}}, {"sampler", Json{{"default", "euler"}, {"choices", Json::array({"euler", "ddim"})}}}};
-            params["workflows"] = Json::array({Json{{"name", "sdxl_basic"}, {"source", "engine"}, {"inputs", inputs}}, Json{{"name", "broken"}, {"source", "game"}, {"error", "no inputs"}}});
-            return params;
-        }
-
-    }  // namespace
-
     TEST_F(ArtGenSessionTest, ThePollCarriesThePresetsWithTheirContentAndTheWorkflowsWithTheirInputs) {
-        Call("artgen_poll", CatalogPoll());
+        Call("artgen_poll", kCatalogPoll);
         const auto& status = session.GetServiceStatus();
         ASSERT_EQ(status.presets.size(), 2u);
         const ArtGenPreset* sprite = session.FindPreset("sprite");
@@ -540,7 +438,7 @@ namespace BECore::Tests {
 
         // The same lists again change nothing the panel draws
         const uint64_t version = session.Version();
-        Call("artgen_poll", CatalogPoll());
+        Call("artgen_poll", kCatalogPoll);
         EXPECT_EQ(session.Version(), version);
     }
 
@@ -567,45 +465,39 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ACountThatIsNotAFiniteNumberIsInvalidParams) {
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         const auto refused = session.HandleGenerate(JsonDoc(R"({"preset":"wood","subject":"knight","count":1e999})"));
         ASSERT_FALSE(refused.has_value());
         EXPECT_EQ(refused.error().code, "invalid_params");
     }
 
     TEST_F(ArtGenSessionTest, ADraftGoesInlineWithTheNameItCameFrom) {
-        Call("artgen_poll", CatalogPoll());
-        Json params = Object();
-        params["preset"] = DraftPreset();
-        params["presetName"] = "wood";
-        params["subject"] = "knight";
-        params["count"] = 1;
-        ASSERT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
-        EXPECT_EQ(session.GetRun().presetData, DumpJson(DraftPreset()));
+        Call("artgen_poll", kCatalogPoll);
+        const String params = Format(R"({{"count":1,"preset":{},"presetName":"wood","subject":"knight"}})", kDraftPreset);
+        ASSERT_TRUE(IntOf(Call("artgen_generate", params).Result(), "id").has_value());
+        EXPECT_EQ(session.GetRun().presetData, kDraftPreset);
 
-        const Json poll = Call("artgen_poll", CatalogPoll());
-        const Json* request = FindJsonMember(Result(poll), "request");
-        ASSERT_NE(request, nullptr);
-        EXPECT_EQ(Require(FindJsonMember(*request, "preset")), DraftPreset());
-        EXPECT_EQ(GetJsonString(*request, "presetName"), Optional<String>("wood"));
-        const Json state = Call("artgen_state");
-        EXPECT_EQ(GetJsonBool(Require(FindJsonMember(Result(state), "run")), "draft"), Optional<bool>(true));
+        const ControlReply poll = Call("artgen_poll", kCatalogPoll);
+        const JsonView request = MemberOf(poll.Result(), "request");
+        ASSERT_TRUE(request.IsObject());
+        EXPECT_EQ(RawOf(request, "preset"), kDraftPreset);
+        EXPECT_EQ(StringOf(request, "presetName"), "wood");
+        const ControlReply state = Call("artgen_state");
+        EXPECT_EQ(BoolOf(MemberOf(state.Result(), "run"), "draft"), Optional<bool>(true));
     }
 
     TEST_F(ArtGenSessionTest, TheRequestOfAPollIsCompactSortedWithTheDraftsTextInIt) {
         const String draft = R"({"preset":1,"prompt":"a {subject}","workflow":"sdxl_basic"})";
         ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 2, Optional<int64_t>(3), false, ArtGenReference{"init", "x.png", Optional<double>(0.25)}).has_value());
-        const auto reply = session.HandlePoll(JsonDoc(DumpJson(ReadyPoll())));
+        const auto reply = session.HandlePoll(JsonDoc(kReadyPoll));
         ASSERT_TRUE(reply.has_value());
         EXPECT_EQ(*reply, Format(R"({{"gameRoot":"D:/Games/Chess","request":{{"count":2,"id":{},"preset":{},"presetName":"wood","reference":{{"image":"x.png","mode":"init","weight":0.25}},)"
                                  R"("seed":3,"subject":"knight"}}}})",
                                  session.GetRun().id, draft));
 
-        Json done = Report(session.GetRun().id);
-        done["status"] = "ok";
-        Call("artgen_done", done);
+        Call("artgen_done", Report(session.GetRun().id, R"("status":"ok")"));
         ASSERT_TRUE(session.Request("wood", "rook", 1, Optional<int64_t>()).has_value());
-        const auto byName = session.HandlePoll(JsonDoc(DumpJson(ReadyPoll())));
+        const auto byName = session.HandlePoll(JsonDoc(kReadyPoll));
         ASSERT_TRUE(byName.has_value());
         EXPECT_EQ(*byName, Format(R"({{"gameRoot":"D:/Games/Chess","request":{{"count":1,"id":{},"preset":"wood","seed":null,"subject":"rook"}}}})", session.GetRun().id));
     }
@@ -620,46 +512,38 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, ADraftThatIsNotAPresetIsRefusedHere) {
-        Json noPrompt = DraftPreset();
-        noPrompt.erase("prompt");
-        auto refused = session.RequestDraft("wood", DumpJson(noPrompt), "knight", 1, Optional<int64_t>());
+        auto refused = session.RequestDraft("wood", JsonWithout(kDraftPreset, "/prompt"), "knight", 1, Optional<int64_t>());
         ASSERT_FALSE(refused.has_value());
         EXPECT_NE(refused.error().find("\"prompt\" is required"), String::npos) << refused.error().c_str();
-        Json params = Object();
-        params["preset"] = Json::array();
-        params["subject"] = "knight";
-        EXPECT_EQ(ErrorCode(Call("artgen_generate", params)), "invalid_params");
+        EXPECT_EQ(Call("artgen_generate", R"({"preset":[],"subject":"knight"})").ErrorCode(), "invalid_params");
     }
 
     TEST_F(ArtGenSessionTest, SaveWritesTheGamesPresetFileShowsItAndAsksTheServiceToLookAgain) {
         const Path root(TestTempDirectory("artgen_save"));
         RemoveDirectory(root);
         session.SetGameRoot(root.View());
-        Call("artgen_poll", CatalogPoll());
+        Call("artgen_poll", kCatalogPoll);
 
-        Json preset = DraftPreset();
-        preset["title"] = "Mine";
-        Json params = Object();
-        params["name"] = "sprite";  // the engine starter's name: the game's own copy now
-        params["preset"] = preset;
-        const Json saved = Call("artgen_save_preset", params);
-        const auto path = GetJsonString(Result(saved), "path");
-        ASSERT_TRUE(path.has_value()) << DumpJson(saved).c_str();
+        const String preset = JsonWith(kDraftPreset, "/title", R"("Mine")");
+        // "sprite" is the engine starter's name: the game's own copy now
+        const ControlReply saved = Call("artgen_save_preset", Format(R"({{"name":"sprite","preset":{}}})", preset));
+        const String path = StringOf(saved.Result(), "path");
+        ASSERT_FALSE(path.empty()) << String(saved.Text()).c_str();
         const Path file = root / "artgen" / "presets" / "sprite.json";
-        EXPECT_EQ(*path, String(file.View()));
+        EXPECT_EQ(path, String(file.View()));
         const auto text = ReadTextFile(file);
         ASSERT_TRUE(text.has_value()) << text.error().c_str();
         EXPECT_EQ(text->find("{\n  \"preset\": 1,\n  \"title\": \"Mine\",\n  \"workflow\": \"sdxl_basic\""), 0u) << text->c_str();
-        const auto reread = ParseJson(*text);
-        ASSERT_TRUE(reread.has_value());
-        EXPECT_EQ(*reread, preset);
+        const JsonDoc reread{StringView(text->c_str(), text->size())};
+        ASSERT_TRUE(reread.IsParsed());
+        EXPECT_TRUE(JsonEquals(reread.Root(), JsonDoc(StringView(preset.c_str(), preset.size())).Root()));
 
         const ArtGenPreset* shown = session.FindPreset("sprite");
         ASSERT_NE(shown, nullptr);
         EXPECT_EQ(shown->source, "game");
         EXPECT_EQ(shown->title, "Mine");
-        EXPECT_EQ(GetJsonBool(Result(Call("artgen_poll", CatalogPoll())), "refresh"), Optional<bool>(true));
-        EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", CatalogPoll())), "refresh"), nullptr) << "asked once";
+        EXPECT_EQ(BoolOf(Call("artgen_poll", kCatalogPoll).Result(), "refresh"), Optional<bool>(true));
+        EXPECT_FALSE(Call("artgen_poll", kCatalogPoll).Result().Find("refresh").has_value()) << "asked once";
         RemoveDirectory(root);
     }
 
@@ -668,34 +552,25 @@ namespace BECore::Tests {
         RemoveDirectory(parent);
         const Path root = parent / "caf\xC3\xA9 game";
         session.SetGameRoot(root.View());
-        Call("artgen_poll", CatalogPoll());
+        Call("artgen_poll", kCatalogPoll);
 
-        Json params = Object();
-        params["name"] = "mine";
-        params["preset"] = DraftPreset();
-        const Json saved = Call("artgen_save_preset", params);
-        const auto path = GetJsonString(Result(saved), "path");
-        ASSERT_TRUE(path.has_value()) << DumpJson(saved).c_str();
-        EXPECT_EQ(*path, Format("{}/artgen/presets/mine.json", root.View()));
-        EXPECT_TRUE(ReadTextFile(*path).has_value());
+        const ControlReply saved = Call("artgen_save_preset", Format(R"({{"name":"mine","preset":{}}})", kDraftPreset));
+        const String path = StringOf(saved.Result(), "path");
+        ASSERT_FALSE(path.empty()) << String(saved.Text()).c_str();
+        EXPECT_EQ(path, Format("{}/artgen/presets/mine.json", root.View()));
+        EXPECT_TRUE(ReadTextFile(path).has_value());
         RemoveDirectory(parent);
     }
 
     TEST_F(ArtGenSessionTest, SaveRefusesABadNameOrAShapeThatIsNotAPreset) {
-        EXPECT_FALSE(session.SavePreset("../escape", DumpJson(DraftPreset())).has_value());
-        EXPECT_FALSE(session.SavePreset("", DumpJson(DraftPreset())).has_value());
-        Json badSize = DraftPreset();
-        badSize["size"] = Json::array({0, 10});
-        EXPECT_FALSE(session.SavePreset("ok", DumpJson(badSize)).has_value());
-        Json params = Object();
-        params["name"] = "ok";
-        EXPECT_EQ(ErrorCode(Call("artgen_save_preset", params)), "invalid_params");
+        EXPECT_FALSE(session.SavePreset("../escape", kDraftPreset).has_value());
+        EXPECT_FALSE(session.SavePreset("", kDraftPreset).has_value());
+        EXPECT_FALSE(session.SavePreset("ok", JsonWith(kDraftPreset, "/size", "[0,10]")).has_value());
+        EXPECT_EQ(Call("artgen_save_preset", R"({"name":"ok"})").ErrorCode(), "invalid_params");
     }
 
     TEST_F(ArtGenSessionTest, KindsComeWithThePresetsTheWorkflowsAndTheImages) {
-        Json params = CatalogPoll();
-        params["presets"][0]["kind"] = "audio";
-        params["workflows"][0]["kind"] = "audio";
+        const String params = JsonWith(JsonWith(kCatalogPoll, "/presets/0/kind", R"("audio")"), "/workflows/0/kind", R"("audio")");
         Call("artgen_poll", params);
         EXPECT_EQ(Require(session.FindPreset("wood")).kind, "audio");
         EXPECT_EQ(Require(session.FindPreset("sprite")).kind, "image") << "image when the service says nothing";
@@ -703,20 +578,13 @@ namespace BECore::Tests {
 
         const uint32_t id = Require(session.Request("wood", "knock", 2, Optional<int64_t>(1)));
         Call("artgen_poll", params);
-        Json sound = Report(id);
-        sound["seed"] = 1;
-        sound["path"] = "D:/out/knock_1.flac";
-        sound["kind"] = "audio";
-        Call("artgen_image", sound);
-        Json picture = Report(id);
-        picture["seed"] = 2;
-        picture["path"] = "D:/out/knock_2.png";
-        Call("artgen_image", picture);
+        Call("artgen_image", Report(id, R"("kind":"audio","path":"D:/out/knock_1.flac","seed":1)"));
+        Call("artgen_image", Report(id, R"("path":"D:/out/knock_2.png","seed":2)"));
         ASSERT_EQ(session.GetRun().variants.size(), 2u);
         EXPECT_TRUE(session.GetRun().variants[0].IsAudio());
         EXPECT_FALSE(session.GetRun().variants[1].IsAudio());
-        const Json state = Call("artgen_state");
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(Require(FindJsonMember(Result(state), "run")), "variants"))[0], "kind"), Optional<String>("audio"));
+        const ControlReply state = Call("artgen_state");
+        EXPECT_EQ(StringOf(ItemAt(MemberOf(MemberOf(state.Result(), "run"), "variants"), 0), "kind"), "audio");
 
         session.SetAcceptor(&FakeAcceptor);
         auto accepted = session.Accept(1, "knock", false);
@@ -727,20 +595,12 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSessionTest, ASoundIsAcceptedAsAClipWithItsSettings) {
         const uint32_t id = Require(session.Request("wood", "knock", 1, Optional<int64_t>(7)));
-        Call("artgen_poll", ReadyPoll());
-        Json sound = Report(id);
-        sound["seed"] = 7;
-        sound["path"] = "D:/out/knock_7.flac";
-        sound["kind"] = "audio";
-        Call("artgen_image", sound);
+        Call("artgen_poll", kReadyPoll);
+        Call("artgen_image", Report(id, R"("kind":"audio","path":"D:/out/knock_7.flac","seed":7)"));
         session.SetSoundAcceptor(&FakeSoundAcceptor);
 
-        Json params = Object();
-        params["seed"] = 7;
-        params["clip"] = "assets/sounds/move.wav";
-        params["sound"] = Json{{"mono", false}, {"peakDb", nullptr}, {"maxSeconds", 1.0}};
-        const Json accepted = Call("artgen_accept", params);
-        EXPECT_EQ(GetJsonString(Result(accepted), "clip"), Optional<String>("assets/sounds/move.wav")) << DumpJson(accepted).c_str();
+        const ControlReply accepted = Call("artgen_accept", R"({"clip":"assets/sounds/move.wav","seed":7,"sound":{"maxSeconds":1.0,"mono":false,"peakDb":null}})");
+        EXPECT_EQ(StringOf(accepted.Result(), "clip"), "assets/sounds/move.wav") << String(accepted.Text()).c_str();
         ASSERT_EQ(gSoundAccepted.calls, 1);
         EXPECT_EQ(gSoundAccepted.seed, 7);
         EXPECT_EQ(gSoundAccepted.target.clip, "assets/sounds/move.wav");
@@ -749,63 +609,41 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(gSoundAccepted.settings.maxSeconds, 1.0f);
         EXPECT_EQ(gSoundAccepted.settings.trimDb, ArtGenSoundSettings{}.trimDb) << "a missing key keeps the default";
 
-        params["sound"] = Json{{"fadeInMs", -5}};
-        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params");
+        EXPECT_EQ(Call("artgen_accept", R"({"clip":"assets/sounds/move.wav","seed":7,"sound":{"fadeInMs":-5}})").ErrorCode(), "invalid_params");
         EXPECT_EQ(gSoundAccepted.calls, 1);
-        params.erase("sound");
-        params["useOnSelected"] = true;
-        EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "artgen_accept_failed") << "no node is selected";
+        EXPECT_EQ(Call("artgen_accept", R"({"clip":"assets/sounds/move.wav","seed":7,"useOnSelected":true})").ErrorCode(), "artgen_accept_failed") << "no node is selected";
         EXPECT_EQ(session.AcceptSound(8, ArtGenSoundTarget{"x", ""}, ArtGenSoundSettings{}, false).error().code, "artgen_no_variant");
     }
-
-    namespace {
-
-        Json ImagePoll(const Json& woodAccept) {
-            Json params = CatalogPoll();
-            Json wood = params["presets"][0];
-            wood["preset"]["accept"] = woodAccept;
-            params["presets"][0] = wood;
-            return params;
-        }
-
-        Json AcceptParams(int64_t seed) {
-            return Json{{"seed", seed}, {"sprite", "icon"}};
-        }
-
-    }  // namespace
 
     TEST_F(ArtGenSessionTest, ASingleAcceptUsesTheSettingsOfTheSavedPresetOrTheDefaults) {
         session.SetAcceptor(&FakeAcceptor);
         RunWithImages({1});
-        Call("artgen_poll", CatalogPoll());
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        Call("artgen_poll", kCatalogPoll);
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1))));
         EXPECT_EQ(gAccepted.settings, ArtGenImageSettings{}) << "a preset without the key";
         EXPECT_FALSE(gAccepted.hasFrame) << "a single image has no frame of a set";
 
-        Call("artgen_poll", ImagePoll(Json{{"trim", false}, {"maxSize", 64}}));
+        Call("artgen_poll", CatalogWithWood("accept", R"({"maxSize":64,"trim":false})"));
         EXPECT_EQ(session.ImageSettingsOfRun().maxSize, 64);
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1))));
         EXPECT_FALSE(gAccepted.settings.trim);
         EXPECT_EQ(gAccepted.settings.maxSize, 64);
         EXPECT_EQ(gAccepted.settings.padding, ArtGenImageSettings::kDefaultPadding) << "a missing key keeps the default";
 
-        Call("artgen_poll", ImagePoll(Json{{"maxSize", 5}}));
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        Call("artgen_poll", CatalogWithWood("accept", R"({"maxSize":5})"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1))));
         EXPECT_EQ(gAccepted.settings, ArtGenImageSettings{}) << "a malformed key is the defaults";
     }
 
     TEST_F(ArtGenSessionTest, ADraftAcceptsWithItsOwnKeyAndNeverTheSavedOnes) {
         session.SetAcceptor(&FakeAcceptor);
-        Call("artgen_poll", ImagePoll(Json{{"maxSize", 64}}));
-        Json draft = DraftPreset();
-        draft["accept"] = Json{{"padding", 9}};
-        ASSERT_TRUE(session.RequestDraft("wood", DumpJson(draft), "knight", 1, Optional<int64_t>(3)).has_value());
-        Call("artgen_poll", ImagePoll(Json{{"maxSize", 64}}));
-        Json image = Report(session.GetRun().id);
-        image["seed"] = 3;
-        image["path"] = "D:/out/knight_3.png";
-        Call("artgen_image", image);
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(3)).contains("result"));
+        const String saved = CatalogWithWood("accept", R"({"maxSize":64})");
+        Call("artgen_poll", saved);
+        const String draft = JsonWith(kDraftPreset, "/accept", R"({"padding":9})");
+        ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 1, Optional<int64_t>(3)).has_value());
+        Call("artgen_poll", saved);
+        Call("artgen_image", Report(session.GetRun().id, R"("path":"D:/out/knight_3.png","seed":3)"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(3))));
         EXPECT_EQ(gAccepted.settings.padding, 9);
         EXPECT_EQ(gAccepted.settings.maxSize, ArtGenImageSettings::kDefaultMaxSize);
     }
@@ -813,188 +651,144 @@ namespace BECore::Tests {
     TEST_F(ArtGenSessionTest, TheImageParameterOverridesTheKeysItNames) {
         session.SetAcceptor(&FakeAcceptor);
         RunWithImages({1});
-        Call("artgen_poll", ImagePoll(Json{{"padding", 10}, {"maxSize", 64}}));
-        Json params = AcceptParams(1);
-        params["image"] = Json{{"maxSize", 0}};
-        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        Call("artgen_poll", CatalogWithWood("accept", R"({"maxSize":64,"padding":10})"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1, R"("image":{"maxSize":0})"))));
         EXPECT_EQ(gAccepted.settings.maxSize, 0);
         EXPECT_EQ(gAccepted.settings.padding, 10) << "the preset's value of a key the call does not name";
         EXPECT_TRUE(gAccepted.settings.trim);
         EXPECT_EQ(gAccepted.calls, 1);
 
-        params["image"] = Json{{"trim", false}, {"padding", 0}, {"maxSize", 32}};
-        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1, R"("image":{"maxSize":32,"padding":0,"trim":false})"))));
         EXPECT_EQ((gAccepted.settings), (ArtGenImageSettings{false, 0, 32}));
 
-        for (const Json& bad : {Json("big"), Json{{"maxSize", 5}}, Json{{"padding", "2"}}, Json{{"trim", 1}}}) {
-            params["image"] = bad;
-            EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params") << DumpJson(bad).c_str();
+        for (const StringView bad : {StringView(R"("big")"), StringView(R"({"maxSize":5})"), StringView(R"({"padding":"2"})"), StringView(R"({"trim":1})")}) {
+            EXPECT_EQ(Call("artgen_accept", AcceptParams(1, Format(R"("image":{})", bad))).ErrorCode(), "invalid_params") << String(bad).c_str();
         }
         EXPECT_EQ(gAccepted.calls, 2) << "a bad image changes nothing";
     }
 
-    namespace {
-
-        Json AtlasPoll(const Json& woodAtlas) {
-            Json params = CatalogPoll();
-            Json wood = params["presets"][0];
-            wood["preset"]["atlas"] = woodAtlas;
-            params["presets"][0] = wood;
-            return params;
-        }
-
-    }  // namespace
-
     TEST_F(ArtGenSessionTest, ASingleAcceptCarriesTheAtlasGroupOfTheSavedPreset) {
         session.SetAcceptor(&FakeAcceptor);
         RunWithImages({1});
-        Call("artgen_poll", CatalogPoll());
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        Call("artgen_poll", kCatalogPoll);
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1))));
         EXPECT_TRUE(gAccepted.atlas.empty()) << "a preset without the key joins no group";
 
-        Call("artgen_poll", AtlasPoll("pieces"));
+        Call("artgen_poll", CatalogWithWood("atlas", R"("pieces")"));
         EXPECT_EQ(session.AtlasOfRun(), "pieces");
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1))));
         EXPECT_EQ(gAccepted.atlas, "pieces");
 
-        Call("artgen_poll", AtlasPoll("not a name"));
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(1)).contains("result"));
+        Call("artgen_poll", CatalogWithWood("atlas", R"("not a name")"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1))));
         EXPECT_TRUE(gAccepted.atlas.empty()) << "a malformed key is no group";
-        Call("artgen_poll", AtlasPoll(5));
+        Call("artgen_poll", CatalogWithWood("atlas", "5"));
         EXPECT_TRUE(session.AtlasOfRun().empty());
     }
 
     TEST_F(ArtGenSessionTest, ADraftAcceptsIntoItsOwnAtlasGroupAndNeverTheSavedOne) {
         session.SetAcceptor(&FakeAcceptor);
-        Call("artgen_poll", AtlasPoll("saved"));
-        Json draft = DraftPreset();
-        draft["atlas"] = "icons";
-        ASSERT_TRUE(session.RequestDraft("wood", DumpJson(draft), "knight", 1, Optional<int64_t>(3)).has_value());
-        Call("artgen_poll", AtlasPoll("saved"));
-        Json image = Report(session.GetRun().id);
-        image["seed"] = 3;
-        image["path"] = "D:/out/knight_3.png";
-        Call("artgen_image", image);
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(3)).contains("result"));
+        const String saved = CatalogWithWood("atlas", R"("saved")");
+        Call("artgen_poll", saved);
+        ASSERT_TRUE(session.RequestDraft("wood", JsonWith(kDraftPreset, "/atlas", R"("icons")"), "knight", 1, Optional<int64_t>(3)).has_value());
+        Call("artgen_poll", saved);
+        constexpr StringView kImage = R"("path":"D:/out/knight_3.png","seed":3)";
+        Call("artgen_image", Report(session.GetRun().id, kImage));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(3))));
         EXPECT_EQ(gAccepted.atlas, "icons");
 
-        Json done = Report(session.GetRun().id);
-        done["status"] = "ok";
-        Call("artgen_done", done);
-        draft.erase("atlas");
-        ASSERT_TRUE(session.RequestDraft("wood", DumpJson(draft), "knight", 1, Optional<int64_t>(3)).has_value());
-        image = Report(session.GetRun().id);
-        image["seed"] = 3;
-        image["path"] = "D:/out/knight_3.png";
-        Call("artgen_poll", AtlasPoll("saved"));
+        Call("artgen_done", Report(session.GetRun().id, R"("status":"ok")"));
+        ASSERT_TRUE(session.RequestDraft("wood", kDraftPreset, "knight", 1, Optional<int64_t>(3)).has_value());
+        const String image = Report(session.GetRun().id, kImage);
+        Call("artgen_poll", saved);
         Call("artgen_image", image);
-        ASSERT_TRUE(Call("artgen_accept", AcceptParams(3)).contains("result"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(3))));
         EXPECT_TRUE(gAccepted.atlas.empty()) << "a draft without the key has no group, whatever the saved preset says";
     }
 
     TEST_F(ArtGenSessionTest, TheAtlasParameterOverridesThePresetsGroup) {
         session.SetAcceptor(&FakeAcceptor);
         RunWithImages({1});
-        Call("artgen_poll", AtlasPoll("pieces"));
-        Json params = AcceptParams(1);
-        params["atlas"] = "icons";
-        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        Call("artgen_poll", CatalogWithWood("atlas", R"("pieces")"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1, R"("atlas":"icons")"))));
         EXPECT_EQ(gAccepted.atlas, "icons");
 
-        params["atlas"] = "";
-        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1, R"("atlas":"")"))));
         EXPECT_TRUE(gAccepted.atlas.empty()) << "an empty string clears the preset's group";
 
-        params["atlas"] = nullptr;
-        ASSERT_TRUE(Call("artgen_accept", params).contains("result"));
+        ASSERT_TRUE(HasResult(Call("artgen_accept", AcceptParams(1, R"("atlas":null)"))));
         EXPECT_EQ(gAccepted.atlas, "pieces") << "null is the preset's";
         EXPECT_EQ(gAccepted.calls, 3);
 
-        for (const Json& bad : {Json("a b"), Json(7), Json::array(), Json("../x")}) {
-            params["atlas"] = bad;
-            EXPECT_EQ(ErrorCode(Call("artgen_accept", params)), "invalid_params") << DumpJson(bad).c_str();
+        for (const StringView bad : {StringView(R"("a b")"), StringView("7"), StringView("[]"), StringView(R"("../x")")}) {
+            EXPECT_EQ(Call("artgen_accept", AcceptParams(1, Format(R"("atlas":{})", bad))).ErrorCode(), "invalid_params") << String(bad).c_str();
         }
         EXPECT_EQ(gAccepted.calls, 3) << "a bad group changes nothing";
     }
 
     TEST_F(ArtGenSessionTest, ASoundAcceptIgnoresTheAtlasGroup) {
         const uint32_t id = session.Request("wood", "knock", 1, Optional<int64_t>(7)).value();
-        Call("artgen_poll", AtlasPoll("pieces"));
-        Json sound = Report(id);
-        sound["seed"] = 7;
-        sound["path"] = "D:/out/knock_7.flac";
-        sound["kind"] = "audio";
-        Call("artgen_image", sound);
+        Call("artgen_poll", CatalogWithWood("atlas", R"("pieces")"));
+        Call("artgen_image", Report(id, R"("kind":"audio","path":"D:/out/knock_7.flac","seed":7)"));
         session.SetSoundAcceptor(&FakeSoundAcceptor);
-        Json params = Json{{"seed", 7}, {"name", "knock"}, {"atlas", "not a name"}};
-        EXPECT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_TRUE(HasResult(Call("artgen_accept", R"({"atlas":"not a name","name":"knock","seed":7})")));
         EXPECT_EQ(gSoundAccepted.calls, 1);
     }
 
     TEST_F(ArtGenSessionTest, ASoundIgnoresTheImageParameter) {
         const uint32_t id = Require(session.Request("wood", "knock", 1, Optional<int64_t>(7)));
-        Call("artgen_poll", ReadyPoll());
-        Json sound = Report(id);
-        sound["seed"] = 7;
-        sound["path"] = "D:/out/knock_7.flac";
-        sound["kind"] = "audio";
-        Call("artgen_image", sound);
+        Call("artgen_poll", kReadyPoll);
+        Call("artgen_image", Report(id, R"("kind":"audio","path":"D:/out/knock_7.flac","seed":7)"));
         session.SetSoundAcceptor(&FakeSoundAcceptor);
-        Json params = Json{{"seed", 7}, {"name", "knock"}, {"image", "not even an object"}};
-        EXPECT_TRUE(Call("artgen_accept", params).contains("result"));
+        EXPECT_TRUE(HasResult(Call("artgen_accept", R"({"image":"not even an object","name":"knock","seed":7})")));
         EXPECT_EQ(gSoundAccepted.calls, 1);
     }
 
     TEST_F(ArtGenSessionTest, ARequestWithAReferenceGoesOutInThePollAndIsInTheState) {
-        Call("artgen_poll", ReadyPoll());
-        Json params = Json{{"preset", "wood"}, {"subject", "rook"}, {"count", 1}, {"reference", Json{{"mode", "init"}, {"image", "assets/artgen/rook.png"}, {"weight", 0.3}}}};
-        ASSERT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
+        Call("artgen_poll", kReadyPoll);
+        constexpr StringView kReference = R"({"image":"assets/artgen/rook.png","mode":"init","weight":0.3})";
+        ASSERT_TRUE(IntOf(Call("artgen_generate", Format(R"({{"count":1,"preset":"wood","reference":{},"subject":"rook"}})", kReference)).Result(), "id").has_value());
         ASSERT_TRUE(session.GetRun().reference.has_value());
         EXPECT_EQ(session.GetRun().reference->image, "assets/artgen/rook.png");
 
-        const Json state = Call("artgen_state");
-        EXPECT_EQ(*FindJsonMember(*FindJsonMember(Result(state), "run"), "reference"), params["reference"]);
+        const ControlReply state = Call("artgen_state");
+        EXPECT_EQ(RawOf(MemberOf(state.Result(), "run"), "reference"), kReference);
 
-        const Json poll = Call("artgen_poll", ReadyPoll());
-        const Json* request = FindJsonMember(Result(poll), "request");
-        ASSERT_NE(request, nullptr);
-        const Json* reference = FindJsonMember(*request, "reference");
-        ASSERT_NE(reference, nullptr);
-        EXPECT_EQ(*reference, params["reference"]);
+        const ControlReply poll = Call("artgen_poll", kReadyPoll);
+        const JsonView request = MemberOf(poll.Result(), "request");
+        ASSERT_TRUE(request.IsObject());
+        EXPECT_EQ(RawOf(request, "reference"), kReference);
     }
 
     TEST_F(ArtGenSessionTest, AStyleReferenceGoesOutInThePollAndIsInTheState) {
-        Call("artgen_poll", ReadyPoll());
-        Json params = Json{{"preset", "wood"}, {"subject", "rook"}, {"count", 1}, {"reference", Json{{"mode", "style"}, {"image", "assets/artgen/pawn.png"}, {"weight", 0.8}}}};
-        ASSERT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
-        EXPECT_EQ(*FindJsonMember(*FindJsonMember(Result(Call("artgen_state")), "run"), "reference"), params["reference"]);
-        const Json poll = Call("artgen_poll", ReadyPoll());
-        const Json* reference = FindJsonMember(*FindJsonMember(Result(poll), "request"), "reference");
-        ASSERT_NE(reference, nullptr);
-        EXPECT_EQ(*reference, params["reference"]);
+        Call("artgen_poll", kReadyPoll);
+        constexpr StringView kReference = R"({"image":"assets/artgen/pawn.png","mode":"style","weight":0.8})";
+        ASSERT_TRUE(IntOf(Call("artgen_generate", Format(R"({{"count":1,"preset":"wood","reference":{},"subject":"rook"}})", kReference)).Result(), "id").has_value());
+        EXPECT_EQ(RawOf(MemberOf(Call("artgen_state").Result(), "run"), "reference"), kReference);
+        const ControlReply poll = Call("artgen_poll", kReadyPoll);
+        EXPECT_EQ(RawOf(MemberOf(poll.Result(), "request"), "reference"), kReference);
     }
 
     TEST_F(ArtGenSessionTest, AStructureReferenceGoesOutInThePollAndIsInTheState) {
-        Call("artgen_poll", ReadyPoll());
-        Json params = Json{{"preset", "wood"}, {"subject", "rook"}, {"count", 1}, {"reference", Json{{"mode", "structure"}, {"image", "sketches/rook.png"}, {"weight", 0.8}}}};
-        ASSERT_TRUE(GetJsonInt(Result(Call("artgen_generate", params)), "id").has_value());
-        EXPECT_EQ(*FindJsonMember(*FindJsonMember(Result(Call("artgen_state")), "run"), "reference"), params["reference"]);
-        const Json poll = Call("artgen_poll", ReadyPoll());
-        const Json* reference = FindJsonMember(*FindJsonMember(Result(poll), "request"), "reference");
-        ASSERT_NE(reference, nullptr);
-        EXPECT_EQ(*reference, params["reference"]);
+        Call("artgen_poll", kReadyPoll);
+        constexpr StringView kReference = R"({"image":"sketches/rook.png","mode":"structure","weight":0.8})";
+        ASSERT_TRUE(IntOf(Call("artgen_generate", Format(R"({{"count":1,"preset":"wood","reference":{},"subject":"rook"}})", kReference)).Result(), "id").has_value());
+        EXPECT_EQ(RawOf(MemberOf(Call("artgen_state").Result(), "run"), "reference"), kReference);
+        const ControlReply poll = Call("artgen_poll", kReadyPoll);
+        EXPECT_EQ(RawOf(MemberOf(poll.Result(), "request"), "reference"), kReference);
     }
 
     TEST_F(ArtGenSessionTest, ARequestWithoutAReferenceLeavesTheKeyOut) {
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         ASSERT_TRUE(session.Request("wood", "rook", 1, Optional<int64_t>(1)).has_value());
-        const Json poll = Call("artgen_poll", ReadyPoll());
-        const Json* request = FindJsonMember(Result(poll), "request");
-        ASSERT_NE(request, nullptr);
-        EXPECT_EQ(FindJsonMember(*request, "reference"), nullptr);
-        const Json state = Call("artgen_state");
-        const Json& run = *FindJsonMember(Result(state), "run");
-        EXPECT_EQ(FindJsonMember(run, "reference"), nullptr) << "none is no member, not null";
+        const ControlReply poll = Call("artgen_poll", kReadyPoll);
+        const JsonView request = MemberOf(poll.Result(), "request");
+        ASSERT_TRUE(request.IsObject());
+        EXPECT_FALSE(request.Find("reference").has_value());
+        const ControlReply state = Call("artgen_state");
+        const JsonView run = MemberOf(state.Result(), "run");
+        ASSERT_TRUE(run.IsObject());
+        EXPECT_FALSE(run.Find("reference").has_value()) << "none is no member, not null";
     }
 
     TEST_F(ArtGenSessionTest, TheReferenceOfAnAnswerIsWrittenAsTheFileWritesIt) {
@@ -1011,32 +805,30 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, TheStateOfARunHasItsSeedOnlyWhenTheRequestNamedOne) {
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         Require(session.Request("wood", "rook", 1, Optional<int64_t>(5)));
-        EXPECT_EQ(GetJsonInt(*FindJsonMember(Result(Call("artgen_state")), "run"), "seed"), Optional<int64_t>(5));
+        EXPECT_EQ(IntOf(MemberOf(Call("artgen_state").Result(), "run"), "seed"), Optional<int64_t>(5));
         session.Cancel();
         Require(session.Request("wood", "rook", 1, Optional<int64_t>()));
-        EXPECT_EQ(FindJsonMember(*FindJsonMember(Result(Call("artgen_state")), "run"), "seed"), nullptr);
+        EXPECT_FALSE(MemberOf(Call("artgen_state").Result(), "run").Find("seed").has_value());
     }
 
     TEST_F(ArtGenSessionTest, ADraftTakesAReferenceToo) {
         const auto id = session.RequestDraft("wood", R"({"preset":1,"prompt":"{subject}","workflow":"sdxl_basic"})", "rook", 1, Optional<int64_t>(), false,
                                              ArtGenReference{"init", "artgen/out/x.png", Optional<double>()});
         ASSERT_TRUE(id.has_value()) << id.error().c_str();
-        const Json poll = Call("artgen_poll", ReadyPoll());
-        const Json* reference = FindJsonMember(*FindJsonMember(Result(poll), "request"), "reference");
-        ASSERT_NE(reference, nullptr);
-        EXPECT_EQ(GetJsonString(*reference, "image"), Optional<String>("artgen/out/x.png"));
-        EXPECT_EQ(FindJsonMember(*reference, "weight"), nullptr);
+        const ControlReply poll = Call("artgen_poll", kReadyPoll);
+        const JsonView reference = MemberOf(MemberOf(poll.Result(), "request"), "reference");
+        ASSERT_TRUE(reference.IsObject());
+        EXPECT_EQ(StringOf(reference, "image"), "artgen/out/x.png");
+        EXPECT_FALSE(reference.Find("weight").has_value());
     }
 
     TEST_F(ArtGenSessionTest, ANewRunClearsTheReferenceOfTheOldOne) {
-        Call("artgen_poll", ReadyPoll());
+        Call("artgen_poll", kReadyPoll);
         const uint32_t id = session.Request("wood", "rook", 1, Optional<int64_t>(1), false, ArtGenReference{"init", "a.png", Optional<double>(0.5)}).value();
-        Call("artgen_poll", ReadyPoll());
-        Json done = Report(id);
-        done["status"] = "ok";
-        Call("artgen_done", done);
+        Call("artgen_poll", kReadyPoll);
+        Call("artgen_done", Report(id, R"("status":"ok")"));
         EXPECT_TRUE(session.GetRun().reference.has_value());
         ASSERT_TRUE(session.Request("wood", "rook", 1, Optional<int64_t>(2)).has_value());
         EXPECT_FALSE(session.GetRun().reference.has_value());
@@ -1065,19 +857,17 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, AMalformedReferenceIsInvalidParamsAndChangesNothing) {
-        Call("artgen_poll", ReadyPoll());
-        Json params = Json{{"preset", "wood"}, {"subject", "rook"}, {"reference", Json{{"mode", "init"}, {"image", "a.png"}, {"weight", "x"}}}};
-        const Json response = Call("artgen_generate", params);
-        EXPECT_EQ(ErrorCode(response), "invalid_params");
-        EXPECT_NE(DumpJson(response).find("reference.weight"), String::npos);
+        Call("artgen_poll", kReadyPoll);
+        const auto generate = [this](StringView reference) { return Call("artgen_generate", Format(R"({{"preset":"wood","reference":{},"subject":"rook"}})", reference)); };
+        const ControlReply response = generate(R"({"image":"a.png","mode":"init","weight":"x"})");
+        EXPECT_EQ(response.ErrorCode(), "invalid_params");
+        EXPECT_NE(String(response.Text()).find("reference.weight"), String::npos);
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Idle);
 
-        for (const Json& bad : {Json("a.png"), Json::array(), Json{{"mode", "init"}}, Json{{"image", "a.png"}}, Json{{"mode", "init"}, {"image", ""}}}) {
-            params["reference"] = bad;
-            EXPECT_EQ(ErrorCode(Call("artgen_generate", params)), "invalid_params") << DumpJson(bad).c_str();
+        for (const StringView bad : {StringView(R"("a.png")"), StringView("[]"), StringView(R"({"mode":"init"})"), StringView(R"({"image":"a.png"})"), StringView(R"({"image":"","mode":"init"})")}) {
+            EXPECT_EQ(generate(bad).ErrorCode(), "invalid_params") << String(bad).c_str();
         }
-        params["reference"] = Json();
-        EXPECT_TRUE(Call("artgen_generate", params).contains("result")) << "null is no reference";
+        EXPECT_TRUE(HasResult(generate("null"))) << "null is no reference";
         EXPECT_FALSE(session.GetRun().reference.has_value());
     }
 
