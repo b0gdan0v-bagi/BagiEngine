@@ -819,7 +819,7 @@ namespace BECore {
         if (preset != nullptr && preset->is_string()) {
             request.preset = StringOr(params, "preset");
         } else if (preset != nullptr && preset->is_object()) {
-            request.presetData = DumpJson(*preset);  // Interim: WP 5
+            request.presetData = DumpJson(*preset);  // Interim: WP 6
             request.preset = StringOr(params, "presetName");
         } else {
             return std::unexpected(InvalidParams("'preset' must be a name or a preset object"));
@@ -954,19 +954,19 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenCancelAnswer, ControlError> ArtGenSession::CancelFromParams(const Json& params) {
-        if (IsGiven(params, "job") && !GetJsonString(params, "job")) {
+    std::expected<ArtGenCancelAnswer, ControlError> ArtGenSession::CancelFromParams(JsonView params) {
+        if (IsGiven(params, "job") && !GetParamString(params, "job")) {
             return std::unexpected(InvalidParams("'job' must be a string"));
         }
-        if (IsGiven(params, "set") && !GetJsonString(params, "set")) {
+        if (IsGiven(params, "set") && !GetParamString(params, "set")) {
             return std::unexpected(InvalidParams("'set' must be a string"));
         }
-        if (IsGiven(params, "all") && !GetJsonBool(params, "all")) {
+        if (IsGiven(params, "all") && !GetParamBool(params, "all")) {
             return std::unexpected(InvalidParams("'all' must be a boolean"));
         }
-        const bool all = GetJsonBool(params, "all").value_or(false);
-        const Optional<String> job = IsGiven(params, "job") ? GetJsonString(params, "job") : Optional<String>();
-        Optional<String> setName = IsGiven(params, "set") ? GetJsonString(params, "set") : Optional<String>();
+        const bool all = GetParamBool(params, "all").value_or(false);
+        const Optional<String> job = IsGiven(params, "job") ? GetParamString(params, "job") : Optional<String>();
+        Optional<String> setName = IsGiven(params, "set") ? GetParamString(params, "set") : Optional<String>();
 
         if (job) {
             if (all) {

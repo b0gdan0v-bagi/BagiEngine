@@ -1,9 +1,12 @@
 #pragma once
 
 #include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Types/Types.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
@@ -29,6 +32,36 @@ namespace BECore::ArtGenControl {
         return ControlError{String(code), std::move(message)};
     }
 
+    inline String StringOr(JsonView object, StringView key, StringView fallback = {}) {
+        auto value = GetParamString(object, key);
+        return value ? std::move(*value) : String(fallback);
+    }
+
+    /// True when @p object has the member and it is not null (a client may send an optional param as null)
+    inline bool IsGiven(JsonView object, StringView key) {
+        const Optional<JsonView> member = FindParam(object, key);
+        return member && !member->IsNull();
+    }
+
+    /// The text of a JSON string value that is not a member of an object (an item of a list); nullopt for any other type
+    inline Optional<String> AsString(JsonView value) {
+        String text;
+        if (!value.ReadText(text)) {
+            return std::nullopt;
+        }
+        return text;
+    }
+
+    /// The compact text of a draft preset a handler got in a call, keys in byte order at every level: the form the session keeps and the manifest
+    /// writes (`WriteJsonSorted`), so one draft is one text whatever order the client wrote it in
+    inline String SortedTextOf(JsonView value) {
+        String text;
+        JsonWriter writer(text);
+        WriteJsonSorted(writer, value);
+        return text;
+    }
+
+    // Interim: the `Json` helpers go with the set handlers (WP 6)
     inline String StringOr(const Json& object, StringView key, StringView fallback = {}) {
         const auto value = GetJsonString(object, key);
         return value ? *value : String(fallback);
@@ -56,7 +89,13 @@ namespace BECore::ArtGenControl {
     template <auto Method>
     void Register(ControlService& service, ArtGenSession& session, StringView name) {
         service.RegisterHandler(name, [&session](ControlCall& call) {
-            auto result = (session.*Method)(call.ParamsJson());
+            auto result = [&] {
+                if constexpr (std::is_invocable_v<decltype(Method), ArtGenSession&, JsonView>) {
+                    return (session.*Method)(call.Params());
+                } else {
+                    return (session.*Method)(call.ParamsJson());  // Interim: WP 6
+                }
+            }();
             if (result) {
                 if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*result)>, String>) {
                     call.Reply([&text = *result](JsonWriter& writer) { writer.Raw(text); });

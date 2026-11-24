@@ -351,16 +351,16 @@ namespace BECore {
         /// The handlers, public for the tests: each takes the params of the call and answers like the method. `HandlePoll` and `HandleSet` answer the
         /// compact text of the reply, written by hand: `request.preset` of the poll is a preset's name or an inline draft (two types under one key,
         /// the draft's text in the middle), and `artgen_set` is the manifest (`WriteArtGenSet`) with `state`
-        std::expected<String, ControlError> HandlePoll(const Json& params);
-        std::expected<ArtGenStaleAnswer, ControlError> HandleProgress(const Json& params);
-        std::expected<ArtGenStaleAnswer, ControlError> HandleImage(const Json& params);
-        std::expected<ArtGenStaleAnswer, ControlError> HandleDone(const Json& params);
-        std::expected<ArtGenQueuedAnswer, ControlError> HandleGenerate(const Json& params);
-        std::expected<ArtGenCancelAnswer, ControlError> HandleCancel(const Json& params);
-        std::expected<ArtGenAcceptAnswer, ControlError> HandleAccept(const Json& params);
-        std::expected<ArtGenStaleAnswer, ControlError> HandleSetupReport(const Json& params);
-        std::expected<ArtGenSetupQueuedAnswer, ControlError> HandleSetup(const Json& params);
-        std::expected<ArtGenSavedAnswer, ControlError> HandleSavePreset(const Json& params);
+        std::expected<String, ControlError> HandlePoll(JsonView params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleProgress(JsonView params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleImage(JsonView params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleDone(JsonView params);
+        std::expected<ArtGenQueuedAnswer, ControlError> HandleGenerate(JsonView params);
+        std::expected<ArtGenCancelAnswer, ControlError> HandleCancel(JsonView params);
+        std::expected<ArtGenAcceptAnswer, ControlError> HandleAccept(JsonView params);
+        std::expected<ArtGenStaleAnswer, ControlError> HandleSetupReport(JsonView params);
+        std::expected<ArtGenSetupQueuedAnswer, ControlError> HandleSetup(JsonView params);
+        std::expected<ArtGenSavedAnswer, ControlError> HandleSavePreset(JsonView params);
         std::expected<ArtGenEnqueueAnswer, ControlError> HandleEnqueue(const Json& params);
         std::expected<String, ControlError> HandleSet(const Json& params);
         std::expected<ArtGenPickAnswer, ControlError> HandlePick(const Json& params);
@@ -372,9 +372,9 @@ namespace BECore {
 
     private:
         /// The run a report of the service is about, or null when it is about an older one (a late message after a new request)
-        ArtGenRun* RunOf(const Json& params);
+        ArtGenRun* RunOf(JsonView params);
         std::expected<uint32_t, String> Queue(StringView preset, String presetData, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants, Optional<ArtGenReference> reference);
-        void ReadCatalog(const Json& params);
+        void ReadCatalog(JsonView params);
         [[nodiscard]] ArtGenSet* MutableSet(StringView name);
         /// The job of `_run` while it is Running (the run is the work of a set), else null
         [[nodiscard]] ArtGenSetJob* RunningJobOfRun(ArtGenSet*& set);
@@ -401,7 +401,7 @@ namespace BECore {
         /// The methods of the sets (ArtGenSessionSets.cpp): the handlers and their descriptions
         void RegisterSetControl(ControlService& service);
         /// `artgen_cancel` with `job` or `set`: the one job, or the whole set
-        std::expected<ArtGenCancelAnswer, ControlError> CancelFromParams(const Json& params);
+        std::expected<ArtGenCancelAnswer, ControlError> CancelFromParams(JsonView params);
         [[nodiscard]] Vector<ArtGenSetSummaryAnswer> BuildSetSummaries() const;
 
         Clock _clock;
@@ -423,7 +423,8 @@ namespace BECore {
         uint32_t _nextId = 1;
         bool _stopService = false;
         bool _refreshCatalog = false;  // a preset was saved: the next poll asks the service to look at the files again
-        Json _catalog;                 // the presets and workflows of the last poll, so an unchanged list is not read again
+        String _catalogPresets;        // the raw text of the two lists of the last poll, so an unchanged list is not read again
+        String _catalogWorkflows;
         double _lastPollSeconds = -1.0;
         uint64_t _pollCount = 0;
         uint64_t _version = 0;

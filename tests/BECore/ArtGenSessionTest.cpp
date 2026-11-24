@@ -3,6 +3,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/File/File.h>
 #include <Common/ControlTestSupport.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
@@ -543,6 +544,35 @@ namespace BECore::Tests {
         EXPECT_EQ(session.Version(), version);
     }
 
+    TEST_F(ArtGenSessionTest, TheInputsOfAWorkflowAreListedInTheOrderOfTheirNamesWhateverTheDocumentSays) {
+        const String poll = R"({"workflows":[{"name":"w","inputs":{"steps":{"default":1},"cfg":{"default":2},"sampler":{"default":"x"}}}]})";
+        ASSERT_TRUE(session.HandlePoll(JsonDoc(poll)).has_value());
+        const ArtGenWorkflow& workflow = Require(session.FindWorkflow("w"));
+        ASSERT_EQ(workflow.inputs.size(), 3u);
+        EXPECT_EQ(workflow.inputs[0].name, "cfg");
+        EXPECT_EQ(workflow.inputs[1].name, "sampler");
+        EXPECT_EQ(workflow.inputs[2].name, "steps");
+    }
+
+    TEST_F(ArtGenSessionTest, AListOfThePollThatIsTheSameBytesIsNotReadAgainAndOneFormattedDifferentlyIs) {
+        const String compact = R"({"presets":[{"name":"wood"}]})";
+        ASSERT_TRUE(session.HandlePoll(JsonDoc(compact)).has_value());
+        ASSERT_EQ(session.GetServiceStatus().presets.size(), 1u);
+        const uint64_t version = session.Version();
+        ASSERT_TRUE(session.HandlePoll(JsonDoc(compact)).has_value());
+        EXPECT_EQ(session.Version(), version);
+        ASSERT_TRUE(session.HandlePoll(JsonDoc(R"({"presets": [ {"name": "wood"} ]})")).has_value());
+        EXPECT_GT(session.Version(), version);
+        EXPECT_EQ(session.GetServiceStatus().presets.size(), 1u);
+    }
+
+    TEST_F(ArtGenSessionTest, ACountThatIsNotAFiniteNumberIsInvalidParams) {
+        Call("artgen_poll", ReadyPoll());
+        const auto refused = session.HandleGenerate(JsonDoc(R"({"preset":"wood","subject":"knight","count":1e999})"));
+        ASSERT_FALSE(refused.has_value());
+        EXPECT_EQ(refused.error().code, "invalid_params");
+    }
+
     TEST_F(ArtGenSessionTest, ADraftGoesInlineWithTheNameItCameFrom) {
         Call("artgen_poll", CatalogPoll());
         Json params = Object();
@@ -565,7 +595,7 @@ namespace BECore::Tests {
     TEST_F(ArtGenSessionTest, TheRequestOfAPollIsCompactSortedWithTheDraftsTextInIt) {
         const String draft = R"({"preset":1,"prompt":"a {subject}","workflow":"sdxl_basic"})";
         ASSERT_TRUE(session.RequestDraft("wood", draft, "knight", 2, Optional<int64_t>(3), false, ArtGenReference{"init", "x.png", Optional<double>(0.25)}).has_value());
-        const auto reply = session.HandlePoll(ReadyPoll());
+        const auto reply = session.HandlePoll(JsonDoc(DumpJson(ReadyPoll())));
         ASSERT_TRUE(reply.has_value());
         EXPECT_EQ(*reply, Format(R"({{"gameRoot":"D:/Games/Chess","request":{{"count":2,"id":{},"preset":{},"presetName":"wood","reference":{{"image":"x.png","mode":"init","weight":0.25}},)"
                                  R"("seed":3,"subject":"knight"}}}})",
@@ -575,7 +605,7 @@ namespace BECore::Tests {
         done["status"] = "ok";
         Call("artgen_done", done);
         ASSERT_TRUE(session.Request("wood", "rook", 1, Optional<int64_t>()).has_value());
-        const auto byName = session.HandlePoll(ReadyPoll());
+        const auto byName = session.HandlePoll(JsonDoc(DumpJson(ReadyPoll())));
         ASSERT_TRUE(byName.has_value());
         EXPECT_EQ(*byName, Format(R"({{"gameRoot":"D:/Games/Chess","request":{{"count":1,"id":{},"preset":"wood","seed":null,"subject":"rook"}}}})", session.GetRun().id));
     }
