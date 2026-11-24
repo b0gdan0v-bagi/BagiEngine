@@ -17,7 +17,7 @@ namespace BECore::Tests {
     namespace {
 
         /// The first bytes of a PNG of @p width x @p height: what ReadPngSize reads (the rest of the file does not matter to it)
-        void WritePngHeader(const std::filesystem::path& file, uint32_t width, uint32_t height) {
+        void WritePngHeader(const Path& file, uint32_t width, uint32_t height) {
             Array<uint8_t, 33> bytes{0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n', 0, 0, 0, 13, 'I', 'H', 'D', 'R'};
             for (int i = 0; i < 4; ++i) {
                 bytes[16 + i] = static_cast<uint8_t>(width >> (24 - 8 * i));
@@ -30,7 +30,7 @@ namespace BECore::Tests {
         const ArtGenImagePlan kIdentity{ArtGenImageSettings{false, ArtGenImageSettings::kDefaultPadding, 0}, {}};
 
         /// A real PNG of @p width x @p height with an opaque red box; the rest is transparent
-        void WriteRealPng(const std::filesystem::path& file, uint32_t width, uint32_t height, ArtGenIntRect box) {
+        void WriteRealPng(const Path& file, uint32_t width, uint32_t height, ArtGenIntRect box) {
             ArtGenPixels pixels;
             pixels.width = width;
             pixels.height = height;
@@ -64,9 +64,9 @@ namespace BECore::Tests {
             RemoveDirectory(folder);
         }
 
-        std::filesystem::path folder;
-        std::filesystem::path png;
-        std::filesystem::path provenance;
+        Path folder;
+        Path png;
+        Path provenance;
     };
 
     namespace {
@@ -357,8 +357,7 @@ namespace BECore::Tests {
         FillGroup(library, game, true);
         const Vector<uint8_t> atlasBefore = ReadFileBytes(game.Resolve(kAtlasPng));
         const SpriteEntry rookBefore = Rook(library);
-        std::error_code ignored;
-        std::filesystem::remove(game.Resolve(kRookPng), ignored);
+        RemoveFileIfPresent(game.Resolve(kRookPng));
         const ArtGenCopied copied = game.Copied(kQueenPng, MakeSolid(6, 2, 0, kHigh, 0));
         int saves = 0;
         auto save = [&saves] {
@@ -692,7 +691,7 @@ namespace BECore::Tests {
         EXPECT_EQ(copied->texturePath, "assets/artgen/white_queen.png");
         EXPECT_EQ(copied->width, 1024u);
         EXPECT_EQ(copied->height, 768u);
-        EXPECT_TRUE(std::filesystem::exists(folder / "assets" / "artgen" / "white_queen.png"));
+        EXPECT_TRUE(PathExists(folder / "assets" / "artgen" / "white_queen.png"));
         EXPECT_EQ(ReadFile(folder / "assets" / "artgen" / "white_queen.artgen.json"), "{\"seed\": 7}");
     }
 
@@ -704,26 +703,70 @@ namespace BECore::Tests {
         const auto copied = CopyVariantIntoAssets(other, provenance, folder / "assets", "queen", kIdentity);
         ASSERT_TRUE(copied.has_value());
         EXPECT_EQ(copied->width, 512u);
-        EXPECT_EQ(ReadPngSize(folder / "assets" / "artgen" / "queen.png")->first, 512u);
+        EXPECT_EQ(Require(ReadPngSize(folder / "assets" / "artgen" / "queen.png")).first, 512u);
         EXPECT_EQ(ReadFile(folder / "assets" / "artgen" / "queen.artgen.json"), "{\"seed\": 8}");
     }
 
     TEST_F(ArtGenAcceptTest, ABadNameOrANonPngIsRefusedAndWritesNothing) {
         EXPECT_FALSE(CopyVariantIntoAssets(png, provenance, folder / "assets", "../escape", kIdentity).has_value());
         EXPECT_FALSE(CopyVariantIntoAssets(provenance, provenance, folder / "assets", "queen", kIdentity).has_value());
-        EXPECT_FALSE(std::filesystem::exists(folder / "assets" / "artgen"));
+        EXPECT_FALSE(PathExists(folder / "assets" / "artgen"));
     }
 
     TEST_F(ArtGenAcceptTest, AVariantWithoutProvenanceIsStillAccepted) {
-        std::filesystem::remove(provenance);
+        RemoveFileIfPresent(provenance);
         const auto copied = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity);
         ASSERT_TRUE(copied.has_value());
-        EXPECT_FALSE(std::filesystem::exists(copied->provenanceFile));
+        EXPECT_FALSE(PathExists(copied->provenanceFile));
     }
 
     TEST_F(ArtGenAcceptTest, TheProvenanceFileIsBesideTheMediaFile) {
-        EXPECT_EQ(ProvenanceFileOf("assets/artgen/queen.png").generic_string(), "assets/artgen/queen.artgen.json");
-        EXPECT_EQ(ProvenanceFileOf("assets/sounds/move.wav").generic_string(), "assets/sounds/move.artgen.json");
+        EXPECT_EQ(ProvenanceFileOf("assets/artgen/queen.png"), Path("assets/artgen/queen.artgen.json"));
+        EXPECT_EQ(ProvenanceFileOf("assets/sounds/move.wav"), Path("assets/sounds/move.artgen.json"));
+    }
+
+    TEST_F(ArtGenAcceptTest, OnlyTheLastExtensionOfTheMediaFileIsReplacedByTheProvenanceOne) {
+        EXPECT_EQ(ProvenanceFileOf("x/a.b.png"), Path("x/a.b.artgen.json"));
+        EXPECT_EQ(ProvenanceFileOf("a.png"), Path("a.artgen.json"));
+    }
+
+    TEST_F(ArtGenAcceptTest, AFileShorterThanThePngHeaderHasNoSize) {
+        const auto shortFile = folder / "out" / "short.png";
+        WriteFile(shortFile, "\x89PNG");
+        EXPECT_FALSE(ReadPngSize(shortFile).has_value());
+        EXPECT_FALSE(ReadPngSize(folder / "out" / "nothing.png").has_value());
+    }
+
+    TEST_F(ArtGenAcceptTest, AnAcceptIntoAGameWhoseAssetsFolderIsNonAsciiWritesTheFiles) {
+        const Path assets(folder / "caf\xC3\xA9" / "assets");
+        const auto identity = CopyVariantIntoAssets(png, provenance, assets, "queen", kIdentity);
+        ASSERT_TRUE(identity.has_value()) << identity.error().c_str();
+        EXPECT_EQ(Require(ReadPngSize(identity->pngFile)).first, 1024u);
+        EXPECT_EQ(ReadFile(identity->provenanceFile), "{\"seed\": 7}");
+
+        const auto source = folder / "out" / "real.png";
+        ASSERT_NO_FATAL_FAILURE(WriteRealPng(source, 256, 256, {40, 40, 100, 100}));
+        ArtGenImagePlan own;
+        own.settings = ArtGenImageSettings{true, 5, 64};
+        const auto processed = CopyVariantIntoAssets(source, provenance, assets, "king", own);
+        ASSERT_TRUE(processed.has_value()) << processed.error().c_str();
+        EXPECT_EQ(processed->pngFile, assets / "artgen" / "king.png");
+        EXPECT_TRUE(ReadPngSize(processed->pngFile).has_value());
+        EXPECT_FALSE(PathExists(Path(Format("{}.tmp", processed->pngFile.View()))));
+        EXPECT_TRUE(ParseJson(StringView(ReadFile(processed->provenanceFile))).has_value());
+    }
+
+    TEST_F(ArtGenAcceptTest, AnIdentityAcceptWithNoProvenanceRemovesTheOldRecordOfTheName) {
+        ASSERT_TRUE(CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity).has_value());
+        const auto old = folder / "assets" / "artgen" / "queen.artgen.json";
+        ASSERT_TRUE(PathExists(old));
+
+        const auto copied = CopyVariantIntoAssets(png, folder / "out" / "none.artgen.json", folder / "assets", "queen", kIdentity);
+        ASSERT_TRUE(copied.has_value()) << copied.error().c_str();
+        EXPECT_FALSE(PathExists(old));
+
+        const auto again = CopyVariantIntoAssets(png, Path(), folder / "assets", "queen", kIdentity);
+        EXPECT_TRUE(again.has_value()) << "a name with no old record is no error";
     }
 
     TEST_F(ArtGenAcceptTest, KeptIsAddedToTheCopiedProvenanceAndItsOwnKeysStay) {
@@ -770,7 +813,7 @@ namespace BECore::Tests {
         const auto result = MarkProvenanceKept(missing, 7, "2026-11-17T10:00:00Z");
         ASSERT_FALSE(result.has_value());
         EXPECT_NE(result.error().find("nothing.artgen.json"), String::npos);
-        EXPECT_FALSE(std::filesystem::exists(missing));
+        EXPECT_FALSE(PathExists(missing));
 
         WriteFile(provenance, "[1, 2]");
         const auto notObject = MarkProvenanceKept(provenance, 7, "2026-11-17T10:00:00Z");
@@ -793,14 +836,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(first.has_value());
         ASSERT_TRUE(MarkProvenanceKept(first->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
 
-        std::filesystem::remove(provenance);
+        RemoveFileIfPresent(provenance);
         const auto second = CopyVariantIntoAssets(png, provenance, folder / "assets", "queen", kIdentity);
         ASSERT_TRUE(second.has_value()) << second.error().c_str();
-        EXPECT_FALSE(std::filesystem::exists(second->provenanceFile)) << "a record with the earlier seed and its `kept` is not this variant's";
+        EXPECT_FALSE(PathExists(second->provenanceFile)) << "a record with the earlier seed and its `kept` is not this variant's";
 
-        const auto withEmptyPath = CopyVariantIntoAssets(png, std::filesystem::path(), folder / "assets", "queen", kIdentity);
+        const auto withEmptyPath = CopyVariantIntoAssets(png, Path(), folder / "assets", "queen", kIdentity);
         ASSERT_TRUE(withEmptyPath.has_value());
-        EXPECT_FALSE(std::filesystem::exists(withEmptyPath->provenanceFile));
+        EXPECT_FALSE(PathExists(withEmptyPath->provenanceFile));
     }
 
     TEST_F(ArtGenAcceptTest, ADefaultAcceptOfAVariantWithNoProvenanceReplacesTheOldRecordWithAnAcceptedOnlyOne) {
@@ -810,7 +853,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(first.has_value());
         ASSERT_TRUE(MarkProvenanceKept(first->provenanceFile, 7, "2026-11-17T10:00:00Z").has_value());
 
-        std::filesystem::remove(provenance);
+        RemoveFileIfPresent(provenance);
         const auto second = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
         ASSERT_TRUE(second.has_value()) << second.error().c_str();
         const auto record = ParseJson(StringView(ReadFile(second->provenanceFile)));
@@ -965,7 +1008,7 @@ namespace BECore::Tests {
         const Json* accepted = FindJsonMember(*record, "accepted");
         ASSERT_NE(accepted, nullptr);
         EXPECT_EQ(GetJsonString(*accepted, "sprite").value_or(String()), "queen");
-        EXPECT_EQ(GetJsonString(*accepted, "source").value_or(String()), String(source.generic_string().c_str()));
+        EXPECT_EQ(GetJsonString(*accepted, "source").value_or(String()), String(source.View()));
         EXPECT_EQ(GetJsonInt(*accepted, "seed").value_or(-1), 7);
         EXPECT_EQ(GetJsonString(*accepted, "frame").value_or(String()), "sprite");
         const Json* processing = FindJsonMember(*accepted, "processing");
@@ -1020,7 +1063,7 @@ namespace BECore::Tests {
         ASSERT_FALSE(copied.has_value());
         EXPECT_NE(copied.error().find("does not fit the frame"), String::npos) << copied.error().c_str();
         EXPECT_NE(copied.error().find("real.png"), String::npos);
-        EXPECT_FALSE(std::filesystem::exists(folder / "assets" / "artgen"));
+        EXPECT_FALSE(PathExists(folder / "assets" / "artgen"));
     }
 
     TEST_F(ArtGenAcceptTest, TwoImagesInOnePlanFrameGiveFilesOfOneSize) {
@@ -1058,7 +1101,7 @@ namespace BECore::Tests {
         const auto copied = CopyVariantIntoAssets(source, provenance, folder / "assets", "queen", ArtGenImagePlan{});
         ASSERT_FALSE(copied.has_value());
         EXPECT_NE(copied.error().find("nothing drawn"), String::npos) << copied.error().c_str();
-        EXPECT_FALSE(std::filesystem::exists(folder / "assets" / "artgen"));
+        EXPECT_FALSE(PathExists(folder / "assets" / "artgen"));
     }
 
     TEST_F(ArtGenAcceptTest, AMeasuredFrameCutsTheRowsOfASetToOneSizeAndKeepsTheirProportion) {
@@ -1073,8 +1116,7 @@ namespace BECore::Tests {
         for (const Picture& picture : pictures) {
             const auto file = folder / "out" / Format("{}.png", picture.name).c_str();
             ASSERT_NO_FATAL_FAILURE(WriteRealPng(file, 512, 512, picture.box));
-            const std::string text = file.generic_string();  //-NoStd: the text of a std::filesystem::path
-            files.push_back(String(text.c_str(), text.size()));
+            files.push_back(String(file.View()));
         }
         const ArtGenImageSettings settings;
         const auto frame = MeasureFrameForControl(files, settings);
@@ -1116,10 +1158,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(WriteRealPng(drawn, 128, 128, {32, 32, 64, 64}));
         ASSERT_NO_FATAL_FAILURE(WriteRealPng(empty, 128, 128, {0, 0, 0, 0}));
         ASSERT_NO_FATAL_FAILURE(WriteRealPng(other, 64, 64, {0, 0, 32, 32}));
-        const auto text = [](const std::filesystem::path& path) {
-            const std::string generic = path.generic_string();  //-NoStd: the text of a std::filesystem::path
-            return String(generic.c_str(), generic.size());
-        };
+        const auto text = [](const Path& path) { return String(path.View()); };
         const ArtGenImageSettings noPadding{true, 0, 0};
 
         const auto skipped = MeasureFrameForControl(Vector<String>{text(empty), text(drawn)}, noPadding);

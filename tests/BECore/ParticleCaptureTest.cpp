@@ -227,8 +227,8 @@ namespace BECore::Tests {
     };
 
     TEST_F(ParticleCaptureTest, TheExampleEffectIsTheOneTheDocQuotes) {
-        const std::filesystem::path path = CoreManager::GetFileSystem().ResolvePath(kParticlesDoc);
-        ASSERT_FALSE(path.empty()) << kParticlesDoc;
+        const Path path = CoreManager::GetFileSystem().ResolvePath(kParticlesDoc);
+        ASSERT_FALSE(path.Empty()) << kParticlesDoc;
         const String text = ReadFile(path);
         EXPECT_NE(text.find(kExampleEffect), String::npos) << "Particles/CLAUDE.md must quote the example effect of ParticleCaptureTest verbatim";
     }

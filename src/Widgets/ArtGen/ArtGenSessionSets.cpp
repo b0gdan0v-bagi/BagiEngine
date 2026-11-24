@@ -1,3 +1,4 @@
+#include <BECore/File/File.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/ArtGenSessionControl.h>
@@ -22,8 +23,8 @@ namespace BECore {
         // Draws of a fresh seed for a more-run before the call gives up; the range is 2^32 wide, so a second draw is already a rarity
         constexpr int32_t kMaxSeedDraws = 16;
 
-        std::filesystem::path RootPath(const String& root) {
-            return std::filesystem::path(ToStd(StringView(root)));  //-NoStd: std::filesystem::path takes a std::string_view
+        Path RootPath(const String& root) {
+            return Path(StringView(root));
         }
 
         int64_t DrawSeed() {
@@ -49,14 +50,16 @@ namespace BECore {
             return static_cast<int32_t>(std::count_if(set.jobs.begin(), set.jobs.end(), [](const ArtGenSetJob& job) { return job.accepted.has_value(); }));
         }
 
-        String TextOfPath(const std::filesystem::path& path) {
-            const std::string text = path.generic_string();  //-NoStd: the text of a std::filesystem::path
-            return String(FromStd(text));
+        String TextOfPath(const Path& path) {
+            return String(path.View());
         }
 
-        bool FileExists(const std::filesystem::path& path) {
-            std::error_code error;
-            return !path.empty() && std::filesystem::is_regular_file(path, error);
+        bool FileExists(const Path& path) {
+            if (path.Empty()) {
+                return false;
+            }
+            const auto info = GetFileInfo(path);
+            return info && info->kind == FileKind::File;
         }
 
         /// "label: a, b"; nothing when @p names is empty. The parts are joined with "; "
@@ -83,7 +86,7 @@ namespace BECore {
         }
 
         /// The variant @p seed of a job of a set about to be written into the game, with the real paths of its files; the reason when it cannot be
-        std::expected<ArtGenVariant, String> VariantToWrite(const std::filesystem::path& gameRoot, const ArtGenSet& set, const ArtGenSetJob& job, int64_t seed) {
+        std::expected<ArtGenVariant, String> VariantToWrite(const Path& gameRoot, const ArtGenSet& set, const ArtGenSetJob& job, int64_t seed) {
             const ArtGenSetVariant* picked = FindVariant(job, seed);
             if (picked == nullptr) {
                 return std::unexpected(String("the pick is not one of its variants"));
@@ -94,13 +97,13 @@ namespace BECore {
             ArtGenVariant variant;
             variant.seed = picked->seed;
             variant.kind = picked->kind;
-            const std::filesystem::path file = AbsoluteInSet(gameRoot, set.name, picked->file);
+            const Path file = AbsoluteInSet(gameRoot, set.name, picked->file);
             if (!FileExists(file)) {
                 return std::unexpected(Format("the picked file '{}' is gone", picked->file));
             }
             variant.path = TextOfPath(file);
             if (!picked->provenance.empty()) {
-                const std::filesystem::path provenance = AbsoluteInSet(gameRoot, set.name, picked->provenance);
+                const Path provenance = AbsoluteInSet(gameRoot, set.name, picked->provenance);
                 if (!FileExists(provenance)) {
                     return std::unexpected(Format("the provenance file '{}' is gone", picked->provenance));
                 }
@@ -184,7 +187,7 @@ namespace BECore {
         ++_version;
     }
 
-    std::expected<Optional<ArtGenSetProcessing>, String> ArtGenSession::ProcessingOfSet(const ArtGenSet& set, const std::filesystem::path& root) const {
+    std::expected<Optional<ArtGenSetProcessing>, String> ArtGenSession::ProcessingOfSet(const ArtGenSet& set, const Path& root) const {
         // A legacy set's rows are full frames already: a frame now would make the next row differ in scale from the first
         if (set.processing || IsLegacyAccepted(set)) {
             return set.processing;
@@ -203,7 +206,7 @@ namespace BECore {
                 continue;
             }
             for (const ArtGenSetVariant& variant : job.variants) {
-                const std::filesystem::path file = AbsoluteInSet(root, set.name, variant.file);
+                const Path file = AbsoluteInSet(root, set.name, variant.file);
                 if (variant.kind == kKindImage && FileExists(file)) {
                     files.push_back(TextOfPath(file));
                 }
@@ -485,7 +488,7 @@ namespace BECore {
             set->kind = variant.kind;
             ++_version;
         }
-        const std::filesystem::path folder = SetFolder(RootPath(_gameRoot), set->name);
+        const Path folder = SetFolder(RootPath(_gameRoot), set->name);
         ArtGenSetVariant entry;
         entry.seed = variant.seed;
         entry.file = RelativeToSet(folder, variant.path);
@@ -1038,7 +1041,7 @@ namespace BECore {
             return std::unexpected(MakeError(kSetIncompleteCode, Format("the set '{}' is not ready to accept: {}", setName, which)));
         }
         const bool sound = StringView(set->kind) == kKindAudio;
-        const std::filesystem::path root = RootPath(_gameRoot);
+        const Path root = RootPath(_gameRoot);
         struct Planned {
             size_t row = 0;
             int64_t seed = 0;

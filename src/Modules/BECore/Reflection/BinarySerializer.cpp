@@ -1,5 +1,4 @@
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <EASTL/numeric.h>
@@ -15,9 +14,9 @@ namespace BECore {
         constexpr size_t kTextReserve = 64;
     }  // namespace
 
-    bool BinarySerializer::SaveToFile(const std::filesystem::path& path) const {
+    bool BinarySerializer::SaveToFile(const Path& path) const {
         const Vector<uint8_t>& image = GetData();
-        return WriteFileAtomically(PathToUtf8(path), Span<const uint8_t>(image.data(), image.size())).has_value();
+        return WriteFileAtomically(path, Span<const uint8_t>(image.data(), image.size())).has_value();
     }
 
     BinarySerializer::PoolSectionSize BinarySerializer::PoolSectionStats() const {

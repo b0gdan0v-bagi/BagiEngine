@@ -1,40 +1,29 @@
 #include "RmlUiFileInterface.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 
 namespace BECore {
 
-    RmlUiFileStamp RmlUiFileStamp::Of(const std::filesystem::path& path) {
+    RmlUiFileStamp RmlUiFileStamp::Of(const Path& path) {
         RmlUiFileStamp stamp;
         stamp.path = path;
-        std::error_code error;
-        const auto lastWrite = std::filesystem::last_write_time(path, error);
-        if (error) {
+        const Optional<FileInfo> info = GetFileInfo(path);
+        if (!info || info->kind != FileKind::File) {
             return stamp;
         }
-        const auto size = std::filesystem::file_size(path, error);
-        if (error) {
-            return stamp;
-        }
-        stamp.lastWrite = lastWrite;
-        stamp.size = size;
+        stamp.lastWriteNs = info->modifyTimeNs;
+        stamp.size = info->size;
         return stamp;
     }
 
     bool RmlUiFileStamp::IsStale() const {
-        std::error_code error;
-        const auto lastWrite = std::filesystem::last_write_time(path, error);
-        if (error) {
+        const Optional<FileInfo> info = GetFileInfo(path);
+        if (!info || info->kind != FileKind::File) {
             return false;
         }
-        const auto currentSize = std::filesystem::file_size(path, error);
-        if (error) {
-            return false;
-        }
-        return lastWrite != this->lastWrite || currentSize != size;
+        return info->modifyTimeNs != lastWriteNs || info->size != size;
     }
 
     void RmlUiFileInterface::BeginRecording() {
@@ -49,10 +38,10 @@ namespace BECore {
 
     Rml::FileHandle RmlUiFileInterface::Open(const Rml::String& path) {
         const StringView virtualPath(path.data(), path.size());
-        std::filesystem::path realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-        std::error_code error;
-        if (realPath.empty() || !std::filesystem::is_regular_file(realPath, error)) {
-            realPath = std::filesystem::path(path);
+        Path realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
+        const Optional<FileInfo> info = realPath.Empty() ? Optional<FileInfo>() : GetFileInfo(realPath);
+        if (!info || info->kind != FileKind::File) {
+            realPath = Path(virtualPath);
         }
         if (_isRecording) {
             const bool known = std::any_of(_recorded.begin(), _recorded.end(), [&](const RmlUiFileStamp& stamp) { return stamp.path == realPath; });
@@ -60,7 +49,7 @@ namespace BECore {
                 _recorded.push_back(RmlUiFileStamp::Of(realPath));
             }
         }
-        auto bytes = ReadFileBytes(PathToUtf8(realPath));
+        auto bytes = ReadFileBytes(realPath);
         if (!bytes) {
             return 0;
         }

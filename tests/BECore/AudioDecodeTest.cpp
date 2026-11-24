@@ -104,7 +104,7 @@ namespace BECore::Tests {
         }
 
         Vector<uint8_t> ReadFixture(const char* name) {
-            const std::filesystem::path path = AudioFixtureFolder() / name;
+            const Path path = AudioFixtureFolder() / name;
             return ReadFileBytes(path);
         }
 

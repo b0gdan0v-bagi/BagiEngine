@@ -1,9 +1,9 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Memory/ArenaAllocator.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Utils/FunctionRef.h>
-#include <filesystem>
 
 namespace BECore {
 
@@ -60,7 +60,7 @@ namespace BECore {
 
         /// Writes the bytes to a file through WriteFileAtomically: the folder is made and a reader sees the old file or the whole new one,
         /// never a half file. False if it cannot be written.
-        bool SaveToFile(const std::filesystem::path& path) const;
+        bool SaveToFile(const Path& path) const;
 
         void Write(StringView name, bool value) override;
         void Write(StringView name, int8_t value) override;

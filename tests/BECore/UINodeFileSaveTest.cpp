@@ -123,7 +123,7 @@ namespace BECore::Tests {
 
         void SetUp() override {
             _dir = TestTempDirectory("BagiUINodeFileSaveTest");
-            std::filesystem::remove_all(_dir);
+            RemoveDirectory(_dir);
             WriteFile(_dir / "nodes" / "Hud.xml", kHudNode);
             WriteFile(_dir / "nodes" / "Seat.xml", kSeatNode);
             _loader = MakeDirectoryNodeLoader(_dir);
@@ -131,8 +131,7 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _manager.Reset();
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
         /// Loads the scene Main with @p nodesXml as its nodes; the scene is kept in `_scene`
@@ -177,7 +176,7 @@ namespace BECore::Tests {
                 return false;
             }
             const auto path = _dir / Format("{}.xml", ref).c_str();
-            if (!std::filesystem::exists(path)) {
+            if (!PathExists(path)) {
                 error = "no file";
                 return false;
             }
@@ -208,7 +207,7 @@ namespace BECore::Tests {
             return Printed(nodesEl);
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         NodeFileLoader _loader;
         pugi::xml_document _doc;
         pugi::xml_document _out;

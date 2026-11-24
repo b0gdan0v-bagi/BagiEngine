@@ -75,6 +75,8 @@ POSITIVES = [
     ("stable-sort", "eastl::stable_sort(a, b);"),
     ("stable-sort", "std::inplace_merge(a, m, b);"),
     ("stable-sort", "std::stable_partition(a, b, p);"),
+    ("path", "std::filesystem::path p;"),
+    ("path", "auto p = std::filesystem::u8path(s);"),
     ("directory-iterator", "for (auto& e : std::filesystem::directory_iterator(p)) {}"),
     ("fmt", "auto s = fmt::format(\"{}\", 1);"),
     ("lock", "std::mutex m;"),

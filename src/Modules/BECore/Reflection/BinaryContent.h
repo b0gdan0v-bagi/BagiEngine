@@ -1,10 +1,10 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Types/Types.h>
 #include <expected>
-#include <filesystem>
 
 namespace BECore {
 
@@ -49,7 +49,7 @@ namespace BECore {
      * read and not adopted stays allocated. A file the loader adopted and the reader (or the content stamp) then refuses leaves its
      * texts in the pool.
      */
-    [[nodiscard]] std::expected<BinaryContent, String> LoadContentFile(const std::filesystem::path& path, BinaryContentOptions options = {});
+    [[nodiscard]] std::expected<BinaryContent, String> LoadContentFile(const Path& path, BinaryContentOptions options = {});
 
     /// The same checks over memory, through the same code as LoadContentFile (the seam of the tests and of the fuzz target)
     [[nodiscard]] std::expected<BinaryContent, String> LoadContentBytes(Span<const uint8_t> data, BinaryContentOptions options = {});

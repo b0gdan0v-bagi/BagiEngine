@@ -196,19 +196,18 @@ namespace BECore::Tests {
         void SetUp() override {
             // One directory per test: ctest runs the tests in parallel processes, and SetUp clears the directory
             _dir = TestTempDirectory("BagiEngineSceneEditorSaveTest");
-            std::filesystem::remove_all(_dir);
-            std::filesystem::create_directories(_dir);
+            RemoveDirectory(_dir);
+            MakeDirectory(_dir);
         }
 
         void TearDown() override {
             // Destroying the scenes drops the components' event connections
             _manager.Reset();
             _reloaded.Reset();
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
-        std::filesystem::path SavedPath() const {
+        Path SavedPath() const {
             return _dir / "SceneConfig.xml";
         }
 
@@ -271,7 +270,7 @@ namespace BECore::Tests {
         XmlDocument _document;
         IntrusivePtr<SceneManager> _manager;
         IntrusivePtr<SceneManager> _reloaded;
-        std::filesystem::path _dir;
+        Path _dir;
     };
 
     TEST_F(SceneEditorSaveTest, OnlyTheActiveSceneIsReplaced) {
@@ -831,7 +830,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneEditorSaveReferencesTest, ANodeFileThatIsGoneGivesAnInlineNodeAndANote) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
-        std::filesystem::remove(_dir / "nodes" / "Panel.xml");
+        RemoveFileIfPresent(_dir / "nodes" / "Panel.xml");
 
         ASSERT_TRUE(Save(GetScene("Main")));
 
@@ -878,7 +877,7 @@ namespace BECore::Tests {
 </node>
 )";
         constexpr float kEditedTitleX = 33.0f;
-        const std::filesystem::path panelPath = _dir / "nodes" / "Panel.xml";
+        const Path panelPath = _dir / "nodes" / "Panel.xml";
         WriteFile(panelPath, kCommentedPanel);
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
 
@@ -949,7 +948,7 @@ namespace BECore::Tests {
 )";
         constexpr float kOutputWidth = 800.0f;
         constexpr float kOutputHeight = 600.0f;
-        const std::filesystem::path panelPath = _dir / "nodes" / "Panel.xml";
+        const Path panelPath = _dir / "nodes" / "Panel.xml";
         WriteFile(panelPath, kCommentedPanel);
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
 

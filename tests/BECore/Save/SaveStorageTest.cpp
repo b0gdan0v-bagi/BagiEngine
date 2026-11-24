@@ -85,8 +85,8 @@ namespace BECore::Tests {
         SaveGameService service(_fileSystem);
         ASSERT_TRUE(service.Initialize(_base / "saves"));
         // A non-empty folder in place of the save: the rename of the temporary file over it fails
-        const std::filesystem::path blocker = _base / "saves" / "one.save";
-        std::filesystem::create_directories(blocker);
+        const Path blocker = _base / "saves" / "one.save";
+        MakeDirectory(blocker);
         WriteFile(blocker / "inside", "x");
 
         EXPECT_FALSE(service.WriteSlot("one", Bytes({1})).has_value());
@@ -140,7 +140,7 @@ namespace BECore::Tests {
 
 #ifndef __EMSCRIPTEN__
     TEST_F(SaveStorageTest, DesktopHasNoPersistentDirectoryAndNoState) {
-        EXPECT_TRUE(PersistentSaveDirectory().empty());
+        EXPECT_TRUE(PersistentSaveDirectory().Empty());
         EXPECT_EQ(GetSaveStorageState(), SaveStorageState::NotApplicable);
     }
 #endif

@@ -44,7 +44,7 @@ namespace BECore::Tests {
         }
 
         /// What ReadFileInto gives for @p path, as a String, so it can be compared with ReadFileBytes
-        Optional<String> ReadInto(const std::filesystem::path& path, size_t maxBytes = kUnlimited) {
+        Optional<String> ReadInto(const Path& path, size_t maxBytes = kUnlimited) {
             ScratchScope scratch;
             const Optional<StringView> view = XmlDocument::ReadFileInto(path, scratch.GetArena(), maxBytes);
             if (!view) {
@@ -53,7 +53,7 @@ namespace BECore::Tests {
             return String(view->data(), view->size());
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
     };
 
     TEST_F(ConfigReadScratchTest, GivesTheBytesOfReadFileBytes) {
@@ -71,7 +71,7 @@ namespace BECore::Tests {
         WriteFile(_dir / "Over.xml", TextOfSize(ReaderLimits::kMaxXmlDocumentBytes));
 
         for (const char* name : {"Missing.xml", "Over.xml", ""}) {
-            const std::filesystem::path path = name[0] == '\0' ? _dir : _dir / name;  // a folder is no file
+            const Path path = name[0] == '\0' ? _dir : _dir / name;  // a folder is no file
             EXPECT_FALSE(XmlDocument::ReadFileBytes(path).has_value()) << name;
             EXPECT_FALSE(ReadInto(path).has_value()) << name;
         }

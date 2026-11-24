@@ -1,12 +1,10 @@
 #include <BECore/Control/Json.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/Format/Format.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -34,7 +32,7 @@ namespace BECore::Tests {
 
         /// The names of `CHECK_NAMES` in the service (`tools/artgen/artgen_checks.py`), read from the source so the list is not a hand copy
         Vector<String> CheckNamesOfTheService() {
-            const std::filesystem::path file = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "tools" / "artgen" / "artgen_checks.py";  //-NoStd: a path
+            const Path file = Path(__FILE__).Parent().Parent().Parent() / "tools" / "artgen" / "artgen_checks.py";
             const String text = ReadFile(file);
             constexpr StringView kDeclaration = "CHECK_NAMES = (";
             Vector<String> names;
@@ -167,12 +165,12 @@ namespace BECore::Tests {
             RemoveDirectory(_root);
         }
 
-        std::filesystem::path _root;
+        Path _root;
     };
 
     TEST_F(ArtGenVerdictFileTest, ReadsARealRecord) {
-        const std::filesystem::path file = _root / "pawn_42.artgen.json";
-        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(file), kRealRecord).has_value());
+        const Path file = _root / "pawn_42.artgen.json";
+        ASSERT_TRUE(WriteFileAtomically(file, kRealRecord).has_value());
         const ArtGenVerdict verdict = ReadArtGenVerdict(file);
         EXPECT_EQ(verdict.kind, ArtGenVerdictKind::Failed);
         EXPECT_TRUE(Contains(verdict.tip, "touches the edge"));
@@ -181,8 +179,8 @@ namespace BECore::Tests {
     TEST_F(ArtGenVerdictFileTest, AMissingFileAnEmptyPathAndBrokenJsonAreNone) {
         EXPECT_EQ(ReadArtGenVerdict(_root / "gone.artgen.json").kind, ArtGenVerdictKind::None);
         EXPECT_EQ(ReadArtGenVerdict({}).kind, ArtGenVerdictKind::None);
-        const std::filesystem::path broken = _root / "broken.artgen.json";
-        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(broken), R"({"checks": {"passed": tr)").has_value());
+        const Path broken = _root / "broken.artgen.json";
+        ASSERT_TRUE(WriteFileAtomically(broken, R"({"checks": {"passed": tr)").has_value());
         EXPECT_EQ(ReadArtGenVerdict(broken).kind, ArtGenVerdictKind::None);
     }
 

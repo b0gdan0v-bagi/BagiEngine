@@ -186,7 +186,7 @@ namespace BECore {
         _cells.clear();
         _islandError.clear();
 
-        const std::filesystem::path file = CoreManager::GetFileSystem().ResolvePath(texturePath.ToStringView());
+        const Path file = CoreManager::GetFileSystem().ResolvePath(texturePath.ToStringView());
         // The pixels live only in this call: the panel keeps the rects, never the image
         auto image = LoadRgbaImage(file);
         if (!image) {

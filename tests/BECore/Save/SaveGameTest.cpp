@@ -8,6 +8,7 @@
 #include <Common/BinaryStreams.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
+#include <Common/TestFiles.h>
 #include <Generated/SaveGameTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -354,7 +355,7 @@ namespace BECore::Tests {
         const auto after = Service().ReadSlot("slot");
         ASSERT_TRUE(after.has_value());
         EXPECT_EQ(BinaryFormat::Load<uint16_t>(after->data() + sizeof(BinaryFormat::Magic)), BinaryFormat::PooledVersion);
-        EXPECT_FALSE(std::filesystem::exists(_saves / "slot.save.tmp"));
+        EXPECT_FALSE(PathExists(_saves / "slot.save.tmp"));
 
         GameState loaded;
         ASSERT_TRUE(Service().Load("slot", kSchema, loaded).has_value());
@@ -529,10 +530,7 @@ namespace BECore::Tests {
     TEST_F(SaveGameTest, AFileOverTheSizeLimitIsNotReadAndNotWritten) {
         // A sparse file of the size of the limit plus one: the size is checked before a byte is allocated
         ASSERT_TRUE(Service().WriteSlot("big", ValidBytes()).has_value());
-        const std::filesystem::path file = _saves / "big.save";
-        std::error_code ec;
-        std::filesystem::resize_file(file, ReaderLimits::kMaxBinaryStreamBytes + 1, ec);
-        ASSERT_FALSE(ec) << ec.message();
+        ResizeFile(_saves / "big.save", ReaderLimits::kMaxBinaryStreamBytes + 1);
 
         GameState state = MakeUntouchedState();
         ExpectFailure(Service().ReadSlot("big"), SaveErrorKind::ReadFailed);
@@ -545,7 +543,7 @@ namespace BECore::Tests {
         ExpectFailure(Service().WriteSlot("kept", Vector<uint8_t>(ReaderLimits::kMaxBinaryStreamBytes + 1)), SaveErrorKind::WriteFailed);
         GameState loaded;
         EXPECT_TRUE(Service().Load("kept", kSchema, loaded).has_value());
-        EXPECT_FALSE(std::filesystem::exists(_saves / "kept.save.tmp"));
+        EXPECT_FALSE(PathExists(_saves / "kept.save.tmp"));
     }
 
     TEST_F(SaveGameTest, MissingSlotIsNotFound) {
@@ -614,11 +612,11 @@ namespace BECore::Tests {
         ExpectFailure(Service().Peek("a"), SaveErrorKind::NotFound);
 
         // WriteFailed: a folder where the file should go
-        std::filesystem::create_directories(_saves / "blocked.save");
+        MakeDirectory(_saves / "blocked.save");
         ExpectFailure(Service().Save("blocked", kSchema, MakeState()), SaveErrorKind::WriteFailed);
 
         // ReadFailed: a folder in place of the save
-        std::filesystem::create_directories(_saves / "folder.save");
+        MakeDirectory(_saves / "folder.save");
         ExpectFailure(Service().Peek("folder"), SaveErrorKind::ReadFailed);
 
         // Corrupt, WrongGame, VersionTooNew, VersionTooOld

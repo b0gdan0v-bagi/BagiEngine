@@ -2,14 +2,13 @@
 #include <BECore/AudioTestSupport.h>
 #include <BECore/Control/Json.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSound.h>
 #include <cmath>
-#include <cstdio>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -41,7 +40,7 @@ namespace BECore::Tests {
             return settings;
         }
 
-        std::filesystem::path Fixture(const char* name) {
+        Path Fixture(const char* name) {
             return AudioFixtureFolder() / name;
         }
 
@@ -155,18 +154,18 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             _root = TestTempDirectory("artgen_sound");
-            std::filesystem::remove_all(_root);
-            std::filesystem::create_directories(_root / "assets" / "sounds");
+            RemoveDirectory(_root);
+            MakeDirectory(_root / "assets" / "sounds");
             _provenance = _root / "pawn_4.artgen.json";
-            ASSERT_TRUE(WriteFileAtomically(PathToUtf8(_provenance), "{\"preset\": \"knock\", \"seed\": 4}").has_value());
+            ASSERT_TRUE(WriteFileAtomically(_provenance, "{\"preset\": \"knock\", \"seed\": 4}").has_value());
         }
 
         void TearDown() override {
-            std::filesystem::remove_all(_root);
+            RemoveDirectory(_root);
         }
 
-        std::filesystem::path _root;
-        std::filesystem::path _provenance;
+        Path _root;
+        Path _provenance;
     };
 
     TEST_F(ArtGenSoundAcceptTest, ASoundBecomesAMonoWavWithItsProvenanceUnderItsName) {
@@ -175,11 +174,11 @@ namespace BECore::Tests {
         const auto written = WriteSoundIntoAssets(Fixture("mono-24bit.flac"), _provenance, _root / "assets", target, ArtGenSoundSettings{});
         ASSERT_TRUE(written.has_value()) << written.error().c_str();
         EXPECT_EQ(written->clipPath, "assets/artgen/knock.wav");
-        EXPECT_EQ(written->wavFile, _root / "assets" / "artgen" / "knock.wav");
+        EXPECT_EQ(written->wavFile, Path(_root / "assets" / "artgen" / "knock.wav"));
         EXPECT_EQ(written->format, (AudioFormat{22050, 1}));
         EXPECT_NEAR(written->peakDb, -1.0f, 0.01f);
 
-        const auto text = ReadTextFile(PathToUtf8(written->provenanceFile));
+        const auto text = ReadTextFile(written->provenanceFile);
         ASSERT_TRUE(text.has_value()) << text.error().c_str();
         const auto provenance = ParseJson(*text);
         ASSERT_TRUE(provenance.has_value());
@@ -193,23 +192,31 @@ namespace BECore::Tests {
     TEST_F(ArtGenSoundAcceptTest, AClipOfTheGameIsReplacedAndTheWavDecodes) {
         ArtGenSoundTarget target;
         target.clip = "assets/sounds/move.wav";
-        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(_root / "assets" / "sounds" / "move.wav"), "the old clip").has_value());
+        ASSERT_TRUE(WriteFileAtomically(_root / "assets" / "sounds" / "move.wav", "the old clip").has_value());
         ArtGenSoundSettings settings;
         settings.sampleRate = 11025;
         const auto written = WriteSoundIntoAssets(Fixture("mono-24bit.flac"), _provenance, _root / "assets", target, settings);
         ASSERT_TRUE(written.has_value()) << written.error().c_str();
-        EXPECT_EQ(written->wavFile, _root / "assets" / "sounds" / "move.wav");
-        EXPECT_TRUE(std::filesystem::exists(_root / "assets" / "sounds" / "move.artgen.json"));
+        EXPECT_EQ(written->wavFile, Path(_root / "assets" / "sounds" / "move.wav"));
+        EXPECT_TRUE(PathExists(_root / "assets" / "sounds" / "move.artgen.json"));
 
-        std::FILE* stream = std::fopen(written->wavFile.string().c_str(), "rb");
-        ASSERT_NE(stream, nullptr);
-        Vector<uint8_t> bytes(static_cast<size_t>(std::filesystem::file_size(written->wavFile)));
-        ASSERT_EQ(std::fread(bytes.data(), 1, bytes.size(), stream), bytes.size());
-        std::fclose(stream);
-        const auto decoded = DecodeWav(bytes);
+        const auto decoded = DecodeWav(ReadFileBytes(written->wavFile));
         ASSERT_TRUE(decoded.has_value()) << decoded.error().c_str();
         EXPECT_EQ(decoded->format, (AudioFormat{11025, 1}));
         EXPECT_NEAR(decoded->GetFrameCount() / 11025.0, written->seconds, 1e-3);
+    }
+
+    TEST_F(ArtGenSoundAcceptTest, AGameWhoseAssetsFolderIsNonAsciiGetsTheClipAndItsRecord) {
+        ArtGenSoundTarget target;
+        target.clip = "assets/sounds/move.wav";
+        const Path assets(_root / "caf\xC3\xA9" / "assets");
+        const auto written = WriteSoundIntoAssets(Fixture("mono-24bit.flac"), _provenance, assets, target, ArtGenSoundSettings{});
+        ASSERT_TRUE(written.has_value()) << written.error().c_str();
+        EXPECT_EQ(written->wavFile, assets / "sounds" / "move.wav");
+        EXPECT_EQ(written->provenanceFile, assets / "sounds" / "move.artgen.json");
+        EXPECT_TRUE(GetFileInfo(written->wavFile).has_value());
+        EXPECT_TRUE(ReadTextFile(written->provenanceFile.View()).has_value());
+        EXPECT_FALSE(PathExists(Path(Format("{}.tmp", written->wavFile.View()))));
     }
 
     TEST_F(ArtGenSoundAcceptTest, ATargetMustBeOneNameOrOneClip) {
@@ -218,7 +225,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(refused(ArtGenSoundTarget{"a", "assets/sounds/a.wav"}));
         EXPECT_TRUE(refused(ArtGenSoundTarget{"../a", ""}));
         EXPECT_TRUE(refused(ArtGenSoundTarget{"", "assets/../a.wav"}));
-        EXPECT_FALSE(std::filesystem::exists(_root / "a.wav"));
+        EXPECT_FALSE(PathExists(_root / "a.wav"));
     }
 
 }  // namespace BECore::Tests

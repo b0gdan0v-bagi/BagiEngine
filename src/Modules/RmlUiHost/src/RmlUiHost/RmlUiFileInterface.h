@@ -1,20 +1,20 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <RmlUi/Core/FileInterface.h>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
     /// A file as it was when a document read it: where it is and when it was last written. A document that came from files is loaded again when one of them is stale
     struct RmlUiFileStamp {
-        std::filesystem::path path;
-        std::filesystem::file_time_type lastWrite{};
-        uintmax_t size = 0;
+        Path path;
+        int64_t lastWriteNs = 0;
+        uint64_t size = 0;
 
         /// The stamp of @p path now (an empty one for a file that cannot be read)
-        [[nodiscard]] static RmlUiFileStamp Of(const std::filesystem::path& path);
+        [[nodiscard]] static RmlUiFileStamp Of(const Path& path);
 
         /// Whether the file on disk differs from this stamp. A file that cannot be read now (an editor saves by deleting and renaming) is not stale: it is looked at again later
         [[nodiscard]] bool IsStale() const;

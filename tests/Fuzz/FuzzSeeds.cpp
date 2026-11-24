@@ -1,7 +1,6 @@
 #include "FuzzSeeds.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/ReaderLimits.h>
@@ -583,10 +582,10 @@ namespace BECore::Fuzz {
         return seeds;
     }
 
-    bool WriteGeneratedSeeds(const std::filesystem::path& corpusRoot) {
+    bool WriteGeneratedSeeds(const Path& corpusRoot) {
         for (const FuzzSeedFile& seed : MakeGeneratedSeeds()) {
-            const std::filesystem::path folder = corpusRoot / seed.folder;
-            if (!WriteFileAtomically(PathToUtf8(folder / ToStd(seed.name)), Span<const uint8_t>(seed.bytes.data(), seed.bytes.size()))) {
+            const Path folder = corpusRoot / seed.folder;
+            if (!WriteFileAtomically(folder / seed.name, Span<const uint8_t>(seed.bytes.data(), seed.bytes.size()))) {
                 return false;
             }
         }

@@ -69,30 +69,29 @@ namespace BECore::Tests {
 
         void SetUp() override {
             _dir = TestTempDirectory("BagiSceneBinaryContentTest");
-            std::filesystem::remove_all(_dir);
+            RemoveDirectory(_dir);
         }
 
         void TearDown() override {
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
-        std::filesystem::path Engine(StringView ref, StringView extension) const {
-            return _dir / "engineRoot" / "config" / (std::filesystem::path(ToStd(ref)) += ToStd(extension));
+        Path Engine(StringView ref, StringView extension) const {
+            return _dir / "engineRoot" / "config" / Format("{}{}", ref, extension);
         }
 
-        std::filesystem::path Game(StringView ref, StringView extension) const {
-            return _dir / "gameRoot" / "config" / (std::filesystem::path(ToStd(ref)) += ToStd(extension));
+        Path Game(StringView ref, StringView extension) const {
+            return _dir / "gameRoot" / "config" / Format("{}{}", ref, extension);
         }
 
-        void WriteBin(const std::filesystem::path& file, StringView xml) const {
+        void WriteBin(const Path& file, StringView xml) const {
             WriteContentBin(file, kRootType, *NodeOf(xml));
         }
 
         /// Both layers mounted, whatever each holds (a layer without files is still a `config` folder)
         const FileSystem& Mount() {
-            std::filesystem::create_directories(_dir / "engineRoot" / "config");
-            std::filesystem::create_directories(_dir / "gameRoot" / "config");
+            MakeDirectory(_dir / "engineRoot" / "config");
+            MakeDirectory(_dir / "gameRoot" / "config");
             _fs.AddContentRoot(_dir / "engineRoot");
             _fs.AddContentRoot(_dir / "gameRoot");
             _fs.Initialize();
@@ -111,14 +110,14 @@ namespace BECore::Tests {
             return loaded ? Normalized(doc) : error;
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         FileSystem _fs;
     };
 
     TEST_F(SceneBinaryContentTest, ACookedNodeFileGivesTheNodeOfItsXml) {
         WriteFile(Engine(kHudRef, ".xml"), HudXml());
         const String fromXml = Load(kHudRef);
-        std::filesystem::remove(Engine(kHudRef, ".xml"));
+        RemoveFileIfPresent(Engine(kHudRef, ".xml"));
         WriteBin(Engine(kHudRef, ".bin"), HudXml());
         _fs = FileSystem{};
 
@@ -141,7 +140,7 @@ namespace BECore::Tests {
         String error;
         ASSERT_TRUE(ExpandNodeReference(ref.document_element(), MakeFileSystemNodeLoader(Mount()), true, expected, error)) << error.c_str();
         const String expectedText = Normalized(expected);
-        std::filesystem::remove(Engine(kHudRef, ".xml"));
+        RemoveFileIfPresent(Engine(kHudRef, ".xml"));
         WriteBin(Engine(kHudRef, ".bin"), HudXml());
         _fs = FileSystem{};
 
@@ -159,8 +158,8 @@ namespace BECore::Tests {
         EXPECT_NE(Load(kHudRef).find("FromGameBin"), String::npos);
 
         _fs = FileSystem{};
-        std::filesystem::remove(Game(kHudRef, ".bin"));
-        std::filesystem::remove(Engine(kHudRef, ".xml"));
+        RemoveFileIfPresent(Game(kHudRef, ".bin"));
+        RemoveFileIfPresent(Engine(kHudRef, ".xml"));
         WriteBin(Engine(kHudRef, ".bin"), "<node name=\"FromEngineBin\"/>");
         WriteFile(Game(kHudRef, ".xml"), Format("<node contentVersion=\"{}\" name=\"FromGameXml\"/>", kContentVersion));
         EXPECT_NE(Load(kHudRef).find("FromGameXml"), String::npos);
@@ -217,7 +216,7 @@ namespace BECore::Tests {
         Vector<String> expected;
         PoolString expectedSource;
         ASSERT_NO_FATAL_FAILURE(instantiate(expected, expectedSource));
-        std::filesystem::remove(Engine(kHudRef, ".xml"));
+        RemoveFileIfPresent(Engine(kHudRef, ".xml"));
         WriteBin(Engine(kHudRef, ".bin"), HudXml());
         _fs = FileSystem{};
 
@@ -239,13 +238,12 @@ namespace BECore::Tests {
 
         void SetUp() override {
             _dir = TestTempDirectory("BagiSceneBinaryScenesTest");
-            std::filesystem::remove_all(_dir);
+            RemoveDirectory(_dir);
             WriteFile(_dir / "nodes" / "Hud.xml", HudXml());
         }
 
         void TearDown() override {
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
         /// The scenes of the XML config: inline nodes with children and components, and a node file with an override
@@ -264,7 +262,7 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         pugi::xml_document _doc;
     };
 

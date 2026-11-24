@@ -14,17 +14,14 @@ namespace BECore::Tests {
         protected:
             void SetUp() override {
                 _root = TestTempDirectory("GitBranch");
-                std::error_code ec;
-                std::filesystem::remove_all(_root, ec);
-                std::filesystem::create_directories(_root, ec);
+                MakeEmptyDirectory(_root);
             }
 
             void TearDown() override {
-                std::error_code ec;
-                std::filesystem::remove_all(_root, ec);
+                RemoveDirectory(_root);
             }
 
-            std::filesystem::path _root;
+            Path _root;
         };
 
     }  // namespace
@@ -70,9 +67,8 @@ namespace BECore::Tests {
 
     TEST_F(GitBranchTest, ReadFromSeveralLevelsBelowTheRoot) {
         WriteFile(_root / ".git" / "HEAD", "ref: refs/heads/main\n");
-        const std::filesystem::path deep = _root / "a" / "b" / "c";
-        std::error_code ec;
-        std::filesystem::create_directories(deep, ec);
+        const Path deep = _root / "a" / "b" / "c";
+        MakeDirectory(deep);
         EXPECT_EQ(ReadGitBranch(deep), "main");
     }
 
@@ -83,7 +79,7 @@ namespace BECore::Tests {
 
     TEST_F(GitBranchTest, ReadFollowsAnAbsoluteGitdirFile) {
         WriteFile(_root / "elsewhere" / "HEAD", "ref: refs/heads/games/mahjong\n");
-        WriteFile(_root / "project" / ".git", Format("gitdir: {}\n", FromStdString((_root / "elsewhere").string())));
+        WriteFile(_root / "project" / ".git", Format("gitdir: {}\n", (_root / "elsewhere").View()));
         EXPECT_EQ(ReadGitBranch(_root / "project"), "games/mahjong");
     }
 
@@ -91,10 +87,27 @@ namespace BECore::Tests {
         // The submodule shape: engine/.git is a file that points into the superproject's .git/modules
         WriteFile(_root / ".git" / "modules" / "engine" / "HEAD", "ref: refs/heads/todo/y\n");
         WriteFile(_root / "engine" / ".git", "gitdir: ../.git/modules/engine\n");
-        const std::filesystem::path below = _root / "engine" / "config";
-        std::error_code ec;
-        std::filesystem::create_directories(below, ec);
+        const Path below = _root / "engine" / "config";
+        MakeDirectory(below);
         EXPECT_EQ(ReadGitBranch(below), "todo/y");
+    }
+
+    TEST_F(GitBranchTest, ReadInANonAsciiCheckoutFolder) {
+        const Path checkout = _root / "caf\xC3\xA9";
+        WriteFile(checkout / ".git" / "HEAD", "ref: refs/heads/todo/folder\n");
+        EXPECT_EQ(ReadGitBranch(checkout / "sub"), "todo/folder");
+
+        WriteFile(checkout / ".git" / "modules" / "engine" / "HEAD", "ref: refs/heads/todo/relative\n");
+        WriteFile(checkout / "engine" / ".git", "gitdir: ../.git/modules/engine\n");
+        EXPECT_EQ(ReadGitBranch(checkout / "engine"), "todo/relative");
+
+        WriteFile(checkout / "elsewhere" / "HEAD", "ref: refs/heads/todo/absolute\n");
+        WriteFile(checkout / "linked" / ".git", Format("gitdir: {}\n", (checkout / "elsewhere").View()));
+        EXPECT_EQ(ReadGitBranch(checkout / "linked"), "todo/absolute");
+    }
+
+    TEST_F(GitBranchTest, AnEmptyStartGivesEmpty) {
+        EXPECT_EQ(ReadGitBranch(Path()), "");
     }
 
     TEST_F(GitBranchTest, ReadStopsAtTheNearestGitEntry) {
@@ -105,20 +118,17 @@ namespace BECore::Tests {
 
     TEST_F(GitBranchTest, ReadGivesEmptyWithoutARepository) {
         // The read walks up past the temp folder, so a .git above it (a checkout holding the temp folder) is found first
-        for (std::filesystem::path above = _root.parent_path(); !above.empty() && above != above.parent_path(); above = above.parent_path()) {
-            std::error_code missing;
-            if (std::filesystem::exists(above / ".git", missing)) {
-                GTEST_SKIP() << "a .git above the temp folder: " << above.string();
+        for (Path above = _root.Parent(); !above.Empty() && above != above.Parent(); above = above.Parent()) {
+            if (PathExists(above / ".git")) {
+                GTEST_SKIP() << "a .git above the temp folder: " << above.CStr();
             }
         }
-        std::error_code ec;
-        std::filesystem::create_directories(_root / "plain" / "dir", ec);
+        MakeDirectory(_root / "plain" / "dir");
         EXPECT_EQ(ReadGitBranch(_root / "plain" / "dir"), "");
     }
 
     TEST_F(GitBranchTest, ReadGivesEmptyForAMissingHead) {
-        std::error_code ec;
-        std::filesystem::create_directories(_root / ".git", ec);
+        MakeDirectory(_root / ".git");
         EXPECT_EQ(ReadGitBranch(_root), "");
     }
 

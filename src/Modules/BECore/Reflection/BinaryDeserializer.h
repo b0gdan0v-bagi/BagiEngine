@@ -1,9 +1,9 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <expected>
-#include <filesystem>
 
 namespace BECore {
 
@@ -22,7 +22,7 @@ namespace BECore {
      *
      * @return nothing on success, else a message (a literal, valid for the whole run) that says what is wrong with the file
      */
-    [[nodiscard]] std::expected<void, StringView> ReadBinaryDocumentFile(const std::filesystem::path& path, Vector<uint8_t>& out);
+    [[nodiscard]] std::expected<void, StringView> ReadBinaryDocumentFile(const Path& path, Vector<uint8_t>& out);
 
     /**
      * @brief Binary deserializer (reader) for the format written by BinarySerializer
@@ -100,7 +100,7 @@ namespace BECore {
          *
          * @return true on success
          */
-        bool LoadFromFile(const std::filesystem::path& path);
+        bool LoadFromFile(const Path& path);
 
         // =================================================================
         // IDeserializer interface - Read methods

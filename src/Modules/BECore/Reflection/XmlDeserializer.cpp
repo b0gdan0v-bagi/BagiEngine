@@ -1,3 +1,4 @@
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -16,23 +17,23 @@ namespace BECore {
         _document.reset();
     }
 
-    bool XmlDeserializer::LoadFromFile(const std::filesystem::path& path) {
+    bool XmlDeserializer::LoadFromFile(const Path& path) {
         ResetDocument();
 
-        std::error_code error;
-        if (!std::filesystem::is_regular_file(path, error)) {
+        const Optional<FileInfo> info = GetFileInfo(path);
+        if (!info || info->kind != FileKind::File) {
             // A folder, a pipe or a device is no document, and has no size to check
-            AddError("", std::filesystem::exists(path, error) ? "XML path is not a regular file" : "Failed to parse XML file", 0);
+            AddError("", info ? "XML path is not a regular file" : "Failed to parse XML file", 0);
             return false;
         }
-        const uintmax_t size = std::filesystem::file_size(path, error);
-        if (error || size > ReaderLimits::kMaxXmlDocumentBytes) {
-            AddError("", error ? "Failed to read the size of the XML file" : "XML file is larger than the limit", 0);
+        if (info->size > ReaderLimits::kMaxXmlDocumentBytes) {
+            AddError("", "XML file is larger than the limit", 0);
             return false;
         }
 
-        pugi::xml_parse_result result = _document.load_file(path.c_str());
-        if (!result) {
+        // load_file(const char*) is the ANSI code page on Windows, which a UTF-8 path is not
+        const std::expected<Vector<uint8_t>, String> bytes = ReadFileBytes(path, ReaderLimits::kMaxXmlDocumentBytes);
+        if (!bytes || !_document.load_buffer(bytes->data(), bytes->size(), pugi::parse_default, pugi::encoding_auto)) {
             AddError("", "Failed to parse XML file", 0);
             return false;
         }
@@ -43,7 +44,7 @@ namespace BECore {
 
     bool XmlDeserializer::LoadFromVirtualPath(StringView virtualPath) {
         auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-        if (realPath.empty()) {
+        if (realPath.Empty()) {
             AddError("", "Failed to resolve virtual path", 0);
             return false;
         }

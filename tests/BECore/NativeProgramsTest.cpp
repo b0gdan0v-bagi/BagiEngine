@@ -14,6 +14,7 @@
 #include <Common/LogRecorder.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <atomic>
 #include <gtest/gtest.h>
 
@@ -109,15 +110,14 @@ namespace BECore::Tests {
 
         /// Removes the file of a test when the test ends
         struct TempFile {
-            std::filesystem::path path = TestTempPath("native_programs_flags");
+            Path path{TestTempPath("native_programs_flags")};
 
             ~TempFile() {
-                std::error_code ignored;
-                std::filesystem::remove(path, ignored);
+                RemoveFileIfPresent(path);
             }
 
             String Name() const {
-                return FromStdString(path.generic_string());
+                return String(path.View());
             }
         };
 
@@ -281,10 +281,10 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadFile(file.path), GenerateNativeSource(Span<const ProgramId>(&chosen, 1), options));
 
         constexpr auto kLongAgo = std::chrono::hours(24);
-        const auto old = std::filesystem::file_time_type::clock::now() - kLongAgo;
-        std::filesystem::last_write_time(file.path, old);
+        SetWriteTime(file.path, -kLongAgo);
+        const auto timeBefore = Require(GetFileInfo(file.path)).modifyTimeNs;
         ASSERT_TRUE(EmitNativeProgramsIfAsked(line, options, Span<const ProgramId>(&chosen, 1)).has_value());
-        EXPECT_EQ(std::filesystem::last_write_time(file.path), old) << "a file that holds the text is not rewritten";
+        EXPECT_EQ(Require(GetFileInfo(file.path)).modifyTimeNs, timeBefore) << "a file that holds the text is not rewritten";
     }
 
     TEST(NativeProgramsFlagsTest, TheEmitFlagWithoutAFileIsAnErrorAndNoFlagMeansTheProgramGoesOn) {

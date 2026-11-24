@@ -1,6 +1,5 @@
 #include <BECore/Control/Json.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/Utils/ScopeGuard.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -22,14 +21,11 @@ namespace BECore::Tests {
         protected:
             void SetUp() override {
                 _directory = TestTempDirectory("EditorSettings");
-                std::error_code ec;
-                std::filesystem::remove_all(_directory, ec);
-                std::filesystem::create_directories(_directory, ec);
+                MakeEmptyDirectory(_directory);
             }
 
             void TearDown() override {
-                std::error_code ec;
-                std::filesystem::remove_all(_directory, ec);
+                RemoveDirectory(_directory);
             }
 
             void WriteFile(const char* name, StringView text) const {
@@ -41,7 +37,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] bool Exists(const char* name) const {
-                return std::filesystem::exists(_directory / name);
+                return PathExists(_directory / name);
             }
 
             [[nodiscard]] Json ReadJsonFile(const char* name) const {
@@ -51,7 +47,7 @@ namespace BECore::Tests {
                 return parsed ? *parsed : Json::object();
             }
 
-            std::filesystem::path _directory;
+            Path _directory;
         };
 
     }  // namespace
@@ -175,6 +171,31 @@ namespace BECore::Tests {
         WriteFile("preferences.json.bad", "kept");
         ASSERT_TRUE(settings.SavePreferences());
         EXPECT_EQ(ReadFile("preferences.json.bad"), "kept");
+    }
+
+    TEST_F(EditorSettingsTest, SettingsRoundTripUnderANonAsciiFolder) {
+        const Path folder = _directory / "caf\xC3\xA9";
+        EditorSettings settings(folder);
+        EditorPreferences preferences;
+        preferences.fontScale = 1.25f;
+        settings.SetPreferences(preferences);
+        ASSERT_TRUE(settings.SavePreferences());
+        ASSERT_TRUE(settings.SaveHotkeys());
+        EXPECT_TRUE(PathExists(folder / "preferences.json"));
+
+        EditorSettings loaded(folder);
+        loaded.Load();
+        EXPECT_FLOAT_EQ(loaded.GetPreferences().fontScale, 1.25f);
+    }
+
+    TEST_F(EditorSettingsTest, AnUnreadableFileUnderANonAsciiFolderIsMovedAsideOnTheFirstSave) {
+        const Path folder = _directory / "caf\xC3\xA9";
+        const String garbage = "{ this is not json";
+        Tests::WriteFile(folder / "preferences.json", garbage);
+        EditorSettings settings(folder);
+        settings.Load();
+        ASSERT_TRUE(settings.SavePreferences());
+        EXPECT_EQ(Tests::ReadFile(folder / "preferences.json.bad"), garbage);
     }
 
     TEST_F(EditorSettingsTest, AValueOfTheWrongTypeGivesTheDefaultOfThatFieldOnly) {
@@ -572,16 +593,16 @@ namespace BECore::Tests {
 
     TEST_F(EditorSettingsTest, AFailedSaveKeepsTheOldFileAndLeavesNoTempFile) {
         // A folder where the file should go makes the rename fail
-        std::filesystem::create_directories(_directory / "preferences.json");
+        MakeDirectory(_directory / "preferences.json");
         EditorSettings settings(_directory);
         EXPECT_FALSE(settings.SavePreferences());
         EXPECT_FALSE(settings.GetLastSaveError().empty());
-        EXPECT_TRUE(std::filesystem::is_directory(_directory / "preferences.json"));
+        EXPECT_TRUE(IsFolder(_directory / "preferences.json"));
         EXPECT_FALSE(Exists("preferences.json.tmp"));
     }
 
     TEST_F(EditorSettingsTest, ASaveWithoutAFolderFails) {
-        EditorSettings settings{std::filesystem::path()};
+        EditorSettings settings{Path()};
         EXPECT_FALSE(settings.SavePreferences());
         EXPECT_FALSE(settings.GetLastSaveError().empty());
     }
@@ -593,20 +614,20 @@ namespace BECore::Tests {
         EXPECT_FALSE(Exists("preferences.json.tmp"));
         EXPECT_FALSE(Exists("hotkeys.json.tmp"));
 
-        const std::filesystem::path path = _directory / "note.txt";
-        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(path), "first").has_value());
-        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(path), "second").has_value());
-        const auto text = ReadTextFile(PathToUtf8(path));
+        const Path path = _directory / "note.txt";
+        ASSERT_TRUE(WriteFileAtomically(path, "first").has_value());
+        ASSERT_TRUE(WriteFileAtomically(path, "second").has_value());
+        const auto text = ReadTextFile(path);
         ASSERT_TRUE(text.has_value());
         EXPECT_EQ(*text, "second");
-        EXPECT_FALSE(std::filesystem::exists(_directory / "note.txt.tmp"));
-        EXPECT_FALSE(ReadTextFile(PathToUtf8(_directory / "missing.txt")).has_value());
+        EXPECT_FALSE(Exists("note.txt.tmp"));
+        EXPECT_FALSE(ReadTextFile(_directory / "missing.txt").has_value());
     }
 
     TEST_F(EditorSettingsTest, SaveMakesTheFolder) {
         EditorSettings settings(_directory / "a" / "b");
         ASSERT_TRUE(settings.SavePreferences());
-        EXPECT_TRUE(std::filesystem::exists(_directory / "a" / "b" / "preferences.json"));
+        EXPECT_TRUE(PathExists(_directory / "a" / "b" / "preferences.json"));
     }
 
     TEST_F(EditorSettingsTest, TheEnvironmentVariableMovesTheFolder) {
@@ -625,13 +646,13 @@ namespace BECore::Tests {
 #endif
         });
 
-        const String value = FromStdString(_directory.string());
+        const String value = String(_directory.View());
 #if defined(_WIN32)
         ASSERT_EQ(_putenv_s(kEditorDirectoryEnvironmentVariable, value.c_str()), 0);
 #else
         ASSERT_EQ(setenv(kEditorDirectoryEnvironmentVariable, value.c_str(), 1), 0);
 #endif
-        EXPECT_EQ(EditorUserDirectory(), _directory);
+        EXPECT_EQ(EditorUserDirectory(), Path(_directory));
     }
 
 }  // namespace BECore::Tests

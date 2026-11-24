@@ -1,4 +1,5 @@
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <CoreSDL/ImageFile.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
@@ -13,29 +14,26 @@ namespace BECore::Tests {
         /// A PNG of @p pixels under the temp folder, removed with the object
         class TempPng {
         public:
-            TempPng(int width, int height, Vector<uint8_t>& pixels) : _path(TestTempDirectory("ImageFile")) {
-                _path += ".png";
+            TempPng(int width, int height, Vector<uint8_t>& pixels, const String& name = "ImageFile") : _file(TestTempDirectory(name).ReplaceExtension(".png")) {
                 SDL_Surface* surface = SDL_CreateSurfaceFrom(width, height, SDL_PIXELFORMAT_RGBA32, pixels.data(), width * kPixelBytes);
-                const auto utf8 = _path.u8string();  //-NoStd: SDL_image takes the path as UTF-8 chars
-                _saved = surface != nullptr && IMG_SavePNG(surface, reinterpret_cast<const char*>(utf8.c_str()));
+                _saved = surface != nullptr && IMG_SavePNG(surface, _file.CStr());
                 SDL_DestroySurface(surface);
             }
             ~TempPng() {
-                std::error_code ignored;
-                std::filesystem::remove(_path, ignored);
+                RemoveFileIfPresent(_file);
             }
             TempPng(const TempPng&) = delete;
             TempPng& operator=(const TempPng&) = delete;
 
-            [[nodiscard]] const std::filesystem::path& Path() const {
-                return _path;
+            [[nodiscard]] const Path& File() const {
+                return _file;
             }
             [[nodiscard]] bool Saved() const {
                 return _saved;
             }
 
         private:
-            std::filesystem::path _path;
+            Path _file;
             bool _saved = false;
         };
 
@@ -46,7 +44,7 @@ namespace BECore::Tests {
         const TempPng file(4, 1, pixels);
         ASSERT_TRUE(file.Saved());
 
-        const auto image = ReadImageFile(file.Path());
+        const auto image = ReadImageFile(file.File());
         ASSERT_TRUE(image.has_value()) << image.error().c_str();
         EXPECT_EQ(image->width, 4u);
         EXPECT_EQ(image->height, 1u);
@@ -59,16 +57,27 @@ namespace BECore::Tests {
         const TempPng file(3, 1, pixels);
         ASSERT_TRUE(file.Saved());
 
-        EXPECT_FALSE(ReadImageFile(file.Path(), 2).has_value());
-        EXPECT_TRUE(ReadImageFile(file.Path(), 3).has_value());
-        EXPECT_TRUE(ReadImageFile(file.Path()).has_value());
+        EXPECT_FALSE(ReadImageFile(file.File(), 2).has_value());
+        EXPECT_TRUE(ReadImageFile(file.File(), 3).has_value());
+        EXPECT_TRUE(ReadImageFile(file.File()).has_value());
+    }
+
+    TEST(ImageFile, AFileWithANonAsciiNameIsRead) {
+        Vector<uint8_t> pixels = {10, 20, 30, 255, 40, 50, 60, 128};
+        const TempPng file(2, 1, pixels, "ImageFile_caf\xC3\xA9");
+        ASSERT_TRUE(file.Saved());
+
+        const auto image = ReadImageFile(file.File());
+        ASSERT_TRUE(image.has_value()) << image.error().c_str();
+        EXPECT_EQ(image->width, 2u);
+        EXPECT_TRUE(image->pixels == pixels);
     }
 
     TEST(ImageFile, AMissingFileIsAnError) {
-        const std::filesystem::path missing = TestTempDirectory("ImageFileMissing");
+        const Path missing(TestTempDirectory("ImageFileMissing"));
         const auto image = ReadImageFile(missing);
         ASSERT_FALSE(image.has_value());
-        EXPECT_FALSE(image.error().empty());
+        EXPECT_TRUE(StringView(image.error()).starts_with("cannot read the image")) << image.error().c_str();
     }
 
 }  // namespace BECore::Tests

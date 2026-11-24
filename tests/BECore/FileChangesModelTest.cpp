@@ -30,13 +30,12 @@ namespace BECore::Tests {
             RemoveDirectory(_dir);
         }
 
-        void Write(const std::filesystem::path& path, StringView text) {
+        void Write(const Path& path, StringView text) {
             WriteFile(path, text);
-            std::error_code error;
-            std::filesystem::last_write_time(path, std::filesystem::file_time_type::clock::now() + std::chrono::seconds(2 * ++_writes), error);
+            SetWriteTime(path, std::chrono::seconds(2 * ++_writes));
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         FileSystem _fileSystem;
         FileWatcher _watcher{_fileSystem};
         FileWatchHandle _handle;

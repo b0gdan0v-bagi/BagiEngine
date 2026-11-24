@@ -138,8 +138,7 @@ namespace BECore {
         Subscribe<SceneSelectionChangedEvent, &ArtGenWidget::OnSelectionChanged>(this);
         Subscribe<ArtGenVariantDropEvent, &ArtGenWidget::OnVariantDropped>(this);
         auto& session = ArtGenSession::GetInstance();
-        const std::string root = CoreManager::GetFileSystem().GetRootPath().generic_string();  //-NoStd: std::filesystem gives a std::string
-        session.SetGameRoot(StringView(root.data(), root.size()));
+        session.SetGameRoot(CoreManager::GetFileSystem().GetRootPath().View());
         session.SetAcceptor(&AcceptForControl);
         session.SetSoundAcceptor(&AcceptSoundForControl);
         session.SetKeeper(&KeepForControl);
@@ -238,7 +237,8 @@ namespace BECore {
 
     void ArtGenWidget::StartBridge(uint16_t port) {
         _bridgeError.clear();
-        const auto script = FindArtGenBridge(CoreManager::GetFileSystem().GetMountLayers(MountPoints::config));
+        const Vector<Path> layers = CoreManager::GetFileSystem().GetMountLayers(MountPoints::config);
+        const auto script = FindArtGenBridge(layers);
         if (!script) {
             _bridgeError = Format("no {} under the content roots (a packaged build?)", kArtGenBridgeScript);
             return;
@@ -724,7 +724,7 @@ namespace BECore {
             _summaryValid = false;
             _drawn.reset();
             _summaryText.clear();
-            auto pixels = ReadArtGenPng(std::filesystem::path(variant.path.c_str()));
+            auto pixels = ReadArtGenPng(Path(variant.path));
             if (pixels) {
                 _imageWidth = static_cast<int32_t>(pixels->width);
                 _imageHeight = static_cast<int32_t>(pixels->height);
@@ -1316,7 +1316,7 @@ namespace BECore {
             _thumbnails.push_back(variant.IsAudio() ? ResourceHandle<ITexture>() : resources.Load<ITexture>(StringView(variant.path.data(), variant.path.size())));
             _thumbnailPaths.push_back(variant.path);
             // Read once with the thumbnail: the service's image report carries no verdict, its provenance file does
-            _verdicts.push_back(variant.IsAudio() ? ArtGenVerdict() : ReadArtGenVerdict(std::filesystem::path(variant.provenancePath.c_str())));
+            _verdicts.push_back(variant.IsAudio() ? ArtGenVerdict() : ReadArtGenVerdict(Path(variant.provenancePath)));
         }
     }
 

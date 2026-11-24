@@ -3,7 +3,6 @@
 #include <BECore/FileSystem/IFileWatchBackend.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
@@ -20,8 +19,8 @@ namespace BECore {
      */
     class PollingFileWatchBackend final : public IFileWatchBackend {
     public:
-        void AddDirectory(const std::filesystem::path& realPath, bool recursive) override;
-        void RemoveDirectory(const std::filesystem::path& realPath) override;
+        void AddDirectory(const Path& realPath, bool recursive) override;
+        void RemoveDirectory(const Path& realPath) override;
 
         void SetSink(IFileWatchSink* sink) override {
             _sink = sink;
@@ -32,16 +31,16 @@ namespace BECore {
 
     private:
         struct Entry {
-            std::filesystem::path path;
-            std::filesystem::file_time_type writeTime{};
-            uintmax_t size = 0;
+            Path path;
+            int64_t writeTimeNs = 0;
+            uint64_t size = 0;
             bool directory = false;
             bool present = true;
         };
 
         /// Entries are sorted by path; the first is the watched folder itself, so a file made in it shows as a change of the folder's write time
         struct Watched {
-            std::filesystem::path root;
+            Path root;
             bool recursive = false;
             Vector<Entry> entries;
         };
@@ -50,7 +49,7 @@ namespace BECore {
         void Poll(Watched& watched);
         /// Lists the folder again; the new files it finds are reported unless this is the baseline of AddDirectory
         void Rescan(Watched& watched, bool reportNewFiles);
-        void Report(const std::filesystem::path& path) const;
+        void Report(const Path& path) const;
 
         IFileWatchSink* _sink = nullptr;
         Vector<Watched> _watched;

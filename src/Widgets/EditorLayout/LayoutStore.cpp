@@ -1,7 +1,6 @@
 #include "LayoutStore.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 
 namespace BECore {
 
@@ -39,10 +38,6 @@ namespace BECore {
             return LayoutError{kind, std::move(detail)};
         }
 
-        std::filesystem::path ToPath(StringView text) {
-            return std::filesystem::path(ToStdString(text));
-        }
-
     }  // namespace
 
     bool IsValidLayoutName(StringView name) {
@@ -57,12 +52,10 @@ namespace BECore {
         return text.find(kDockingSection) != StringView::npos;
     }
 
-    LayoutStore::LayoutStore(std::filesystem::path userDirectory) : _folder(std::move(userDirectory) / ToPath(kLayoutsFolderName)) {}
+    LayoutStore::LayoutStore(Path userDirectory) : _folder(userDirectory / kLayoutsFolderName) {}
 
-    std::filesystem::path LayoutStore::PathOf(StringView name) const {
-        std::filesystem::path path = _folder / ToPath(name);
-        path += ToStdString(kLayoutExtension);
-        return path;
+    Path LayoutStore::PathOf(StringView name) const {
+        return _folder / Format("{}{}", name, kLayoutExtension);
     }
 
     std::expected<void, LayoutError> LayoutStore::Save(StringView name, StringView text) {
@@ -72,7 +65,7 @@ namespace BECore {
         if (text.empty()) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::EmptyText, "A layout with no text would not load back"));
         }
-        const std::expected<void, String> written = WriteFileAtomically(PathToUtf8(PathOf(name)), text);
+        const std::expected<void, String> written = WriteFileAtomically(PathOf(name), text);
         if (!written) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::WriteFailed, written.error()));
         }
@@ -83,12 +76,11 @@ namespace BECore {
         if (!IsValidLayoutName(name)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::InvalidName, Format("'{}' is not a valid layout name", name)));
         }
-        const std::filesystem::path path = PathOf(name);
-        std::error_code ec;
-        if (!std::filesystem::exists(path, ec)) {
+        const Path path = PathOf(name);
+        if (!GetFileInfo(path)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::NotFound, Format("There is no layout '{}'", name)));
         }
-        std::expected<String, String> text = ReadTextFile(PathToUtf8(path));
+        std::expected<String, String> text = ReadTextFile(path);
         if (!text) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::ReadFailed, text.error()));
         }
@@ -99,12 +91,13 @@ namespace BECore {
         if (!IsValidLayoutName(name)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::InvalidName, Format("'{}' is not a valid layout name", name)));
         }
-        std::error_code ec;
-        if (!std::filesystem::remove(PathOf(name), ec)) {
-            if (ec) {
-                return std::unexpected(MakeLayoutError(LayoutErrorKind::WriteFailed, Format("Cannot delete layout '{}': {}", name, ec.message())));
-            }
+        const Path path = PathOf(name);
+        if (!GetFileInfo(path)) {
             return std::unexpected(MakeLayoutError(LayoutErrorKind::NotFound, Format("There is no layout '{}'", name)));
+        }
+        const std::expected<void, String> removed = RemoveFile(path);
+        if (!removed) {
+            return std::unexpected(MakeLayoutError(LayoutErrorKind::WriteFailed, Format("Cannot delete layout '{}': {}", name, removed.error())));
         }
         return {};
     }
@@ -113,28 +106,23 @@ namespace BECore {
         if (!IsValidLayoutName(name)) {
             return false;
         }
-        std::error_code ec;
-        return std::filesystem::is_regular_file(PathOf(name), ec);
+        const Optional<FileInfo> info = GetFileInfo(PathOf(name));
+        return info && info->kind == FileKind::File;
     }
 
     Vector<String> LayoutStore::List() const {
         Vector<String> names;
-        std::error_code ec;
-        std::filesystem::directory_iterator it(_folder, ec);
-        if (ec) {
-            return names;
-        }
-        for (const std::filesystem::directory_entry& entry : it) {
-            std::error_code entryError;
-            if (!entry.is_regular_file(entryError) || entry.path().extension() != ToStdString(kLayoutExtension)) {
-                continue;
+        // A folder that cannot be listed is an empty list
+        static_cast<void>(WalkDirectory(_folder, WalkMode::Folder, [&names](StringView relative, FileKind kind) {
+            if (kind != FileKind::File || PathExtension(relative) != kLayoutExtension) {
+                return true;
             }
-            //-NoStd: the text of a std::filesystem::path
-            const std::string stem = entry.path().stem().string();
-            if (IsValidLayoutName(FromStd(stem))) {
-                names.push_back(String(stem.c_str(), stem.size()));
+            const StringView stem = PathStem(relative);
+            if (IsValidLayoutName(stem)) {
+                names.push_back(String(stem.data(), stem.size()));
             }
-        }
+            return true;
+        }));
         std::sort(names.begin(), names.end());
         return names;
     }

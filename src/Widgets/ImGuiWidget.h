@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/ImGuiFonts.h>
 
@@ -35,8 +36,7 @@ namespace BECore {
         void OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const;
 
         bool _isInitialized = false;
-        //-NoStd: a std::filesystem path's text, ImGui reads it by c_str()
-        std::string _iniFilePath;
+        Path _iniFilePath;
         /// ImGui reads these bytes while its atlas lives: they are released after the context
         ImGuiFontBuffers _fontBuffers;
         ImGuiFonts _fonts;

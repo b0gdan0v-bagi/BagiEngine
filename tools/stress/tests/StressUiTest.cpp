@@ -19,9 +19,9 @@ namespace BECore::Stress::Tests {
 
         /// The table the app ships, from the file next to the sources: the app's own content is not mounted in the test environment
         void LoadShippedStrings() {
-            const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path().parent_path() / "config" / "UIStrings.xml";
+            const Path path = Path(__FILE__).Parent().Parent() / "config" / "UIStrings.xml";
             auto config = XmlConfig::Create();
-            ASSERT_TRUE(config.LoadFromFile(path)) << path.string();
+            ASSERT_TRUE(config.LoadFromFile(path)) << path.CStr();
             ASSERT_TRUE(CoreManager::GetUIStrings().LoadFromXml(config.GetRoot()).empty());
         }
 

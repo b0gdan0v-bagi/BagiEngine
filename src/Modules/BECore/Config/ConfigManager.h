@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/File/Path.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/FileWatcher.h>
 #include <BECore/PoolString/PoolString.h>
@@ -13,7 +14,6 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
@@ -96,7 +96,7 @@ namespace BECore {
         Vector<PoolString> GetAllConfigNames() const;
 
         /// The file the config was loaded from (the layer that won), or an empty path when the name is unknown
-        std::filesystem::path GetConfigFilePath(PoolString name) const;
+        Path GetConfigFilePath(PoolString name) const;
 
         /// Writes the cached document back to the file it was loaded from, then emits ConfigEvents::ConfigChangedEvent; a `.bin` config is read-only: false, one `LOG_ERROR`
         bool SaveConfig(PoolString name);
@@ -122,7 +122,7 @@ namespace BECore {
     private:
         struct ConfigEntry {
             IntrusivePtr<XmlDocument> doc;  ///< null for a `.bin`
-            std::filesystem::path filePath;
+            Path filePath;
             uint64_t fileHash = 0;  ///< of the file text the document reflects: set at load, SaveConfig and ReloadConfig
             BinaryContent content;  ///< a `.bin`: the validated file, never replaced; a deserializer borrows its `bytes` and `strings` (a `Vector`'s block stays when the entry is moved)
             bool binary = false;
@@ -143,9 +143,9 @@ namespace BECore {
         bool ReloadFromDisk(PoolString name, bool skipIfSame, String* failure);
 
         /// The `.xml` and `.bin` files of @p dir by stem. A stem with both is logged and added to @p conflicted instead of @p filesToLoad
-        void ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad, Vector<PoolString>& conflicted) const;
+        void ScanDirectory(const Path& dir, Vector<Pair<Path, PoolString>>& filesToLoad, Vector<PoolString>& conflicted) const;
 
-        Task<void> LoadConfigAsync(std::filesystem::path path, PoolString name);
+        Task<void> LoadConfigAsync(Path path, PoolString name);
 
         const FileSystem* _fileSystem = nullptr;  ///< null: CoreManager's
         FileWatchHandle _watch;

@@ -1,9 +1,9 @@
 #include "FileWatcher.h"
 
+#include <BECore/File/File.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <chrono>
-#include <system_error>
 
 namespace BECore {
 
@@ -13,38 +13,19 @@ namespace BECore {
             return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
         }
 
-        std::filesystem::path Normalise(const std::filesystem::path& path) {
-            return std::filesystem::absolute(path).lexically_normal();
-        }
-
-        /// The part of @p path below @p base, or empty when @p path is the base itself or is not inside it
-        std::filesystem::path RelativeInside(const std::filesystem::path& path, const std::filesystem::path& base) {
-            std::filesystem::path relative = path.lexically_relative(base);
-            if (relative.empty() || relative == ".") {
-                return {};
-            }
-            if (*relative.begin() == "..") {
-                return {};
-            }
-            return relative;
-        }
-
-        String PathKey(const std::filesystem::path& path) {
-            return FromStdString(path.generic_string());
+        String PathKey(const Path& path) {
+            return String(path.View().data(), path.View().size());
         }
 
         /// Reads the state of the regular file at @p path; false when it is missing or is not a file
-        bool ReadState(const std::filesystem::path& path, std::filesystem::file_time_type& writeTime, uintmax_t& size) {
-            std::error_code error;
-            if (!std::filesystem::is_regular_file(path, error)) {
+        bool ReadState(const Path& path, int64_t& writeTimeNs, uint64_t& size) {
+            const Optional<FileInfo> info = GetFileInfo(path.View());
+            if (!info || info->kind != FileKind::File) {
                 return false;
             }
-            writeTime = std::filesystem::last_write_time(path, error);
-            if (error) {
-                return false;
-            }
-            size = std::filesystem::file_size(path, error);
-            return !error;
+            writeTimeNs = info->modifyTimeNs;
+            size = info->size;
+            return true;
         }
 
     }  // namespace
@@ -138,15 +119,15 @@ namespace BECore {
         }
 
         auto watch = MakeUnique<Watch>();
-        for (const std::filesystem::path& layer : _fileSystem.GetMountLayers(PoolString::Intern(mountPoint))) {
-            std::filesystem::path target = layer;
+        for (const Path& layer : _fileSystem.GetMountLayers(PoolString::Intern(mountPoint))) {
+            Path target = layer;
             if (!remaining.empty()) {
-                target /= ToStd(remaining);
+                target /= remaining;
             }
-            target = Normalise(target);
-            const std::filesystem::path directory = folder ? target : target.parent_path();
-            std::error_code error;
-            if (!std::filesystem::is_directory(directory, error)) {
+            target = AbsoluteNormalPath(target);
+            const Path directory = folder ? target : target.Parent();
+            const Optional<FileInfo> directoryInfo = GetFileInfo(directory.View());
+            if (!directoryInfo || directoryInfo->kind != FileKind::Directory) {
                 continue;
             }
             watch->targets.push_back(std::move(target));
@@ -162,7 +143,7 @@ namespace BECore {
         watch->virtualName = PoolString::Intern(virtualPath);
         watch->consumer = consumer.empty() ? watch->virtualName : PoolString::Intern(consumer);
         watch->callback = std::move(callback);
-        for (const std::filesystem::path& directory : watch->directories) {
+        for (const Path& directory : watch->directories) {
             AcquireDirectory(directory, folder);
         }
         const uint64_t id = watch->id;
@@ -171,7 +152,7 @@ namespace BECore {
         return FileWatchHandle(this, id);
     }
 
-    void FileWatcher::AcquireDirectory(const std::filesystem::path& directory, bool recursive) {
+    void FileWatcher::AcquireDirectory(const Path& directory, bool recursive) {
         for (DirectoryUse& use : _directories) {
             if (use.path != directory) {
                 continue;
@@ -188,7 +169,7 @@ namespace BECore {
         _backend->AddDirectory(directory, recursive);
     }
 
-    void FileWatcher::ReleaseDirectory(const std::filesystem::path& directory, bool recursive) {
+    void FileWatcher::ReleaseDirectory(const Path& directory, bool recursive) {
         for (size_t i = 0; i < _directories.size(); ++i) {
             DirectoryUse& use = _directories[i];
             if (use.path != directory) {
@@ -206,7 +187,7 @@ namespace BECore {
         }
     }
 
-    void FileWatcher::Post(const std::filesystem::path& realPath) {
+    void FileWatcher::Post(const Path& realPath) {
         {
             LockGuard lock(_queueMutex);
             _incoming.push_back(realPath);
@@ -231,7 +212,7 @@ namespace BECore {
                 LockGuard lock(_queueMutex);
                 _routing.swap(_incoming);
             }
-            for (const std::filesystem::path& realPath : _routing) {
+            for (const Path& realPath : _routing) {
                 RouteChange(realPath, nowSeconds);
             }
             _routing.clear();
@@ -241,8 +222,8 @@ namespace BECore {
         }
     }
 
-    void FileWatcher::RouteChange(const std::filesystem::path& realPath, double nowSeconds) {
-        const std::filesystem::path path = realPath.lexically_normal();
+    void FileWatcher::RouteChange(const Path& realPath, double nowSeconds) {
+        const Path path = realPath.LexicallyNormal();
         for (const UniquePtr<Watch>& watch : _watches) {
             PoolString virtualPath;
             if (watch->alive && Matches(*watch, path, virtualPath)) {
@@ -251,17 +232,17 @@ namespace BECore {
         }
     }
 
-    bool FileWatcher::Covers(const Watch& watch, const std::filesystem::path& path) {
-        for (const std::filesystem::path& target : watch.targets) {
-            if (watch.folder ? !RelativeInside(path, target).empty() : path == target) {
+    bool FileWatcher::Covers(const Watch& watch, const Path& path) {
+        for (const Path& target : watch.targets) {
+            if (watch.folder ? !path.Relative(target).Empty() : path == target) {
                 return true;
             }
         }
         return false;
     }
 
-    bool FileWatcher::Matches(const Watch& watch, const std::filesystem::path& path, PoolString& virtualPath) {
-        for (const std::filesystem::path& target : watch.targets) {
+    bool FileWatcher::Matches(const Watch& watch, const Path& path, PoolString& virtualPath) {
+        for (const Path& target : watch.targets) {
             if (!watch.folder) {
                 if (path == target) {
                     virtualPath = watch.virtualName;
@@ -269,9 +250,9 @@ namespace BECore {
                 }
                 continue;
             }
-            const std::filesystem::path relative = RelativeInside(path, target);
-            if (!relative.empty()) {
-                virtualPath = PoolString::Intern(Format("{}/{}", watch.virtualPath, FromStdString(relative.generic_string())));
+            const Path relative = path.Relative(target);
+            if (!relative.Empty()) {
+                virtualPath = PoolString::Intern(Format("{}/{}", watch.virtualPath, relative.View()));
                 return true;
             }
         }
@@ -351,7 +332,7 @@ namespace BECore {
                 ++i;
                 continue;
             }
-            for (const std::filesystem::path& directory : watch.directories) {
+            for (const Path& directory : watch.directories) {
                 ReleaseDirectory(directory, watch.folder);
             }
             _watches.erase(_watches.begin() + static_cast<ptrdiff_t>(i));
@@ -359,42 +340,44 @@ namespace BECore {
         PruneBaseline();
     }
 
-    Vector<std::filesystem::path> FileWatcher::LayerFiles(const Watch& watch, StringView virtualPath) {
-        Vector<std::filesystem::path> files;
-        std::filesystem::path relative;
+    Vector<Path> FileWatcher::LayerFiles(const Watch& watch, StringView virtualPath) {
+        Vector<Path> files;
+        Path relative;
         if (watch.folder) {
             const size_t prefix = watch.virtualPath.size() + 1;  // the folder and its slash
             if (virtualPath.size() <= prefix) {
                 return files;
             }
-            relative = ToStd(virtualPath.substr(prefix));
+            relative = Path(virtualPath.substr(prefix));
         }
-        for (const std::filesystem::path& target : watch.targets) {
-            files.push_back(watch.folder ? (target / relative).lexically_normal() : target);
+        for (const Path& target : watch.targets) {
+            files.push_back(watch.folder ? (target / relative).LexicallyNormal() : target);
         }
         return files;
     }
 
     void FileWatcher::CollectFiles(const Watch& watch, FileStates& out) {
-        for (const std::filesystem::path& target : watch.targets) {
-            FileState state;
+        for (const Path& target : watch.targets) {
             if (!watch.folder) {
-                if (ReadState(target, state.writeTime, state.size)) {
+                FileState state;
+                if (ReadState(target, state.writeTimeNs, state.size)) {
                     state.path = target;
                     out.insert_or_assign(PathKey(target), std::move(state));
                 }
                 continue;
             }
-            std::error_code error;
-            constexpr auto kOptions = std::filesystem::directory_options::skip_permission_denied;
-            std::filesystem::recursive_directory_iterator it(target, kOptions, error);  //-NoStd: the walk of a requested rescan, no engine type lists a folder
-            const std::filesystem::recursive_directory_iterator end;                    //-NoStd: the end marker of the listing above
-            for (; !error && it != end; it.increment(error)) {
-                state.path = it->path().lexically_normal();
-                if (ReadState(state.path, state.writeTime, state.size)) {
-                    out.insert_or_assign(PathKey(state.path), state);
+            // The walk tells the kind; the state of each regular file is read in the callback. An unreadable folder yields no files
+            static_cast<void>(WalkDirectory(target.View(), WalkMode::Tree, [&](StringView relative, FileKind kind) {
+                if (kind != FileKind::File) {
+                    return true;
                 }
-            }
+                FileState state;
+                state.path = (target / relative).LexicallyNormal();
+                if (ReadState(state.path, state.writeTimeNs, state.size)) {
+                    out.insert_or_assign(PathKey(state.path), std::move(state));
+                }
+                return true;
+            }));
         }
     }
 
@@ -408,9 +391,9 @@ namespace BECore {
 
     bool FileWatcher::IsAppliedAndUnchanged(const Watch& watch, StringView virtualPath) const {
         bool applied = false;
-        for (const std::filesystem::path& file : LayerFiles(watch, virtualPath)) {
+        for (const Path& file : LayerFiles(watch, virtualPath)) {
             FileState now;
-            const bool exists = ReadState(file, now.writeTime, now.size);
+            const bool exists = ReadState(file, now.writeTimeNs, now.size);
             const auto known = _baseline.find(PathKey(file));
             if (known == _baseline.end()) {
                 if (exists) {
@@ -419,7 +402,7 @@ namespace BECore {
                 continue;
             }
             const FileState& before = known->second;
-            if (!exists || !before.byApply || before.writeTime != now.writeTime || before.size != now.size) {
+            if (!exists || !before.byApply || before.writeTimeNs != now.writeTimeNs || before.size != now.size) {
                 return false;
             }
             applied = true;
@@ -427,11 +410,11 @@ namespace BECore {
         return applied;
     }
 
-    void FileWatcher::RefreshBaseline(const std::filesystem::path& realPath, bool byApply) {
+    void FileWatcher::RefreshBaseline(const Path& realPath, bool byApply) {
         FileState state;
         state.byApply = byApply;
         const String key = PathKey(realPath);
-        if (ReadState(realPath, state.writeTime, state.size)) {
+        if (ReadState(realPath, state.writeTimeNs, state.size)) {
             state.path = realPath;
             _baseline.insert_or_assign(key, std::move(state));
         } else {
@@ -440,7 +423,7 @@ namespace BECore {
     }
 
     void FileWatcher::RefreshBaseline(const Watch& watch, StringView virtualPath, bool byApply) {
-        for (const std::filesystem::path& file : LayerFiles(watch, virtualPath)) {
+        for (const Path& file : LayerFiles(watch, virtualPath)) {
             RefreshBaseline(file, byApply);
         }
     }
@@ -465,10 +448,10 @@ namespace BECore {
                 CollectFiles(*watch, current);
             }
         }
-        Vector<std::filesystem::path> differing;
+        Vector<Path> differing;
         for (const auto& [key, state] : current) {
             const auto known = _baseline.find(key);
-            if (known == _baseline.end() || known->second.writeTime != state.writeTime || known->second.size != state.size) {
+            if (known == _baseline.end() || known->second.writeTimeNs != state.writeTimeNs || known->second.size != state.size) {
                 differing.push_back(state.path);
             }
         }
@@ -479,7 +462,7 @@ namespace BECore {
         }
 
         Vector<Detected> detected;
-        for (const std::filesystem::path& path : differing) {
+        for (const Path& path : differing) {
             for (const UniquePtr<Watch>& watch : _watches) {
                 PoolString virtualPath;
                 if (!watch->alive || !Matches(*watch, path, virtualPath)) {
@@ -498,7 +481,7 @@ namespace BECore {
                     // The layers of one virtual path are one file for the consumer: it was there before when any layer had it, is there now when any has it
                     bool was = false;
                     bool now = false;
-                    for (const std::filesystem::path& file : LayerFiles(*watch, virtualPath.ToStringView())) {
+                    for (const Path& file : LayerFiles(*watch, virtualPath.ToStringView())) {
                         const String key = PathKey(file);
                         was = was || _baseline.find(key) != _baseline.end();
                         now = now || current.find(key) != current.end();

@@ -1,7 +1,6 @@
 #include "UIWebDocumentLoader.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/UI/UIDocument.h>
@@ -17,11 +16,11 @@ namespace BECore {
         constexpr StringView CurrentDirectoryPrefix = "./";
 
         Optional<String> ReadVirtualFile(StringView virtualPath) {
-            const std::filesystem::path resolved = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-            if (resolved.empty()) {
+            const Path resolved = CoreManager::GetFileSystem().ResolvePath(virtualPath);
+            if (resolved.Empty()) {
                 return std::nullopt;
             }
-            auto text = ReadTextFile(PathToUtf8(resolved));
+            auto text = ReadTextFile(resolved);
             if (!text) {
                 return std::nullopt;
             }
