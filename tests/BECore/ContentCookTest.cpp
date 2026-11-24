@@ -109,7 +109,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
         ASSERT_NE(FindRow(report, 0, "Probe.xml"), nullptr);
         EXPECT_EQ(FindRow(report, 0, "Probe.xml")->outcome, CookOutcome::Cooked);
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "Probe.xml")) << "a .xml beside a .bin of one stem is an error of ConfigManager";
+        EXPECT_FALSE(PathExists(_tree.OutConfig(0) / "Probe.xml")) << "a .xml beside a .bin of one stem is an error of ConfigManager";
 
         SourceContent source(_tree);
         CookedContent cooked(_tree.Out(), CookTestTree::kLayers);
@@ -158,7 +158,7 @@ namespace BECore::Tests {
 
         const CookReport report = Cook();
         ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
-        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(1) / "sub" / "deeper" / "Probe.bin"));
+        EXPECT_TRUE(IsFile(_tree.OutConfig(1) / "sub" / "deeper" / "Probe.bin"));
         ASSERT_NE(FindRow(report, 1, "sub/deeper/Probe.xml"), nullptr);
     }
 
@@ -175,7 +175,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(text, "layer1/config/Probe.xml")) << text.c_str();
         EXPECT_TRUE(Contains(text, "bogus")) << text.c_str();
         EXPECT_TRUE(Contains(text, "wieght")) << text.c_str();
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "Probe.bin"));
+        EXPECT_FALSE(PathExists(_tree.OutConfig(1) / "Probe.bin"));
     }
 
     TEST_F(ContentCookTest, AMalformedNumberFailsOnlyUnderStrictValues) {
@@ -196,17 +196,17 @@ namespace BECore::Tests {
         EXPECT_FALSE(report.Ok());
         ASSERT_NE(FindRow(report, 0, "Probe.xml"), nullptr);
         EXPECT_EQ(FindRow(report, 0, "Probe.xml")->outcome, CookOutcome::Failed);
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "Probe.bin"));
+        EXPECT_FALSE(PathExists(_tree.OutConfig(0) / "Probe.bin"));
     }
 
     TEST_F(ContentCookTest, AnOutputFolderInsideAContentFolderIsRefusedBeforeAnythingIsWritten) {
         _tree.Write(1, "Probe.xml", kProbeXml);
-        const std::filesystem::path inside = _tree.SourceConfig(1) / "cooked";
+        const Path inside = _tree.SourceConfig(1) / "cooked";
 
         const CookReport report = CookContent(_tree.Sources(), inside, _registry);
         EXPECT_FALSE(report.Ok());
-        EXPECT_FALSE(std::filesystem::exists(inside));
-        EXPECT_FALSE(std::filesystem::exists(_tree.SourceConfig(1) / "Probe.bin"));
+        EXPECT_FALSE(PathExists(inside));
+        EXPECT_FALSE(PathExists(_tree.SourceConfig(1) / "Probe.bin"));
     }
 
     TEST_F(ContentCookTest, AContentFolderInsideTheOutputFolderIsRefusedAndKept) {
@@ -214,7 +214,7 @@ namespace BECore::Tests {
 
         const CookReport report = CookContent(_tree.Sources(), _tree.Root(), _registry);
         EXPECT_FALSE(report.Ok());
-        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.SourceConfig(0) / "Probe.xml"));
+        EXPECT_TRUE(IsFile(_tree.SourceConfig(0) / "Probe.xml"));
     }
 
     TEST_F(ContentCookTest, AnXmlAndABinOfOneStemInOneLayerFailTheCook) {
@@ -250,14 +250,14 @@ namespace BECore::Tests {
         WriteFile(_tree.Out() / "keep.txt", "mine");
 
         ASSERT_TRUE(Cook().Ok());
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "Gone.bin"));
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "deep"));
+        EXPECT_FALSE(PathExists(_tree.OutConfig(0) / "Gone.bin"));
+        EXPECT_FALSE(PathExists(_tree.OutConfig(1) / "deep"));
         EXPECT_EQ(ReadFile(_tree.Out() / "keep.txt"), "mine");
     }
 
     TEST_F(ContentCookTest, LayersAndAnOutputFolderWithNonAsciiNamesAreCooked) {
-        const std::filesystem::path layer = _tree.Root() / "caf\xC3\xA9" / "conf\xC3\xA9";
-        const std::filesystem::path out = _tree.Root() / "sorti\xC3\xA9";
+        const Path layer = _tree.Root() / "caf\xC3\xA9" / "conf\xC3\xA9";
+        const Path out = _tree.Root() / "sorti\xC3\xA9";
         WriteFile(layer / "Probe.xml", kProbeXml);
         WriteFile(layer / "dossier\xC3\xA9" / "note\xC3\xA9.txt", "text");
         FileSystem files;
@@ -265,7 +265,7 @@ namespace BECore::Tests {
 
         const CookReport report = CookContent(files, out, _registry);
         ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
-        EXPECT_TRUE(std::filesystem::is_regular_file(out / "layer0" / "config" / "Probe.bin"));
+        EXPECT_TRUE(IsFile(out / "layer0" / "config" / "Probe.bin"));
         EXPECT_EQ(ReadFile(out / "layer0" / "config" / "dossier\xC3\xA9" / "note\xC3\xA9.txt"), "text");
         ASSERT_NE(FindRow(report, 0, "dossier\xC3\xA9/note\xC3\xA9.txt"), nullptr);
         EXPECT_EQ(FindRow(report, 0, "dossier\xC3\xA9/note\xC3\xA9.txt")->outcome, CookOutcome::Copied);
@@ -276,45 +276,45 @@ namespace BECore::Tests {
 
         const CookReport report = CookContent(_tree.Sources(), _tree.SourceConfig(1), _registry);
         EXPECT_FALSE(report.Ok());
-        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.SourceConfig(1) / "Probe.xml"));
-        EXPECT_FALSE(std::filesystem::exists(_tree.SourceConfig(1) / "layer0"));
+        EXPECT_TRUE(IsFile(_tree.SourceConfig(1) / "Probe.xml"));
+        EXPECT_FALSE(PathExists(_tree.SourceConfig(1) / "layer0"));
     }
 
     TEST_F(ContentCookTest, AnOutputFolderBelowAContentFolderThroughDotDotIsRefused) {
         _tree.Write(0, "Probe.xml", kProbeXml);
-        const std::filesystem::path sneaky = _tree.SourceConfig(0) / "sub" / ".." / "cooked";
+        const Path sneaky = _tree.SourceConfig(0) / "sub" / ".." / "cooked";
 
         EXPECT_FALSE(CookContent(_tree.Sources(), sneaky, _registry).Ok());
-        EXPECT_FALSE(std::filesystem::exists(_tree.SourceConfig(0) / "cooked"));
-        EXPECT_FALSE(std::filesystem::exists(_tree.SourceConfig(0) / "sub"));
+        EXPECT_FALSE(PathExists(_tree.SourceConfig(0) / "cooked"));
+        EXPECT_FALSE(PathExists(_tree.SourceConfig(0) / "sub"));
     }
 
     TEST_F(ContentCookTest, AFolderThatOnlySharesATextPrefixWithTheOtherIsNotInsideIt) {
-        const std::filesystem::path data = _tree.Root() / "data";
+        const Path data = _tree.Root() / "data";
 
         // the output `data/b` is a text prefix of the content folder `data/bc/config`
-        const std::filesystem::path longerLayer = data / "bc" / "config";
+        const Path longerLayer = data / "bc" / "config";
         WriteFile(longerLayer / "Probe.xml", kProbeXml);
         FileSystem longer;
         ASSERT_TRUE(longer.Mount(MountPoints::config, longerLayer));
         const CookReport outShorter = CookContent(longer, data / "b", _registry);
         EXPECT_TRUE(outShorter.Ok()) << outShorter.ToText().c_str();
-        EXPECT_TRUE(std::filesystem::is_regular_file(data / "b" / "layer0" / "config" / "Probe.bin"));
-        EXPECT_TRUE(std::filesystem::is_regular_file(longerLayer / "Probe.xml"));
+        EXPECT_TRUE(IsFile(data / "b" / "layer0" / "config" / "Probe.bin"));
+        EXPECT_TRUE(IsFile(longerLayer / "Probe.xml"));
 
         // and the content folder `data/b` of the other cook is a text prefix of the output `data/bc`
-        const std::filesystem::path shorterLayer = data / "b" / "content";
+        const Path shorterLayer = data / "b" / "content";
         WriteFile(shorterLayer / "Probe.xml", kProbeXml);
         FileSystem shorter;
         ASSERT_TRUE(shorter.Mount(MountPoints::config, shorterLayer));
         const CookReport outLonger = CookContent(shorter, data / "bc" / "contentout", _registry);
         EXPECT_TRUE(outLonger.Ok()) << outLonger.ToText().c_str();
-        EXPECT_TRUE(std::filesystem::is_regular_file(shorterLayer / "Probe.xml"));
+        EXPECT_TRUE(IsFile(shorterLayer / "Probe.xml"));
     }
 
     TEST_F(ContentCookTest, OnlyTheLayerFoldersOfAnEarlierCookAreRemovedFromTheOutputFolder) {
         _tree.Write(0, "Probe.xml", kProbeXml);
-        const std::filesystem::path out = _tree.Out();
+        const Path out = _tree.Out();
         WriteFile(out / "layer3" / "old.bin", "old");
         WriteFile(out / "layer12" / "old.bin", "old");
         WriteFile(out / "notes" / "keep.txt", "mine");
@@ -323,8 +323,8 @@ namespace BECore::Tests {
         WriteFile(out / "layer7", "a file, not a folder");
 
         ASSERT_TRUE(Cook().Ok());
-        EXPECT_FALSE(std::filesystem::exists(out / "layer3"));
-        EXPECT_FALSE(std::filesystem::exists(out / "layer12"));
+        EXPECT_FALSE(PathExists(out / "layer3"));
+        EXPECT_FALSE(PathExists(out / "layer12"));
         EXPECT_EQ(ReadFile(out / "notes" / "keep.txt"), "mine");
         EXPECT_EQ(ReadFile(out / "layer" / "keep.txt"), "mine");
         EXPECT_EQ(ReadFile(out / "layerx" / "keep.txt"), "mine");
@@ -334,21 +334,19 @@ namespace BECore::Tests {
 #ifndef _WIN32
     TEST_F(ContentCookTest, ALinkNamedLikeALayerFolderIsRemovedAsALinkAndItsTargetStays) {
         _tree.Write(0, "Probe.xml", kProbeXml);
-        const std::filesystem::path target = _tree.Root() / "elsewhere";
+        const Path target = _tree.Root() / "elsewhere";
         WriteFile(target / "keep.txt", "mine");
         MakeDirectory(_tree.Out());
-        std::error_code error;                                                             //-NoStd: makes a symbolic link, which the file layer has no call for
-        std::filesystem::create_directory_symlink(target, _tree.Out() / "layer3", error);  //-NoStd: same
-        ASSERT_FALSE(error) << error.message();                                            //-NoStd: same
+        CreateSymlink(_tree.Out() / "layer3", target);
 
         ASSERT_TRUE(Cook().Ok());
-        EXPECT_FALSE(std::filesystem::is_symlink(_tree.Out() / "layer3"));  //-NoStd: same
+        EXPECT_FALSE(IsSymbolicLink(_tree.Out() / "layer3"));
         EXPECT_EQ(ReadFile(target / "keep.txt"), "mine");
     }
 #endif
 
     TEST_F(ContentCookTest, TheContentFilesAreListedInTheByteOrderOfTheirTextWithoutDotFilesAndTheEditorLayout) {
-        const std::filesystem::path layer = _tree.SourceConfig(0);
+        const Path layer = _tree.SourceConfig(0);
         WriteFile(layer / "a.xml", "<A/>");
         WriteFile(layer / "a-b.xml", "<A/>");
         WriteFile(layer / "a" / "b.xml", "<A/>");
@@ -389,8 +387,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
         ASSERT_NE(FindRow(report, 1, "SceneConfig.xml"), nullptr);
         EXPECT_EQ(FindRow(report, 1, "SceneConfig.xml")->outcome, CookOutcome::Cooked);
-        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(1) / "SceneConfig.bin"));
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "SceneConfig.xml"));
+        EXPECT_TRUE(IsFile(_tree.OutConfig(1) / "SceneConfig.bin"));
+        EXPECT_FALSE(PathExists(_tree.OutConfig(1) / "SceneConfig.xml"));
 
         SourceContent source(_tree);
         CookedContent cooked(_tree.Out(), CookTestTree::kLayers);
@@ -410,7 +408,7 @@ namespace BECore::Tests {
         ASSERT_NE(row, nullptr);
         EXPECT_EQ(row->outcome, CookOutcome::Failed);
         EXPECT_TRUE(Contains(report.ToText(), "nodes/Missing")) << report.ToText().c_str();
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "SceneConfig.bin"));
+        EXPECT_FALSE(PathExists(_tree.OutConfig(1) / "SceneConfig.bin"));
     }
 
     TEST_F(ContentCookTest, AnUnknownKeyInASceneFailsTheCook) {
@@ -432,7 +430,7 @@ namespace BECore::Tests {
         ASSERT_NE(FindRow(report, 0, "nodes/Old.xml"), nullptr);
         EXPECT_EQ(FindRow(report, 0, "nodes/Old.xml")->outcome, CookOutcome::Failed);
         EXPECT_TRUE(Contains(report.ToText(), "content version 4")) << report.ToText().c_str();
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(1) / "SceneConfig.bin"));
+        EXPECT_FALSE(PathExists(_tree.OutConfig(1) / "SceneConfig.bin"));
     }
 
     TEST_F(ContentCookTest, ANodeFileCooksToTheNodeOfItsXmlAndInstantiatesTheSame) {
@@ -441,8 +439,8 @@ namespace BECore::Tests {
         const CookReport report = Cook();
         ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
         EXPECT_EQ(FindRow(report, 0, "nodes/Hud.xml")->outcome, CookOutcome::Cooked);
-        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(0) / "nodes" / "Hud.bin")) << "the reference nodes/Hud finds the file by this path";
-        EXPECT_FALSE(std::filesystem::exists(_tree.OutConfig(0) / "nodes" / "Hud.xml"));
+        EXPECT_TRUE(IsFile(_tree.OutConfig(0) / "nodes" / "Hud.bin")) << "the reference nodes/Hud finds the file by this path";
+        EXPECT_FALSE(PathExists(_tree.OutConfig(0) / "nodes" / "Hud.xml"));
 
         CookedContent cooked(_tree.Out(), CookTestTree::kLayers);
         const String fromXml = NodeFileText(_tree.Sources(), kHudRef);
@@ -479,8 +477,8 @@ namespace BECore::Tests {
 
         const CookReport report = Cook();
         ASSERT_TRUE(report.Ok()) << report.ToText().c_str();
-        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(0) / "nodes" / "Hud.bin"));
-        EXPECT_TRUE(std::filesystem::is_regular_file(_tree.OutConfig(1) / "nodes" / "Hud.bin"));
+        EXPECT_TRUE(IsFile(_tree.OutConfig(0) / "nodes" / "Hud.bin"));
+        EXPECT_TRUE(IsFile(_tree.OutConfig(1) / "nodes" / "Hud.bin"));
 
         CookedContent both(_tree.Out(), CookTestTree::kLayers);
         EXPECT_TRUE(Contains(NodeFileText(both.Files(), kHudRef), "Up"));
@@ -529,11 +527,11 @@ namespace BECore::Tests {
         CookTestTree tree;
         tree.Write(0, "Plain.xml", "<Plain/>");
         tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A"/>)"));
-        const CookRequest request{FromStdString(tree.Out().string()), true};
+        const CookRequest request{String(tree.Out().View()), true};
 
         EXPECT_EQ(RunCookCommand(request, tree.Sources()), 0);
-        EXPECT_TRUE(std::filesystem::is_regular_file(tree.OutConfig(1) / "SceneConfig.bin"));
-        EXPECT_TRUE(std::filesystem::is_regular_file(tree.OutConfig(0) / "Plain.xml"));
+        EXPECT_TRUE(IsFile(tree.OutConfig(1) / "SceneConfig.bin"));
+        EXPECT_TRUE(IsFile(tree.OutConfig(0) / "Plain.xml"));
 
         tree.Write(1, "SceneConfig.xml", SceneText(R"(<node name="A"/>)", 4));
         EXPECT_EQ(RunCookCommand(request, tree.Sources()), kCookExitFailed);

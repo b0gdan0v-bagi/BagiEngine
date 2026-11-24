@@ -6,8 +6,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        std::filesystem::path EngineRoot() {
-            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        Path EngineRoot() {
+            return Path(__FILE__).Parent().Parent().Parent();
         }
 
     }  // namespace
@@ -24,9 +24,8 @@ namespace BECore::Tests {
 
     /// The helper a game's own test calls, on a folder with one file of every kind
     TEST(ContentFilesVersionTest, FindsOnlyStaleContentFiles) {
-        const std::filesystem::path dir = TestTempDirectory("BagiContentFilesCheck");
-        std::error_code error;
-        std::filesystem::remove_all(dir, error);
+        const Path dir = Path(TestTempDirectory("BagiContentFilesCheck"));
+        RemoveDirectory(dir);
         WriteFile(dir / "SceneConfig.xml", Format("<SceneManager contentVersion=\"{}\"/>", kContentVersion).c_str());
         WriteFile(dir / "nodes" / "Old.xml", "<node name=\"Old\" contentVersion=\"0\"/>");
         WriteFile(dir / "nodes" / "New.xml", Format("<node name=\"New\" contentVersion=\"{}\"/>", kContentVersion + 1).c_str());
@@ -36,11 +35,10 @@ namespace BECore::Tests {
         WriteFile(dir / "notes.txt", "<node/>");
 
         const Vector<String> stale = FindStaleContentFiles(dir);
-        std::error_code ignored;
-        std::filesystem::remove_all(dir, ignored);
+        RemoveDirectory(dir);
 
         ASSERT_EQ(stale.size(), 3u);
-        const String base = Format("{}/nodes/", dir.generic_string());
+        const String base = Format("{}/nodes/", dir.View());
         EXPECT_TRUE(StringView(stale[0]).starts_with(Format("{}Bad.xml: ", base))) << stale[0];
         EXPECT_NE(stale[0].find("is not a whole number"), String::npos) << stale[0];
         EXPECT_TRUE(StringView(stale[1]).starts_with(Format("{}New.xml: ", base))) << stale[1];

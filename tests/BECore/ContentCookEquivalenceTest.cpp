@@ -182,7 +182,7 @@ namespace BECore::Tests {
         Cookable("Doc");
         _tree.Write(0, "Doc.xml", kDocumentXml);
         ASSERT_TRUE(Cook().Ok());
-        const std::filesystem::path bin = _tree.OutConfig(0) / "Doc.bin";
+        const Path bin = _tree.OutConfig(0) / "Doc.bin";
         Vector<uint8_t> bytes = ReadFileBytes(bin);
         const StringView needle = "doc";
         const auto at = eastl::search(bytes.begin(), bytes.end(), needle.begin(), needle.end());
@@ -241,7 +241,7 @@ namespace BECore::Tests {
         _tree.Write(1, "Gone.xml", "<Other/>");
         ASSERT_TRUE(Cook().Ok());
         WriteFile(_tree.OutConfig(0) / "Extra.bin", "x");
-        std::filesystem::remove(_tree.OutConfig(1) / "Gone.xml");
+        RemoveFileIfPresent(_tree.OutConfig(1) / "Gone.xml");
 
         const CookReport report = Verify();
         EXPECT_FALSE(report.Ok());
@@ -279,8 +279,8 @@ namespace BECore::Tests {
 
     TEST_F(ContentCookEquivalenceTest, ACookMadeInFoldersWithNonAsciiNamesVerifiesAndNamesTheMissingAndTheExtraLayer) {
         Cookable("Doc");
-        const std::filesystem::path layer = _tree.Root() / "caf\xC3\xA9" / "conf\xC3\xA9";
-        const std::filesystem::path out = _tree.Root() / "sorti\xC3\xA9";
+        const Path layer = _tree.Root() / "caf\xC3\xA9" / "conf\xC3\xA9";
+        const Path out = _tree.Root() / "sorti\xC3\xA9";
         WriteFile(layer / "dossier\xC3\xA9" / "Doc.xml", kDocumentXml);
         WriteFile(layer / "note\xC3\xA9.txt", "text");
         FileSystem files;

@@ -7,5 +7,3 @@
 # Whoever empties a rule deletes its lines here.
 tests/BECore/FuzzCorpusTest.cpp directory-iterator 1
 tests/BECore/Save/SaveGameFilesTest.cpp directory-iterator 1
-tests/Common/ContentFilesCheck.h directory-iterator 1
-tests/Common/MigrationTwin.h directory-iterator 1

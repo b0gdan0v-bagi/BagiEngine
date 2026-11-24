@@ -354,7 +354,7 @@ namespace BECore::Tests {
     TEST(ContentMigrationAfterFixturesTest, EveryFixtureIsLoadedOrSkippedWithAReason) {
         Set<String> found;
         for (const char* folder : {"ui_button", "ui_group", "ui_value", "ui_text"}) {
-            ASSERT_TRUE(std::filesystem::is_directory(FixtureFolder(folder))) << FixtureFolder(folder).string();
+            ASSERT_TRUE(IsFolder(FixtureFolder(folder))) << FixtureFolder(folder).CStr();
             for (const String& name : CaseNames(FixtureFolder(folder))) {
                 found.insert(Key(folder, name.c_str()));
             }
@@ -376,12 +376,12 @@ namespace BECore::Tests {
             const String key = skipped;
             const String folder = key.substr(0, key.find('/'));
             const String name = key.substr(key.find('/') + 1);
-            const String xml = ReadFile(FixtureFolder(folder.c_str()) / ToStd(Format("{}.after.xml", name)));
+            const String xml = ReadFile(FixtureFolder(folder.c_str()) / Format("{}.after.xml", name));
             ASSERT_FALSE(xml.empty()) << key;
             EXPECT_TRUE(std::regex_search(xml.c_str(), removed)) << key << " holds no such element: load it instead of skipping it";
         }
         for (const Expectation& expectation : Expectations()) {
-            const String xml = ReadFile(FixtureFolder(expectation.folder) / ToStd(Format("{}.after.xml", expectation.name)));
+            const String xml = ReadFile(FixtureFolder(expectation.folder) / Format("{}.after.xml", expectation.name));
             ASSERT_FALSE(xml.empty()) << expectation.name;
             // The dropdown stays a class: in `ui_text/` it is the final form, with its header as a text component
             const bool isText = String(expectation.folder) == "ui_text";
@@ -395,7 +395,7 @@ namespace BECore::Tests {
     TEST_P(ContentMigrationAfterTest, TheComposedScreenBehaves) {
         const Expectation& expectation = Expectations()[GetParam()];
         const String label = Key(expectation.folder, expectation.name);
-        const String xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / ToStd(Format("{}.after.xml", expectation.name))));
+        const String xml = SceneManagerXml(ReadFile(FixtureFolder(expectation.folder) / Format("{}.after.xml", expectation.name)));
         ASSERT_FALSE(xml.empty());
         LoadCase(xml);
         ASSERT_NE(_scene, nullptr);

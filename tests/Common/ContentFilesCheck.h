@@ -1,10 +1,11 @@
 #pragma once
 
 #include <BECore/Config/ContentVersion.h>
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <Common/Printers.h>
+#include <Common/TestFiles.h>
 #include <algorithm>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -14,22 +15,23 @@ namespace BECore::Tests {
      * message per file: the path, then what CheckContentVersion says. A file that does not parse, or whose root is
      * not a content root, is not a content file and is skipped. Sorted by path.
      */
-    inline Vector<String> FindStaleContentFiles(const std::filesystem::path& folder) {
+    inline Vector<String> FindStaleContentFiles(const Path& folder) {
         Vector<String> stale;
-        std::error_code ec;
-        for (std::filesystem::recursive_directory_iterator it(folder, ec), end; !ec && it != end; it.increment(ec)) {
-            if (!it->is_regular_file(ec) || it->path().extension() != ".xml") {
-                continue;
+        const auto walked = WalkDirectory(folder, WalkMode::Tree, [&](StringView relativePath, FileKind kind) {
+            const Path file = folder / relativePath;
+            if (kind != FileKind::File || file.Extension().View() != ".xml") {
+                return true;
             }
             pugi::xml_document document;
-            if (!document.load_file(it->path().c_str()) || !IsContentRoot(document.document_element().name())) {
-                continue;
+            if (!document.load_file(file.CStr()) || !IsContentRoot(document.document_element().name())) {
+                return true;
             }
-            const String path = FromStdString(it->path().generic_string());
-            if (const auto version = CheckContentVersion(document.document_element(), path.c_str()); !version) {
+            if (const auto version = CheckContentVersion(document.document_element(), file.CStr()); !version) {
                 stale.emplace_back(version.error().c_str());
             }
-        }
+            return true;
+        });
+        EXPECT_TRUE(walked.has_value()) << "could not list " << folder.CStr() << ": " << (walked ? "" : walked.error().c_str());
         std::ranges::sort(stale);
         return stale;
     }
@@ -39,8 +41,8 @@ namespace BECore::Tests {
      * game calls it on its own `config/` (`ExpectContentFilesAtCurrentVersion(sourceDir / "config")`), the path taken
      * from `__FILE__` as the game's other tests do; the message says how to migrate the file.
      */
-    inline void ExpectContentFilesAtCurrentVersion(const std::filesystem::path& configFolder) {
-        EXPECT_TRUE(std::filesystem::is_directory(configFolder)) << "no folder " << configFolder.string();
+    inline void ExpectContentFilesAtCurrentVersion(const Path& configFolder) {
+        EXPECT_TRUE(IsFolder(configFolder)) << "no folder " << configFolder.CStr();
         for (const String& message : FindStaleContentFiles(configFolder)) {
             ADD_FAILURE() << message;
         }

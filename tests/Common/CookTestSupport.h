@@ -3,6 +3,7 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Cook/ContentCook.h>
+#include <BECore/File/Path.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Format/Format.h>
@@ -11,7 +12,6 @@
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -25,7 +25,7 @@ namespace BECore::Tests {
     public:
         static constexpr size_t kLayers = 2;
 
-        CookTestTree() : _root(TestTempDirectory("cook")) {
+        CookTestTree() : _root(Path(TestTempDirectory("cook"))) {
             EngineEnvironment::EnsureCoreServices();
             MakeEmptyDirectory(_root);
             for (size_t layer = 0; layer < kLayers; ++layer) {
@@ -41,33 +41,33 @@ namespace BECore::Tests {
         CookTestTree(const CookTestTree&) = delete;
         CookTestTree& operator=(const CookTestTree&) = delete;
 
-        std::filesystem::path SourceConfig(size_t layer) const {
-            return _root / ToStd(Format("source{}", layer)) / "config";
+        Path SourceConfig(size_t layer) const {
+            return _root / Format("source{}", layer) / "config";
         }
 
         /// Writes @p text as the file @p relative of the source layer @p layer
         void Write(size_t layer, StringView relative, StringView text) const {
-            WriteFile(SourceConfig(layer) / ToStd(relative), text);
+            WriteFile(SourceConfig(layer) / relative, text);
         }
 
         const FileSystem& Sources() const {
             return _sources;
         }
 
-        std::filesystem::path Out() const {
+        Path Out() const {
             return _root / "out";
         }
 
-        std::filesystem::path OutConfig(size_t layer) const {
-            return Out() / ToStd(Format("layer{}", layer)) / "config";
+        Path OutConfig(size_t layer) const {
+            return Out() / Format("layer{}", layer) / "config";
         }
 
-        std::filesystem::path Root() const {
+        Path Root() const {
             return _root;
         }
 
     private:
-        std::filesystem::path _root;
+        Path _root;
         FileSystem _sources;
     };
 
@@ -98,9 +98,9 @@ namespace BECore::Tests {
     /// A FileSystem and a ConfigManager over the cooked layers of a cook (`<out>/layer<k>/config`, k < @p layers), as the game would load them
     class CookedContent {
     public:
-        CookedContent(const std::filesystem::path& out, size_t layers) {
+        CookedContent(const Path& out, size_t layers) {
             for (size_t layer = 0; layer < layers; ++layer) {
-                EXPECT_TRUE(_fileSystem.Mount(MountPoints::config, out / ToStd(Format("layer{}", layer)) / "config")) << "layer " << layer;
+                EXPECT_TRUE(_fileSystem.Mount(MountPoints::config, out / Format("layer{}", layer) / "config")) << "layer " << layer;
             }
             _configs.Initialize();
         }
