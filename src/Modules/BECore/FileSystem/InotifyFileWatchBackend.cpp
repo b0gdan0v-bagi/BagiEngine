@@ -1,12 +1,12 @@
 #if defined(__linux__)
 
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/IFileWatchBackend.h>
 #include <BECore/FileSystem/PlatformFileWatchBackend.h>
 #include <cerrno>
 #include <poll.h>
 #include <sys/eventfd.h>
 #include <sys/inotify.h>
-#include <system_error>
 #include <unistd.h>
 
 namespace BECore {
@@ -22,15 +22,10 @@ namespace BECore {
         /// One inotify watch: the directory it is on, and the directory the facade added (the root of its tree)
         struct Watched {
             int wd = -1;
-            std::filesystem::path dir;
-            std::filesystem::path root;
+            Path dir;
+            Path root;
             bool recursive = false;
         };
-
-        /// Whether @p dir is @p top or lies below it
-        bool IsAtOrBelow(const std::filesystem::path& dir, const std::filesystem::path& top) {
-            return std::mismatch(top.begin(), top.end(), dir.begin(), dir.end()).first == top.end();
-        }
 
         /**
          * One inotify descriptor and one reader thread for every watched directory. inotify is not recursive, so a recursive directory
@@ -43,7 +38,7 @@ namespace BECore {
                 Shutdown();
             }
 
-            void AddDirectory(const std::filesystem::path& realPath, bool recursive) override {
+            void AddDirectory(const Path& realPath, bool recursive) override {
                 RemoveDirectory(realPath);
                 LockGuard lock(_mutex);
                 if (!Start()) {
@@ -52,7 +47,7 @@ namespace BECore {
                 AddTree(realPath, realPath, recursive);
             }
 
-            void RemoveDirectory(const std::filesystem::path& realPath) override {
+            void RemoveDirectory(const Path& realPath) override {
                 LockGuard lock(_mutex);
                 for (size_t i = _watched.size(); i-- > 0;) {
                     if (_watched[i].root != realPath) {
@@ -125,29 +120,33 @@ namespace BECore {
             }
 
             /// With _mutex held: a watch on @p dir and, when @p recursive, on every folder below it
-            void AddTree(const std::filesystem::path& dir, const std::filesystem::path& root, bool recursive) {
-                const int wd = inotify_add_watch(_inotifyFd, dir.c_str(), kWatchMask);
+            void AddTree(const Path& dir, const Path& root, bool recursive) {
+                const String dirText(dir.View().data(), dir.View().size());
+                const int wd = inotify_add_watch(_inotifyFd, dirText.c_str(), kWatchMask);
                 if (wd < 0) {
-                    LOG_WARNING("File watch: cannot watch '{}': {}", dir.c_str(), std::strerror(errno));
+                    LOG_WARNING("File watch: cannot watch '{}': {}", dir.View(), std::strerror(errno));
                     return;
                 }
                 _watched.push_back(Watched{wd, dir, root, recursive});
                 if (!recursive) {
                     return;
                 }
-                std::error_code error;
-                std::filesystem::directory_iterator it(dir, error);  //-NoStd: the walk of a new folder is rare, runs on the reader thread and has no engine type
-                const std::filesystem::directory_iterator end;       //-NoStd: same
-                for (; !error && it != end; it.increment(error)) {
-                    std::error_code entryError;
-                    // A link to a folder is not followed: it may lead out of the tree or back into it
-                    if (it->is_directory(entryError) && !it->is_symlink(entryError)) {
-                        AddTree(it->path(), root, true);
+                // The subfolders are collected first: a watch added inside the walk would be a second open folder under the one being listed
+                Vector<Path> subfolders;
+                static_cast<void>(WalkDirectory(dir.View(), WalkMode::Folder, [&](StringView name, FileKind kind) {
+                    const Path child = dir / name;
+                    // A link to a folder is not followed: it may lead out of the tree or back into it. The walk reports a link with the kind of its target
+                    if (kind == FileKind::Directory && !IsSymbolicLink(child.View())) {
+                        subfolders.push_back(child);
                     }
+                    return true;
+                }));
+                for (const Path& subfolder : subfolders) {
+                    AddTree(subfolder, root, true);
                 }
             }
 
-            void Post(const std::filesystem::path& path) const {
+            void Post(const Path& path) const {
                 if (_sink != nullptr) {
                     _sink->Post(path);
                 }
@@ -177,13 +176,13 @@ namespace BECore {
                     return;
                 }
                 const size_t count = _watched.size();
-                std::filesystem::path movedAway;
+                Path movedAway;
                 for (size_t i = 0; i < count; ++i) {
                     if (_watched[i].wd != event.wd) {
                         continue;
                     }
-                    const std::filesystem::path changed = _watched[i].dir / event.name;
-                    const std::filesystem::path root = _watched[i].root;
+                    const Path changed = _watched[i].dir / StringView(event.name);
+                    const Path root = _watched[i].root;
                     const bool recursive = _watched[i].recursive;
                     Post(changed);
                     const bool folderAppeared = (event.mask & IN_ISDIR) != 0 && (event.mask & (IN_CREATE | IN_MOVED_TO)) != 0;
@@ -198,15 +197,15 @@ namespace BECore {
                         movedAway = changed;
                     }
                 }
-                if (!movedAway.empty()) {
+                if (!movedAway.Empty()) {
                     DropTree(movedAway);
                 }
             }
 
             /// With _mutex held: the watches of a folder that was moved out of the tree follow it to its new place, where they would post paths of the old one
-            void DropTree(const std::filesystem::path& top) {
+            void DropTree(const Path& top) {
                 for (size_t i = _watched.size(); i-- > 0;) {
-                    if (IsAtOrBelow(_watched[i].dir, top)) {
+                    if (_watched[i].dir.IsUnder(top)) {
                         inotify_rm_watch(_inotifyFd, _watched[i].wd);
                         _watched.erase(_watched.begin() + static_cast<ptrdiff_t>(i));
                     }

@@ -1,8 +1,8 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <Fuzz/FuzzMutator.h>
-#include <filesystem>
 
 namespace BECore::Fuzz {
 
@@ -17,7 +17,7 @@ namespace BECore::Fuzz {
 
     /// A seed file: its name inside the folder of its target and its bytes
     struct FuzzSeedFile {
-        std::filesystem::path folder;  ///< Relative to the corpus root (the corpusFolder of the target)
+        Path folder;  ///< Relative to the corpus root (the corpusFolder of the target)
         String name;
         FuzzBytes bytes;
     };
@@ -40,6 +40,6 @@ namespace BECore::Fuzz {
     void AddJsonSeeds(Vector<FuzzSeedFile>& seeds);
 
     /// Writes every generated seed under @p corpusRoot (<corpusRoot>/<folder>/<name>); returns false if a file cannot be written
-    bool WriteGeneratedSeeds(const std::filesystem::path& corpusRoot);
+    bool WriteGeneratedSeeds(const Path& corpusRoot);
 
 }  // namespace BECore::Fuzz

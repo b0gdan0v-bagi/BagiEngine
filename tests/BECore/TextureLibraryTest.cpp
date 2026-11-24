@@ -742,11 +742,10 @@ namespace BECore::Tests {
             edit(library);
             EXPECT_TRUE(library.WriteInto(document.GetRoot().GetPugiNode()));
 
-            const std::filesystem::path path = TestTempPath("TextureLibraryTest_Saved.xml");
+            const Path path = TestTempPath("TextureLibraryTest_Saved.xml");
             EXPECT_TRUE(document.SaveToFile(path));
             String bytes = ReadFile(path);
-            std::error_code error;
-            std::filesystem::remove(path, error);
+            RemoveFileIfPresent(path);
             return bytes;
         }
 
@@ -830,7 +829,7 @@ namespace BECore::Tests {
         /// The Accept of the Generate panel on a file on disk: load, edit the library, WriteInto, SaveToFile over the same file
         template <typename Edit>
         String AcceptedOnDisk(Edit edit) {
-            const std::filesystem::path path = TestTempPath("TextureLibraryTest_HandLaid.xml");
+            const Path path = TestTempPath("TextureLibraryTest_HandLaid.xml");
             WriteFile(path, kHandLaidFile);
 
             XmlDocument document;
@@ -844,8 +843,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(document.SaveToFile(path));
 
             String bytes = ReadFile(path);
-            std::error_code error;
-            std::filesystem::remove(path, error);
+            RemoveFileIfPresent(path);
             return bytes;
         }
 

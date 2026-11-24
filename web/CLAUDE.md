@@ -9,7 +9,7 @@ The files the browser build links or packs in (`cmake/BagiWeb.cmake`); they name
 
 ## `saves.js`
 
-**Why IDBFS:** it is Emscripten's own IndexedDB-backed file system, so `SaveGameService` keeps using `std::filesystem` unchanged. It copies the whole folder between memory and IndexedDB by timestamp (`FS.syncfs`), which suits a handful of small saves, not a large data set. The database is named after the mount point.
+**Why IDBFS:** it is Emscripten's own IndexedDB-backed file system, so `SaveGameService` needs no web branch: it goes through the file layer like on every platform. It copies the whole folder between memory and IndexedDB by timestamp (`FS.syncfs`), which suits a handful of small saves, not a large data set. The database is named after the mount point.
 
 **The rules of the script:**
 

@@ -57,8 +57,7 @@ namespace BECore::Tests {
         /// A rewrite that is a change on a file system with coarse time too
         void EditHot(StringView text) {
             WriteFile(HotPath(), text);
-            std::error_code error;
-            std::filesystem::last_write_time(HotPath(), std::filesystem::file_time_type::clock::now() + std::chrono::seconds(2 * ++_writes), error);
+            SetWriteTime(HotPath(), std::chrono::seconds(2 * ++_writes));
         }
 
         /// Posts the request and runs it; a deferred answer arrives with the end of a frame, so @p frames of them are run. Returns the whole response
@@ -94,11 +93,11 @@ namespace BECore::Tests {
             return value ? String(value->data(), value->size()) : String();
         }
 
-        std::filesystem::path HotPath() const {
+        Path HotPath() const {
             return _dir / "HotConfig.xml";
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         FileSystem _fileSystem;
         ConfigManager _manager{_fileSystem};
         FileWatcher _watcher{_fileSystem};
@@ -157,7 +156,7 @@ namespace BECore::Tests {
         EXPECT_EQ(HotValue(), "one") << "looking delivers nothing";
 
         Json params = Json::object();
-        params["paths"] = Json::array({ToStd(kHotPath)});
+        params["paths"] = Json::array({MakeJsonString(String(kHotPath))});
         const Json applied = Call("files_apply", params, 1);
         ASSERT_TRUE(IsOk(applied));
         const Json* items = FindJsonMember(*FindJsonMember(applied, "result"), "applied");

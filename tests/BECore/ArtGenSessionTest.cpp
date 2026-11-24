@@ -2,11 +2,11 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenAnswers.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
@@ -573,10 +573,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSessionTest, SaveWritesTheGamesPresetFileShowsItAndAsksTheServiceToLookAgain) {
-        const std::filesystem::path root = TestTempDirectory("artgen_save");
-        std::filesystem::remove_all(root);
-        const std::string rootText = root.generic_string();  //-NoStd: std::filesystem gives a std::string
-        session.SetGameRoot(FromStd(rootText));
+        const Path root(TestTempDirectory("artgen_save"));
+        RemoveDirectory(root);
+        session.SetGameRoot(root.View());
         Call("artgen_poll", CatalogPoll());
 
         Json preset = DraftPreset();
@@ -587,9 +586,9 @@ namespace BECore::Tests {
         const Json saved = Call("artgen_save_preset", params);
         const auto path = GetJsonString(Result(saved), "path");
         ASSERT_TRUE(path.has_value()) << DumpJson(saved).c_str();
-        const std::filesystem::path file = root / "artgen" / "presets" / "sprite.json";
-        EXPECT_EQ(*path, String(FromStd(file.generic_string())));
-        const auto text = ReadTextFile(PathToUtf8(file));
+        const Path file = root / "artgen" / "presets" / "sprite.json";
+        EXPECT_EQ(*path, String(file.View()));
+        const auto text = ReadTextFile(file);
         ASSERT_TRUE(text.has_value()) << text.error().c_str();
         EXPECT_EQ(text->find("{\n  \"preset\": 1,\n  \"title\": \"Mine\",\n  \"workflow\": \"sdxl_basic\""), 0u) << text->c_str();
         const auto reread = ParseJson(*text);
@@ -602,7 +601,25 @@ namespace BECore::Tests {
         EXPECT_EQ(shown->title, "Mine");
         EXPECT_EQ(GetJsonBool(Result(Call("artgen_poll", CatalogPoll())), "refresh"), Optional<bool>(true));
         EXPECT_EQ(FindJsonMember(Result(Call("artgen_poll", CatalogPoll())), "refresh"), nullptr) << "asked once";
-        std::filesystem::remove_all(root);
+        RemoveDirectory(root);
+    }
+
+    TEST_F(ArtGenSessionTest, SaveIntoAGameWhoseRootHasANonAsciiNameWritesTheFile) {
+        const Path parent(TestTempDirectory("artgen_save_utf8"));
+        RemoveDirectory(parent);
+        const Path root = parent / "caf\xC3\xA9 game";
+        session.SetGameRoot(root.View());
+        Call("artgen_poll", CatalogPoll());
+
+        Json params = Object();
+        params["name"] = "mine";
+        params["preset"] = DraftPreset();
+        const Json saved = Call("artgen_save_preset", params);
+        const auto path = GetJsonString(Result(saved), "path");
+        ASSERT_TRUE(path.has_value()) << DumpJson(saved).c_str();
+        EXPECT_EQ(*path, Format("{}/artgen/presets/mine.json", root.View()));
+        EXPECT_TRUE(ReadTextFile(*path).has_value());
+        RemoveDirectory(parent);
     }
 
     TEST_F(ArtGenSessionTest, SaveRefusesABadNameOrAShapeThatIsNotAPreset) {

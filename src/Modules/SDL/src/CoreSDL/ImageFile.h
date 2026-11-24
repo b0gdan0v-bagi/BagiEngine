@@ -1,9 +1,9 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 #include <limits>
 
 namespace BECore {
@@ -28,6 +28,6 @@ namespace BECore {
      * A PNG keeps the exact colour of a partly transparent pixel on every platform. A side above @p maxSide is refused before the pixels are allocated.
      * The error is a line for a log or a status text.
      */
-    [[nodiscard]] std::expected<RgbaImage, String> ReadImageFile(const std::filesystem::path& file, uint32_t maxSide = kNoImageSideLimit);
+    [[nodiscard]] std::expected<RgbaImage, String> ReadImageFile(const Path& file, uint32_t maxSide = kNoImageSideLimit);
 
 }  // namespace BECore

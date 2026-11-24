@@ -778,10 +778,10 @@ namespace BECore::Tests {
         Profiler::SetBackend(&original);
         Profiler::SetRingEnabled(true);
 
-        const std::filesystem::path folder = TestTempDirectory("profiler_ring");
+        const Path folder(TestTempDirectory("profiler_ring"));
         MakeDirectory(folder);
         {
-            const ScopedTrace trace(String((folder / "trace.json").string().c_str()));
+            const ScopedTrace trace((folder / "trace.json").View());
             EXPECT_EQ(Profiler::GetPrimaryBackend(), &Profiler::GetChromeTrace());
             EXPECT_TRUE(Profiler::IsRingEnabled());
         }

@@ -1,10 +1,10 @@
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenImage.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
@@ -30,11 +30,6 @@ namespace BECore::Tests {
         constexpr float kSearchHeight = 890.0f;
         constexpr float kSearchWidth = 900.0f;
 
-        String PathText(const std::filesystem::path& path) {
-            const std::string text = path.generic_string();  //-NoStd: the text of a std::filesystem::path
-            return String(text.c_str(), text.size());
-        }
-
     }  // namespace
 
     /// The Set tab in an ImGui context of its own with no backend, driven by the mouse and the keyboard events like a person
@@ -48,9 +43,8 @@ namespace BECore::Tests {
 
         void SetUp() override {
             _root = TestTempDirectory("artgen_set_panel");
-            std::filesystem::remove_all(_root);
-            std::filesystem::create_directories(_root);
-            session.SetGameRoot(PathText(_root));
+            MakeEmptyDirectory(_root);
+            session.SetGameRoot(_root.View());
             form.New("workflow");
 
             ImGui::CreateContext();
@@ -68,8 +62,7 @@ namespace BECore::Tests {
             panel = ArtGenSetPanel();
             ImGui::DestroyContext();
             SetActiveImGuiFonts({});
-            std::error_code error;
-            std::filesystem::remove_all(_root, error);
+            RemoveDirectory(_root);
         }
 
         void Frame() {
@@ -162,11 +155,11 @@ namespace BECore::Tests {
 
         /// Writes a manifest of @p jobs into a second game root and makes it the session's, as a person who opens another game would
         void LoadSets(std::initializer_list<ArtGenSet> sets) {
-            const std::filesystem::path second = _root / "second";
+            const Path second = _root / "second";
             for (const ArtGenSet& set : sets) {
                 ASSERT_TRUE(WriteManifest(second, set).has_value());
             }
-            session.SetGameRoot(PathText(second));
+            session.SetGameRoot(second.View());
             Frame();
         }
 
@@ -251,12 +244,12 @@ namespace BECore::Tests {
         }
 
         /// The folder of a job's files in the set `chess` of the second game root that LoadSets makes
-        std::filesystem::path VariantFolder(const char* job) const {
+        Path VariantFolder(const char* job) const {
             return _root / "second" / "artgen" / "out" / "chess" / job;
         }
 
-        static void WritePicture(const std::filesystem::path& file) {
-            std::filesystem::create_directories(file.parent_path());
+        static void WritePicture(const Path& file) {
+            MakeDirectory(file.Parent());
             ArtGenPixels pixels;
             pixels.width = 2;
             pixels.height = 2;
@@ -264,8 +257,8 @@ namespace BECore::Tests {
             ASSERT_TRUE(WriteArtGenPng(file, pixels).has_value());
         }
 
-        static void WriteProvenance(const std::filesystem::path& file, StringView text) {
-            ASSERT_TRUE(WriteFileAtomically(PathToUtf8(file), text).has_value());
+        static void WriteProvenance(const Path& file, StringView text) {
+            ASSERT_TRUE(WriteFileAtomically(file, text).has_value());
         }
 
         static constexpr StringView kPassedChecks = R"({"seed":5,"checks":{"passed":true,"failed":[]}})";
@@ -346,12 +339,12 @@ namespace BECore::Tests {
         ImGuiFontBuffers buffers;
         ImGuiFonts fonts;
 
-        std::filesystem::path Root() const {
+        Path Root() const {
             return _root;
         }
 
     private:
-        std::filesystem::path _root;
+        Path _root;
     };
 
     TEST_F(ArtGenSetPanelTest, QueueSendsTheSlotOfAnImagePresetAndNothingForASound) {
@@ -565,8 +558,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSetPanelTest, UseAsReferenceOnAVariantFillsTheSlotWithItsFile) {
-        const std::filesystem::path folder = Root() / "second" / "artgen" / "out" / "chess" / "king";
-        std::filesystem::create_directories(folder);
+        const Path folder = Root() / "second" / "artgen" / "out" / "chess" / "king";
+        MakeDirectory(folder);
         ArtGenPixels pixels;
         pixels.width = 2;
         pixels.height = 2;

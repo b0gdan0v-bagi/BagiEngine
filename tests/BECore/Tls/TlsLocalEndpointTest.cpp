@@ -31,7 +31,7 @@ namespace BECore::Tests {
         }
 
         [[nodiscard]] Vector<uint8_t> ReadFile(const String& path) {
-            return ReadFileBytes(std::filesystem::path(path.c_str()));
+            return ReadFileBytes(Path(path));
         }
 
         class TlsLocalEndpointTest : public ::testing::Test {

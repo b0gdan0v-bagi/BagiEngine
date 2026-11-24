@@ -2,6 +2,7 @@
 
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/SchemaHash.h>
@@ -22,16 +23,20 @@ namespace BECore {
         /// The editor keeps its window layout in `config/` so that it survives a clean build; it is the developer's state, not content, and a cook must not ship it
         constexpr StringView kEditorLayoutFile = "imgui.ini";
 
-        /// True when @p inner is @p outer or lies below it; both are compared as they exist on disk (symbolic links and `..` resolved)
-        bool IsInside(const std::filesystem::path& inner, const std::filesystem::path& outer) {
-            std::error_code ec;
-            const std::filesystem::path innerPath = std::filesystem::weakly_canonical(inner, ec);
-            const std::filesystem::path outerPath = ec ? std::filesystem::path{} : std::filesystem::weakly_canonical(outer, ec);
-            if (ec) {
+        /// True when @p inner is @p outer or lies below it; both are compared as they exist on disk (symbolic links and `..` resolved).
+        /// `Relative` is empty for equal paths and for a path outside, so the equal case is its own test; `a/bc` is not below `a/b`.
+        bool IsInside(const Path& inner, const Path& outer) {
+            const std::expected<String, String> innerText = WeaklyCanonicalPath(inner);
+            if (!innerText) {
                 return false;
             }
-            const std::filesystem::path relative = innerPath.lexically_relative(outerPath);
-            return !relative.empty() && *relative.begin() != "..";
+            const std::expected<String, String> outerText = WeaklyCanonicalPath(outer);
+            if (!outerText) {
+                return false;
+            }
+            const Path innerPath(*innerText);
+            const Path outerPath(*outerText);
+            return innerPath == outerPath || !innerPath.Relative(outerPath).Empty();
         }
 
         /// A name the cook owns in its output folder: `layer` and the digits of a layer's position
@@ -47,10 +52,6 @@ namespace BECore {
             return true;
         }
 
-        String Generic(const std::filesystem::path& path) {
-            return FromStdString(path.generic_string());
-        }
-
         void Fail(CookReport& report, size_t layer, StringView path, String message) {
             CookRow& row = report.rows.emplace_back();
             row.layer = layer;
@@ -59,9 +60,9 @@ namespace BECore {
             row.messages.push_back(eastl::move(message));
         }
 
-        bool IsBinaryOrXml(const std::filesystem::path& path) {
-            const std::filesystem::path extension = path.extension();
-            return extension == kXmlExtension.data() || extension == kBinaryExtension.data();
+        bool IsBinaryOrXml(const Path& path) {
+            const StringView extension = PathExtension(path.View());
+            return extension == kXmlExtension || extension == kBinaryExtension;
         }
 
         /// Which of `<stem>.xml` and `<stem>.bin` a layer holds, over the whole layer as `ConfigManager` scans it
@@ -70,33 +71,33 @@ namespace BECore {
             bool binary = false;
         };
 
-        HashMap<String, StemFiles> ScanStems(const Vector<std::filesystem::path>& files) {
+        HashMap<String, StemFiles> ScanStems(const Vector<Path>& files) {
             HashMap<String, StemFiles> stems;
-            for (const std::filesystem::path& file : files) {
+            for (const Path& file : files) {
                 if (IsBinaryOrXml(file)) {
-                    StemFiles& entry = stems[FromStdString(file.stem().string())];
-                    (file.extension() == kXmlExtension.data() ? entry.xml : entry.binary) = true;
+                    StemFiles& entry = stems[String(PathStem(file.View()))];
+                    (PathExtension(file.View()) == kXmlExtension ? entry.xml : entry.binary) = true;
                 }
             }
             return stems;
         }
 
-        bool MakeParentFolder(const std::filesystem::path& file, String& error) {
-            std::error_code ec;
-            std::filesystem::create_directories(file.parent_path(), ec);
-            if (ec) {
-                error = Format("cannot make '{}': {}", file.parent_path().string(), ec.message());
+        bool MakeParentFolder(const Path& file, String& error) {
+            const Path folder = file.Parent();
+            if (const std::expected<void, String> made = CreateDirectories(folder); !made) {
+                error = Format("cannot make '{}': {}", folder.View(), made.error());
+                return false;
             }
-            return !ec;
+            return true;
         }
 
         /// Writes the stream of @p writer to @p target, making the folder above it; the findings get the reason it could not
-        void SaveCooked(const BinarySerializer& writer, const std::filesystem::path& target, Vector<String>& findings) {
+        void SaveCooked(const BinarySerializer& writer, const Path& target, Vector<String>& findings) {
             String error;
             if (!MakeParentFolder(target, error)) {
                 findings.push_back(eastl::move(error));
             } else if (!writer.SaveToFile(target)) {
-                findings.push_back(Format("cannot write '{}'", target.string()));
+                findings.push_back(Format("cannot write '{}'", target.View()));
             }
         }
 
@@ -167,8 +168,8 @@ namespace BECore {
         }
 
         /// Cooks the XML file @p source into @p target when its root element or its stem says how; false (nothing written, @p findings empty) when it is to be copied
-        bool CookXml(const FileSystem& fs, const ContentCookRegistry& registry, const std::filesystem::path& source, const std::filesystem::path& target, Vector<String>& findings) {
-            const String stem = FromStdString(source.stem().string());
+        bool CookXml(const FileSystem& fs, const ContentCookRegistry& registry, const Path& source, const Path& target, Vector<String>& findings) {
+            const String stem(PathStem(source.View()));
             const ContentCooker* cooker = registry.Find(stem);
             XmlDocument document;
             if (!document.LoadFromFile(source)) {
@@ -196,39 +197,37 @@ namespace BECore {
             return true;
         }
 
-        void CopyOne(const std::filesystem::path& source, const std::filesystem::path& target, Vector<String>& findings) {
+        void CopyOne(const Path& source, const Path& target, Vector<String>& findings) {
             String error;
             if (!MakeParentFolder(target, error)) {
                 findings.push_back(eastl::move(error));
                 return;
             }
-            std::error_code ec;
-            std::filesystem::copy_file(source, target, std::filesystem::copy_options::overwrite_existing, ec);
-            if (ec) {
-                findings.push_back(Format("cannot copy to '{}': {}", target.string(), ec.message()));
+            if (const std::expected<void, String> copied = CopyFileTo(source, target, CopyMode::Overwrite); !copied) {
+                findings.push_back(Format("cannot copy to '{}': {}", target.View(), copied.error()));
             }
         }
 
-        void CookLayer(const FileSystem& fs, size_t layerIndex, const std::filesystem::path& layer, const std::filesystem::path& outDir, const ContentCookRegistry& registry, CookReport& report) {
+        void CookLayer(const FileSystem& fs, size_t layerIndex, const Path& layer, const Path& outDir, const ContentCookRegistry& registry, CookReport& report) {
             String listError;
-            const Vector<std::filesystem::path> files = ListContentFiles(layer, listError);
+            const Vector<Path> files = ListContentFiles(layer, listError);
             if (!listError.empty()) {
                 Fail(report, layerIndex, "", eastl::move(listError));
                 return;
             }
             const HashMap<String, StemFiles> stems = ScanStems(files);
-            const std::filesystem::path outLayer = outDir / Format("{}{}", kLayerFolderPrefix, layerIndex).c_str() / kConfigFolder.data();
-            std::error_code ec;
-            std::filesystem::create_directories(outLayer, ec);
+            const Path outLayer = outDir / Format("{}{}", kLayerFolderPrefix, layerIndex) / kConfigFolder;
+            // A failure here shows again as the failure of the first file that needs the folder
+            static_cast<void>(CreateDirectories(outLayer));
 
-            for (const std::filesystem::path& relative : files) {
+            for (const Path& relative : files) {
                 CookRow row;
                 row.layer = layerIndex;
-                row.path = Generic(relative);
-                const std::filesystem::path source = layer / relative;
+                row.path = String(relative.View());
+                const Path source = layer / relative;
 
                 if (IsBinaryOrXml(relative)) {
-                    const StemFiles& entry = stems.find(FromStdString(relative.stem().string()))->second;
+                    const StemFiles& entry = stems.find(String(PathStem(relative.View())))->second;
                     if (entry.xml && entry.binary) {
                         row.outcome = CookOutcome::Failed;
                         row.messages.push_back("a .xml and a .bin of this stem are in one layer: ConfigManager refuses both, keep one");
@@ -237,10 +236,9 @@ namespace BECore {
                     }
                 }
 
-                std::filesystem::path target = outLayer / relative;
                 bool cooked = false;
-                if (relative.extension() == kXmlExtension.data()) {
-                    target.replace_extension(kBinaryExtension.data());
+                if (PathExtension(relative.View()) == kXmlExtension) {
+                    const Path target = (outLayer / relative).ReplaceExtension(kBinaryExtension);
                     cooked = CookXml(fs, registry, source, target, row.messages);
                 }
                 if (!cooked) {
@@ -256,35 +254,46 @@ namespace BECore {
         }
 
         /// Removes what an earlier cook left in @p outDir (`layer<k>` folders) and makes the folder; the reason when it cannot
-        String PrepareOutput(const std::filesystem::path& outDir) {
-            std::error_code ec;
-            std::filesystem::create_directories(outDir, ec);
-            if (ec) {
-                return Format("cannot make '{}': {}", outDir.string(), ec.message());
+        String PrepareOutput(const Path& outDir) {
+            if (const std::expected<void, String> made = CreateDirectories(outDir); !made) {
+                return Format("cannot make '{}': {}", outDir.View(), made.error());
             }
-            for (std::filesystem::directory_iterator it(outDir, ec), end; !ec && it != end; it.increment(ec)) {  //-NoStd: an offline tool lists the output folder once
-                if (it->is_directory(ec) && IsLayerFolderName(FromStdString(it->path().filename().string()))) {
-                    std::filesystem::remove_all(it->path(), ec);
+            // The folder must not change while it is walked, so the names are removed after the walk. A link named `layer<k>` counts as the folder it points at and is removed as a link
+            Vector<String> stale;
+            const std::expected<void, String> walked = WalkDirectory(outDir, WalkMode::Folder, [&](StringView name, FileKind kind) {
+                if (kind == FileKind::Directory && IsLayerFolderName(name)) {
+                    stale.emplace_back(name);
+                }
+                return true;
+            });
+            if (!walked) {
+                return Format("cannot clear '{}': {}", outDir.View(), walked.error());
+            }
+            for (const String& name : stale) {
+                if (const std::expected<void, String> removed = RemoveTree(outDir / name); !removed) {
+                    return Format("cannot clear '{}': {}", outDir.View(), removed.error());
                 }
             }
-            return ec ? Format("cannot clear '{}': {}", outDir.string(), ec.message()) : String{};
+            return {};
         }
 
     }  // namespace
 
-    Vector<std::filesystem::path> ListContentFiles(const std::filesystem::path& layer, String& error) {
-        Vector<std::filesystem::path> files;
-        std::error_code ec;
-        for (std::filesystem::recursive_directory_iterator it(layer, ec), end; !ec && it != end; it.increment(ec)) {  //-NoStd: an offline tool lists the content folder once
-            const String name = FromStdString(it->path().filename().string());
-            if (it->is_regular_file(ec) && !ec && name.front() != '.' && name != kEditorLayoutFile) {
-                files.push_back(it->path().lexically_relative(layer));
+    Vector<Path> ListContentFiles(const Path& layer, String& error) {
+        Vector<Path> files;
+        const std::expected<void, String> walked = WalkDirectory(layer, WalkMode::Tree, [&](StringView relative, FileKind kind) {
+            if (kind == FileKind::File) {
+                const StringView name = PathFilename(relative);
+                if (!name.starts_with('.') && name != kEditorLayoutFile) {
+                    files.emplace_back(relative);
+                }
             }
+            return true;
+        });
+        if (!walked) {
+            error = Format("the layer '{}' cannot be listed: {}", layer.View(), walked.error());
         }
-        if (ec) {
-            error = Format("the layer '{}' cannot be listed: {}", layer.string(), ec.message());
-        }
-        eastl::sort(files.begin(), files.end(), [](const std::filesystem::path& a, const std::filesystem::path& b) { return a.generic_string() < b.generic_string(); });
+        eastl::sort(files.begin(), files.end(), [](const Path& a, const Path& b) { return a.View() < b.View(); });
         return files;
     }
 
@@ -316,25 +325,25 @@ namespace BECore {
         return text;
     }
 
-    CookReport CookContent(const FileSystem& fs, const std::filesystem::path& outDir, const ContentCookRegistry& registry) {
+    CookReport CookContent(const FileSystem& fs, const Path& outDir, const ContentCookRegistry& registry) {
         CookReport report;
-        const Vector<std::filesystem::path> layers = fs.GetMountLayers(MountPoints::config);
+        const Vector<Path> layers = fs.GetMountLayers(MountPoints::config);
         if (layers.empty()) {
             Fail(report, 0, "", "the file system has no 'config' layer");
             return report;
         }
 
-        Vector<std::filesystem::path> guarded = layers;
-        for (const std::filesystem::path& layer : fs.GetMountLayers(MountPoints::assets)) {
+        Vector<Path> guarded = layers;
+        for (const Path& layer : fs.GetMountLayers(MountPoints::assets)) {
             guarded.push_back(layer);
         }
-        for (const std::filesystem::path& layer : guarded) {
+        for (const Path& layer : guarded) {
             if (IsInside(outDir, layer)) {
-                Fail(report, 0, "", Format("the output folder '{}' is inside the content folder '{}': it would be scanned as content", outDir.string(), layer.string()));
+                Fail(report, 0, "", Format("the output folder '{}' is inside the content folder '{}': it would be scanned as content", outDir.View(), layer.View()));
                 return report;
             }
             if (IsInside(layer, outDir)) {
-                Fail(report, 0, "", Format("the content folder '{}' is inside the output folder '{}': the cook removes what it finds there", layer.string(), outDir.string()));
+                Fail(report, 0, "", Format("the content folder '{}' is inside the output folder '{}': the cook removes what it finds there", layer.View(), outDir.View()));
                 return report;
             }
         }

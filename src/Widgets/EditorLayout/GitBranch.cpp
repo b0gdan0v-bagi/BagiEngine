@@ -1,7 +1,6 @@
 #include "GitBranch.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 
 namespace BECore {
 
@@ -30,20 +29,16 @@ namespace BECore {
             return std::ranges::all_of(text, [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; });
         }
 
-        std::filesystem::path ToPath(StringView text) {
-            return std::filesystem::path(ToStdString(text));
-        }
-
         /// The folder with HEAD for the `.git` entry @p gitEntry of @p repositoryRoot; empty when it is neither a folder nor a gitdir file
-        std::filesystem::path ResolveGitDirectory(const std::filesystem::path& gitEntry, const std::filesystem::path& repositoryRoot) {
-            std::error_code ec;
-            if (std::filesystem::is_directory(gitEntry, ec)) {
+        Path ResolveGitDirectory(const Path& gitEntry, const Path& repositoryRoot) {
+            const Optional<FileInfo> info = GetFileInfo(gitEntry);
+            if (info && info->kind == FileKind::Directory) {
                 return gitEntry;
             }
-            if (!std::filesystem::is_regular_file(gitEntry, ec)) {
+            if (!info || info->kind != FileKind::File) {
                 return {};
             }
-            const auto content = ReadTextFile(PathToUtf8(gitEntry));
+            const auto content = ReadTextFile(gitEntry);
             if (!content) {
                 return {};
             }
@@ -55,8 +50,8 @@ namespace BECore {
             if (target.empty()) {
                 return {};
             }
-            const std::filesystem::path targetPath = ToPath(target);
-            return targetPath.is_absolute() ? targetPath : (repositoryRoot / targetPath).lexically_normal();
+            const Path targetPath(target);
+            return targetPath.IsAbsolute() ? targetPath : (repositoryRoot / targetPath).LexicallyNormal();
         }
 
     }  // namespace
@@ -73,24 +68,28 @@ namespace BECore {
         return {};
     }
 
-    String ReadGitBranch(const std::filesystem::path& startDirectory) {
-        std::error_code ec;
-        std::filesystem::path directory = std::filesystem::absolute(startDirectory, ec).lexically_normal();
-        if (ec) {
+    String ReadGitBranch(const Path& startDirectory) {
+        // AbsolutePath("") is the working folder, which is not what an empty start means
+        if (startDirectory.Empty()) {
             return {};
         }
+        std::expected<String, String> absolute = AbsolutePath(startDirectory);
+        if (!absolute) {
+            return {};
+        }
+        Path directory(std::move(*absolute));
         while (true) {
-            const std::filesystem::path gitEntry = directory / ToStdString(kGitEntryName);
-            if (std::filesystem::exists(gitEntry, ec)) {
-                const std::filesystem::path gitDirectory = ResolveGitDirectory(gitEntry, directory);
-                if (gitDirectory.empty()) {
+            const Path gitEntry = directory / kGitEntryName;
+            if (GetFileInfo(gitEntry)) {
+                const Path gitDirectory = ResolveGitDirectory(gitEntry, directory);
+                if (gitDirectory.Empty()) {
                     return {};
                 }
-                const auto head = ReadTextFile(PathToUtf8(gitDirectory / ToStdString(kHeadFileName)));
+                const auto head = ReadTextFile(gitDirectory / kHeadFileName);
                 return head ? ParseGitHead(*head) : String();
             }
-            const std::filesystem::path parent = directory.parent_path();
-            if (parent.empty() || parent == directory) {
+            const Path parent = directory.Parent();
+            if (parent.Empty() || parent == directory) {
                 return {};
             }
             directory = parent;

@@ -1,5 +1,6 @@
 #include "ArtGenLaunch.h"
 
+#include <BECore/File/File.h>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_process.h>
 #include <SDL3/SDL_properties.h>
@@ -7,11 +8,10 @@
 
 namespace BECore {
 
-    Optional<std::filesystem::path> FindArtGenBridge(const Vector<std::filesystem::path>& configLayers) {
-        for (const auto& layer : configLayers) {
-            std::filesystem::path script = layer.parent_path() / ToStd(kArtGenBridgeScript);  //-NoStd: std::filesystem::path takes a std::string
-            std::error_code error;
-            if (std::filesystem::is_regular_file(script, error)) {
+    Optional<Path> FindArtGenBridge(const Vector<Path>& configLayers) {
+        for (const Path& layer : configLayers) {
+            Path script = layer.Parent() / kArtGenBridgeScript;
+            if (const auto info = GetFileInfo(script); info && info->kind == FileKind::File) {
                 return script;
             }
         }
@@ -41,12 +41,10 @@ namespace BECore {
         return arguments;
     }
 
-    bool LaunchArtGenBridge(const std::filesystem::path& script, uint16_t port, const std::filesystem::path& log, String& error) {
+    bool LaunchArtGenBridge(const Path& script, uint16_t port, const Path& log, String& error) {
         error.clear();
-        const std::string scriptText = script.generic_string();  //-NoStd: std::filesystem gives a std::string
-        const std::string logText = log.generic_string();        //-NoStd: std::filesystem gives a std::string
         const String python = ArtGenPython();
-        const Vector<String> arguments = BuildBridgeLaunch(python, StringView(scriptText.data(), scriptText.size()), port, StringView(logText.data(), logText.size()));
+        const Vector<String> arguments = BuildBridgeLaunch(python, script.View(), port, log.View());
         Vector<const char*> argv;
         argv.reserve(arguments.size() + 1);
         for (const String& argument : arguments) {

@@ -56,14 +56,11 @@ namespace BECore::Tests {
         }
 
         void Age(const char* fileName, std::chrono::hours age) const {
-            std::error_code error;
-            std::filesystem::last_write_time(_dir / fileName, std::filesystem::file_time_type::clock::now() - age, error);
-            EXPECT_FALSE(error) << fileName << ": " << error.message();
+            SetWriteTime(_dir / fileName, -age);
         }
 
         bool FileExists(const char* fileName) const {
-            std::error_code error;
-            return std::filesystem::exists(_dir / fileName, error);
+            return PathExists(_dir / fileName);
         }
 
         /// The serialized form of an object, to compare what two loads produced
@@ -295,8 +292,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(FileExists("gem.sim.xml"));
         EXPECT_TRUE(FileExists("gem.visual.xml"));
         EXPECT_TRUE(FileExists("gem.editor.xml"));
-        std::error_code error;
-        ASSERT_TRUE(std::filesystem::remove(_dir / "gem.asset.xml", error)) << error.message();
+        const auto removed = RemoveFile(_dir / "gem.asset.xml");
+        ASSERT_TRUE(removed.has_value()) << removed.error().c_str();
 
         EXPECT_EQ(Serialized(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)), simWhole);
         EXPECT_EQ(Serialized(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual)), visualWhole);
@@ -318,6 +315,25 @@ namespace BECore::Tests {
         EXPECT_FALSE(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual).has_value());
     }
 
+    TEST_F(AssetPartsTest, ASplitInANonAsciiFolderServesWhileFreshAndNotWhenTheWholeFileIsNewer) {
+        const char* const folder = "caf\xC3\xA9";
+        const String whole = Format("{}/gem.asset.xml", folder);
+        WriteFile(whole.c_str(), kWholeXml);
+
+        ASSERT_TRUE(SplitAssetFile(VirtualPath(whole.c_str())));
+        EXPECT_TRUE(FileExists(Format("{}/gem.sim.xml", folder).c_str()));
+        EXPECT_TRUE(FileExists(Format("{}/gem.visual.xml", folder).c_str()));
+        EXPECT_TRUE(FileExists(Format("{}/gem.editor.xml", folder).c_str()));
+
+        // A split file that is not older than the whole file wins over it
+        WriteFile(Format("{}/gem.sim.xml", folder).c_str(), kSplitSimXml);
+        EXPECT_EQ(Require(Load<PartSimProbe>(whole.c_str(), AssetPurpose::Sim)).value, kSplitValue);
+
+        // A whole file that is newer than its split files serves instead
+        Age(Format("{}/gem.sim.xml", folder).c_str(), kOlder);
+        EXPECT_EQ(Require(Load<PartSimProbe>(whole.c_str(), AssetPurpose::Sim)).value, kSimValue);
+    }
+
     TEST_F(AssetPartsTest, AResplitRemovesTheFileOfAPartThatIsGone) {
         WriteFile("gem.asset.xml", kWholeXml);
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
@@ -333,8 +349,8 @@ namespace BECore::Tests {
 
     TEST_F(AssetPartsTest, TheOutputFolderTakesTheFilesAndTheSourceFolderNone) {
         WriteFile("gem.asset.xml", kWholeXml);
-        std::error_code error;
-        ASSERT_TRUE(std::filesystem::create_directories(_dir / "packed", error)) << error.message();
+        MakeDirectory(_dir / "packed");
+        ASSERT_TRUE(IsFolder(_dir / "packed"));
 
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml"), VirtualPath("packed")));
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml"), VirtualPath("made/deep")));

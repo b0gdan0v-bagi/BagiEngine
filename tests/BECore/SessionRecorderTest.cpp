@@ -15,7 +15,6 @@
 #include <Games/GameManager.h>
 #include <Games/ReplayFile.h>
 #include <Games/SessionRecorder.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -42,8 +41,7 @@ namespace BECore::Tests {
                 SessionRecorder::DestroyInstance();
                 GameManager::GetInstance().Shutdown();
                 CoreManager::GetTime().Reset();
-                std::error_code ignored;
-                std::filesystem::remove(_path, ignored);
+                RemoveFileIfPresent(_path);
             }
 
             static ReplayTestGame& Game() {
@@ -56,7 +54,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String PathText() const {
-                return FromStdString(_path.string());
+                return String(_path.View());
             }
 
             std::expected<void, ControlError> StartRecording(StringView title = {}) {
@@ -97,7 +95,7 @@ namespace BECore::Tests {
                 return response;
             }
 
-            std::filesystem::path _path;
+            Path _path;
         };
 
     }  // namespace
@@ -281,11 +279,11 @@ namespace BECore::Tests {
             EXPECT_EQ(started.error().code, game->AsControllable() != nullptr ? String(GameControlErrors::kUnsupported) : String(GameControlErrors::kNotControllable));
             EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
         }
-        EXPECT_FALSE(std::filesystem::exists(_path));
+        EXPECT_FALSE(PathExists(_path));
     }
 
     TEST_F(SessionRecorderTest, APathThatCannotBeWrittenStopsTheRecordingAndNotTheGame) {
-        const String missing = FromStdString((_path / "no" / "such" / "folder.jsonl").string());
+        const String missing = String((_path / "no" / "such" / "folder.jsonl").View());
 
         const auto started = SessionRecorder::GetInstance().Start(missing, *GameManager::GetInstance().GetActive());
 
@@ -357,7 +355,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
 
         EXPECT_EQ(SessionRecorder::GetInstance().GetEntryCount(), 0u);
-        EXPECT_FALSE(std::filesystem::exists(_path));
+        EXPECT_FALSE(PathExists(_path));
     }
 
 }  // namespace BECore::Tests

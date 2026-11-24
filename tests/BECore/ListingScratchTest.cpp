@@ -70,11 +70,11 @@ namespace BECore::Tests {
             GTEST_SKIP() << kNoAllocTracker;
         }
         TestTempFolder folder("BagiListingScratch");
-        const std::filesystem::path root = ToStdString(folder.PathOf("root"));
+        const Path root = folder.PathOf("root");
         const String stem = FreshText("listing");
         for (size_t d = 0; d < kFolders; ++d) {
             for (size_t f = 0; f < kFilesPerFolder; ++f) {
-                WriteFile(root / "assets" / ToStd(Format("{}_{:02}", stem, d)) / ToStd(Format("f{:03}.png", f)), "x");
+                WriteFile(root / "assets" / Format("{}_{:02}", stem, d) / Format("f{:03}.png", f), "x");
             }
         }
 
@@ -134,7 +134,7 @@ namespace BECore::Tests {
 
     TEST(ListingScratchTest, SavingAnEditedConfigOverItsFileKeepsItsLayoutAndReadsTheOldTextFromScratch) {
         TestTempFolder folder("BagiListingScratchSave");
-        const std::filesystem::path path = ToStdString(folder.PathOf("config.xml"));
+        const Path path = folder.PathOf("config.xml");
         const LaidOutConfig config = MakeConfig(kConfigLines);
         WriteFile(path, config.original);
 

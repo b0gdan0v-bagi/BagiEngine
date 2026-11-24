@@ -1,10 +1,11 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
 #include <Common/TempPath.h>
-#include <filesystem>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 #include <initializer_list>
 
@@ -20,20 +21,17 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             _base = TestTempDirectory(Format("Bagi{}", ::testing::UnitTest::GetInstance()->current_test_info()->test_suite_name()));
-            std::error_code ec;
-            std::filesystem::remove_all(_base, ec);
-            std::filesystem::create_directories(_base, ec);
-            ASSERT_FALSE(ec) << "cannot make " << _base.string() << ": " << ec.message();
+            MakeEmptyDirectory(_base);
+            ASSERT_TRUE(IsFolder(_base)) << "cannot make " << _base.CStr();
             _saves = _base / "saves";
         }
 
         void TearDown() override {
-            std::error_code ec;
-            std::filesystem::remove_all(_base, ec);
+            RemoveDirectory(_base);
         }
 
-        std::filesystem::path _base;
-        std::filesystem::path _saves;
+        Path _base;
+        Path _saves;
         FileSystem _fileSystem;
     };
 

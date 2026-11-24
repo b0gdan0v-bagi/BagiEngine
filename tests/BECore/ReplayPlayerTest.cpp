@@ -17,7 +17,6 @@
 #include <Games/ReplayFile.h>
 #include <Games/ReplayPlayer.h>
 #include <Games/SessionRecorder.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -45,8 +44,7 @@ namespace BECore::Tests {
                 SessionRecorder::DestroyInstance();
                 GameManager::GetInstance().Shutdown();
                 CoreManager::GetTime().Reset();
-                std::error_code ignored;
-                std::filesystem::remove(_path, ignored);
+                RemoveFileIfPresent(_path);
             }
 
             static ReplayTestGame& Game() {
@@ -70,7 +68,7 @@ namespace BECore::Tests {
 
             /// reset, roll, arm, a wait of the lock, roll, set_state, roll: the arm / timer gap is in the file (6 entries)
             String RecordSession() {
-                EXPECT_TRUE(SessionRecorder::GetInstance().Start(FromStdString(_path.string()), *GameManager::GetInstance().GetActive(), "session").has_value());
+                EXPECT_TRUE(SessionRecorder::GetInstance().Start(_path.View(), *GameManager::GetInstance().GetActive(), "session").has_value());
                 EXPECT_TRUE(ControlledReset(Game(), JsonDoc(R"({"seed":21})")).has_value());
                 Frame();
                 EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
@@ -103,7 +101,7 @@ namespace BECore::Tests {
                 return {};
             }
 
-            std::filesystem::path _path;
+            Path _path;
         };
 
     }  // namespace
@@ -285,7 +283,7 @@ namespace BECore::Tests {
         const String text = RecordSession();
         ReplayPlayer player;
         ASSERT_TRUE(player.Load(text, "ReplayTest").has_value());
-        ASSERT_TRUE(SessionRecorder::GetInstance().Start(FromStdString(_path.string()), *GameManager::GetInstance().GetActive()).has_value());
+        ASSERT_TRUE(SessionRecorder::GetInstance().Start(_path.View(), *GameManager::GetInstance().GetActive()).has_value());
 
         EXPECT_TRUE(Play(player, Game()).has_value());
 

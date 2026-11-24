@@ -1,7 +1,7 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Reflection/ISerializer.h>
-#include <filesystem>
 #include <pugixml.hpp>
 
 namespace BECore {
@@ -30,7 +30,7 @@ namespace BECore {
         XmlSerializer& operator=(XmlSerializer&&) = default;
 
         /// Writes the document to a file; true on success.
-        bool SaveToFile(const std::filesystem::path& path) const;
+        bool SaveToFile(const Path& path) const;
 
         String SaveToString() const;
 

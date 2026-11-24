@@ -2,7 +2,7 @@
 
 #include <BECore/Control/JsonViewOps.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
+#include <BECore/File/Path.h>
 #include <BECore/Format/Format.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/SceneManager.h>
@@ -15,7 +15,6 @@
 #include <Games/IGame.h>
 #include <Games/ReplayPlayer.h>
 #include <expected>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -48,15 +47,15 @@ namespace BECore::Tests {
      * read, does not parse, or is of another game than @p gameName). The file is read-only data of the repository, found by the caller from
      * `__FILE__`. @p game has to be in the state a fresh start has: the file begins with a `reset`.
      */
-    inline std::expected<void, ReplayCheckFailure> PlayReplayFile(IControllableGame& game, StringView gameName, const std::filesystem::path& path, ReplayStepFn step = StepReplayFrame) {
-        const auto text = ReadTextFile(PathToUtf8(path));
+    inline std::expected<void, ReplayCheckFailure> PlayReplayFile(IControllableGame& game, StringView gameName, const Path& path, ReplayStepFn step = StepReplayFrame) {
+        const auto text = ReadTextFile(path);
         if (!text) {
-            return std::unexpected(ReplayCheckFailure{Format("cannot read the replay file '{}': {}", path.string(), text.error()), std::nullopt});
+            return std::unexpected(ReplayCheckFailure{Format("cannot read the replay file '{}': {}", path.View(), text.error()), std::nullopt});
         }
 
         ReplayPlayer player;
         if (const auto loaded = player.Load(*text, gameName); !loaded) {
-            return std::unexpected(ReplayCheckFailure{Format("'{}': {}", path.string(), DescribeReplayError(loaded.error())), std::nullopt});
+            return std::unexpected(ReplayCheckFailure{Format("'{}': {}", path.View(), DescribeReplayError(loaded.error())), std::nullopt});
         }
         while (!player.IsDone()) {
             const ReplayGap gap = player.PeekGap();
@@ -69,7 +68,7 @@ namespace BECore::Tests {
             if (const ReplayStep applied = player.Apply(game); !applied) {
                 const ReplayMismatch& mismatch = applied.error();
                 return std::unexpected(ReplayCheckFailure{
-                    Format("'{}': entry {} (line {}) {}: {}", path.string(), mismatch.index, mismatch.entry.line, ReplayMismatchKindName(mismatch.kind), ReplayMismatchText(mismatch)), mismatch});
+                    Format("'{}': entry {} (line {}) {}: {}", path.View(), mismatch.index, mismatch.entry.line, ReplayMismatchKindName(mismatch.kind), ReplayMismatchText(mismatch)), mismatch});
             }
         }
         return {};
@@ -80,7 +79,7 @@ namespace BECore::Tests {
      * the state `WriteState()` writes and it are equal as values, whatever the key order). A failure names the entry, its line in the file and what differed.
      * Use through EXPECT_REPLAY_FINAL_STATE.
      */
-    inline void ExpectReplayFinalState(IGame& game, const std::filesystem::path& path, StringView expectedStateJson, ReplayStepFn step = StepReplayFrame) {
+    inline void ExpectReplayFinalState(IGame& game, const Path& path, StringView expectedStateJson, ReplayStepFn step = StepReplayFrame) {
         IControllableGame* control = game.AsControllable();
         if (control == nullptr) {
             ADD_FAILURE() << Format("the game '{}' cannot be controlled from outside", game.GetName().ToStringView()).c_str();
@@ -103,7 +102,7 @@ namespace BECore::Tests {
             return;
         }
         EXPECT_TRUE(JsonEquals(JsonView(actualTape, 0), JsonView(expectedTape, 0)))
-            << "the state after '" << path.string() << "'\n actual:   " << actualText.c_str() << "\n expected: " << String(expectedStateJson.data(), expectedStateJson.size()).c_str();
+            << "the state after '" << path.CStr() << "'\n actual:   " << actualText.c_str() << "\n expected: " << String(expectedStateJson.data(), expectedStateJson.size()).c_str();
     }
 
 }  // namespace BECore::Tests

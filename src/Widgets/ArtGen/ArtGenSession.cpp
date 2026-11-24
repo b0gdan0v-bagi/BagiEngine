@@ -3,7 +3,6 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -322,14 +321,12 @@ namespace BECore {
         if (_gameRoot.empty()) {
             return std::unexpected(String("no game root to save into"));
         }
-        const std::filesystem::path folder = std::filesystem::path(ToStdString(_gameRoot)) / "artgen" / "presets";
-        std::error_code error;
-        std::filesystem::create_directories(folder, error);
-        if (error) {
-            return std::unexpected(Format("cannot make {}: {}", FromStd(folder.generic_string()), FromStd(error.message())));
+        const Path folder = Path(StringView(_gameRoot)) / "artgen" / "presets";
+        if (auto made = CreateDirectories(folder); !made) {
+            return std::unexpected(Format("cannot make {}: {}", folder.View(), made.error()));
         }
-        const std::filesystem::path path = folder / (ToStdString(name) + ".json");
-        if (auto written = WriteFileAtomically(PathToUtf8(path), FormatArtGenPresetFile(preset)); !written) {
+        const Path path = folder / Format("{}.json", name);
+        if (auto written = WriteFileAtomically(path, FormatArtGenPresetFile(preset)); !written) {
             return std::unexpected(written.error());
         }
         // Shown at once as the game's own; the service checks it at the look the next poll asks for
@@ -349,7 +346,7 @@ namespace BECore {
         }
         _refreshCatalog = true;
         ++_version;
-        return String(FromStd(path.generic_string()));
+        return String(path.View());
     }
 
     void ArtGenSession::RequestServiceStop() {

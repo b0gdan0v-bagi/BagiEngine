@@ -1,7 +1,6 @@
 #include "ImGuiFonts.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -25,11 +24,11 @@ namespace BECore {
         bool ReadFontFile(const char* virtualPath, Vector<uint8_t>& bytes) {
             bytes.clear();
             const auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
-            if (realPath.empty()) {
+            if (realPath.Empty()) {
                 LOG_ERROR("ImGuiFonts: cannot open '{}'", virtualPath);
                 return false;
             }
-            auto read = ReadFileBytes(PathToUtf8(realPath));
+            auto read = ReadFileBytes(realPath);
             if (!read || read->empty()) {
                 LOG_ERROR("ImGuiFonts: cannot read '{}'", virtualPath);
                 return false;

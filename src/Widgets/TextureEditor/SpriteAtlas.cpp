@@ -1,5 +1,6 @@
 #include "SpriteAtlas.h"
 
+#include <BECore/File/File.h>
 #include <EASTL/sort.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <cmath>
@@ -275,14 +276,11 @@ namespace BECore {
             return std::unexpected(built.error());
         }
 
-        const std::filesystem::path folder = io.assetsDir / ToStd(kAtlasAssetsFolder);
-        std::error_code error;
-        std::filesystem::create_directories(folder, error);
-        if (error) {
-            return std::unexpected(Format("cannot create the folder {}: {}", folder.generic_string(), error.message()));
+        const Path folder = io.assetsDir / kAtlasAssetsFolder;
+        if (const auto made = CreateDirectories(folder); !made) {
+            return std::unexpected(Format("cannot create the folder {}: {}", folder.View(), made.error()));
         }
-        const String fileName = Format("{}{}", atlasName, kAtlasExtension);
-        if (auto written = ReplaceRgbaPng(folder / ToStd(fileName), built->image); !written) {
+        if (auto written = ReplaceRgbaPng(folder / Format("{}{}", atlasName, kAtlasExtension), built->image); !written) {
             return std::unexpected(written.error());
         }
 

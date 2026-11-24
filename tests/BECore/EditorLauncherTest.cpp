@@ -88,25 +88,34 @@ namespace BECore::Tests {
 
     TEST(EditorLauncherTest, ASiteIsOpenableOnlyForAnExistingAbsolutePath) {
         // The answer is cached per pointer for the life of the process, so every path asked about lives as long
-        static const String missing((TestTempPath("BagiEditorLauncherMissing") / "nothing.cpp").string().c_str());
+        static const String missing((TestTempPath("BagiEditorLauncherMissing") / "nothing.cpp").View());
         EXPECT_FALSE(IsSiteOpenable(nullptr));
         EXPECT_FALSE(IsSiteOpenable("relative/path.cpp"));
         EXPECT_FALSE(IsSiteOpenable(missing.c_str()));
 
         const char* thisFile = __FILE__;
-        std::error_code ec;
-        if (std::filesystem::path(thisFile).is_absolute() && std::filesystem::exists(thisFile, ec)) {
+        if (Path(thisFile).IsAbsolute() && PathExists(thisFile)) {
             EXPECT_TRUE(IsSiteOpenable(thisFile));
         }
     }
 
     TEST(EditorLauncherTest, TheAnswerForASiteIsAskedOfTheDiskOnce) {
-        const std::filesystem::path folder = TestTempPath("BagiEditorLauncherSite");
-        static const String site((folder / "site.cpp").string().c_str());
+        const Path folder(TestTempPath("BagiEditorLauncherSite"));
+        static const String site((folder / "site.cpp").View());
         WriteFile(folder / "site.cpp", "x");
         EXPECT_TRUE(IsSiteOpenable(site.c_str()));
         RemoveDirectory(folder);
         EXPECT_TRUE(IsSiteOpenable(site.c_str()));
+    }
+
+    TEST(EditorLauncherTest, ASiteUnderANonAsciiFolderIsOpenable) {
+        const Path folder = TestTempPath("BagiEditorLauncherUtf8") / "caf\xC3\xA9";
+        WriteFile(folder / "site.cpp", "x");
+        static const String site((folder / "site.cpp").View());
+        static const String missing((folder / "nothing.cpp").View());
+        EXPECT_TRUE(IsSiteOpenable(site.c_str()));
+        EXPECT_FALSE(IsSiteOpenable(missing.c_str()));
+        RemoveDirectory(folder.Parent());
     }
 
 }  // namespace BECore::Tests

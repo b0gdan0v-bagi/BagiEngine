@@ -16,13 +16,14 @@ namespace BECore::Tests {
             return names;
         }
 
-        bool HasTempFile(const std::filesystem::path& directory) {
-            for (const auto& entry : std::filesystem::directory_iterator(directory)) {
-                if (entry.path().extension().string() == ToStd(kSaveTempExtension)) {
-                    return true;
-                }
-            }
-            return false;
+        bool HasTempFile(const Path& directory) {
+            bool found = false;
+            const auto walked = WalkDirectory(directory, WalkMode::Folder, [&](StringView name, FileKind) {
+                found = Path(name).Extension().View() == kSaveTempExtension;
+                return !found;
+            });
+            EXPECT_TRUE(walked.has_value()) << "could not list " << directory.CStr() << ": " << (walked ? "" : walked.error().c_str());
+            return found;
         }
 
         /// The kind of a failed result; a success is a test failure of its own (the value returned for it is only a placeholder)
@@ -46,7 +47,7 @@ namespace BECore::Tests {
         const auto read = service.ReadSlot("slot1");
         ASSERT_TRUE(read.has_value());
         EXPECT_EQ(*read, bytes);
-        EXPECT_TRUE(std::filesystem::is_regular_file(_saves / "slot1.save"));
+        EXPECT_TRUE(IsFile(_saves / "slot1.save"));
     }
 
     TEST_F(SaveGameFilesTest, EmptyBytesAreAValidSave) {
@@ -85,20 +86,20 @@ namespace BECore::Tests {
         ASSERT_TRUE(service.Initialize(_saves));
 
         // A folder where the save file should go: the rename cannot replace it
-        std::filesystem::create_directories(_saves / "blocked.save");
+        MakeDirectory(_saves / "blocked.save");
 
         const auto result = service.WriteSlot("blocked", Bytes({1, 2, 3}));
         ASSERT_FALSE(result.has_value());
         EXPECT_EQ(result.error().kind, SaveErrorKind::WriteFailed);
         EXPECT_FALSE(result.error().detail.empty());
-        EXPECT_TRUE(std::filesystem::is_directory(_saves / "blocked.save"));
+        EXPECT_TRUE(IsFolder(_saves / "blocked.save"));
         EXPECT_FALSE(HasTempFile(_saves));
     }
 
     TEST_F(SaveGameFilesTest, ReadOfAFolderInPlaceOfASaveFails) {
         SaveGameService service(_fileSystem);
         ASSERT_TRUE(service.Initialize(_saves));
-        std::filesystem::create_directories(_saves / "folder.save");
+        MakeDirectory(_saves / "folder.save");
 
         EXPECT_EQ(KindOf(service.ReadSlot("folder")), SaveErrorKind::ReadFailed);
         EXPECT_FALSE(service.Exists("folder"));
@@ -117,7 +118,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(service.Delete("one"));
         EXPECT_FALSE(service.Exists("one"));
-        EXPECT_FALSE(std::filesystem::exists(_saves / "one.save"));
+        EXPECT_FALSE(PathExists(_saves / "one.save"));
         EXPECT_FALSE(service.Delete("one"));
     }
 
@@ -155,7 +156,7 @@ namespace BECore::Tests {
         for (size_t i = kSlots; i-- > 0;) {
             ASSERT_TRUE(service.WriteSlot(expected[i], Bytes({1})).has_value());
         }
-        std::filesystem::copy_file(_saves / ToStd(Format("{}.save", expected[0])), _saves / "listbatch bad.save");
+        ASSERT_TRUE(CopyFileTo(_saves / Format("{}.save", expected[0]), _saves / "listbatch bad.save").has_value());
         const PoolString mountPoint = PoolString::Intern(kSaveMountPoint);
         ASSERT_FALSE(mountPoint.Empty());
 
@@ -188,17 +189,20 @@ namespace BECore::Tests {
 
         // Changing the working directory is safe here: nothing else in this process uses a relative path meanwhile (the
         // test is single threaded), and the old directory is restored before any check
-        const std::filesystem::path previous = std::filesystem::current_path();
-        std::filesystem::current_path(_base);
-        const bool exists = service.Exists("stray");
-        const bool deleted = service.Delete("stray");
-        const auto read = service.ReadSlot("stray");
-        std::filesystem::current_path(previous);
+        bool exists = true;
+        bool deleted = true;
+        std::expected<Vector<uint8_t>, SaveError> read;
+        {
+            const ScopedCurrentDirectory working(_base);
+            exists = service.Exists("stray");
+            deleted = service.Delete("stray");
+            read = service.ReadSlot("stray");
+        }
 
         EXPECT_FALSE(exists);
         EXPECT_FALSE(deleted);
         EXPECT_EQ(KindOf(read), SaveErrorKind::NotFound);
-        EXPECT_TRUE(std::filesystem::exists(_base / "saves" / "stray.save"));
+        EXPECT_TRUE(PathExists(_base / "saves" / "stray.save"));
     }
 
     TEST_F(SaveGameFilesTest, BadSlotNamesAreRefusedByEveryCall) {
@@ -249,18 +253,59 @@ namespace BECore::Tests {
 
     TEST_F(SaveGameFilesTest, InitializeCreatesTheFolderAndMountsIt) {
         SaveGameService service(_fileSystem);
-        const std::filesystem::path nested = _base / "a" / "b" / "saves";
+        const Path nested = _base / "a" / "b" / "saves";
         ASSERT_TRUE(service.Initialize(nested));
 
         EXPECT_TRUE(service.IsInitialized());
-        EXPECT_TRUE(std::filesystem::is_directory(nested));
+        EXPECT_TRUE(IsFolder(nested));
         EXPECT_EQ(_fileSystem.GetMountLayers(PoolString::Intern(kSaveMountPoint)).size(), 1u);
-        EXPECT_TRUE(std::filesystem::equivalent(_fileSystem.GetMountedPath(PoolString::Intern(kSaveMountPoint)), nested));
-        EXPECT_TRUE(std::filesystem::equivalent(service.GetDirectory(), nested));
+        EXPECT_TRUE(IsSameFile(_fileSystem.GetMountedPath(PoolString::Intern(kSaveMountPoint)), nested).value_or(false));
+        EXPECT_TRUE(IsSameFile(service.GetDirectory(), nested).value_or(false));
+    }
+
+    TEST_F(SaveGameFilesTest, ANonAsciiFolderRoundTripsASlot) {
+        const Path folder = _base / "caf\xC3\xA9" / "sauvegardes";
+        SaveGameService service(_fileSystem);
+        ASSERT_TRUE(service.Initialize(folder));
+
+        ASSERT_TRUE(service.WriteSlot("slot1", Bytes({4, 5, 6})).has_value());
+        EXPECT_TRUE(service.Exists("slot1"));
+        EXPECT_TRUE(IsFile(folder / "slot1.save"));
+
+        const auto read = service.ReadSlot("slot1");
+        ASSERT_TRUE(read.has_value());
+        EXPECT_EQ(*read, Bytes({4, 5, 6}));
+        EXPECT_EQ(Names(service.List()), Vector<String>{"slot1"});
+
+        EXPECT_TRUE(service.Delete("slot1"));
+        EXPECT_FALSE(service.Exists("slot1"));
+        EXPECT_FALSE(PathExists(folder / "slot1.save"));
+    }
+
+    TEST_F(SaveGameFilesTest, ARelativeFolderIsStoredAbsoluteAndNormal) {
+        SaveGameService service(_fileSystem);
+
+        // The working folder is switched for this call only (the test is single threaded), as FileOfTheWorkingDirectoryIsNotASave does
+        bool initialized = false;
+        {
+            const ScopedCurrentDirectory working(_base);
+            initialized = service.Initialize(Path("x/../rel/./saves"));
+        }
+        ASSERT_TRUE(initialized);
+
+        const Path directory = service.GetDirectory();
+        EXPECT_TRUE(directory.IsAbsolute());
+        EXPECT_EQ(directory, directory.LexicallyNormal());
+        EXPECT_EQ(directory.View().find(".."), StringView::npos);
+        EXPECT_EQ(directory.Filename(), Path("saves"));
+        EXPECT_TRUE(IsFolder(_base / "rel" / "saves"));
+
+        ASSERT_TRUE(service.WriteSlot("slot", Bytes({1})).has_value());
+        EXPECT_TRUE(IsFile(_base / "rel" / "saves" / "slot.save"));
     }
 
     TEST_F(SaveGameFilesTest, InitializeOnAFileIsFalse) {
-        const std::filesystem::path file = _base / "not_a_folder";
+        const Path file = _base / "not_a_folder";
         WriteFile(file, "x");
 
         SaveGameService service(_fileSystem);
@@ -272,8 +317,8 @@ namespace BECore::Tests {
 
     TEST_F(SaveGameFilesTest, SecondInitializeMountsTheNewFolder) {
         SaveGameService service(_fileSystem);
-        const std::filesystem::path first = _base / "first";
-        const std::filesystem::path second = _base / "second";
+        const Path first = _base / "first";
+        const Path second = _base / "second";
 
         ASSERT_TRUE(service.Initialize(first));
         ASSERT_TRUE(service.WriteSlot("shared", Bytes({1})).has_value());
@@ -286,12 +331,12 @@ namespace BECore::Tests {
         EXPECT_TRUE(service.List().empty());
 
         ASSERT_TRUE(service.WriteSlot("shared", Bytes({2, 2})).has_value());
-        EXPECT_TRUE(std::filesystem::exists(second / "shared.save"));
+        EXPECT_TRUE(PathExists(second / "shared.save"));
         const auto read = service.ReadSlot("shared");
         ASSERT_TRUE(read.has_value());
         EXPECT_EQ(*read, Bytes({2, 2}));
 
-        EXPECT_TRUE(std::filesystem::exists(first / "only_first.save"));
+        EXPECT_TRUE(PathExists(first / "only_first.save"));
     }
 
     TEST_F(SaveGameFilesTest, FailedSecondInitializeChangesNothing) {
@@ -299,7 +344,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(service.Initialize(_saves));
         ASSERT_TRUE(service.WriteSlot("keep", Bytes({7})).has_value());
 
-        const std::filesystem::path file = _base / "not_a_folder";
+        const Path file = _base / "not_a_folder";
         WriteFile(file, "x");
         EXPECT_FALSE(service.Initialize(file));
 

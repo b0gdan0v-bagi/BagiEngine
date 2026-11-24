@@ -1,20 +1,14 @@
 #include "ArtGenSetStore.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
-#include <system_error>
 
 namespace BECore {
 
     namespace {
 
-        std::filesystem::path PathOf(StringView text) {
-            return std::filesystem::path(ToStd(text));  //-NoStd: std::filesystem::path takes a std::string_view
-        }
-
-        std::filesystem::path OutRoot(const std::filesystem::path& gameRoot) {
-            return gameRoot / PathOf(kArtGenOutFolder);
+        Path OutRoot(const Path& gameRoot) {
+            return gameRoot / kArtGenOutFolder;
         }
 
         /// A `\` of a Windows path separates folders on every platform here, so a manifest written on one machine reads on another
@@ -22,11 +16,6 @@ namespace BECore {
             String result(text);
             std::replace(result.begin(), result.end(), '\\', '/');
             return result;
-        }
-
-        String Generic(const std::filesystem::path& path) {
-            const std::string text = path.generic_string();  //-NoStd: the text of a std::filesystem::path
-            return String(text.c_str(), text.size());
         }
 
         void CancelInterrupted(ArtGenSet& set) {
@@ -38,12 +27,12 @@ namespace BECore {
         }
 
         /// The set of one folder, or why it is skipped
-        std::expected<ArtGenSet, String> LoadSet(const std::filesystem::path& folder) {
-            const String name = FromStdString(folder.filename().string());  //-NoStd: the text of a std::filesystem::path
+        std::expected<ArtGenSet, String> LoadSet(const Path& folder) {
+            const String name(folder.Filename().View());
             if (!IsValidSpriteName(name)) {
                 return std::unexpected(Format("'{}' is not a valid set name", name));
             }
-            const auto text = ReadTextFile(PathToUtf8(folder / PathOf(kArtGenManifestFile)));
+            const auto text = ReadTextFile(folder / kArtGenManifestFile);
             if (!text) {
                 return std::unexpected(text.error());
             }
@@ -62,60 +51,57 @@ namespace BECore {
 
     }  // namespace
 
-    std::filesystem::path SetFolder(const std::filesystem::path& gameRoot, StringView set) {
-        return OutRoot(gameRoot) / PathOf(set);
+    Path SetFolder(const Path& gameRoot, StringView set) {
+        return OutRoot(gameRoot) / set;
     }
 
-    std::filesystem::path ManifestPath(const std::filesystem::path& gameRoot, StringView set) {
-        return SetFolder(gameRoot, set) / PathOf(kArtGenManifestFile);
+    Path ManifestPath(const Path& gameRoot, StringView set) {
+        return SetFolder(gameRoot, set) / kArtGenManifestFile;
     }
 
-    std::filesystem::path JobFolder(const std::filesystem::path& gameRoot, StringView set, StringView job) {
-        return SetFolder(gameRoot, set) / PathOf(job);
+    Path JobFolder(const Path& gameRoot, StringView set, StringView job) {
+        return SetFolder(gameRoot, set) / job;
     }
 
     String OutDirOf(StringView set, StringView job) {
         return Format("{}/{}", set, job);
     }
 
-    bool NewSetFolderFree(const std::filesystem::path& gameRoot, StringView name) {
-        if (!IsValidSpriteName(name)) {
-            return false;
-        }
-        std::error_code error;
-        const bool exists = std::filesystem::exists(SetFolder(gameRoot, name), error);
-        return !exists && !error;
+    bool NewSetFolderFree(const Path& gameRoot, StringView name) {
+        return IsValidSpriteName(name) && !GetFileInfo(SetFolder(gameRoot, name));
     }
 
-    std::expected<void, String> WriteManifest(const std::filesystem::path& gameRoot, const ArtGenSet& set) {
+    std::expected<void, String> WriteManifest(const Path& gameRoot, const ArtGenSet& set) {
         if (!IsValidSpriteName(set.name)) {
             return std::unexpected(Format("'{}' is not a valid set name", set.name));
         }
         String text = DumpJson(ArtGenSetToJson(set));
         text += '\n';
-        return WriteFileAtomically(PathToUtf8(ManifestPath(gameRoot, set.name)), text);
+        return WriteFileAtomically(ManifestPath(gameRoot, set.name), text);
     }
 
-    Vector<ArtGenSet> LoadSets(const std::filesystem::path& gameRoot) {
+    Vector<ArtGenSet> LoadSets(const Path& gameRoot) {
         Vector<ArtGenSet> sets;
-        std::error_code error;
-        //-NoStd: one listing of the game's sets at start, no engine file layer lists folders
-        std::filesystem::directory_iterator it(OutRoot(gameRoot), error);
-        if (error) {
+        const Path outRoot = OutRoot(gameRoot);
+        Vector<String> folders;
+        const auto listed = WalkDirectory(outRoot, WalkMode::Folder, [&folders](StringView name, FileKind kind) {
+            if (kind == FileKind::Directory) {
+                folders.emplace_back(name);
+            }
+            return true;
+        });
+        if (!listed) {
             return sets;
         }
-        for (const std::filesystem::directory_entry& entry : it) {
-            std::error_code entryError;
-            if (!entry.is_directory(entryError)) {
+        for (const String& name : folders) {
+            const Path folder = outRoot / name;
+            const auto manifest = GetFileInfo(folder / kArtGenManifestFile);
+            if (!manifest || manifest->kind != FileKind::File) {
                 continue;
             }
-            const std::filesystem::path manifest = entry.path() / PathOf(kArtGenManifestFile);
-            if (!std::filesystem::exists(manifest, entryError)) {
-                continue;
-            }
-            auto set = LoadSet(entry.path());
+            auto set = LoadSet(folder);
             if (!set) {
-                LOG_WARNING("Art generation: the set '{}' is skipped and left as it is: {}", Generic(entry.path()), set.error());
+                LOG_WARNING("Art generation: the set '{}' is skipped and left as it is: {}", folder.View(), set.error());
                 continue;
             }
             sets.push_back(std::move(*set));
@@ -124,29 +110,32 @@ namespace BECore {
         return sets;
     }
 
-    String RelativeToSet(const std::filesystem::path& setFolder, StringView realPath) {
-        const std::filesystem::path given = PathOf(WithForwardSlashes(realPath));
-        const std::filesystem::path relative = given.lexically_normal().lexically_relative(setFolder.lexically_normal());
-        if (relative.empty() || *relative.begin() == "..") {
-            return Generic(given);
-        }
-        return Generic(relative);
+    String RelativeToSet(const Path& setFolder, StringView realPath) {
+        const Path given(WithForwardSlashes(realPath));
+        // Relative is empty for a path that is not below the folder (also one that climbs out with `..`) and for the folder itself
+        const Path relative = given.LexicallyNormal().Relative(setFolder.LexicallyNormal());
+        return String(relative.Empty() ? given.View() : relative.View());
     }
 
-    std::filesystem::path AbsoluteInSet(const std::filesystem::path& gameRoot, StringView set, StringView file) {
+    Path AbsoluteInSet(const Path& gameRoot, StringView set, StringView file) {
         if (file.empty()) {
             return {};
         }
-        const std::filesystem::path path = PathOf(WithForwardSlashes(file));
-        if (path.has_root_name() || path.has_root_directory()) {
-            return path;
+        const String text = WithForwardSlashes(file);
+        if (PathIsAbsolute(text) || text.front() == '/') {
+            return Path(text);
         }
-        for (const std::filesystem::path& part : path) {
-            if (part == "..") {
+        for (size_t begin = 0; begin <= text.size();) {
+            size_t end = text.find('/', begin);
+            if (end == String::npos) {
+                end = text.size();
+            }
+            if (StringView(text.data() + begin, end - begin) == "..") {
                 return {};
             }
+            begin = end + 1;
         }
-        return SetFolder(gameRoot, set) / path;
+        return SetFolder(gameRoot, set) / text;
     }
 
 }  // namespace BECore

@@ -55,8 +55,8 @@ namespace BECore::Tests {
             return [this](const FileChange& change) { _seen.push_back(String(change.virtualPath.ToStringView())); };
         }
 
-        std::filesystem::path _lower;
-        std::filesystem::path _upper;
+        Path _lower;
+        Path _upper;
         FileSystem _fileSystem;
         FileWatcher _watcher{_fileSystem};
         IntrusivePtr<FakeFileWatchBackend> _fake;
@@ -77,6 +77,38 @@ namespace BECore::Tests {
         _watcher.Update(After(1.0));
         ASSERT_EQ(_seen.size(), 1u);
         EXPECT_EQ(_seen[0], "fwtest/a.xml");
+    }
+
+    TEST_F(FileWatcherTest, AFileWithANonAsciiNameInANonAsciiFolderNotifiesOnceUnderItsVirtualPath) {
+        MountLower();
+        const Path folder = Path(_lower) / "Папка_é";
+        MakeDirectory(folder);
+        FileWatchHandle handle = _watcher.WatchFile("fwtest/Папка_é/данные_é.xml", Record());
+        ASSERT_TRUE(handle.IsActive());
+
+        _fake->Emit(folder / "данные_é.xml");
+        _fake->Emit(folder / "другой_é.xml");
+        _watcher.Update(0.0);
+        _watcher.Update(After(0.0));
+
+        ASSERT_EQ(_seen.size(), 1u);
+        EXPECT_EQ(_seen[0], "fwtest/Папка_é/данные_é.xml");
+    }
+
+    TEST_F(FileWatcherTest, AFolderWatchReportsANonAsciiFileOfANestedNonAsciiFolderOnce) {
+        MountLower();
+        const Path nested = Path(_lower) / "Папка_é" / "вложенная_é";
+        MakeDirectory(nested);
+        FileWatchHandle handle = _watcher.WatchFolder("fwtest/Папка_é", Record());
+        ASSERT_TRUE(handle.IsActive());
+
+        _fake->Emit(nested / "данные_é.png");
+        _fake->Emit(nested / "данные_é.png");
+        _watcher.Update(0.0);
+        _watcher.Update(After(0.0));
+
+        ASSERT_EQ(_seen.size(), 1u);
+        EXPECT_EQ(_seen[0], "fwtest/Папка_é/вложенная_é/данные_é.png");
     }
 
     TEST_F(FileWatcherTest, ABurstIsOneCallbackAndTwoBurstsApartAreTwo) {

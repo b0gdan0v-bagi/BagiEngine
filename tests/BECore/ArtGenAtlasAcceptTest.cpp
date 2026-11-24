@@ -271,8 +271,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(FillPackedPieces(library, game));
         const Vector<uint8_t> atlasBefore = ReadFileBytes(game.Resolve(kPiecesAtlas));
         const Rect rookPlace = Rook(library).srcRect;
-        std::error_code ignored;
-        std::filesystem::remove(game.Resolve(kRookPng), ignored);
+        RemoveFileIfPresent(game.Resolve(kRookPng));
         CountingSave save;
 
         const auto stored = AcceptIntoGroup(library, game.Copied(kQueenPng, MakeSolid(6, 2, 0, kHigh, 0)), "queen", "pieces", false, game.Io(), save);

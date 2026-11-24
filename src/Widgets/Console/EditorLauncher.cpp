@@ -1,5 +1,6 @@
 #include "EditorLauncher.h"
 
+#include <BECore/File/File.h>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_misc.h>
 #include <SDL3/SDL_process.h>
@@ -122,9 +123,8 @@ namespace BECore {
         if (const auto found = answers.find(file); found != answers.end()) {
             return found->second;
         }
-        const std::filesystem::path path(file);
-        std::error_code ec;
-        const bool openable = path.is_absolute() && std::filesystem::exists(path, ec);
+        const Path path(file);
+        const bool openable = path.IsAbsolute() && GetFileInfo(path).has_value();
         answers.emplace(file, openable);
         return openable;
     }

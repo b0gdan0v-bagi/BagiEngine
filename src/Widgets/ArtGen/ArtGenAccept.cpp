@@ -2,7 +2,6 @@
 
 #include <BECore/Audio/AudioSourceComponent.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -17,8 +16,6 @@
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
-#include <cstdio>
-#include <system_error>
 
 namespace BECore {
 
@@ -35,15 +32,9 @@ namespace BECore {
             return (static_cast<uint32_t>(bytes[0]) << 24) | (static_cast<uint32_t>(bytes[1]) << 16) | (static_cast<uint32_t>(bytes[2]) << 8) | static_cast<uint32_t>(bytes[3]);
         }
 
-        std::filesystem::path PathOf(StringView text) {
-            return std::filesystem::path(ToStd(text));  //-NoStd: std::filesystem::path takes a std::string
-        }
-
-        std::expected<void, String> CopyOver(const std::filesystem::path& from, const std::filesystem::path& to) {
-            std::error_code error;
-            std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing, error);
-            if (error) {
-                return std::unexpected(Format("cannot copy '{}' to '{}': {}", from.generic_string(), to.generic_string(), error.message()));
+        std::expected<void, String> CopyOver(const Path& from, const Path& to) {
+            if (const auto copied = CopyFileTo(from, to, CopyMode::Overwrite); !copied) {
+                return std::unexpected(Format("cannot copy '{}' to '{}': {}", from.View(), to.View(), copied.error()));
             }
             return {};
         }
@@ -52,49 +43,13 @@ namespace BECore {
         constexpr StringView kAssetsPrefix = "assets/";
         constexpr int kProvenanceIndent = 2;
 
-        std::expected<Vector<uint8_t>, String> ReadBytes(const std::filesystem::path& file) {
-            std::FILE* stream = std::fopen(file.string().c_str(), "rb");
-            if (stream == nullptr) {
-                return std::unexpected(Format("cannot open '{}'", file.generic_string()));
-            }
-            Vector<uint8_t> bytes;
-            Array<uint8_t, 65536> chunk{};
-            for (size_t read = std::fread(chunk.data(), 1, chunk.size(), stream); read > 0; read = std::fread(chunk.data(), 1, chunk.size(), stream)) {
-                bytes.insert(bytes.end(), chunk.begin(), chunk.begin() + static_cast<ptrdiff_t>(read));
-            }
-            std::fclose(stream);
-            return bytes;
-        }
-
-        std::expected<void, String> WriteBytes(const std::filesystem::path& file, Span<const uint8_t> bytes) {
-            const std::filesystem::path temp = PathOf(Format("{}.tmp", file.generic_string()));
-            std::FILE* stream = std::fopen(temp.string().c_str(), "wb");
-            if (stream == nullptr) {
-                return std::unexpected(Format("cannot write '{}'", temp.generic_string()));
-            }
-            const size_t written = std::fwrite(bytes.data(), 1, bytes.size(), stream);
-            const bool closed = std::fclose(stream) == 0;
-            std::error_code error;
-            if (written != bytes.size() || !closed) {
-                std::filesystem::remove(temp, error);
-                return std::unexpected(Format("cannot write '{}'", temp.generic_string()));
-            }
-            // A game may be playing the old clip: the rename replaces it whole, never a half-written file
-            std::filesystem::rename(temp, file, error);
-            if (error) {
-                std::filesystem::remove(temp, error);
-                return std::unexpected(Format("cannot replace '{}': {}", file.generic_string(), error.message()));
-            }
-            return {};
-        }
-
         /// The `.artgen.json` file is a `Json` document by hand, like every record built around it (`accepted`, `kept`): it is the service's own record, read back and
         /// merged into, so its other keys are a payload of another program that no struct of the engine types
-        std::expected<void, String> WriteProvenance(const std::filesystem::path& file, const Json& record) {
+        std::expected<void, String> WriteProvenance(const Path& file, const Json& record) {
             String text;
             AppendJson(text, record, kProvenanceIndent);
             text.push_back('\n');
-            return WriteFileAtomically(PathToUtf8(file), text);
+            return WriteFileAtomically(file, text);
         }
 
         bool IsClipPart(StringView part) {
@@ -175,15 +130,14 @@ namespace BECore {
         return true;
     }
 
-    Optional<Pair<uint32_t, uint32_t>> ReadPngSize(const std::filesystem::path& file) {
-        std::FILE* stream = std::fopen(file.string().c_str(), "rb");
-        if (stream == nullptr) {
+    Optional<Pair<uint32_t, uint32_t>> ReadPngSize(const Path& file) {
+        auto stream = File::Open(file, FileMode::Read);
+        if (!stream) {
             return {};
         }
         Array<uint8_t, kPngHeaderBytes> header{};
-        const size_t read = std::fread(header.data(), 1, header.size(), stream);
-        std::fclose(stream);
-        if (read != header.size() || !std::equal(kPngSignature.begin(), kPngSignature.end(), header.begin())) {
+        const auto read = stream->Read(header.data(), header.size());
+        if (!read || *read != header.size() || !std::equal(kPngSignature.begin(), kPngSignature.end(), header.begin())) {
             return {};
         }
         return Pair<uint32_t, uint32_t>(ReadBigEndian32(header.data() + kPngWidthOffset), ReadBigEndian32(header.data() + kPngWidthOffset + 4));
@@ -208,8 +162,8 @@ namespace BECore {
         return true;
     }
 
-    std::expected<ArtGenSoundWritten, String> WriteSoundIntoAssets(const std::filesystem::path& sourceFile, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir,
-                                                                   const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings) {
+    std::expected<ArtGenSoundWritten, String> WriteSoundIntoAssets(const Path& sourceFile, const Path& provenance, const Path& assetsDir, const ArtGenSoundTarget& target,
+                                                                   const ArtGenSoundSettings& settings) {
         String clipPath;
         if (!target.clip.empty() && target.name.empty()) {
             if (!IsValidClipPath(StringView(target.clip))) {
@@ -225,13 +179,13 @@ namespace BECore {
             return std::unexpected(String("give a sound name or a clip path, one of them"));
         }
 
-        auto bytes = ReadBytes(sourceFile);
+        auto bytes = ReadFileBytes(sourceFile);
         if (!bytes) {
             return std::unexpected(bytes.error());
         }
         auto decoded = DecodeAudio(*bytes);
         if (!decoded) {
-            return std::unexpected(Format("'{}': {}", sourceFile.generic_string(), decoded.error()));
+            return std::unexpected(Format("'{}': {}", sourceFile.View(), decoded.error()));
         }
         auto processed = ProcessArtGenSound(*decoded, settings);
         if (!processed) {
@@ -244,32 +198,32 @@ namespace BECore {
 
         ArtGenSoundWritten written;
         written.clipPath = clipPath;
-        written.wavFile = assetsDir / PathOf(StringView(clipPath).substr(kAssetsPrefix.size()));
+        written.wavFile = assetsDir / StringView(clipPath).substr(kAssetsPrefix.size());
         written.provenanceFile = ProvenanceFileOf(written.wavFile);
         written.format = processed->format;
         const ArtGenSoundStats stats = MeasureArtGenSound(*processed);
         written.seconds = stats.seconds;
         written.peakDb = stats.PeakDb();
 
-        std::error_code error;
-        std::filesystem::create_directories(written.wavFile.parent_path(), error);
-        if (error) {
-            return std::unexpected(Format("cannot create '{}': {}", written.wavFile.parent_path().generic_string(), error.message()));
+        const Path wavFolder = written.wavFile.Parent();
+        if (const auto made = CreateDirectories(wavFolder); !made) {
+            return std::unexpected(Format("cannot create '{}': {}", wavFolder.View(), made.error()));
         }
-        if (auto result = WriteBytes(written.wavFile, *wav); !result) {
-            return std::unexpected(result.error());
+        // A game may be playing the old clip: the replace is whole, never a half-written file
+        if (const auto result = WriteFileAtomically(written.wavFile, Span<const uint8_t>(wav->data(), wav->size())); !result) {
+            return std::unexpected(Format("cannot write '{}': {}", written.wavFile.View(), result.error()));
         }
 
         // The generation's record, and what Accept did to the sound, so the clip can be made again
         Json record = Json::object();
-        if (auto text = ReadTextFile(PathToUtf8(provenance)); text) {
+        if (auto text = ReadTextFile(provenance); text) {
             if (auto parsed = ParseJson(*text); parsed && parsed->is_object()) {
                 record = std::move(*parsed);
             }
         }
         Json accepted = Json::object();
         accepted["clip"] = ToStdString(clipPath);
-        accepted["source"] = sourceFile.generic_string();
+        accepted["source"] = ToStdString(sourceFile.View());
         accepted["processing"] = ArtGenSoundSettingsToJson(settings);
         accepted["sampleRate"] = written.format.sampleRate;
         accepted["channels"] = written.format.channels;
@@ -290,14 +244,14 @@ namespace BECore {
 
     std::expected<ArtGenAcceptAnswer, ControlError> AcceptSoundForControl(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* node) {
         auto fail = [](const String& message) { return std::unexpected(ControlError{String("artgen_accept_failed"), message}); };
-        const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
-        if (assetsDir.empty()) {
+        const Path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
+        if (assetsDir.Empty()) {
             return fail(String("the game has no assets folder"));
         }
         if (node != nullptr && !node->GetComponent<AudioSourceComponent>()) {
             return fail(Format("'{}' has no AudioSourceComponent", node->GetName().ToStringView()));
         }
-        auto written = WriteSoundIntoAssets(PathOf(variant.path), PathOf(variant.provenancePath), assetsDir, target, settings);
+        auto written = WriteSoundIntoAssets(Path(variant.path), Path(variant.provenancePath), assetsDir, target, settings);
         if (!written) {
             return fail(written.error());
         }
@@ -310,7 +264,7 @@ namespace BECore {
         }
         ArtGenAcceptAnswer reply;
         reply.clip = written->clipPath;
-        reply.wav = Format("{}", written->wavFile.generic_string());
+        reply.wav = String(written->wavFile.View());
         reply.sampleRate = written->format.sampleRate;
         reply.channels = written->format.channels;
         reply.seconds = written->seconds;
@@ -351,10 +305,10 @@ namespace BECore {
         }
 
         /// The generation's record, and what Accept did to the picture, so the sprite can be made again
-        std::expected<void, String> WriteImageProvenance(const std::filesystem::path& source, const std::filesystem::path& provenance, StringView sprite, const ArtGenCopied& copied) {
+        std::expected<void, String> WriteImageProvenance(const Path& source, const Path& provenance, StringView sprite, const ArtGenCopied& copied) {
             Json record = Json::object();
-            if (!provenance.empty()) {
-                if (auto text = ReadTextFile(PathToUtf8(provenance)); text) {
+            if (!provenance.Empty()) {
+                if (auto text = ReadTextFile(provenance); text) {
                     if (auto parsed = ParseJson(*text); parsed && parsed->is_object()) {
                         record = std::move(*parsed);
                     }
@@ -363,7 +317,7 @@ namespace BECore {
             const Optional<int64_t> seed = GetJsonInt(record, "seed");
             Json accepted = PlacementToJson(copied);
             accepted["sprite"] = ToStdString(sprite);
-            accepted["source"] = source.generic_string();
+            accepted["source"] = ToStdString(source.View());
             accepted["seed"] = seed ? Json(*seed) : Json();
             accepted["processing"] = ArtGenImageSettingsToJson(copied.settings);
             record["accepted"] = std::move(accepted);
@@ -387,14 +341,13 @@ namespace BECore {
         return answer;
     }
 
-    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const std::filesystem::path& png, const std::filesystem::path& provenance, const std::filesystem::path& assetsDir, StringView sprite,
-                                                              const ArtGenImagePlan& plan) {
+    std::expected<ArtGenCopied, String> CopyVariantIntoAssets(const Path& png, const Path& provenance, const Path& assetsDir, StringView sprite, const ArtGenImagePlan& plan) {
         if (!IsValidSpriteName(sprite)) {
             return std::unexpected(Format("'{}' is not a sprite name (1 to {} of A-Z a-z 0-9 _ -)", sprite, kMaxSpriteNameLength));
         }
-        const std::filesystem::path folder = assetsDir / ToStd(kArtGenAssetsFolder);  //-NoStd: std::filesystem::path takes a std::string
+        const Path folder = assetsDir / kArtGenAssetsFolder;
         ArtGenCopied copied;
-        copied.pngFile = folder / PathOf(Format("{}{}", sprite, kPngExtension));
+        copied.pngFile = folder / Format("{}{}", sprite, kPngExtension);
         copied.provenanceFile = ProvenanceFileOf(copied.pngFile);
         copied.texturePath = ArtGenGameFile(sprite, kKindImage);
         copied.settings = plan.settings;
@@ -404,7 +357,7 @@ namespace BECore {
         if (plan.settings.IsIdentity()) {
             const auto size = ReadPngSize(png);
             if (!size) {
-                return std::unexpected(Format("'{}' is not a PNG file", png.generic_string()));
+                return std::unexpected(Format("'{}' is not a PNG file", png.View()));
             }
             copied.width = size->first;
             copied.height = size->second;
@@ -416,12 +369,12 @@ namespace BECore {
             }
             const Optional<ArtGenIntRect> drawn = DrawnBounds(*pixels);
             if (!drawn) {
-                return std::unexpected(Format("'{}': nothing drawn: the picture is empty", png.generic_string()));
+                return std::unexpected(Format("'{}': nothing drawn: the picture is empty", png.View()));
             }
             ArtGenImageFrame frame;
             if (plan.frame) {
                 if (!FrameContains(*plan.frame, *drawn)) {
-                    return std::unexpected(Format("'{}' does not fit the frame of the set: it would be cut", png.generic_string()));
+                    return std::unexpected(Format("'{}' does not fit the frame of the set: it would be cut", png.View()));
                 }
                 frame = *plan.frame;
             } else {
@@ -433,7 +386,7 @@ namespace BECore {
             }
             auto made = ProcessArtGenImage(*pixels, frame);
             if (!made) {
-                return std::unexpected(Format("'{}': {}", png.generic_string(), made.error()));
+                return std::unexpected(Format("'{}': {}", png.View(), made.error()));
             }
             processed = std::move(*made);
             copied.width = processed->width;
@@ -442,10 +395,8 @@ namespace BECore {
             copied.scale = static_cast<double>(frame.outWidth) / frame.w;
         }
 
-        std::error_code error;
-        std::filesystem::create_directories(folder, error);
-        if (error) {
-            return std::unexpected(Format("cannot create '{}': {}", folder.generic_string(), error.message()));
+        if (const auto made = CreateDirectories(folder); !made) {
+            return std::unexpected(Format("cannot create '{}': {}", folder.View(), made.error()));
         }
         if (processed) {
             if (auto result = WriteArtGenPng(copied.pngFile, *processed); !result) {
@@ -459,15 +410,16 @@ namespace BECore {
         if (auto result = CopyOver(png, copied.pngFile); !result) {
             return std::unexpected(result.error());
         }
-        if (!provenance.empty() && std::filesystem::exists(provenance)) {
+        if (!provenance.Empty() && GetFileInfo(provenance).has_value()) {
             if (auto result = CopyOver(provenance, copied.provenanceFile); !result) {
                 return std::unexpected(result.error());
             }
         } else {
             // No record for this picture: the file an earlier accept of the name left describes another variant (its seed, its `kept`)
-            std::filesystem::remove(copied.provenanceFile, error);
-            if (error) {
-                return std::unexpected(Format("cannot remove the old '{}': {}", copied.provenanceFile.generic_string(), error.message()));
+            if (GetFileInfo(copied.provenanceFile).has_value()) {
+                if (const auto removed = RemoveFile(copied.provenanceFile); !removed) {
+                    return std::unexpected(Format("cannot remove the old '{}': {}", copied.provenanceFile.View(), removed.error()));
+                }
             }
         }
         return copied;
@@ -606,7 +558,7 @@ namespace BECore {
         const SpriteEntry entry = AcceptedSpriteEntry(library, name, texturePath, copied.width, copied.height);
         auto stored = StoreSpriteEntry(library, entry, save);
         if (!stored) {
-            return std::unexpected(Format("the PNG was already written over the game's file '{}', so the library entry was not updated: {}", copied.pngFile.generic_string(), stored.error()));
+            return std::unexpected(Format("the PNG was already written over the game's file '{}', so the library entry was not updated: {}", copied.pngFile.View(), stored.error()));
         }
         AcceptStored result;
         result.saved = *stored;
@@ -619,11 +571,11 @@ namespace BECore {
             if (!repacked.error().atlasWritten) {
                 return std::unexpected(
                     Format("the PNG was already written over the game's file '{}' and the library points to it, but atlas '{}' could not be repacked: {}; press Pack in the Sprite Library",
-                           copied.pngFile.generic_string(), group.ToStringView(), repacked.error().reason));
+                           copied.pngFile.View(), group.ToStringView(), repacked.error().reason));
             }
             return std::unexpected(Format("the PNG was already written over the game's file '{}' and atlas '{}' was rewritten, but TextureLibrary.xml could not be saved, so the library entries "
                                           "were not updated; press Pack in the Sprite Library",
-                                          copied.pngFile.generic_string(), group.ToStringView()));
+                                          copied.pngFile.View(), group.ToStringView()));
         }
         repacked->saved = repacked->saved || result.saved;
         return std::move(*repacked);
@@ -669,8 +621,8 @@ namespace BECore {
     }
 
     std::expected<ArtGenAccepted, String> AcceptVariant(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan) {
-        const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
-        if (assetsDir.empty()) {
+        const Path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
+        if (assetsDir.Empty()) {
             return std::unexpected(String("the game has no assets folder"));
         }
         auto& library = CoreManager::GetTextureLibrary();
@@ -681,7 +633,7 @@ namespace BECore {
                 return std::unexpected(joined.error());
             }
         }
-        auto copied = CopyVariantIntoAssets(PathOf(variant.path), PathOf(variant.provenancePath), assetsDir, sprite, plan);
+        auto copied = CopyVariantIntoAssets(Path(variant.path), Path(variant.provenancePath), assetsDir, sprite, plan);
         if (!copied) {
             return std::unexpected(copied.error());
         }
@@ -732,19 +684,18 @@ namespace BECore {
         return {};
     }
 
-    std::filesystem::path ProvenanceFileOf(const std::filesystem::path& mediaFile) {
-        std::filesystem::path file = mediaFile;
-        return file.replace_extension(PathOf(kProvenanceExtension));
+    Path ProvenanceFileOf(const Path& mediaFile) {
+        return mediaFile.ReplaceExtension(kProvenanceExtension);
     }
 
-    std::expected<void, String> MarkProvenanceKept(const std::filesystem::path& file, int64_t seed, StringView date) {
-        auto text = ReadTextFile(PathToUtf8(file));
+    std::expected<void, String> MarkProvenanceKept(const Path& file, int64_t seed, StringView date) {
+        auto text = ReadTextFile(file);
         if (!text) {
-            return std::unexpected(Format("cannot read '{}': {}", file.generic_string(), text.error()));
+            return std::unexpected(Format("cannot read '{}': {}", file.View(), text.error()));
         }
         auto parsed = ParseJson(StringView(*text));
         if (!parsed || !parsed->is_object()) {
-            return std::unexpected(Format("'{}' is not a JSON object", file.generic_string()));
+            return std::unexpected(Format("'{}' is not a JSON object", file.View()));
         }
         Json kept = Json::object();
         kept["seed"] = seed;
@@ -758,7 +709,7 @@ namespace BECore {
         int32_t width = 0;
         int32_t height = 0;
         for (const String& file : pngFiles) {
-            const std::filesystem::path path = PathOf(StringView(file));
+            const Path path(file);
             auto pixels = ReadArtGenPng(path);
             if (!pixels) {
                 return std::unexpected(pixels.error());
@@ -769,8 +720,7 @@ namespace BECore {
                 width = pixelsWidth;
                 height = pixelsHeight;
             } else if (pixelsWidth != width || pixelsHeight != height) {
-                return std::unexpected(
-                    Format("'{}' is {} x {}, the others are {} x {}: one frame cannot cut pictures of different sizes", path.generic_string(), pixelsWidth, pixelsHeight, width, height));
+                return std::unexpected(Format("'{}' is {} x {}, the others are {} x {}: one frame cannot cut pictures of different sizes", path.View(), pixelsWidth, pixelsHeight, width, height));
             }
             if (const Optional<ArtGenIntRect> drawn = DrawnBounds(*pixels)) {
                 bounds.push_back(*drawn);
@@ -791,12 +741,11 @@ namespace BECore {
         if (!IsValidSpriteName(name)) {
             return fail(Format("'{}' is not a sprite or sound name", name));
         }
-        const std::filesystem::path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
-        if (assetsDir.empty()) {
+        const Path assetsDir = CoreManager::GetFileSystem().GetMountedPath(MountPoints::assets);
+        if (assetsDir.Empty()) {
             return fail(String("the game has no assets folder"));
         }
-        const std::filesystem::path media =
-            assetsDir / ToStd(kArtGenAssetsFolder) / PathOf(Format("{}{}", name, image ? kPngExtension : kWavExtension));  //-NoStd: std::filesystem::path takes a std::string
+        const Path media = assetsDir / kArtGenAssetsFolder / Format("{}{}", name, image ? kPngExtension : kWavExtension);
         if (auto marked = MarkProvenanceKept(ProvenanceFileOf(media), seed, date); !marked) {
             return fail(marked.error());
         }
@@ -812,7 +761,7 @@ namespace BECore {
         ArtGenAcceptAnswer reply;
         reply.sprite = String(sprite);
         reply.texturePath = accepted->copied.texturePath;
-        reply.png = Format("{}", accepted->copied.pngFile.generic_string());
+        reply.png = String(accepted->copied.pngFile.View());
         reply.width = accepted->copied.width;
         reply.height = accepted->copied.height;
         reply.processing = MakeArtGenProcessingAnswer(accepted->copied);

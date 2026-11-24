@@ -32,8 +32,8 @@ namespace BECore::Tests {
         constexpr int kSeed = 8;  // its draws are 5, 6, 2: the last differs from the 6s that `state` sets
 
         /// The committed recording of ReplayTestGame: read-only data of the repository
-        std::filesystem::path CommittedReplay() {
-            return std::filesystem::path(__FILE__).parent_path() / "replays" / "replay_test_game.jsonl";
+        Path CommittedReplay() {
+            return Path(__FILE__).Parent() / "replays" / "replay_test_game.jsonl";
         }
 
         class ReplayCheckTest : public ::testing::Test {
@@ -54,8 +54,7 @@ namespace BECore::Tests {
                 SessionRecorder::DestroyInstance();
                 GameManager::GetInstance().Shutdown();
                 CoreManager::GetTime().Reset();
-                std::error_code ignored;
-                std::filesystem::remove(_path, ignored);
+                RemoveFileIfPresent(_path);
             }
 
             static ReplayTestGame& Game() {
@@ -78,7 +77,7 @@ namespace BECore::Tests {
 
             /// The session of the committed file: reset, roll, arm, a wait of the lock, roll, set_state, roll
             String RecordSession() {
-                EXPECT_TRUE(SessionRecorder::GetInstance().Start(FromStdString(_path.string()), *GameManager::GetInstance().GetActive(), "replay test game").has_value());
+                EXPECT_TRUE(SessionRecorder::GetInstance().Start(_path.View(), *GameManager::GetInstance().GetActive(), "replay test game").has_value());
                 EXPECT_TRUE(ControlledReset(Game(), JsonDoc(Format("{{\"seed\":{}}}", kSeed))).has_value());
                 Frame();
                 EXPECT_TRUE(ControlledAction(Game(), JsonDoc(R"({"type":"roll"})")).has_value());
@@ -98,7 +97,7 @@ namespace BECore::Tests {
                 game.Update(seconds);
             }
 
-            std::filesystem::path _path;
+            Path _path;
         };
 
     }  // namespace

@@ -16,6 +16,7 @@
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -239,22 +240,46 @@ namespace BECore::Tests {
     TEST_F(ProfilerControlGoldenTest, ProfilerDumpAnswersThePathAndTheDroppedCount) {
         IProfilerBackend* const previous = Profiler::GetPrimaryBackend();
         Profiler::SetBackend(&Profiler::GetChromeTrace());
-        const std::filesystem::path file = TestTempPath("ProfilerDump caf\xC3\xA9").filename();
+        const Path file = TestTempPath("ProfilerDump caf\xC3\xA9").Filename();
         Json params = Json::object();
-        params["path"] = file.string();
+        params["path"] = ToStdString(file.View());
 
         const String text = Ask(service, "profiler_dump", params);
 
         Profiler::SetBackend(previous);
-        std::error_code ignored;
-        const bool written = std::filesystem::remove(file, ignored);
-        EXPECT_TRUE(written);
+        EXPECT_TRUE(PathExists(file));
+        RemoveFileIfPresent(file);
         ExpectCanonical(text);
         String shown = text;
-        const size_t pathAt = shown.find(file.string().c_str());
+        const size_t pathAt = shown.find(file.CStr());
         ASSERT_NE(pathAt, String::npos);
-        shown.replace(pathAt, file.string().size(), "FILE");
+        shown.replace(pathAt, file.View().size(), "FILE");
         EXPECT_EQ(MaskIntegers(shown), R"json({"id":N,"ok":true,"result":{"dropped":N,"path":"FILE"}})json");
+    }
+
+    TEST_F(ProfilerControlGoldenTest, ProfilerDumpRefusesAPathOutsideTheWorkingFolderBeforeItLooksAtTheBackend) {
+        if (Profiler::GetPrimaryBackend() == &Profiler::GetChromeTrace()) {
+            GTEST_SKIP() << "an accepted path would write a file";
+        }
+        static constexpr const char* kRefused = "has to be a relative file name";
+        const auto refused = [this](const String& path) {
+            Json params = Json::object();
+            params["path"] = path.c_str();
+            return Ask(service, "profiler_dump", params).find(kRefused) != String::npos;
+        };
+
+        // An accepted path goes on to the backend check, which answers that nothing is recording
+        for (const char* accepted : {"trace.json", "sub/trace.json", "caf\xC3\xA9.json", "with space.json", "a/..b", "a../b", "a/.b/c"}) {
+            EXPECT_FALSE(refused(accepted)) << accepted;
+        }
+        for (const char* unsafe : {"", "/abs/trace.json", "..", "../trace.json", "a/../b", "a/..", "a//..", "./../x"}) {
+            EXPECT_TRUE(refused(unsafe)) << unsafe;
+        }
+#ifdef _WIN32
+        for (const char* unsafe : {"C:x", "C:\\x", "\\\\server\\share\\x", "\\x", "a\\..\\b"}) {
+            EXPECT_TRUE(refused(unsafe)) << unsafe;
+        }
+#endif
     }
 
     TEST_F(ProfilerControlGoldenTest, FrameStatsAllocatesNothingBeyondTheStatsItReads) {

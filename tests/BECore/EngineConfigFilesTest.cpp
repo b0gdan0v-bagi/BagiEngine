@@ -21,8 +21,8 @@ namespace BECore::Tests {
         // WidgetList reads them, but the widget classes are registered by the runtime and editor executables: the test executable's factory cannot make them
         constexpr StringView kWidgetsReason = "a WidgetList of widgets that only the application executable registers";
 
-        std::filesystem::path EngineRoot() {
-            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+        Path EngineRoot() {
+            return Path(__FILE__).Parent().Parent().Parent();
         }
 
         ConfigReader ApplicationConfigReader() {
@@ -62,8 +62,8 @@ namespace BECore::Tests {
             };
         }
 
-        std::filesystem::path SeededFolder() {
-            const std::filesystem::path dir = TestTempDirectory("BagiConfigFilesCheck");
+        Path SeededFolder() {
+            const Path dir = TestTempDirectory("BagiConfigFilesCheck");
             RemoveDirectory(dir);
             return dir;
         }
@@ -91,7 +91,7 @@ namespace BECore::Tests {
 
     /// The helper a game's own test calls: a folder with a typo, a missing required key and an unlisted file
     TEST_F(EngineConfigFilesTest, TheFinderNamesEveryKindOfProblem) {
-        const std::filesystem::path dir = SeededFolder();
+        const Path dir = SeededFolder();
         WriteFile(dir / "ApplicationConfig.xml", "<root type=\"A\" rendrer=\"Vulkan\"/>");
         WriteFile(dir / "TestsConfig.xml", "<root><tests><test type=\"EngineSmokeTest\"/></tests></root>");
         WriteFile(dir / "Extra.xml", "<root/>");
@@ -118,7 +118,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(EngineConfigFilesTest, TheFinderChecksTheContentOfTheSceneNodeFiles) {
-        const std::filesystem::path dir = SeededFolder();
+        const Path dir = SeededFolder();
         WriteFile(
             dir / "SceneConfig.xml",
             Format("<SceneManager contentVersion=\"{}\"><scenes><scene type=\"Scene\" name=\"Main\"><nodes><node ref=\"nodes/A\"/></nodes></scene></scenes></SceneManager>", kContentVersion).c_str());
@@ -133,7 +133,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(EngineConfigFilesTest, ACleanFolderHasNoFindings) {
-        const std::filesystem::path dir = SeededFolder();
+        const Path dir = SeededFolder();
         WriteFile(dir / "ApplicationConfig.xml", "<root type=\"A\"/>");
         const Vector<ConfigReader> readers{ApplicationConfigReader()};
         EXPECT_TRUE(FindConfigFindings(dir, readers, {}).empty());

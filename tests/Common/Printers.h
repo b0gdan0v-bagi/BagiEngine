@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Math/Color.h>
 #include <BECore/PoolString/PoolString.h>
 #include <gtest/gtest.h>
@@ -32,6 +33,12 @@ namespace BECore {
 
     inline void PrintTo(const PoolString& value, std::ostream* os) {
         *os << "PoolString(\"" << value.CStr() << "\")";
+    }
+
+    inline void PrintTo(const Path& value, std::ostream* os) {
+        *os << "Path(\"";
+        os->write(value.View().data(), static_cast<std::streamsize>(value.View().size()));
+        *os << "\")";
     }
 
     /// Color has no `operator==`: compare with `EXPECT_PRED2(ColorsEqual, a, b)` (UI/UIColor.h), which prints both through this

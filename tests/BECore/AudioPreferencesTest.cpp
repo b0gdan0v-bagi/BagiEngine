@@ -6,6 +6,7 @@
 #include <BECore/FileSystem/FileSystem.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -15,7 +16,7 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             _base = TestTempDirectory("BagiAudioPreferencesTest");
-            std::filesystem::remove_all(_base);
+            RemoveDirectory(_base);
             _service.emplace(_fileSystem);
             ASSERT_TRUE(_service->Initialize(_base / "saves"));
             manager.Initialize(AudioSettings{});
@@ -23,8 +24,7 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _service.reset();
-            std::error_code ec;
-            std::filesystem::remove_all(_base, ec);
+            RemoveDirectory(_base);
         }
 
         SaveGameService& Service() {
@@ -32,7 +32,7 @@ namespace BECore::Tests {
         }
 
         AudioManager manager;
-        std::filesystem::path _base;
+        Path _base;
         FileSystem _fileSystem;
         Optional<SaveGameService> _service;
     };

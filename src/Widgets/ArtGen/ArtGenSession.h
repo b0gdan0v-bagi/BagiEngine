@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/Json.h>
+#include <BECore/File/Path.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
@@ -15,7 +16,6 @@
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 
 namespace BECore {
 
@@ -387,7 +387,7 @@ namespace BECore {
         [[nodiscard]] String AtlasOf(const Json& presetData, StringView preset) const;
         /// What the rows of an image set are written with: the set's own processing, else (the first Accept all) one measured now over every
         /// variant of every Done job; none (the identity plan) for a legacy set or settings that change nothing. Nothing is stored here
-        [[nodiscard]] std::expected<Optional<ArtGenSetProcessing>, String> ProcessingOfSet(const ArtGenSet& set, const std::filesystem::path& root) const;
+        [[nodiscard]] std::expected<Optional<ArtGenSetProcessing>, String> ProcessingOfSet(const ArtGenSet& set, const Path& root) const;
         /// The kind of the set's preset or draft workflow from the service's catalog; the set's own kind while the catalog does not know it
         [[nodiscard]] String KindOfSet(const ArtGenSet& set) const;
         void StartJob(ArtGenSet& set, ArtGenSetJob& job);

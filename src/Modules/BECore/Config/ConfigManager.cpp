@@ -1,6 +1,7 @@
 #include "ConfigManager.h"
 
 #include <BECore/Application/CommandLine.h>
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -41,7 +42,7 @@ namespace BECore {
         /// The text is valid inside @p use only. No `co_await` may sit between this call and the end of @p use: a scratch scope
         /// ends on the thread that made it, and a coroutine may resume on another
         template <typename Use>
-        bool WithConfigText(const std::filesystem::path& path, Use&& use) {
+        bool WithConfigText(const Path& path, Use&& use) {
             {
                 ScratchScope scratch;
                 if (const Optional<StringView> text = XmlDocument::ReadFileInto(path, scratch.GetArena(), kMaxScratchConfigBytes)) {
@@ -59,7 +60,7 @@ namespace BECore {
         }
 
         /// The hash of the file as it is now; 0 when it cannot be read, so the next change of it reloads
-        uint64_t HashFileOnDisk(const std::filesystem::path& path) {
+        uint64_t HashFileOnDisk(const Path& path) {
             uint64_t hash = 0;
             WithConfigText(path, [&hash](StringView text) { hash = HashFileText(text); });
             return hash;
@@ -68,12 +69,12 @@ namespace BECore {
         constexpr StringView kXmlExtension = ".xml";
         constexpr StringView kBinaryExtension = ".bin";
 
-        bool IsBinaryPath(const std::filesystem::path& path) {
-            return path.extension() == kBinaryExtension.data();
+        bool IsBinaryPath(const Path& path) {
+            return PathExtension(path.View()) == kBinaryExtension;
         }
 
         /// The content of the `.bin` at @p path once it is a valid document with a stamp that this program accepts, or the reason it is not
-        std::expected<BinaryContent, String> LoadCheckedBinary(const std::filesystem::path& path) {
+        std::expected<BinaryContent, String> LoadCheckedBinary(const Path& path) {
             auto content = LoadContentFile(path);
             if (!content) {
                 return content;
@@ -85,8 +86,7 @@ namespace BECore {
             }
             // After the adoption: the stamp is in the entries, which are read after the section, so a file that another layout
             // refuses leaves its type and field names in the pool
-            const std::string source = path.string();  //-NoStd: the path API's own text
-            const auto stamp = CheckContentStamp(reader, StringView(source.data(), source.size()));
+            const auto stamp = CheckContentStamp(reader, path.View());
             if (!stamp) {
                 return std::unexpected(stamp.error());
             }
@@ -115,16 +115,16 @@ namespace BECore {
             return;
         }
 
-        Vector<Pair<std::filesystem::path, PoolString>> filesToLoad;
+        Vector<Pair<Path, PoolString>> filesToLoad;
         Vector<PoolString> conflicted;
         for (const auto& layer : layers) {
-            Vector<Pair<std::filesystem::path, PoolString>> layerFiles;
+            Vector<Pair<Path, PoolString>> layerFiles;
             ScanDirectory(layer, layerFiles, conflicted);
 
             for (auto& layerFile : layerFiles) {
                 auto existing = eastl::find_if(filesToLoad.begin(), filesToLoad.end(), [&](const auto& loaded) { return loaded.second == layerFile.second; });
                 if (existing != filesToLoad.end()) {
-                    LOG_INFO("[ConfigManager] Config '{}' from {} overrides {}", layerFile.second.ToStringView(), layerFile.first.string(), existing->first.string());
+                    LOG_INFO("[ConfigManager] Config '{}' from {} overrides {}", layerFile.second.ToStringView(), layerFile.first.View(), existing->first.View());
                     *existing = eastl::move(layerFile);
                 } else {
                     filesToLoad.push_back(eastl::move(layerFile));
@@ -265,7 +265,7 @@ namespace BECore {
         return names;
     }
 
-    std::filesystem::path ConfigManager::GetConfigFilePath(PoolString name) const {
+    Path ConfigManager::GetConfigFilePath(PoolString name) const {
         ASSERT(_initialized.load(std::memory_order_acquire));
         auto it = _configs.find(name);
         if (it != _configs.end()) {
@@ -290,7 +290,7 @@ namespace BECore {
                 return false;
             }
             auto& entry = it->second;
-            if (entry.filePath.empty()) {
+            if (entry.filePath.Empty()) {
                 LOG_ERROR("[ConfigManager] SaveConfig: no file path for config '{}'", name.ToStringView());
                 return false;
             }
@@ -298,9 +298,9 @@ namespace BECore {
             if (ok) {
                 // The file keeps the layout of what was there, so its text is read back: the hash must be the one the watcher will see
                 entry.fileHash = HashFileOnDisk(entry.filePath);
-                LOG_INFO("[ConfigManager] Saved config '{}' to {}", name.ToStringView(), entry.filePath.string());
+                LOG_INFO("[ConfigManager] Saved config '{}' to {}", name.ToStringView(), entry.filePath.View());
             } else {
-                LOG_ERROR("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), entry.filePath.string());
+                LOG_ERROR("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), entry.filePath.View());
             }
         }
         if (ok) {
@@ -320,7 +320,7 @@ namespace BECore {
     }
 
     bool ConfigManager::ReloadFromDisk(PoolString name, bool skipIfSame, String* failure) {
-        std::filesystem::path filePath;
+        Path filePath;
         uint64_t knownHash = 0;
         {
             LockGuard lock(_writeMutex);
@@ -332,7 +332,7 @@ namespace BECore {
             if (it->second.binary) {
                 // Hot reload of a cooked file is not built: the bytes of an entry never change, a deserializer may hold them
                 if (skipIfSame) {
-                    LOG_DEBUG("[ConfigManager] Config '{}': {} changed, binary configs are not reloaded", name.ToStringView(), it->second.filePath.string());
+                    LOG_DEBUG("[ConfigManager] Config '{}': {} changed, binary configs are not reloaded", name.ToStringView(), it->second.filePath.View());
                 } else {
                     LOG_ERROR("[ConfigManager] ReloadConfig: config '{}' is a binary file and cannot be reloaded", name.ToStringView());
                 }
@@ -358,9 +358,9 @@ namespace BECore {
                 *failure = Format("the file is gone or unreadable, the loaded '{}' is kept", name.ToStringView());
             }
             if (skipIfSame) {
-                LOG_DEBUG("[ConfigManager] Config '{}': {} is gone or unreadable, keeping the loaded document", name.ToStringView(), filePath.string());
+                LOG_DEBUG("[ConfigManager] Config '{}': {} is gone or unreadable, keeping the loaded document", name.ToStringView(), filePath.View());
             } else {
-                LOG_ERROR("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string());
+                LOG_ERROR("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.View());
             }
             return false;
         }
@@ -372,7 +372,7 @@ namespace BECore {
             if (failure != nullptr) {
                 *failure = Format("the file does not parse, the old '{}' is kept", name.ToStringView());
             }
-            LOG_ERROR("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string());
+            LOG_ERROR("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.View());
             return false;
         }
 
@@ -408,12 +408,12 @@ namespace BECore {
             return {};
         }
         const StringView relativeText = virtualPath.substr(prefix.size() + 1);
-        const std::filesystem::path relative(relativeText.begin(), relativeText.end());
+        const Path relative(relativeText);
         LockGuard lock(_writeMutex);
-        for (const std::filesystem::path& layer : GetFileSystem().GetMountLayers(MountPoints::config)) {
-            const std::filesystem::path candidate = (layer / relative).lexically_normal();
+        for (const Path& layer : GetFileSystem().GetMountLayers(MountPoints::config)) {
+            const Path candidate = (layer / relative).LexicallyNormal();
             for (const auto& [name, entry] : _configs) {
-                if (entry.filePath.lexically_normal() == candidate) {
+                if (entry.filePath.LexicallyNormal() == candidate) {
                     return name;
                 }
             }
@@ -437,17 +437,24 @@ namespace BECore {
         }
     }
 
-    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, Vector<Pair<std::filesystem::path, PoolString>>& filesToLoad, Vector<PoolString>& conflicted) const {
-        Vector<std::filesystem::path> paths;
+    void ConfigManager::ScanDirectory(const Path& dir, Vector<Pair<Path, PoolString>>& filesToLoad, Vector<PoolString>& conflicted) const {
+        Vector<Path> paths;
         Vector<String> stems;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
-            if (entry.is_regular_file() && (entry.path().extension() == kXmlExtension.data() || IsBinaryPath(entry.path()))) {
-                const auto stemStr = entry.path().stem().string();
-                paths.push_back(entry.path());
-                stems.push_back(String(stemStr.c_str(), stemStr.length()));
+        const std::expected<void, String> walked = WalkDirectory(dir.View(), WalkMode::Tree, [&](StringView relative, FileKind kind) {
+            const StringView extension = PathExtension(relative);
+            if (kind == FileKind::File && (extension == kXmlExtension || extension == kBinaryExtension)) {
+                const StringView stem = PathStem(relative);
+                paths.push_back(dir / relative);
+                stems.push_back(String(stem));
 
-                LOG_DEBUG("[ConfigManager] Found config: {} -> {}", stemStr, entry.path().string());
+                LOG_DEBUG("[ConfigManager] Found config: {} -> {}", stem, paths.back().View());
             }
+            return true;
+        });
+        if (!walked) {
+            // A layer that cannot be listed adds no file: what the walk saw before the failure is dropped with it
+            LOG_ERROR("[ConfigManager] Cannot list the config layer {}: {}", dir.View(), walked.error());
+            return;
         }
 
         // One batch for the layer: the names come from the disk, so the form that hashes them
@@ -461,8 +468,8 @@ namespace BECore {
 
         // Whether a stem has a file of each extension, to tell a stem with both from a stem with two files of one kind
         struct StemFiles {
-            const std::filesystem::path* xml = nullptr;
-            const std::filesystem::path* binary = nullptr;
+            const Path* xml = nullptr;
+            const Path* binary = nullptr;
         };
         UnorderedPoolMap<StemFiles> seen;
         for (size_t i = 0; i < paths.size(); ++i) {
@@ -474,8 +481,7 @@ namespace BECore {
             const StemFiles& files = seen[names[i]];
             if (files.xml != nullptr && files.binary != nullptr) {
                 if (eastl::find(conflicted.begin(), conflicted.end(), names[i]) == conflicted.end()) {
-                    LOG_ERROR("[ConfigManager] Config '{}' has both {} and {} in one layer, it is not loaded; remove one of them", names[i].ToStringView(), files.xml->string(),
-                              files.binary->string());
+                    LOG_ERROR("[ConfigManager] Config '{}' has both {} and {} in one layer, it is not loaded; remove one of them", names[i].ToStringView(), files.xml->View(), files.binary->View());
                     conflicted.push_back(names[i]);
                 }
                 continue;
@@ -484,7 +490,7 @@ namespace BECore {
         }
     }
 
-    Task<void> ConfigManager::LoadConfigAsync(std::filesystem::path path, PoolString name) {
+    Task<void> ConfigManager::LoadConfigAsync(Path path, PoolString name) {
         LOG_DEBUG("[ConfigManager] Loading config: {}", name.ToStringView());
 
         // The same stem twice in one layer: the first task to get the lock wins
@@ -499,7 +505,7 @@ namespace BECore {
         if (IsBinaryPath(path)) {
             auto content = LoadCheckedBinary(path);
             if (!content) {
-                LOG_ERROR("[ConfigManager] Failed to load config: {} from {}: {}", name.ToStringView(), path.string(), content.error());
+                LOG_ERROR("[ConfigManager] Failed to load config: {} from {}: {}", name.ToStringView(), path.View(), content.error());
                 co_return;
             }
             LockGuard lock(_writeMutex);
@@ -523,7 +529,7 @@ namespace BECore {
             hash = HashFileText(text);
         });
         if (!doc) {
-            LOG_ERROR("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.string());
+            LOG_ERROR("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.View());
             co_return;
         }
 

@@ -5,7 +5,6 @@
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <SDL3/SDL_filesystem.h>
 
 namespace BECore {
@@ -55,14 +54,13 @@ namespace BECore {
 
         // Reads the file at @p path into @p text and tapes it into @p tape (the tape borrows @p text, so both stay with the caller). Missing file:
         // false, no warning. A file that cannot be read or parsed, or whose root is not an object: false, one warning, @p unreadable set.
-        bool ReadJsonObject(const std::filesystem::path& path, String& text, JsonTape& tape, bool& unreadable) {
+        bool ReadJsonObject(const Path& path, String& text, JsonTape& tape, bool& unreadable) {
             unreadable = false;
-            std::error_code ec;
-            if (!std::filesystem::exists(path, ec)) {
+            if (!GetFileInfo(path)) {
                 return false;
             }
             unreadable = true;
-            std::expected<String, String> read = ReadTextFile(PathToUtf8(path));
+            std::expected<String, String> read = ReadTextFile(path);
             if (!read) {
                 LOG_WARNING("Editor settings: {}; using the defaults", read.error());
                 return false;
@@ -73,7 +71,7 @@ namespace BECore {
                 body.remove_prefix(kUtf8Bom.size());
             }
             if (!tape.Parse(body) || !JsonView(tape, 0).IsObject()) {
-                LOG_WARNING("Editor settings: '{}' is not a JSON object; using the defaults", path.string());
+                LOG_WARNING("Editor settings: '{}' is not a JSON object; using the defaults", path.View());
                 return false;
             }
             unreadable = false;
@@ -315,21 +313,21 @@ namespace BECore {
         }
     }
 
-    std::filesystem::path EditorUserDirectory() {
+    Path EditorUserDirectory() {
         if (const char* overridden = std::getenv(kEditorDirectoryEnvironmentVariable); overridden != nullptr && overridden[0] != '\0') {
-            return std::filesystem::path(overridden);
+            return Path(overridden);
         }
         char* prefPath = SDL_GetPrefPath(kEditorOrganization, kEditorApplication);
         if (prefPath == nullptr) {
             LOG_WARNING("Editor settings: no per-user folder: {}", SDL_GetError());
             return {};
         }
-        std::filesystem::path directory(prefPath);
+        Path directory(prefPath);
         SDL_free(prefPath);
         return directory;
     }
 
-    EditorSettings::EditorSettings(std::filesystem::path directory) : _directory(std::move(directory)) {}
+    EditorSettings::EditorSettings(Path directory) : _directory(std::move(directory)) {}
 
     void EditorSettings::SetPreferences(const EditorPreferences& preferences) {
         _preferences = ClampPreferences(preferences);
@@ -347,7 +345,7 @@ namespace BECore {
 
         String fileText;
         JsonTape tape;
-        if (!ReadJsonObject(_directory / ToStdString(kPreferencesFileName), fileText, tape, _preferencesUnreadable)) {
+        if (!ReadJsonObject(_directory / kPreferencesFileName, fileText, tape, _preferencesUnreadable)) {
             return;
         }
         const JsonView content(tape, 0);
@@ -389,7 +387,7 @@ namespace BECore {
 
         String fileText;
         JsonTape tape;
-        if (!ReadJsonObject(_directory / ToStdString(kHotkeysFileName), fileText, tape, _hotkeysUnreadable)) {
+        if (!ReadJsonObject(_directory / kHotkeysFileName, fileText, tape, _hotkeysUnreadable)) {
             return;
         }
         const JsonView content(tape, 0);
@@ -467,9 +465,9 @@ namespace BECore {
         }
     }
 
-    bool EditorSettings::Save(const std::filesystem::path& path, const JsonMemberMap& content, bool& unreadable) {
+    bool EditorSettings::Save(const Path& path, const JsonMemberMap& content, bool& unreadable) {
         _lastSaveError.clear();
-        if (_directory.empty()) {
+        if (_directory.Empty()) {
             _lastSaveError = "There is no folder for the editor settings";
             LOG_ERROR("Editor settings: {}", _lastSaveError);
             return false;
@@ -477,14 +475,9 @@ namespace BECore {
 
         // A file that did not parse is moved aside once, so the user's old text is not lost to the first change
         if (unreadable) {
-            std::filesystem::path backup = path;
-            backup += ToStdString(kBadFileSuffix);
-            std::error_code ec;
-            if (std::filesystem::exists(path, ec)) {
-                std::filesystem::rename(path, backup, ec);
-                if (!ec) {
-                    LOG_WARNING("Editor settings: the unreadable '{}' was kept as '{}'", path.string(), backup.string());
-                }
+            const Path backup(Format("{}{}", path.View(), kBadFileSuffix));
+            if (GetFileInfo(path) && RenameFile(path, backup)) {
+                LOG_WARNING("Editor settings: the unreadable '{}' was kept as '{}'", path.View(), backup.View());
             }
             unreadable = false;
         }
@@ -493,7 +486,7 @@ namespace BECore {
         JsonWriter writer(text, kJsonIndent);
         content.Write(writer);
         text.push_back('\n');
-        const std::expected<void, String> written = WriteFileAtomically(PathToUtf8(path), text);
+        const std::expected<void, String> written = WriteFileAtomically(path, text);
         if (!written) {
             _lastSaveError = written.error();
             LOG_ERROR("Editor settings: {}", _lastSaveError);
@@ -514,7 +507,7 @@ namespace BECore {
         SetValue(content, kViewportInputModeKey, InputModeName(_preferences.viewportInputMode));
         SetValue(content, kExternalEditorKey, StringView(_preferences.externalEditor.data(), _preferences.externalEditor.size()));
         SetStrings(content, kConsoleHistoryKey, _preferences.consoleHistory);
-        return Save(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable);
+        return Save(_directory / kPreferencesFileName, content, _preferencesUnreadable);
     }
 
     bool EditorSettings::SaveHotkeys() {
@@ -530,7 +523,7 @@ namespace BECore {
         JsonMemberMap content = _extraHotkeys;
         SetValue(content, kVersionKey, kFileVersion);
         content.SetWith(kBindingsKey, [&](JsonWriter& writer) { bindings.Write(writer); });
-        return Save(_directory / ToStdString(kHotkeysFileName), content, _hotkeysUnreadable);
+        return Save(_directory / kHotkeysFileName, content, _hotkeysUnreadable);
     }
 
 }  // namespace BECore

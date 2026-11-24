@@ -28,8 +28,8 @@ namespace BECore::Stress::Tests {
         }
 
         /// The scenes the app ships, from the file next to the sources: the app's own content is not mounted in the test environment
-        static std::filesystem::path ShippedSceneConfig() {
-            return std::filesystem::path(__FILE__).parent_path().parent_path() / "config" / "SceneConfig.xml";
+        static Path ShippedSceneConfig() {
+            return Path(__FILE__).Parent().Parent() / "config" / "SceneConfig.xml";
         }
 
         void StartGame(const Vector<String>& arguments = {}) {
@@ -38,7 +38,7 @@ namespace BECore::Stress::Tests {
             CoreManager::GetRendererManager().SetRenderer(_renderer);
 
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromFile(ShippedSceneConfig())) << ShippedSceneConfig().string();
+            ASSERT_TRUE(deserializer.LoadFromFile(ShippedSceneConfig())) << ShippedSceneConfig().CStr();
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());

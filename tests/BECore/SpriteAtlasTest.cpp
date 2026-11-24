@@ -156,7 +156,7 @@ namespace BECore::Tests {
             UnorderedPoolMap<RgbaImage> _images;
         };
 
-        Vector<uint8_t> ReadBytes(const std::filesystem::path& file) {
+        Vector<uint8_t> ReadBytes(const Path& file) {
             return ReadFileBytes(file);
         }
 
@@ -164,18 +164,16 @@ namespace BECore::Tests {
         class TempGame {
         public:
             TempGame() : _root(TestTempDirectory("SpriteAtlas")), _resolver{_root} {
-                std::error_code ignored;
-                std::filesystem::remove_all(_root, ignored);
-                std::filesystem::create_directories(_root / "assets", ignored);
+                RemoveDirectory(_root);
+                MakeDirectory(_root / "assets");
             }
             ~TempGame() {
-                std::error_code ignored;
-                std::filesystem::remove_all(_root, ignored);
+                RemoveDirectory(_root);
             }
             TempGame(const TempGame&) = delete;
             TempGame& operator=(const TempGame&) = delete;
 
-            [[nodiscard]] std::filesystem::path Resolve(StringView virtualPath) const {
+            [[nodiscard]] Path Resolve(StringView virtualPath) const {
                 return _resolver(virtualPath);
             }
 
@@ -185,26 +183,25 @@ namespace BECore::Tests {
             }
 
             void SavePng(const char* virtualPath, const RgbaImage& image) const {
-                const std::filesystem::path file = Resolve(virtualPath);
-                std::error_code ignored;
-                std::filesystem::create_directories(file.parent_path(), ignored);
+                const Path file = Resolve(virtualPath);
+                MakeDirectory(file.Parent());
                 ASSERT_TRUE(SaveRgbaPng(file, image).has_value());
             }
 
             [[nodiscard]] bool Exists(PoolString virtualPath) const {
-                return std::filesystem::exists(Resolve(virtualPath.ToStringView()));
+                return PathExists(Resolve(virtualPath.ToStringView()));
             }
 
         private:
             struct Resolver {
-                std::filesystem::path root;
+                Path root;
 
-                std::filesystem::path operator()(StringView virtualPath) const {
-                    return root / ToStd(virtualPath);
+                Path operator()(StringView virtualPath) const {
+                    return root / virtualPath;
                 }
             };
 
-            std::filesystem::path _root;
+            Path _root;
             Resolver _resolver;
         };
 
@@ -477,6 +474,19 @@ namespace BECore::Tests {
         EXPECT_EQ(built->entries[0].srcRect.w, 4.0f);
     }
 
+    TEST(SpriteAtlas, WriteMakesTheAssetsFolderUnderANonAsciiPathThatDoesNotExistYet) {
+        TempGame game;
+        SaveSources(game);
+        TextureLibrary library;
+        FillLibrary(library);
+        const Path assetsDir = game.Resolve("caf\xC3\xA9") / "assets";
+        const auto resolve = [&game](StringView virtualPath) { return game.Resolve(virtualPath); };
+
+        const auto written = WriteAtlas(library, "ui", PackSettings{}, AtlasIo{assetsDir, resolve});
+        ASSERT_TRUE(written.has_value()) << written.error().c_str();
+        EXPECT_TRUE(LoadRgbaImage(assetsDir / "atlases" / "ui.png").has_value());
+    }
+
     TEST(SpriteAtlas, WriteMakesTheFileAndRewritesTheEntriesInPlace) {
         TempGame game;
         SaveSources(game);
@@ -613,8 +623,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(Pack(library, game).has_value());
         before = library.GetAll();
-        std::error_code ignored;
-        std::filesystem::remove(game.Resolve("assets/b.png"), ignored);
+        RemoveFileIfPresent(game.Resolve("assets/b.png"));
         const auto missing = UnpackAtlas(library, "ui", exists);
         ASSERT_FALSE(missing.has_value());
         EXPECT_NE(missing.error().find("Bravo"), String::npos) << missing.error().c_str();

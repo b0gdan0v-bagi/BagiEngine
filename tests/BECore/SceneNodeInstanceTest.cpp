@@ -70,7 +70,7 @@ namespace BECore::Tests {
 
         void SetUp() override {
             _dir = TestTempDirectory("BagiSceneNodeInstanceTest");
-            std::filesystem::remove_all(_dir);
+            RemoveDirectory(_dir);
             WriteFile(_dir / "nodes" / "Box.xml", kBoxNode);
             WriteFile(_dir / "nodes" / "Panel.xml", kPanelNode);
             _loader = MakeDirectoryNodeLoader(_dir);
@@ -78,8 +78,7 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _manager.Reset();
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
         /// Loads a scene Main whose only node is @p nodeXml (a `<node ref>` or an inline node) and returns that node
@@ -130,7 +129,7 @@ namespace BECore::Tests {
             ExpectRoundTrip(node);
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         NodeFileLoader _loader;
         pugi::xml_document _doc;
         pugi::xml_document _out;
@@ -301,7 +300,7 @@ namespace BECore::Tests {
 
     TEST_F(SceneNodeInstanceTest, ANodeFileThatIsGoneIsRefused) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
-        std::filesystem::remove(_dir / "nodes" / "Box.xml");
+        RemoveFileIfPresent(_dir / "nodes" / "Box.xml");
 
         String result;
         String reason;

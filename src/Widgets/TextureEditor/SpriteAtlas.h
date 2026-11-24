@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Math/Rect.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Resource/TextureLibrary.h>
@@ -9,7 +10,6 @@
 #include <Widgets/TextureEditor/SpriteImage.h>
 #include <cstdint>
 #include <expected>
-#include <filesystem>
 
 namespace BECore {
 
@@ -106,8 +106,8 @@ namespace BECore {
 
     /// Where `WriteAtlas` reads and writes: `resolve` turns the virtual path of a source into a file, `assetsDir` is the top layer the atlas lands under
     struct AtlasIo {
-        std::filesystem::path assetsDir;
-        FunctionRef<std::filesystem::path(StringView virtualPath)> resolve;
+        Path assetsDir;
+        FunctionRef<Path(StringView virtualPath)> resolve;
     };
 
     struct AtlasWritten {

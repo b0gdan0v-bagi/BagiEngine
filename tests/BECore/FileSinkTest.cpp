@@ -12,8 +12,8 @@ namespace BECore::Tests {
 
     namespace {
 
-        String ReadFirstLine(const std::filesystem::path& file) {
-            const auto text = ReadTextFile(FromStdString(file.generic_string()));
+        String ReadFirstLine(const Path& file) {
+            const auto text = ReadTextFile(file);
             if (!text) {
                 ADD_FAILURE() << text.error();
                 return {};
@@ -56,11 +56,11 @@ namespace BECore::Tests {
 
     /// The text of a log line in a file is "[Level] [date time.ms] message": the layer's Format must write it so.
     TEST(FileSinkTest, WritesTheLevelTheTimeAndTheMessage) {
-        const std::filesystem::path dir = TestTempDirectory("BagiFileSinkTest");
+        const Path dir = TestTempDirectory("BagiFileSinkTest");
         MakeEmptyDirectory(dir);
-        const std::filesystem::path file = dir / "sink.log";
+        const Path file = dir / "sink.log";
 
-        const String xml = Format("<root><sinks><sink type=\"FileSink\" enabled=\"true\" minLevel=\"Warning\" filename=\"{}\" append=\"false\"/></sinks></root>", file.generic_string().c_str());
+        const String xml = Format("<root><sinks><sink type=\"FileSink\" enabled=\"true\" minLevel=\"Warning\" filename=\"{}\" append=\"false\"/></sinks></root>", file.CStr());
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(xml));
         {
@@ -75,8 +75,7 @@ namespace BECore::Tests {
         }
 
         const String line = ReadFirstLine(file);
-        std::error_code ec;
-        std::filesystem::remove_all(dir, ec);
+        RemoveDirectory(dir);
 
         // "[Warning] [YYYY-MM-DD HH:MM:SS.mmm] hello world"
         ASSERT_EQ(line.size(), 47U) << line;
@@ -93,11 +92,11 @@ namespace BECore::Tests {
 
     /// The sink prints the view it is given, not the characters up to a terminator that may lie past the view.
     TEST(FileSinkTest, WritesOnlyTheViewItIsGiven) {
-        const std::filesystem::path dir = TestTempDirectory("BagiFileSinkViewTest");
+        const Path dir = TestTempDirectory("BagiFileSinkViewTest");
         MakeEmptyDirectory(dir);
-        const std::filesystem::path file = dir / "sink.log";
+        const Path file = dir / "sink.log";
 
-        const String xml = Format("<root><sinks><sink type=\"FileSink\" enabled=\"true\" minLevel=\"Warning\" filename=\"{}\" append=\"false\"/></sinks></root>", file.generic_string().c_str());
+        const String xml = Format("<root><sinks><sink type=\"FileSink\" enabled=\"true\" minLevel=\"Warning\" filename=\"{}\" append=\"false\"/></sinks></root>", file.CStr());
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(xml));
         {
@@ -111,8 +110,7 @@ namespace BECore::Tests {
         }
 
         const String line = ReadFirstLine(file);
-        std::error_code ec;
-        std::filesystem::remove_all(dir, ec);
+        RemoveDirectory(dir);
 
         ASSERT_GE(line.size(), 5U) << line;
         EXPECT_EQ(StringView(line.data(), line.size()).substr(line.size() - 5), "] abc");

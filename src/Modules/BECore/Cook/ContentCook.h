@@ -1,11 +1,11 @@
 #pragma once
 
 #include <BECore/Cook/ContentCooker.h>
+#include <BECore/File/Path.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <cstddef>
-#include <filesystem>
 
 namespace BECore {
 
@@ -37,9 +37,9 @@ namespace BECore {
         [[nodiscard]] String ToText() const;
     };
 
-    /// The files of @p layer relative to it, sorted by their generic path; dot files (`.DS_Store`) and the editor's `imgui.ini` are not content. The reason goes to @p error when the folder cannot be
-    /// listed. What the cook and its check (`VerifyCooked`) both walk, so they cannot disagree on which files exist
-    Vector<std::filesystem::path> ListContentFiles(const std::filesystem::path& layer, String& error);
+    /// The files of @p layer relative to it, sorted by the bytes of their generic text (not by `Path` order: the report order is part of the output); dot files (`.DS_Store`) and the editor's
+    /// `imgui.ini` are not content. The reason goes to @p error when the folder cannot be listed. What the cook and its check (`VerifyCooked`) both walk, so they cannot disagree on which files exist
+    Vector<Path> ListContentFiles(const Path& layer, String& error);
 
     /**
      * @brief Cooks the `config` folders of @p fs into `<outDir>/layer<k>/config/`, one output folder per source layer (k = 0 for the lowest)
@@ -67,6 +67,6 @@ namespace BECore {
      *
      * @param registry The cookers; the engine's own is `ContentCookRegistry::GetInstance()`
      */
-    CookReport CookContent(const FileSystem& fs, const std::filesystem::path& outDir, const ContentCookRegistry& registry);
+    CookReport CookContent(const FileSystem& fs, const Path& outDir, const ContentCookRegistry& registry);
 
 }  // namespace BECore

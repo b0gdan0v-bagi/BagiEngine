@@ -1,5 +1,4 @@
 #include <BECore/FileSystem/FileSystem.h>
-#include <BECore/Utils/ScopeGuard.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -10,8 +9,13 @@ namespace BECore::Tests {
     namespace {
 
         /// A file whose content no test reads: only where it lies matters
-        void Touch(const std::filesystem::path& path) {
+        void Touch(const Path& path) {
             WriteFile(path, "x");
+        }
+
+        /// A host path as `Path` in the absolute and normal form that `FileSystem` keeps
+        Path Normal(const Path& path) {
+            return path.LexicallyNormal();
         }
 
     }  // namespace
@@ -33,9 +37,9 @@ namespace BECore::Tests {
             RemoveDirectory(_base);
         }
 
-        std::filesystem::path _base;
-        std::filesystem::path _engine;
-        std::filesystem::path _game;
+        Path _base;
+        Path _engine;
+        Path _game;
     };
 
     TEST_F(FileSystemTest, UpperRootOverridesLowerRoot) {
@@ -47,7 +51,7 @@ namespace BECore::Tests {
         fs.AddContentRoot(_game);
         fs.Initialize();
 
-        EXPECT_EQ(fs.ResolvePath("config/A.xml"), (_game / "config" / "A.xml").lexically_normal());
+        EXPECT_EQ(fs.ResolvePath("config/A.xml"), Normal(_game / "config" / "A.xml"));
     }
 
     TEST_F(FileSystemTest, FallsBackToLowerRoot) {
@@ -59,8 +63,8 @@ namespace BECore::Tests {
         fs.AddContentRoot(_game);
         fs.Initialize();
 
-        EXPECT_EQ(fs.ResolvePath("config/OnlyEngine.xml"), (_engine / "config" / "OnlyEngine.xml").lexically_normal());
-        EXPECT_EQ(fs.ResolvePath("config/OnlyGame.xml"), (_game / "config" / "OnlyGame.xml").lexically_normal());
+        EXPECT_EQ(fs.ResolvePath("config/OnlyEngine.xml"), Normal(_engine / "config" / "OnlyEngine.xml"));
+        EXPECT_EQ(fs.ResolvePath("config/OnlyGame.xml"), Normal(_game / "config" / "OnlyGame.xml"));
     }
 
     TEST_F(FileSystemTest, MissingFileResolvesToEmptyPath) {
@@ -70,7 +74,7 @@ namespace BECore::Tests {
         fs.AddContentRoot(_engine);
         fs.Initialize();
 
-        EXPECT_TRUE(fs.ResolvePath("config/Missing.xml").empty());
+        EXPECT_TRUE(fs.ResolvePath("config/Missing.xml").Empty());
         EXPECT_FALSE(fs.Exists("config/Missing.xml"));
         EXPECT_TRUE(fs.Exists("config/A.xml"));
     }
@@ -86,10 +90,10 @@ namespace BECore::Tests {
 
         const auto layers = fs.GetMountLayers("config"_intern);
         ASSERT_EQ(layers.size(), 2u);
-        EXPECT_EQ(layers[0], (_engine / "config").lexically_normal());
-        EXPECT_EQ(layers[1], (_game / "config").lexically_normal());
-        EXPECT_EQ(fs.GetMountedPath("config"_intern), (_game / "config").lexically_normal());
-        EXPECT_EQ(fs.GetRootPath(), _game.lexically_normal());
+        EXPECT_EQ(layers[0], Normal(_engine / "config"));
+        EXPECT_EQ(layers[1], Normal(_game / "config"));
+        EXPECT_EQ(fs.GetMountedPath("config"_intern), Normal(_game / "config"));
+        EXPECT_EQ(fs.GetRootPath(), Normal(_game));
     }
 
     TEST_F(FileSystemTest, RootWithoutDirectoryAddsNoLayer) {
@@ -127,7 +131,7 @@ namespace BECore::Tests {
 
         const auto layers = fs.GetMountLayers("config"_intern);
         ASSERT_EQ(layers.size(), 1u);
-        EXPECT_EQ(layers[0], (_game / "config").lexically_normal());
+        EXPECT_EQ(layers[0], Normal(_game / "config"));
     }
 
     TEST_F(FileSystemTest, EnumerateFilesMergesLayersAndListsOverriddenFileOnce) {
@@ -158,9 +162,9 @@ namespace BECore::Tests {
         Vector<String> expected;
         for (size_t i = 0; i < kFiles; ++i) {
             const String name = Format("{}_{:03}.png", stem, kFiles - 1 - i);
-            Touch(_engine / "assets" / "enumbatch" / ToStd(name));
+            Touch(_engine / "assets" / "enumbatch" / name);
             if (i % 2 == 0) {
-                Touch(_game / "assets" / "enumbatch" / ToStd(name));
+                Touch(_game / "assets" / "enumbatch" / name);
             }
         }
         for (size_t i = 0; i < kFiles; ++i) {
@@ -209,6 +213,79 @@ namespace BECore::Tests {
         EXPECT_EQ(files[3].ToStringView(), "assets/a.txt");
     }
 
+    TEST_F(FileSystemTest, EnumerateFilesListsNonAsciiNamesInPathOrderAndAnUppercaseExtension) {
+        // Bytes decide, per component: 'z' < 0xC3 (the folder and the names starting with "ü") < 0xD0 ("Ж"); in "ünï/", "ünï-x" and "ünï.png" the shorter component first, then '-' < '.'
+        const Path engineAssets = Path(_engine) / "assets";
+        Touch(engineAssets / "Ж.png");
+        Touch(engineAssets / "ünï.png");
+        Touch(engineAssets / "ünï-x.png");
+        Touch(engineAssets / "z.png");
+        Touch(Path(_game) / "assets" / "ünï" / "b.PNG");
+        Touch(Path(_game) / "assets" / "ünï.png");
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.AddContentRoot(_game);
+        fs.Initialize();
+
+        const StringView extensions[] = {".png"};
+        const auto files = fs.EnumerateFiles("assets"_intern, Span<const StringView>(extensions));
+
+        ASSERT_EQ(files.size(), 5u);
+        EXPECT_EQ(files[0].ToStringView(), "assets/z.png");
+        EXPECT_EQ(files[1].ToStringView(), "assets/ünï/b.PNG");
+        EXPECT_EQ(files[2].ToStringView(), "assets/ünï-x.png");
+        EXPECT_EQ(files[3].ToStringView(), "assets/ünï.png");  // in both layers, listed once
+        EXPECT_EQ(files[4].ToStringView(), "assets/Ж.png");
+    }
+
+    TEST_F(FileSystemTest, EnumerateFilesSkipsALayerThatCannotBeRead) {
+        Touch(_engine / "assets" / "a.png");
+        Touch(_game / "assets" / "b.png");
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.AddContentRoot(_game);
+        fs.Initialize();
+        RemoveDirectory(_game / "assets");
+
+        const StringView extensions[] = {".png"};
+        const auto files = fs.EnumerateFiles("assets"_intern, Span<const StringView>(extensions));
+
+        ASSERT_EQ(files.size(), 1u);
+        EXPECT_EQ(files[0].ToStringView(), "assets/a.png");
+    }
+
+    TEST_F(FileSystemTest, ResolvePathFindsAFileWithANonAsciiName) {
+        const Path file = _engine / "config" / "héllo ж.xml";
+        Touch(file);
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.Initialize();
+
+        EXPECT_EQ(fs.ResolvePath("config/héllo ж.xml"), Normal(file));
+        EXPECT_TRUE(fs.Exists("config/héllo ж.xml"));
+    }
+
+    TEST_F(FileSystemTest, MountRefusesAFileAndStoresARelativeFolderAbsoluteAndNormal) {
+        Touch(_engine / "data" / "file.txt");
+
+        FileSystem fs;
+        EXPECT_FALSE(fs.Mount("data"_intern, _engine / "data" / "file.txt"));
+        EXPECT_FALSE(fs.Mount("data"_intern, _engine / "missing"));
+        EXPECT_TRUE(fs.GetMountLayers("data"_intern).empty());
+
+        const ScopedCurrentDirectory enter(_engine);
+        const auto current = CurrentDirectory();
+        ASSERT_TRUE(current.has_value()) << current.error().c_str();
+
+        EXPECT_TRUE(fs.Mount("data"_intern, "./other/../data"));
+
+        ASSERT_EQ(fs.GetMountLayers("data"_intern).size(), 1u);
+        EXPECT_EQ(fs.GetMountedPath("data"_intern), Normal(Path(*current) / "data"));
+    }
+
 #ifndef _WIN32
     TEST_F(FileSystemTest, EnumerateFilesTurnsABackslashInAFileNameIntoASlash) {
         // A POSIX file name may hold a backslash; the virtual path has only slashes
@@ -229,22 +306,16 @@ namespace BECore::Tests {
     TEST_F(FileSystemTest, WithoutContentRootsTheProjectRootIsFoundFromTheWorkingDirectory) {
         // A working directory two levels below a folder with config/, whatever folder the run started in
         MakeDirectory(_engine / "config");
-        const std::filesystem::path deep = _engine / "a" / "b";
+        const Path deep = _engine / "a" / "b";
         MakeDirectory(deep);
-        std::error_code error;
-        const std::filesystem::path started = std::filesystem::current_path(error);
-        ASSERT_FALSE(error) << error.message();
-        std::filesystem::current_path(deep, error);
-        ASSERT_FALSE(error) << error.message();
-        const ScopeGuard restore([&started] {
-            std::error_code ignored;
-            std::filesystem::current_path(started, ignored);
-        });
+        const ScopedCurrentDirectory enter(deep);
 
         FileSystem fs;
         fs.Initialize();
 
-        EXPECT_TRUE(std::filesystem::equivalent(fs.GetRootPath(), _engine, error)) << fs.GetRootPath().string() << " is not " << _engine.string();
+        const auto same = IsSameFile(fs.GetRootPath(), _engine);
+        ASSERT_TRUE(same.has_value()) << same.error().c_str();
+        EXPECT_TRUE(*same) << fs.GetRootPath().CStr() << " is not " << _engine.CStr();
         EXPECT_FALSE(fs.GetMountLayers("config"_intern).empty());
     }
 

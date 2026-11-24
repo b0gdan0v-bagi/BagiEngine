@@ -2,6 +2,7 @@
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/File/Path.h>
 #include <BECore/Format/Format.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/UIInput.h>
@@ -33,7 +34,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <map>
 #include <regex>
@@ -58,27 +58,24 @@ namespace BECore::Tests::MigrationTwin {
     inline constexpr float kOutside = -100.0f;  // a point on no element, to park the pointer
     inline constexpr const char* kNodeSceneName = "Main";
 
-    inline std::filesystem::path FixtureFolder(const char* step) {
-        return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "tools" / "migrate" / "tests" / "fixtures" / step;
+    inline Path FixtureFolder(const char* step) {
+        return Path(__FILE__).Parent().Parent().Parent() / "tools" / "migrate" / "tests" / "fixtures" / step;
     }
 
-    /// The names of the cases of a fixture folder: every `<case>.before.xml` that has an `<case>.after.xml`
-    inline Vector<String> CaseNames(const std::filesystem::path& folder) {
+    /// The names of the cases of a fixture folder: every `<case>.before.xml` that has an `<case>.after.xml`, sorted
+    inline Vector<String> CaseNames(const Path& folder) {
         Vector<String> names;
-        const String suffix = ".before.xml";
-        std::error_code error;
-        // increment(error), not a range-for: the throwing increment would abort the process, exceptions being off
-        for (std::filesystem::directory_iterator it(folder, error), end; !error && it != end; it.increment(error)) {
-            const String file = FromStdString(it->path().filename().string());
-            if (file.size() > suffix.size() && file.compare(file.size() - suffix.size(), suffix.size(), suffix) == 0) {
-                const String name = file.substr(0, file.size() - suffix.size());
-                std::error_code missing;
-                if (std::filesystem::exists(folder / ToStd(Format("{}.after.xml", name)), missing)) {
+        const StringView suffix = ".before.xml";
+        const auto walked = WalkDirectory(folder, WalkMode::Folder, [&](StringView file, FileKind) {
+            if (file.size() > suffix.size() && file.substr(file.size() - suffix.size()) == suffix) {
+                const String name(file.substr(0, file.size() - suffix.size()));
+                if (PathExists(folder / Format("{}.after.xml", name))) {
                     names.push_back(name);
                 }
             }
-        }
-        EXPECT_FALSE(error) << folder.generic_string() << ": " << error.message();
+            return true;
+        });
+        EXPECT_TRUE(walked.has_value()) << folder.CStr() << ": " << (walked ? "" : walked.error().c_str());
         std::sort(names.begin(), names.end());
         return names;
     }

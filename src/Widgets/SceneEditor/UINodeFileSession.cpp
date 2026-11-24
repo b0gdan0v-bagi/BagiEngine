@@ -1,7 +1,6 @@
 #include "UINodeFileSession.h"
 
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Scene.h>
@@ -13,7 +12,7 @@ namespace BECore {
 
     namespace {
 
-        std::filesystem::path NodeFilePath(StringView ref) {  //-NoStd: the path of the file system's resolver
+        Path NodeFilePath(StringView ref) {
             const String virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
             return CoreManager::GetFileSystem().ResolvePath(virtualPath);
         }
@@ -41,7 +40,7 @@ namespace BECore {
     UINodeFileReport UINodeFileSession::Save(Scene& scene) {
         // Named, because the FunctionRefs of `io` only point at them
         const auto read = [](StringView ref, String& text, String& error) {
-            auto content = ReadTextFile(PathToUtf8(NodeFilePath(ref)));
+            auto content = ReadTextFile(NodeFilePath(ref));
             if (!content) {
                 error = content.error();
                 return false;
@@ -50,7 +49,7 @@ namespace BECore {
             return true;
         };
         const auto write = [](StringView ref, StringView text, String& error) {
-            const auto written = WriteFileAtomically(PathToUtf8(NodeFilePath(ref)), text);
+            const auto written = WriteFileAtomically(NodeFilePath(ref), text);
             if (!written) {
                 error = written.error();
                 return false;

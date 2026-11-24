@@ -42,9 +42,9 @@ namespace BECore {
 
     }  // namespace
 
-    std::filesystem::path PersistentSaveDirectory() {
+    Path PersistentSaveDirectory() {
 #ifdef __EMSCRIPTEN__
-        return std::filesystem::path(kWebSaveDirectory.data(), kWebSaveDirectory.data() + kWebSaveDirectory.size());
+        return Path(kWebSaveDirectory);
 #else
         return {};
 #endif

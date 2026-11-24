@@ -1,8 +1,8 @@
 #pragma once
 
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
-#include <filesystem>
 
 namespace BECore {
 
@@ -13,7 +13,7 @@ namespace BECore {
      * @brief The generation service's bridge among the content roots: `<root>/tools/artgen/artgen_bridge.py` of the first root (the parent of a
      * `config` layer) that has it, which is the engine checkout. Nullopt when no root has it (a packaged build, the web).
      */
-    [[nodiscard]] Optional<std::filesystem::path> FindArtGenBridge(const Vector<std::filesystem::path>& configLayers);
+    [[nodiscard]] Optional<Path> FindArtGenBridge(const Vector<Path>& configLayers);
 
     /// The Python to run the bridge with: `$BAGI_PYTHON` when set, else `pythonw` on Windows (no console window over the editor) and `python3`
     /// elsewhere, looked up on PATH
@@ -26,6 +26,6 @@ namespace BECore {
      * @brief Starts the bridge in the background (no standard streams: an editor started from the desktop has none to hand over), not waited
      * for; its lines go to @p log. False with @p error (from SDL) when the process could not be created.
      */
-    bool LaunchArtGenBridge(const std::filesystem::path& script, uint16_t port, const std::filesystem::path& log, String& error);
+    bool LaunchArtGenBridge(const Path& script, uint16_t port, const Path& log, String& error);
 
 }  // namespace BECore
