@@ -312,7 +312,7 @@ namespace BECore {
         }
         auto page = MakeUnique<Page>(kPageSize);
         Page* raw = page.get();
-        // The texture is made when RmlUi first draws with it, for each of its contexts; the pixels are final from then on
+        // The texture is made when RmlUi first draws with it, once for all contexts (one RenderManager per render interface); the pixels are final from then on
         raw->source = Rml::CallbackTextureSource([raw](const Rml::CallbackTextureInterface& textureInterface) {
             raw->sealed = true;
             return textureInterface.GenerateTexture(Rml::Span<const Rml::byte>(raw->pixels.data(), raw->pixels.size()), Rml::Vector2i(static_cast<int>(raw->size), static_cast<int>(raw->size)));

@@ -15,4 +15,13 @@ namespace BECore {
         BE_REFLECT_FIELD double y = 0.0;
     };
 
+    /// `wheel_at`: the output pixel the wheel turned at, as doubles so the text of a widened float stays
+    struct InputWheelAnswer {
+        BE_CLASS(InputWheelAnswer)
+
+        BE_REFLECT_FIELD bool consumed = false;
+        BE_REFLECT_FIELD double x = 0.0;
+        BE_REFLECT_FIELD double y = 0.0;
+    };
+
 }  // namespace BECore

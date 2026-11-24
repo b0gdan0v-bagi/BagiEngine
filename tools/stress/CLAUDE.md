@@ -2,13 +2,14 @@
 
 ## Overview
 
-`BagiStress` is an executable of the engine repository with an `IGame` of its own (`StressGame`, name `Stress`, namespace `BECore::Stress`) and no game rules: three scenes that load the engine in different ways, chosen by argument. It is the target of the engine's benchmarks (`tools/perf`), of a control smoke and of a recorded control scenario; it is the engine's own runnable program, so a change to the 2D renderer, the scene or the UI is measured and tried without a game. How a game plugs into the engine: `src/Modules/Games/CLAUDE.md`.
+`BagiStress` is an executable of the engine repository with an `IGame` of its own (`StressGame`, name `Stress`, namespace `BECore::Stress`) and no game rules: three scenes (a fourth with `ENGINE_UI_RMLUI`) that load the engine in different ways, chosen by argument. It is the target of the engine's benchmarks (`tools/perf`), of a control smoke and of a recorded control scenario; it is the engine's own runnable program, so a change to the 2D renderer, the scene or the UI is measured and tried without a game. How a game plugs into the engine: `src/Modules/Games/CLAUDE.md`.
 
 | Scene (`SceneConfig.xml`) | Flag value | Loads |
 |---------------------------|------------|-------|
 | `StressSprites` | `sprites` | N spinning sprites, one `IRenderer` call each |
 | `StressEntities` | `entities` | N nodes with a transform and a tween, nothing drawn |
 | `StressUi` | `ui` | one canvas of N text labels, English and Russian |
+| `StressRmlUi` | `rmlui` | N RmlUi documents and a scrollable panel; only with `ENGINE_UI_RMLUI` (`src/Stress/RmlUi/CLAUDE.md`) |
 
 Each scene is 1920 x 1080 and has a node `Field` for the scene's component and a node `Run` (after it) for `StressRunComponent`.
 
@@ -18,6 +19,7 @@ Each scene is 1920 x 1080 and has a node `Field` for the scene's component and a
 CMakeLists.txt        be_add_module(Stress), the reflection, BagiStress, StressTests (no standalone block: not a game of its own repository)
 config/               ApplicationConfig.xml (Game mode), SceneConfig.xml: kept at the engine's content version by ContentFilesVersionTest; UIStrings.xml (the `{#key}` labels of the `ui` scene)
 src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressNames (the scene and counter names the game and its tests share), StressGameControl (the control adapter), SpriteField and EntityField and UiField (pure placement of the sprites, the orbits and the labels, and the texts of the labels), StressHash (the integer hash they share), StressRecorder (the samples, the percentiles and the JSON line of a run), RampController (the pure search of the ramp and its line)
+src/Stress/RmlUi/     the `rmlui` scene (its own `CLAUDE.md`)
 src/Stress/Components/ the component of each scene (StressSpritesComponent, StressEntitiesComponent, StressUiComponent, StressRunComponent: the measurement, fixed and ramp)
 tests/                gtest sources of StressTests; StressSceneFixture.h is the shipped scene file on a RecordingRenderer with the StressGame active (the setup of every scene component's test)
 tests/stress_smoke.py the control smoke (BagiStressControlSmoke); tests/scenarios/ the recorded control sessions (BagiStressScenario.<file> and, through `qa/invariants.py`, BagiStressQaReplay.<file>; `be_add_game_scenario_tests`, `tools/control/CLAUDE.md`); `ui_reference.jsonl` holds the `ui` scene to `references/stress_ui.png` at threshold 0 (the software renderer repeats to the pixel)
@@ -80,7 +82,7 @@ tests/stress_smoke.py the control smoke (BagiStressControlSmoke); tests/scenario
 - **The result is re-measured once more:** the bisection ends on a count that passed once, and one pass can be noise. A result that fails its re-measure steps down by one resolution (2 %, at least 1) and is measured again, at most three times, then published with `verified: false`. A noisy machine therefore never publishes a count the frame does not hold without saying so.
 - **`capped`** (kMaxCount fit: the app cannot ask for more), **`aborted`** (`kMaxRampFrames` frames went first: the best passing count so far, `verified: false`) and `objectsAt60fps` 0 (even `kRampStart` fails) are all in the line. The budget is 16.6 ms, a frame that fits 60 fps.
 - **The line** (keys sorted): `aborted allocTracking atlases budgetMs capped frames interleave manualClock measure measureFrames mode objectsAt60fps scene settleFrames steps verified`. `frames` is the frames the ramp took, `steps` the steps (settle + measure). Same stdout rule as the fixed line. `FormatRampLine`.
-- The count of a ramp is a number of **this** scene's objects: the three scenes do not compare with one another.
+- The count of a ramp is a number of **this** scene's objects: the scenes do not compare with one another.
 - **A `verified: false` count** is a lower-confidence number: read it with `steps` and the repetitions, and do not gate on it (the ramp benchmarks have no gate).
 
 ## Running it

@@ -58,6 +58,7 @@ A charter is one sentence; the skill takes the first one when the user names non
 | Every scene and every language switch | `set_scene` to each scene and `set_language` both ways in every scene, a few frames after each, a screenshot of each scene in both languages, the `ui_tree` check on the `ui` scene |
 | A count sweep up to the maximum | `set_count` through small counts, the listed half and double, and `maxCount`, in each scene; a refused `0` and `maxCount + 1`; at a large count the `ui` scene needs tens of seconds in a Debug build, so take it one scene at a time and keep the session to a few hundred calls |
 | Reset and the manual clock | `reset` with and without `scene` / `count` from every scene, `step` with several `frames` and `dt`, the state the same after a `reset` as after a start, no frame advancing between two calls that do not `step` |
+| RmlUi scene: documents, reload and wheel | only in a build with `ENGINE_UI_RMLUI` (`macos-rmlui-debug`, where `get_state.scenes` lists `rmlui`); `reset` to `rmlui` at a small and at a large count (a few hundred documents), `set_count` up and down, `set_language` both ways, `call_method` `ReloadRmlUiDocuments`, `wheel_at` over the panel (`x` 1700, `y` 920) on both axes and with both `flipped`, a `step` of a few dozen frames after each wheel, screenshots, the counters `Stress rmlui ...` of `frame_stats`. The scene makes many contexts and documents; it does not make hundreds of textures (the glyph pages are shared by all contexts), so it does not exercise the growth of the Vulkan descriptor pool |
 
 ## Monkey
 
@@ -68,8 +69,9 @@ A charter is one sentence; the skill takes the first one when the user names non
 | Every scene and every language switch | `{"scene": "sprites", "count": 20}` | all |
 | A count sweep up to the maximum | not a monkey charter: a walk cannot keep a big count and a Debug `ui` scene at it in a minute, so `monkey_moves` caps `set_count` | none |
 | Reset and the manual clock | `{"count": 20}` | `action,reset,step` |
+| RmlUi scene: documents, reload and wheel | not a monkey charter: the monkey reaches the scene through the first charter's scene list (`reset` adds `rmlui` to it in that build) and finds its moves there | none |
 
-Budget per seed: the runner's default steps and 3 minutes (`--minutes 3`), whichever ends first. Engine, `BagiStress`: `monkey_moves` drops a `set_count` above `MONKEY_MAX_COUNT` and adds a `reset` to each scene of `state.scenes` with a small count. A game's file has the same headings: its charters, start parameters and kinds, and what its `monkey_moves` does.
+Budget per seed: the runner's default steps and 3 minutes (`--minutes 3`), whichever ends first. Engine, `BagiStress`: `monkey_moves` drops a `set_count` above `MONKEY_MAX_COUNT` and adds a `reset` to each scene of `state.scenes` with a small count; on the scene `rmlui` it also adds a `wheel_at` over the panel (both axes, `flipped`) and the `call_method` `ReloadRmlUiDocuments`, as kind `click` (the runner follows a `click` with a `step`). The cap needs no lower value for that scene (measured in `invariants.py`). A game's file has the same headings: its charters, start parameters and kinds, and what its `monkey_moves` does.
 
 ## Known deviations
 

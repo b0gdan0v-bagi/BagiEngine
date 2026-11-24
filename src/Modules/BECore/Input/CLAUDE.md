@@ -1,6 +1,6 @@
 # Input
 
-`UIInput` (`CoreManager::GetUIInput()`) is the one door for mouse input. `SDLEventsProvider` (`SDL/CLAUDE.md`), `ViewportWidget` (the editor viewport, through `ViewportPointer::Forward`) and the control API's `ui_click` and `click_at` call `DispatchMouseButtonDown/Up`, `DispatchMouseMotion`, `DispatchMouseWheel`; none of them emits the `SDLEvents` mouse events itself. Positions are render output pixels.
+`UIInput` (`CoreManager::GetUIInput()`) is the one door for mouse input. `SDLEventsProvider` (`SDL/CLAUDE.md`), `ViewportWidget` (the editor viewport, through `ViewportPointer::Forward`) and the control API's `ui_click`, `click_at` and `wheel_at` call `DispatchMouseButtonDown/Up`, `DispatchMouseMotion`, `DispatchMouseWheel`; none of them emits the `SDLEvents` mouse events itself. Positions are render output pixels.
 
 ## The walk
 
@@ -27,8 +27,12 @@
 
 `click_at {x, y, space?, button?, which?}` (`InputControl.h`) and `ui_click` move, press and release through `UIInput` at a point, with the pointer `kControlPointerId`, as a person does; `space` is `output` pixels or `scene` units mapped by the active scene's last draw. "consumed" says whether a handler took the press; `UIInput::LastPressTaker()` names it (an identity to compare, it may be gone) and `ui_click` answers `takenBy` from it: `element` (its own canvas), `target` (a handler above it: `action` and `value` are empty, the element emitted nothing) or `none`.
 
+## The wheel
+
+`wheel_at {x, y, dx?, dy?, flipped?, which?}` (`InputControl.h`) sends one `SDL_MouseWheelEvent` through `DispatchMouseWheel` at an output pixel, `dx` / `dy` as SDL gives them (`dy` positive away from the user), `flipped` as `SDL_MOUSEWHEEL_FLIPPED`. It sends no motion first: the event carries its own position, and a handler that needs the pointer there (a document) moves it itself. "consumed" says whether a handler took it; otherwise game code gets the raw event. No `dx` and no `dy` is `invalid_params`.
+
 ## Rules
 
 - Register and unregister inside a handler are safe: a registration joins after the dispatch in progress, an unregistered handler is not called again, not even by that dispatch, and is never called to leave. A handler that unregisters itself while answering `true` starts no capture.
 - **A dispatch allocates nothing:** no container per event; `PointerTracker` holds `kMaxEntries` captures and hovers inline (a further one is refused and the dispatcher then simply holds nothing).
-- Tests: `PointerTrackerTest`, `UIInputTest`, `UIInputPointerTest`, `SceneInputOrderTest`, `PointerTargetComponentTest`, `ClickableComponentTest`, `ClipRectComponentTest`, `FingerPointersTest`, `ClickAtControlTest`.
+- Tests: `PointerTrackerTest`, `UIInputTest`, `UIInputPointerTest`, `SceneInputOrderTest`, `PointerTargetComponentTest`, `ClickableComponentTest`, `ClipRectComponentTest`, `FingerPointersTest`, `ClickAtControlTest`, `WheelAtControlTest`.
