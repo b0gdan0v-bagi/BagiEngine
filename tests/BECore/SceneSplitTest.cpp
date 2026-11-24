@@ -208,11 +208,11 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = TestTempDirectory("BagiSceneSplitTest");
-            std::filesystem::remove_all(_dir);
-            std::filesystem::create_directories(_dir);
+            _dir = Path(TestTempDirectory("BagiSceneSplitTest"));
+            RemoveDirectory(_dir);
+            MakeDirectory(_dir);
             for (int i = 0; i < 3; ++i) {
-                WriteFile(_dir / "nodes" / ToStd(Format("{}.xml", kNodeNames[i])), kNodeTexts[i]);
+                WriteFile(_dir / "nodes" / Format("{}.xml", kNodeNames[i]), kNodeTexts[i]);
             }
             _renderer = New<RecordingRenderer>();
             _renderer->width = 800.0f;
@@ -225,8 +225,7 @@ namespace BECore::Tests {
             CoreManager::GetUIVars().Clear();
             EngineEnvironment::UseSceneManager({});
             CoreManager::GetRendererManager().SetRenderer({});
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
         /// Loads a SceneConfig text through LoadSceneManager with the node files of the temp folder; the document is kept alive in @p doc
@@ -274,7 +273,7 @@ namespace BECore::Tests {
             return all;
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         ControlService _service;
         IntrusivePtr<RecordingRenderer> _renderer;
     };
@@ -579,9 +578,7 @@ namespace BECore::Tests {
         WriteFile(_dir / "nodes" / "Board.xml", withNote(kBoardNode, {"<components>"}));
         WriteFile(_dir / "nodes" / "Hud.xml", withNote(kHudNode, {"<components>", "<elements>", "<children>"}));
         // The node files are read with their comments, as the DOM of an editor has them
-        const NodeFileLoader loader = [this](StringView ref, pugi::xml_document& out, String&) {
-            return static_cast<bool>(out.load_file((_dir / (std::filesystem::path(ToStd(ref)) += ".xml")).c_str(), pugi::parse_full));
-        };
+        const NodeFileLoader loader = [this](StringView ref, pugi::xml_document& out, String&) { return static_cast<bool>(out.load_file((_dir / Format("{}.xml", ref)).CStr(), pugi::parse_full)); };
         const String plainNodes = "<node ref=\"nodes/Board\" name=\"Board2\"><components><component type=\"TransformComponent\" x=\"9\"/></components></node>"
                                   "<node ref=\"nodes/Hud\"/><node ref=\"nodes/Menu\"/><node name=\"Inline\"><components><component type=\"TransformComponent\" x=\"1\"/></components></node>";
         const String commentedNodes =

@@ -69,8 +69,8 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = TestTempDirectory("BagiSceneInstantiateTest");
-            std::filesystem::remove_all(_dir);
+            _dir = Path(TestTempDirectory("BagiSceneInstantiateTest"));
+            RemoveDirectory(_dir);
             WriteFile(_dir / "nodes" / "Box.xml", kBoxNode);
             WriteFile(_dir / "nodes" / "Panel.xml", kCanvasNode);
             _loader = MakeDirectoryNodeLoader(_dir);
@@ -78,8 +78,7 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _manager.Reset();
-            std::error_code ignored;
-            std::filesystem::remove_all(_dir, ignored);
+            RemoveDirectory(_dir);
         }
 
         /// Loads @p sceneXml (a SceneConfig text) and keeps the manager; the scene "Main" is the one tests work on
@@ -105,7 +104,7 @@ namespace BECore::Tests {
             return Load(SceneConfigText(Format("<node name=\"A\"/>{}<node name=\"C\"/>", reference), kMainSceneView800x600));
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
         NodeFileLoader _loader;
         pugi::xml_document _doc;
         pugi::xml_document _refDoc;

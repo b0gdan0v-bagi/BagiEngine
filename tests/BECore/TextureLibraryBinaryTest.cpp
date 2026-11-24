@@ -92,7 +92,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _folder = TestTempDirectory("texlib_bin");
+            _folder = Path(TestTempDirectory("texlib_bin"));
             MakeEmptyDirectory(_folder);
         }
 
@@ -114,7 +114,7 @@ namespace BECore::Tests {
             }
         }
 
-        std::filesystem::path _folder;
+        Path _folder;
         FileSystem _fileSystem;
     };
 

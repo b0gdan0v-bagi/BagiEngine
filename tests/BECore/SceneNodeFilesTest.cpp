@@ -108,7 +108,7 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             // One folder per test and per process (ctest runs the tests in parallel processes)
-            _dir = TestTempDirectory("BagiSceneNodeFilesTest");
+            _dir = Path(TestTempDirectory("BagiSceneNodeFilesTest"));
             MakeEmptyDirectory(_dir);
             WriteFile(_dir / "nodes" / "Hud.xml", kHudNode);
             WriteFile(_dir / "nodes" / "B.xml", kPlainNode);
@@ -134,7 +134,7 @@ namespace BECore::Tests {
             EXPECT_TRUE(Mentions(result.errors[0], reference)) << result.errors[0].c_str();
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
     };
 
     TEST(SceneNodeFilesRefTest, ValidReferences) {
@@ -741,7 +741,7 @@ namespace BECore::Tests {
         pugi::xml_document second;
         ASSERT_TRUE(Expand(SceneConfigText(R"(<node ref="nodes/Two"><components><component type="TransformComponent" x="9"/></components></node>)"), second).Ok());
         pugi::xml_document file;
-        ASSERT_TRUE(file.load_file((_dir / "nodes" / "Two.xml").c_str()));
+        ASSERT_TRUE(file.load_file((_dir / "nodes" / "Two.xml").CStr()));
         EXPECT_EQ(XmlTextIndented(ComponentOf(FirstNode(second), "QuadRendererComponent")), XmlTextIndented(ComponentOf(file.document_element(), "QuadRendererComponent")));
     }
 
