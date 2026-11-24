@@ -7,8 +7,8 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 | Class | Role |
 |-------|------|
 | `SceneManager` | Built by `LoadSceneManagerFromConfig()` (`SceneLoader.h`: `SceneConfig` with its node references expanded, see "Node files") in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`. `SetActiveScene(name)`, `GetActiveScene()`, `GetSceneByName()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
-| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()` emits `SceneFixedUpdateEvent` once per fixed step due, then `SceneUpdateEvent` with the frame time; `Draw()` runs `SceneDrawSystem` ("Draw order"). `IsActive()`: the scene `SceneManager` drives. `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes` (`SceneConfigWriter.h`) |
-| `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children, an `entt::entity`. `_components` / `_children` are `SmallVector`s (`ComponentList` / `ChildList`, the inline counts `kInlineComponents` / `kInlineChildren`, the same saved text). `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. `_children` is reflected, so a node holds nested `<children>` in the file ("XML shape") |
+| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()` runs the fixed update list once per step due, then the frame list ("Gotchas"), and emits both events for plain subscribers; `Draw()` runs `SceneDrawSystem` ("Draw order"). `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes` (`SceneConfigWriter.h`) |
+| `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children, an `entt::entity`. `_components` / `_children` are `SmallVector`s (`ComponentList` / `ChildList`, the same saved text). `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. `_children` is reflected, so a node holds nested `<children>` in the file |
 | `IComponent` | `FACTORY_BASE` and `SubscriptionHolder` (128 bytes, `Events/CLAUDE.md`); gets its `Scene&` / `SceneNode&` through `GetScene()` / `GetNode()` |
 | `SceneNodeFiles` / `SceneLoader` | `SceneNodeFiles`: the expansion of `<node ref>` (`ExpandNodeReference(s)`, `ApplyNodeOverrides`, the node loaders, `LoadSceneDocument`). `SceneLoader`: `LoadSceneManager(configRoot, loader)` / `LoadSceneManagerFromConfig()` build the `SceneManager` from the expanded copy. `SceneNodeInstance`: `DeserializeNode`, `BuildNodeReference`. See "Node files" |
 
@@ -58,20 +58,19 @@ A game can split its one `SceneConfig.xml`: a node kept in a file of its own is 
 - **Errors never stop a game:** an invalid reference or override, or a missing, unparsable or wrong-version file, is one `LOG_ERROR`; the element is dropped and the rest loads.
 - **The expansion is done on a copy:** `LoadSceneManager` deserializes an expanded copy; the cached document of `ConfigManager` keeps its references. A tool that reads the **file** calls `LoadSceneDocument(path, document)`.
 - **A cooked `SceneConfig.bin`** is read as it is by `LoadSceneManagerFromBinary` (stamp `SceneManager`, else one `LOG_ERROR` and an empty manager): the cook expanded the `<node ref>` and checked the version, so the load does neither.
-- **`sourceRef`:** `ExpandNodeReference` marks the copy `sourceRef="<ref>"` when asked; `LoadSceneManager` does, so `SceneNode::GetSourceRef()` names the node file of an instance (empty for an inline node) and the editor can tell it from a typed node. Only the loader and `InstantiateNode` set it.
+- **`sourceRef`:** `SceneNode::GetSourceRef()` names the node file of an instance (empty for an inline node), so the editor can tell it from a typed node; only the loader and `InstantiateNode` set it.
 - **Runtime instantiation:** `Scene::InstantiateNode(reference, loader, parent, index)` expands as the XML does (`reference` is a `<node ref name layer>` element with the same overrides), wires the node as `Initialize` does and inserts it into `parent` (default the root, of this scene) at `index` (clamped, `kAppend` last). A bad reference, an uninitialized scene or a foreign parent: one `LOG_ERROR`, an empty pointer.
 - **The editor saves an instance as `<node ref>`** with the overrides that differ (`BuildNodeReference`: the file without overrides is the baseline, both sides serialized and compared field by field, the result loaded back and refused unless it equals the live node). A node that gained, lost or reordered a component, **has children** (the override language has none), whose file is gone or changed, or saved without a loader, is written inline with one warning: its data is kept, the link is not. A nested node is always written inline; the writer writes `<children>` recursively. The editor never edits the node file.
-- Not built: keyed merge of UI elements in an override, adding or removing a component or children in an instance, `<scene ref>`.
 
 ## Editing the tree
 
-`Scene::MoveNode(node, newParent, index)` reparents and reorders (null parent = root; `index` counts the children after the node left its place, clamped, `kAppend`); entity and components stay; false and unchanged for the root, a node or parent of another scene, or a parent that is the node or below it. `DuplicateNode(node)` deep-copies a subtree after the original, named `Name (copy)`, `Name (copy 2)`, ... (`MakeUniqueSiblingName`); the top copy keeps `sourceRef`; empty for the root.
+`Scene::MoveNode(node, newParent, index)` reparents and reorders (null parent = root; `index` counts the children after the node left its place, clamped, `kAppend`); entity and components stay; false and unchanged for the root, a node or parent of another scene, or a parent that is the node or below it. `DuplicateNode(node)` deep-copies a subtree after the original, named `Name (copy)`, `Name (copy 2)`, ...; the top copy keeps `sourceRef`; empty for the root.
 
 ## Component lifecycle
 
 1. Deserialization creates the component through `AbstractFactory<IComponent>` and calls `Initialize()` (the reflection hook: runs even when there is no node yet).
 2. `Scene::Initialize()` → `SceneNode::WireToScene()` sets `_scene` / `_node` and calls `OnAttached()`. `AddComponent` does the same at runtime.
-3. Do node-dependent setup in `OnAttached()`: event subscriptions, resource lookups, sibling components via `GetNode().GetComponent<T>()`. This runs for the components of **every** loaded scene, active or not, so subscribe with `SubscribeInScene` (see Gotchas).
+3. Do node-dependent setup in `OnAttached()`: event subscriptions, resource lookups, sibling components via `GetNode().GetComponent<T>()`. This runs for the components of **every** loaded scene, active or not, so subscribe with `SubscribeInScene` (Gotchas); for the two update events that registers in the scene's update list.
 
 ## Draw order
 
@@ -90,7 +89,7 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a 
 
 The object model stays `SceneNode` + `IComponent` (reflection, the XML and the inspector build on it). The `entt::registry` of a `Scene` holds one entity per node and the `SceneDrawItem` (order, rank) written with the draw list ("Draw order"); the components stay the truth.
 
-- It is **not** a pure ECS: the components are not stored in EnTT pools. The draw data is plain arrays rebuilt on a key change, not pools: component fields have no setter hooks, so a pool copy would be refreshed every frame, which costs the read it was meant to save.
+- It is **not** a pure ECS: the components are not stored in EnTT pools. Component fields have no setter hooks, so a pool copy would be refreshed every frame, which costs the read it was meant to save.
 - One `IRenderer` call per quad or sprite, nothing batched (`.claude/rules/rendering-module.md`).
 
 ## View size
@@ -100,7 +99,6 @@ A scene says how big its picture is in scene units: `<scene type="Scene" name="G
 - `Scene::Draw()` asks the renderer for its output size, picks the active view (below), builds `ViewTransform::Fit(activeWidth, activeHeight, outputW, outputH)` (one uniform scale, the view centered, bars on the free sides), sets it with `IRenderer::SetViewTransform()` for the draw pass and resets it after.
 - Without a view size (both 0, the default) the transform is the identity: one unit is one output pixel.
 - Mouse positions arrive in output pixels; a handler maps them with `GetScene().ScreenToSceneX/Y` (the last draw's transform) before comparing with scene geometry.
-- Pick the view size as the bounding box of the content plus the margins to keep; the HUD lives in the margins as a `SceneView` canvas (`UI/CLAUDE.md`).
 
 **View variants.** A scene may declare other view sizes for other shapes of output, so a game lays itself out for portrait too:
 
@@ -136,12 +134,12 @@ A scene says how big its picture is in scene units: `<scene type="Scene" name="G
 
 1. Class in `Components/` (or a game module's `Components/`) deriving `IComponent` with `BE_CLASS(Name)`; fields get `BE_REFLECT_FIELD`.
 2. Include `<Generated/Name.gen.hpp>` in its `.cpp`; the directory must be in `reflection_targets.json`; re-run `cmake --preset ...`.
-3. Subscribe in `OnAttached()` through `SubscribeInScene<Event, &Name::Handler>(this)`. Plain `Subscribe` is only for a handler that must run whichever scene is active. A component that draws overrides `OnDraw()` instead of subscribing (see "Draw order"); `HasOnDraw()` returns false only for one that never draws.
+3. Subscribe in `OnAttached()` through `SubscribeInScene<Event, &Name::Handler>(this)`. Plain `Subscribe` is only for a handler that must run whichever scene is active; one that subscribes in `Initialize()` joins the list when added at runtime (`AddComponent` sets the scene first) but takes the channel path when read from a file. A component that draws overrides `OnDraw()` instead of subscribing (see "Draw order"); `HasOnDraw()` returns false only for one that never draws.
 4. Use it from `config/SceneConfig.xml` with `type="Name"`. The inspector shows its reflected fields automatically.
 
 ## Gotchas
 
-- The update and input events (`SceneUpdateEvent`, `SDLEvents::MouseButtonDownEvent`, `ActionEvent`) are **global** `EventBase` events and `OnAttached()` runs for the components of **every** scene at load. Subscribe with `SubscribeInScene<Event, &Handler>(this)`: the handler runs only while the component's scene is `IsActive()`; plain `Subscribe` makes a component of an inactive scene react. The connection stays, so switching scenes connects nothing (not allowed inside a handler).
+- **Update events are lists, input events are global.** `SubscribeInScene` of `SceneUpdateEvent` / `SceneFixedUpdateEvent` registers in the scene's list (`SceneUpdateList.h`), which `Scene::Update()` runs when the scene was active at its start: no tree walk, no per-call filter. Last registered first, stable; a component leaves with its node or `RemoveComponent`. A handler may add and remove nodes and components: an added one first runs next pass, a removed one not yet run is skipped. A hand `Emit()` of the two events reaches plain subscribers only. `MouseButtonDownEvent` and `ActionEvent` are global `EventBase` events and `OnAttached()` runs for the components of **every** scene at load: `SubscribeInScene` filters them per call by `IsActive()`, plain `Subscribe` makes an inactive scene react; not inside a handler.
 - A component that reads a model owned by its `IGame` does nothing unless `GameManager::GetActive()` is that game. `SceneEventsTest.cpp` loads scenes from an XML string: copy its setup.
 - Do not keep `SceneNode*` / `IComponent*` across scene edits; hold `IntrusivePtr` or look up again.
 - Do not draw from `Update` or change state from `Draw`; the frame order is in `BECore/CLAUDE.md`. Movement and animation scale by `SceneUpdateEvent::deltaTime`.

@@ -11,6 +11,7 @@ Every event type has its own channel of listeners and its own queue (CRTP `Event
 - `Update()` delivers what was queued when it started, in order; an event that a handler enqueues waits for the next `Update()`.
 - `EventsQueueRegistry::UpdateAll()` runs the updates registered when it started: a type a handler enqueues for the first time registers during the pass and is first updated by the next `UpdateAll()`.
 - The queue registry (`EventsQueueRegistry`) keeps plain function pointers, not a `MoveOnlyFunction`: that header includes the assert macros, which emit events, so `EventBase.h` could not include it. An update is `[]() { Derived::Update(); }` and needs no capture.
+- `SceneUpdateList` (the scene's update events) follows the same pass rules with a stable order: last added first, count at the start, a removal inside a run leaves a tombstone and the outermost run compacts, so the order of the others never changes.
 - A disconnect inside a handler does not crash or skip the others (the entry is marked and the list compacted after the outermost dispatch); still avoid it, the order after it is not a contract.
 
 ## Event Structure
@@ -55,7 +56,7 @@ class MyWidget : public IWidget {   // IWidget and IRenderer already derive from
 | `ApplicationEvents.h` | App lifecycle (`QuitEvent`, `ApplicationCleanUpEvent`) |
 | `RenderEvents.h` | Rendering (`NewFrameEvent`, `RenderClearEvent`, `RenderPresentEvent`, `ImGui*Event`, `SetRenderDrawColorEvent`) |
 | `InputEvents.h` | Input (`ActionEvent`) |
-| `SceneEvents.h` | Scene (`SceneUpdateEvent` and `SceneFixedUpdateEvent` carry `deltaTime`), declared with `BE_EVENT`. Global, not per scene: components subscribe with `IComponent::SubscribeInScene` so only the active scene's react (`BECore/Scene/CLAUDE.md`). Drawing is not an event: `Scene::Draw()` runs the draw system in sorted order: it draws the quad and the sprite itself and calls `IComponent::OnDraw()` of the other components |
+| `SceneEvents.h` | Scene (`SceneUpdateEvent` and `SceneFixedUpdateEvent` carry `deltaTime`), declared with `BE_EVENT`. Global, not per scene: components subscribe with `IComponent::SubscribeInScene`. For the two update events that registers in the scene's `SceneUpdateList`, run by `Scene::Update()` (a hand `Emit()` reaches plain `Subscribe`rs only); for the others only the active scene's react (`BECore/Scene/CLAUDE.md`). Drawing is not an event: `Scene::Draw()` runs the draw system in sorted order: it draws the quad and the sprite itself and calls `IComponent::OnDraw()` of the other components |
 | `ConfigEvents.h` | `ConfigChangedEvent{name}`: a cached config document changed (file edited on disk, `SaveConfig`, `ReloadConfig`); `BECore/Config/CLAUDE.md`, "Hot reload" |
 | `SDL/CoreSDL/SDLEvents.h` | Raw SDL input, defined in the SDL module |
 
