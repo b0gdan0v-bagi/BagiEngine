@@ -133,20 +133,20 @@ namespace BECore {
 
         /// The subjects of the `subjects` param: one string of lines, or a list of strings (each may be a `name: subject` line) and
         /// `{name?, subject}` objects
-        std::expected<Vector<ArtGenSubject>, String> SubjectsOf(const Json& params) {
-            const Json* list = FindJsonMember(params, "subjects");
-            if (list == nullptr) {
+        std::expected<Vector<ArtGenSubject>, String> SubjectsOf(JsonView params) {
+            const Optional<JsonView> list = FindParam(params, "subjects");
+            if (!list) {
                 return std::unexpected(String("'subjects' is required: a string of lines, or a list of strings and {name, subject} objects"));
             }
-            if (list->is_string()) {
-                return ParseArtGenSubjects(StringView(GetJsonString(params, "subjects").value_or(String())));
+            if (list->IsString()) {
+                return ParseArtGenSubjects(StringView(GetParamString(params, "subjects").value_or(String())));
             }
-            if (!list->is_array()) {
+            if (!list->IsArray()) {
                 return std::unexpected(String("'subjects' must be a string of lines or a list"));
             }
             Vector<ArtGenSubject> subjects;
             int32_t index = 0;
-            for (const Json& item : *list) {
+            for (const JsonView item : list->Items()) {
                 if (const Optional<String> line = AsString(item); line) {
                     auto parsed = ParseArtGenSubjects(StringView(*line));
                     if (!parsed) {
@@ -155,17 +155,17 @@ namespace BECore {
                     for (ArtGenSubject& subject : *parsed) {
                         subjects.push_back(std::move(subject));
                     }
-                } else if (item.is_object()) {
-                    const auto text = GetJsonString(item, "subject");
+                } else if (item.IsObject()) {
+                    const auto text = GetParamString(item, "subject");
                     if (!text) {
                         return std::unexpected(Format("subjects[{}]: 'subject' (string) is required", index));
                     }
-                    if (IsGiven(item, "name") && !GetJsonString(item, "name")) {
+                    if (IsGiven(item, "name") && !GetParamString(item, "name")) {
                         return std::unexpected(Format("subjects[{}]: 'name' must be a string", index));
                     }
                     ArtGenSubject subject;
                     subject.subject = *text;
-                    subject.name = IsGiven(item, "name") ? *GetJsonString(item, "name") : ArtGenNameFromSubject(StringView(*text));
+                    subject.name = IsGiven(item, "name") ? *GetParamString(item, "name") : ArtGenNameFromSubject(StringView(*text));
                     subjects.push_back(std::move(subject));
                 } else {
                     return std::unexpected(Format("subjects[{}] must be a string or an object", index));
@@ -813,13 +813,13 @@ namespace BECore {
                                ControlParamInfo{"jobs", "array", false, "only these rows (names); an unknown name is artgen_no_set"}}});
     }
 
-    std::expected<ArtGenEnqueueAnswer, ControlError> ArtGenSession::HandleEnqueue(const Json& params) {
+    std::expected<ArtGenEnqueueAnswer, ControlError> ArtGenSession::HandleEnqueue(JsonView params) {
         ArtGenSetRequest request;
-        const Json* preset = FindJsonMember(params, "preset");
-        if (preset != nullptr && preset->is_string()) {
+        const Optional<JsonView> preset = FindParam(params, "preset");
+        if (preset && preset->IsString()) {
             request.preset = StringOr(params, "preset");
-        } else if (preset != nullptr && preset->is_object()) {
-            request.presetData = DumpJson(*preset);  // Interim: WP 6
+        } else if (preset && preset->IsObject()) {
+            request.presetData = SortedTextOf(*preset);
             request.preset = StringOr(params, "presetName");
         } else {
             return std::unexpected(InvalidParams("'preset' must be a name or a preset object"));
@@ -830,7 +830,7 @@ namespace BECore {
         }
         request.subjects = std::move(*subjects);
         if (IsGiven(params, "count")) {
-            const auto count = GetJsonInt(params, "count");
+            const auto count = GetParamInt(params, "count");
             if (!count) {
                 return std::unexpected(InvalidParams("'count' must be an integer"));
             }
@@ -838,34 +838,34 @@ namespace BECore {
             request.count = *count > kArtGenSetMaxCount || *count < 0 ? 0 : static_cast<int32_t>(*count);
         }
         if (IsGiven(params, "seed")) {
-            request.seed = GetJsonInt(params, "seed");
+            request.seed = GetParamInt(params, "seed");
             if (!request.seed) {
                 return std::unexpected(InvalidParams("'seed' must be an integer"));
             }
         }
         if (IsGiven(params, "set")) {
-            const auto name = GetJsonString(params, "set");
+            const auto name = GetParamString(params, "set");
             if (!name || name->empty()) {
                 return std::unexpected(InvalidParams("'set' must be a name of 1 to 64 of A-Z a-z 0-9 _ -"));
             }
             request.name = *name;
         }
         if (IsGiven(params, "frameOf")) {
-            const auto frameOf = GetJsonString(params, "frameOf");
+            const auto frameOf = GetParamString(params, "frameOf");
             if (!frameOf || frameOf->empty()) {
                 return std::unexpected(InvalidParams("'frameOf' must be the name of a set"));
             }
             request.frameOf = *frameOf;
         }
         if (IsGiven(params, "reference")) {
-            auto reference = ReadArtGenReference(*FindJsonMember(params, "reference"));
+            auto reference = ReadArtGenReference(*FindParam(params, "reference"));
             if (!reference) {
                 return std::unexpected(InvalidParams(reference.error()));
             }
             request.reference = std::move(*reference);
         }
         if (IsGiven(params, "atlas")) {
-            const auto atlas = GetJsonString(params, "atlas");
+            const auto atlas = GetParamString(params, "atlas");
             if (!atlas || (!atlas->empty() && !IsValidSpriteName(StringView(*atlas)))) {
                 return std::unexpected(InvalidParams("'atlas' must be an atlas group name (1 to 64 of A-Z a-z 0-9 _ -) or \"\" for none"));
             }
@@ -887,8 +887,8 @@ namespace BECore {
     }
 
     // By hand: the answer is the manifest (`WriteArtGenSet`) with `state` added, and the manifest holds a draft's text
-    std::expected<String, ControlError> ArtGenSession::HandleSet(const Json& params) {
-        const auto name = GetJsonString(params, "set");
+    std::expected<String, ControlError> ArtGenSession::HandleSet(JsonView params) {
+        const auto name = GetParamString(params, "set");
         if (!name) {
             return std::unexpected(InvalidParams("'set' (string) is required"));
         }
@@ -902,10 +902,10 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenPickAnswer, ControlError> ArtGenSession::HandlePick(const Json& params) {
-        const auto set = GetJsonString(params, "set");
-        const auto job = GetJsonString(params, "job");
-        const auto seed = GetJsonInt(params, "seed");
+    std::expected<ArtGenPickAnswer, ControlError> ArtGenSession::HandlePick(JsonView params) {
+        const auto set = GetParamString(params, "set");
+        const auto job = GetParamString(params, "job");
+        const auto seed = GetParamInt(params, "seed");
         if (!set || !job || !seed) {
             return std::unexpected(InvalidParams("'set' (string), 'job' (string) and 'seed' (integer) are required"));
         }
@@ -934,15 +934,15 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenRetryAnswer, ControlError> ArtGenSession::HandleRetry(const Json& params) {
-        const auto set = GetJsonString(params, "set");
+    std::expected<ArtGenRetryAnswer, ControlError> ArtGenSession::HandleRetry(JsonView params) {
+        const auto set = GetParamString(params, "set");
         if (!set) {
             return std::unexpected(InvalidParams("'set' (string) is required"));
         }
-        if (IsGiven(params, "job") && !GetJsonString(params, "job")) {
+        if (IsGiven(params, "job") && !GetParamString(params, "job")) {
             return std::unexpected(InvalidParams("'job' must be a string"));
         }
-        const String job = IsGiven(params, "job") ? *GetJsonString(params, "job") : String();
+        const String job = IsGiven(params, "job") ? *GetParamString(params, "job") : String();
         const ArtGenSet* known = FindSet(*set);
         const int32_t pendingBefore = known != nullptr ? CountJobs(*known, ArtGenSetJobState::Pending) : 0;
         if (RetryJobs(*set, StringView(job)) == ArtGenSetEdit::NoSet) {
@@ -1275,26 +1275,26 @@ namespace BECore {
         return reply;
     }
 
-    std::expected<ArtGenKeepAnswer, ControlError> ArtGenSession::HandleKeep(const Json& params) {
-        const auto set = GetJsonString(params, "set");
+    std::expected<ArtGenKeepAnswer, ControlError> ArtGenSession::HandleKeep(JsonView params) {
+        const auto set = GetParamString(params, "set");
         if (!set) {
             return std::unexpected(InvalidParams("'set' (string) is required"));
         }
-        if (IsGiven(params, "job") && !GetJsonString(params, "job")) {
+        if (IsGiven(params, "job") && !GetParamString(params, "job")) {
             return std::unexpected(InvalidParams("'job' must be a string"));
         }
-        const String job = IsGiven(params, "job") ? *GetJsonString(params, "job") : String();
+        const String job = IsGiven(params, "job") ? *GetParamString(params, "job") : String();
         return KeepSet(*set, StringView(job));
     }
 
-    std::expected<ArtGenMoreAnswer, ControlError> ArtGenSession::HandleMore(const Json& params) {
-        const auto set = GetJsonString(params, "set");
+    std::expected<ArtGenMoreAnswer, ControlError> ArtGenSession::HandleMore(JsonView params) {
+        const auto set = GetParamString(params, "set");
         if (!set) {
             return std::unexpected(InvalidParams("'set' (string) is required"));
         }
         int32_t count = 1;
         if (IsGiven(params, "count")) {
-            const auto given = GetJsonInt(params, "count");
+            const auto given = GetParamInt(params, "count");
             if (!given) {
                 return std::unexpected(InvalidParams("'count' must be an integer"));
             }
@@ -1303,18 +1303,18 @@ namespace BECore {
         }
         Optional<int64_t> seed;
         if (IsGiven(params, "seed")) {
-            seed = GetJsonInt(params, "seed");
+            seed = GetParamInt(params, "seed");
             if (!seed) {
                 return std::unexpected(InvalidParams("'seed' must be an integer"));
             }
         }
         Vector<String> jobs;
         if (IsGiven(params, "jobs")) {
-            const Json* list = FindJsonMember(params, "jobs");
-            if (!list->is_array()) {
+            const JsonView list = *FindParam(params, "jobs");
+            if (!list.IsArray()) {
                 return std::unexpected(InvalidParams("'jobs' must be a list of job names"));
             }
-            for (const Json& item : *list) {
+            for (const JsonView item : list.Items()) {
                 const Optional<String> name = AsString(item);
                 if (!name) {
                     return std::unexpected(InvalidParams("'jobs' must be a list of job names"));
@@ -1328,8 +1328,8 @@ namespace BECore {
         return MoreVariants(*set, count, seed, jobs);
     }
 
-    std::expected<ArtGenAcceptSetAnswer, ControlError> ArtGenSession::HandleAcceptSet(const Json& params) {
-        const auto set = GetJsonString(params, "set");
+    std::expected<ArtGenAcceptSetAnswer, ControlError> ArtGenSession::HandleAcceptSet(JsonView params) {
+        const auto set = GetParamString(params, "set");
         if (!set) {
             return std::unexpected(InvalidParams("'set' (string) is required"));
         }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonView.h>
 #include <BECore/File/Path.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
@@ -361,13 +361,13 @@ namespace BECore {
         std::expected<ArtGenStaleAnswer, ControlError> HandleSetupReport(JsonView params);
         std::expected<ArtGenSetupQueuedAnswer, ControlError> HandleSetup(JsonView params);
         std::expected<ArtGenSavedAnswer, ControlError> HandleSavePreset(JsonView params);
-        std::expected<ArtGenEnqueueAnswer, ControlError> HandleEnqueue(const Json& params);
-        std::expected<String, ControlError> HandleSet(const Json& params);
-        std::expected<ArtGenPickAnswer, ControlError> HandlePick(const Json& params);
-        std::expected<ArtGenRetryAnswer, ControlError> HandleRetry(const Json& params);
-        std::expected<ArtGenAcceptSetAnswer, ControlError> HandleAcceptSet(const Json& params);
-        std::expected<ArtGenKeepAnswer, ControlError> HandleKeep(const Json& params);
-        std::expected<ArtGenMoreAnswer, ControlError> HandleMore(const Json& params);
+        std::expected<ArtGenEnqueueAnswer, ControlError> HandleEnqueue(JsonView params);
+        std::expected<String, ControlError> HandleSet(JsonView params);
+        std::expected<ArtGenPickAnswer, ControlError> HandlePick(JsonView params);
+        std::expected<ArtGenRetryAnswer, ControlError> HandleRetry(JsonView params);
+        std::expected<ArtGenAcceptSetAnswer, ControlError> HandleAcceptSet(JsonView params);
+        std::expected<ArtGenKeepAnswer, ControlError> HandleKeep(JsonView params);
+        std::expected<ArtGenMoreAnswer, ControlError> HandleMore(JsonView params);
         [[nodiscard]] ArtGenStateAnswer BuildState() const;
 
     private:

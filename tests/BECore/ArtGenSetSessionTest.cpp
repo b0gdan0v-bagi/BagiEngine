@@ -915,6 +915,21 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(Call("artgen_set", params)), "artgen_no_set");
     }
 
+    TEST_F(ArtGenSetSessionTest, OfTwoEqualSetKeysOfACallTheFirstIsTheSet) {
+        ASSERT_TRUE(Enqueue("shown", "a\nb").has_value());
+        const auto first = session.HandleSet(JsonDoc(R"({"set":"shown","set":"nothing"})"));
+        EXPECT_TRUE(first.has_value());
+        const auto other = session.HandleSet(JsonDoc(R"({"set":"nothing","set":"shown"})"));
+        ASSERT_FALSE(other.has_value());
+        EXPECT_EQ(other.error().code, "artgen_no_set");
+    }
+
+    TEST_F(ArtGenSetSessionTest, AnEnqueueWhoseCountIsNotAFiniteNumberIsInvalidParams) {
+        const auto refused = session.HandleEnqueue(JsonDoc(R"({"preset":"wood","subjects":"a","count":1e999})"));
+        ASSERT_FALSE(refused.has_value());
+        EXPECT_EQ(refused.error().code, "invalid_params");
+    }
+
     TEST_F(ArtGenSetSessionTest, ArtgenPickAndRetryAnswerWhatTheyDid) {
         ASSERT_TRUE(Enqueue("edit", "a\nb\nc").has_value());
         Finish(*RequestOf(Poll()), "ok");

@@ -4,7 +4,6 @@
 #include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlTypes.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriter.h>
@@ -61,46 +60,15 @@ namespace BECore::ArtGenControl {
         return text;
     }
 
-    // Interim: the `Json` helpers go with the set handlers (WP 6)
-    inline String StringOr(const Json& object, StringView key, StringView fallback = {}) {
-        const auto value = GetJsonString(object, key);
-        return value ? *value : String(fallback);
-    }
-
-    inline Json ToJsonString(const String& text) {
-        return MakeJsonString(StringView(text.data(), text.size()));
-    }
-
-    /// True when @p object has the member and it is not null (a client may send an optional param as null)
-    inline bool IsGiven(const Json& object, StringView key) {
-        const Json* member = FindJsonMember(object, key);
-        return member != nullptr && !member->is_null();
-    }
-
-    /// The text of a JSON string value that is not a member of an object (an item of a list); nullopt for any other type
-    inline Optional<String> AsString(const Json& value) {
-        Json holder = Json::object();
-        holder["value"] = value;
-        return GetJsonString(holder, "value");
-    }
-
     /// Wraps a handler of the session as a control method: a value is the reply, an error the failure. A handler answers the compact text of a
-    /// document written by hand (a `String`, src/Widgets/ArtGen/CLAUDE.md, "The contract"), a `Json` or a reflected struct of ArtGenAnswers.h, which writes itself
+    /// document written by hand (a `String`, src/Widgets/ArtGen/CLAUDE.md, "The contract") or a reflected struct of ArtGenAnswers.h, which writes itself
     template <auto Method>
     void Register(ControlService& service, ArtGenSession& session, StringView name) {
         service.RegisterHandler(name, [&session](ControlCall& call) {
-            auto result = [&] {
-                if constexpr (std::is_invocable_v<decltype(Method), ArtGenSession&, JsonView>) {
-                    return (session.*Method)(call.Params());
-                } else {
-                    return (session.*Method)(call.ParamsJson());  // Interim: WP 6
-                }
-            }();
+            auto result = (session.*Method)(call.Params());
             if (result) {
                 if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*result)>, String>) {
                     call.Reply([&text = *result](JsonWriter& writer) { writer.Raw(text); });
-                } else if constexpr (std::is_same_v<std::remove_cvref_t<decltype(*result)>, Json>) {
-                    call.Reply(std::move(*result));
                 } else {
                     call.ReplyObject(*result);
                 }
