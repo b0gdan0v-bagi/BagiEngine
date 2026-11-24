@@ -10,8 +10,8 @@ namespace BECore::Tests {
 
     /// The conversions every `std::filesystem` line of the tests and the fuzz targets goes through (no gtest here: the fuzz targets do not link it).
     /// UTF-8 both ways, because `path::string()` is the ANSI code page on Windows
-    inline std::filesystem::path NativePath(const Path& path) {                                                        //-NoStd: the one std::filesystem boundary of the tests
-        const StringView text = path.View();                                                                           //-NoStd: the one std::filesystem boundary of the tests
+    inline std::filesystem::path NativePath(const Path& path) {  //-NoStd: the one std::filesystem boundary of the tests
+        const StringView text = path.View();
         return std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t*>(text.data()), text.size()));  //-NoStd: the one std::filesystem boundary of the tests
     }
 
