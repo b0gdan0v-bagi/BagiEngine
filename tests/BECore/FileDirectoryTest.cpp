@@ -33,19 +33,6 @@ namespace BECore::Tests {
             return *text;
         }
 
-#ifndef _WIN32
-        /// The layer has no link of its own; the tests that need one make it through std
-        void MakeLink(StringView target, StringView link, bool folder) {
-            std::error_code error;  //-NoStd: creates a symbolic link, which the file layer has no call for
-            if (folder) {
-                std::filesystem::create_directory_symlink(Path(target), Path(link), error);  //-NoStd: same
-            } else {
-                std::filesystem::create_symlink(Path(target), Path(link), error);  //-NoStd: same
-            }
-            EXPECT_FALSE(error) << error.message().c_str();  //-NoStd: same
-        }
-#endif
-
     }  // namespace
 
     class FileDirectoryTest : public ::testing::Test {
@@ -147,7 +134,7 @@ namespace BECore::Tests {
 #ifndef _WIN32
     TEST_F(FileDirectoryTest, SymbolicLinkToFolderIsReportedAsAFolderButNotEntered) {
         MakeTree();
-        MakeLink(_folder.PathOf("tree/sub"), _folder.PathOf("tree/link"), true);
+        CreateSymlink(_folder.PathOf("tree/link"), _folder.PathOf("tree/sub"));
 
         const Vector<String> entries = Collect(_folder.PathOf("tree"), WalkMode::Tree);
 
@@ -157,14 +144,14 @@ namespace BECore::Tests {
 
     TEST_F(FileDirectoryTest, SymbolicLinkLoopEndsTheWalk) {
         MakeTree();
-        MakeLink(_folder.PathOf("tree"), _folder.PathOf("tree/sub/back"), true);
+        CreateSymlink(_folder.PathOf("tree/sub/back"), _folder.PathOf("tree"));
 
         EXPECT_EQ(Collect(_folder.PathOf("tree"), WalkMode::Tree).size(), 7u);
     }
 
     TEST_F(FileDirectoryTest, SymbolicLinkToNowhereIsOther) {
         ASSERT_TRUE(CreateDirectories(_folder.PathOf("tree")).has_value());
-        MakeLink(_folder.PathOf("gone"), _folder.PathOf("tree/dangling"), false);
+        CreateSymlink(_folder.PathOf("tree/dangling"), _folder.PathOf("gone"));
 
         EXPECT_EQ(Collect(_folder.PathOf("tree"), WalkMode::Folder), (Vector<String>{"O dangling"}));
     }
@@ -203,7 +190,7 @@ namespace BECore::Tests {
 #ifndef _WIN32
     TEST_F(FileDirectoryTest, RemoveTreeRemovesASymbolicLinkWithoutTouchingItsTarget) {
         MakeTree();
-        MakeLink(_folder.PathOf("tree/sub"), _folder.PathOf("link"), true);
+        CreateSymlink(_folder.PathOf("link"), _folder.PathOf("tree/sub"));
 
         EXPECT_TRUE(RemoveTree(_folder.PathOf("link")).has_value());
         EXPECT_FALSE(GetFileInfo(_folder.PathOf("link")).has_value());
@@ -211,7 +198,7 @@ namespace BECore::Tests {
 
         // A link inside the removed folder is removed as a link too
         ASSERT_TRUE(CreateDirectories(_folder.PathOf("other")).has_value());
-        MakeLink(_folder.PathOf("tree/sub"), _folder.PathOf("other/link"), true);
+        CreateSymlink(_folder.PathOf("other/link"), _folder.PathOf("tree/sub"));
         EXPECT_TRUE(RemoveTree(_folder.PathOf("other")).has_value());
         EXPECT_EQ(Read(_folder.PathOf("tree/sub/b.txt")), "bb");
     }
@@ -220,8 +207,8 @@ namespace BECore::Tests {
 #ifndef _WIN32
     TEST_F(FileDirectoryTest, IsSymbolicLinkSeesTheLinkAndNotWhatItPointsAt) {
         MakeTree();
-        MakeLink(_folder.PathOf("tree/sub"), _folder.PathOf("folderLink"), true);
-        MakeLink(_folder.PathOf("tree/a.txt"), _folder.PathOf("fileLink"), false);
+        CreateSymlink(_folder.PathOf("folderLink"), _folder.PathOf("tree/sub"));
+        CreateSymlink(_folder.PathOf("fileLink"), _folder.PathOf("tree/a.txt"));
 
         EXPECT_TRUE(IsSymbolicLink(_folder.PathOf("folderLink")));
         EXPECT_TRUE(IsSymbolicLink(_folder.PathOf("fileLink")));
@@ -295,7 +282,7 @@ namespace BECore::Tests {
         const auto current = CurrentDirectory();
 
         ASSERT_TRUE(current.has_value());
-        EXPECT_EQ(*current, String(std::filesystem::current_path().generic_string().c_str()));  //-NoStd: the oracle
+        EXPECT_EQ(*current, OsCurrentDirectory());
     }
 #endif
 
@@ -331,7 +318,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(canonical.has_value()) << canonical.error();
         // The temp folder itself can be a link (/var on macOS): the oracle resolves it the same way
-        EXPECT_EQ(*canonical, String(std::filesystem::canonical(Path(spelled)).generic_string().c_str()));  //-NoStd: the oracle
+        EXPECT_EQ(*canonical, OsCanonical(spelled));
         const auto folder = CanonicalPath(_folder.PathOf("real"));
         ASSERT_TRUE(folder.has_value());
         EXPECT_EQ(*folder, String(Path(*canonical).Parent().View()));
@@ -349,7 +336,7 @@ namespace BECore::Tests {
 #ifndef _WIN32
     TEST_F(FileDirectoryTest, CanonicalPathFollowsASymbolicLink) {
         _folder.Write("real/file.txt", "x");
-        MakeLink(_folder.PathOf("real"), _folder.PathOf("link"), true);
+        CreateSymlink(_folder.PathOf("link"), _folder.PathOf("real"));
 
         const auto viaLink = CanonicalPath(_folder.PathOf("link/file.txt"));
         const auto direct = CanonicalPath(_folder.PathOf("real/file.txt"));
@@ -361,13 +348,13 @@ namespace BECore::Tests {
 
     TEST_F(FileDirectoryTest, WeaklyCanonicalPathResolvesWhatExistsAndCleansUpTheRest) {
         _folder.Write("real/file.txt", "x");
-        MakeLink(_folder.PathOf("real"), _folder.PathOf("link"), true);
+        CreateSymlink(_folder.PathOf("link"), _folder.PathOf("real"));
         const String spelled = Format("{}/link/not/./there/../here.txt", Root());
 
         const auto weak = WeaklyCanonicalPath(spelled);
 
         ASSERT_TRUE(weak.has_value()) << weak.error();
-        EXPECT_EQ(*weak, String(std::filesystem::weakly_canonical(Path(spelled)).generic_string().c_str()));  //-NoStd: the oracle
+        EXPECT_EQ(*weak, OsWeaklyCanonical(spelled));
         const auto real = CanonicalPath(_folder.PathOf("real"));
         ASSERT_TRUE(real.has_value());
         EXPECT_EQ(*weak, Format("{}/not/here.txt", *real));
@@ -388,7 +375,7 @@ namespace BECore::Tests {
     TEST_F(FileDirectoryTest, SameFileThroughALinkAndThroughDotDot) {
         const String file = _folder.Write("real/file.txt", "x");
         _folder.Write("real/other.txt", "x");
-        MakeLink(_folder.PathOf("real"), _folder.PathOf("link"), true);
+        CreateSymlink(_folder.PathOf("link"), _folder.PathOf("real"));
 
         EXPECT_TRUE(IsSameFile(file, _folder.PathOf("link/file.txt")).value_or(false));
         EXPECT_TRUE(IsSameFile(file, Format("{}/real/../real/file.txt", Root())).value_or(false));

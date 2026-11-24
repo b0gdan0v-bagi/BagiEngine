@@ -1,6 +1,4 @@
-#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FileSystem.h>
-#include <BECore/Utils/ScopeGuard.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -11,13 +9,13 @@ namespace BECore::Tests {
     namespace {
 
         /// A file whose content no test reads: only where it lies matters
-        void Touch(const std::filesystem::path& path) {
+        void Touch(const Path& path) {
             WriteFile(path, "x");
         }
 
         /// A host path as `Path` in the absolute and normal form that `FileSystem` keeps
-        Path Normal(const std::filesystem::path& path) {
-            return Path(path.lexically_normal());
+        Path Normal(const Path& path) {
+            return path.LexicallyNormal();
         }
 
     }  // namespace
@@ -39,9 +37,9 @@ namespace BECore::Tests {
             RemoveDirectory(_base);
         }
 
-        std::filesystem::path _base;
-        std::filesystem::path _engine;
-        std::filesystem::path _game;
+        Path _base;
+        Path _engine;
+        Path _game;
     };
 
     TEST_F(FileSystemTest, UpperRootOverridesLowerRoot) {
@@ -164,9 +162,9 @@ namespace BECore::Tests {
         Vector<String> expected;
         for (size_t i = 0; i < kFiles; ++i) {
             const String name = Format("{}_{:03}.png", stem, kFiles - 1 - i);
-            Touch(_engine / "assets" / "enumbatch" / ToStd(name));
+            Touch(_engine / "assets" / "enumbatch" / name);
             if (i % 2 == 0) {
-                Touch(_game / "assets" / "enumbatch" / ToStd(name));
+                Touch(_game / "assets" / "enumbatch" / name);
             }
         }
         for (size_t i = 0; i < kFiles; ++i) {
@@ -259,7 +257,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(FileSystemTest, ResolvePathFindsAFileWithANonAsciiName) {
-        const std::filesystem::path file = Path(_engine) / "config" / "héllo ж.xml";
+        const Path file = _engine / "config" / "héllo ж.xml";
         Touch(file);
 
         FileSystem fs;
@@ -278,20 +276,14 @@ namespace BECore::Tests {
         EXPECT_FALSE(fs.Mount("data"_intern, _engine / "missing"));
         EXPECT_TRUE(fs.GetMountLayers("data"_intern).empty());
 
-        std::error_code error;
-        const std::filesystem::path started = std::filesystem::current_path(error);
-        ASSERT_FALSE(error) << error.message();
-        std::filesystem::current_path(_engine, error);
-        ASSERT_FALSE(error) << error.message();
-        const ScopeGuard restore([&started] {
-            std::error_code ignored;
-            std::filesystem::current_path(started, ignored);
-        });
+        const ScopedCurrentDirectory enter(_engine);
+        const auto current = CurrentDirectory();
+        ASSERT_TRUE(current.has_value()) << current.error().c_str();
 
         EXPECT_TRUE(fs.Mount("data"_intern, "./other/../data"));
 
         ASSERT_EQ(fs.GetMountLayers("data"_intern).size(), 1u);
-        EXPECT_EQ(fs.GetMountedPath("data"_intern), Normal(std::filesystem::current_path() / "data"));
+        EXPECT_EQ(fs.GetMountedPath("data"_intern), Normal(Path(*current) / "data"));
     }
 
 #ifndef _WIN32
@@ -314,22 +306,16 @@ namespace BECore::Tests {
     TEST_F(FileSystemTest, WithoutContentRootsTheProjectRootIsFoundFromTheWorkingDirectory) {
         // A working directory two levels below a folder with config/, whatever folder the run started in
         MakeDirectory(_engine / "config");
-        const std::filesystem::path deep = _engine / "a" / "b";
+        const Path deep = _engine / "a" / "b";
         MakeDirectory(deep);
-        std::error_code error;
-        const std::filesystem::path started = std::filesystem::current_path(error);
-        ASSERT_FALSE(error) << error.message();
-        std::filesystem::current_path(deep, error);
-        ASSERT_FALSE(error) << error.message();
-        const ScopeGuard restore([&started] {
-            std::error_code ignored;
-            std::filesystem::current_path(started, ignored);
-        });
+        const ScopedCurrentDirectory enter(deep);
 
         FileSystem fs;
         fs.Initialize();
 
-        EXPECT_TRUE(std::filesystem::equivalent(fs.GetRootPath(), _engine, error)) << PathToUtf8(fs.GetRootPath()) << " is not " << _engine.string();
+        const auto same = IsSameFile(fs.GetRootPath(), _engine);
+        ASSERT_TRUE(same.has_value()) << same.error().c_str();
+        EXPECT_TRUE(*same) << fs.GetRootPath().CStr() << " is not " << _engine.CStr();
         EXPECT_FALSE(fs.GetMountLayers("config"_intern).empty());
     }
 

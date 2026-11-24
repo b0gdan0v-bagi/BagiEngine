@@ -7,7 +7,6 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -27,7 +26,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _dir = TestTempDirectory(_mountPoint);
+            _dir = Path(TestTempDirectory(_mountPoint));
             MakeEmptyDirectory(_dir);
             ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(_mountPoint), _dir));
         }
@@ -42,7 +41,7 @@ namespace BECore::Tests {
             return Format("{}/{}", _mountPoint, fileName);
         }
 
-        std::filesystem::path _dir;
+        Path _dir;
 
     private:
         const char* _mountPoint;
