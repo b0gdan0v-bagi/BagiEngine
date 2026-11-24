@@ -44,7 +44,7 @@ The engine's own file layer over SDL3 (`SDL_IOStream`, `SDL_GetPathInfo`, `SDL_R
 - `SDL_CreateDirectory` makes the parents and succeeds when the folder exists. On POSIX it is `mkdir(0770)`, not `0777 & ~umask` like `std::filesystem`: a folder made through it is closed to others whatever the umask.
 - `GetFileInfo` allocates nothing on POSIX; on Windows SDL converts the path to UTF-16 with `SDL_malloc`, which the tracker counts (the test is skipped there).
 - `TextFileWriter` cuts a formatted line longer than `N`; `XmlDocument::SaveToFile`, `XmlSerializer::SaveToFile` and the other `Write`-mode users truncate the file in place, so a watcher of the folder sees no `<name>.tmp` (an atomic write would show two changed files).
-- `BECore::Tests::ReadFileBytes` (`tests/Common/TestFiles.h`) hides the layer's `ReadFileBytes` inside `namespace BECore::Tests`: qualify the layer's call.
+- `BECore::Tests::ReadFileBytes` (`tests/Common/TestFiles.h`, it takes a `Path`) hides the layer's `ReadFileBytes` inside `namespace BECore::Tests`: qualify the layer's call. What the layer has no call for (a write time set, a symbolic link made, a sparse resize, the working folder set, the system temp folder) is `std::filesystem` in the one marked section of that header, nowhere else in the tests.
 
 ## Tests
 

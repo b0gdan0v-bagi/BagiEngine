@@ -1,3 +1,4 @@
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/FakeFileWatchBackend.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/FileWatcher.h>

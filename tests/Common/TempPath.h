@@ -18,7 +18,7 @@ namespace BECore::Tests {
     inline std::filesystem::path TestTempPath(const String& stem) {
         static const String tag = Format("{:08x}", std::random_device{}());
         const String name = Format("{}_{}", stem, tag);
-        return std::filesystem::temp_directory_path() / ToStd(name);
+        return SystemTempDirectory() / name;
     }
 
     /// TestTempPath("<prefix>_<name of the running test>"): one folder per test and per process
@@ -30,21 +30,17 @@ namespace BECore::Tests {
     class TestTempFolder {
     public:
         explicit TestTempFolder(const String& prefix) : _path(TestTempDirectory(prefix)) {
-            std::error_code error;
-            std::filesystem::remove_all(_path, error);
-            std::filesystem::create_directories(_path, error);
-            EXPECT_FALSE(error) << "cannot create " << _path.generic_string() << ": " << error.message();
+            MakeEmptyDirectory(_path);
         }
         ~TestTempFolder() {
-            std::error_code ignored;
-            std::filesystem::remove_all(_path, ignored);
+            RemoveDirectory(_path);
         }
         TestTempFolder(const TestTempFolder&) = delete;
         TestTempFolder& operator=(const TestTempFolder&) = delete;
 
         /// The absolute path of @p name in the folder; nothing is written
         String PathOf(const char* name) const {
-            return FromStdString((_path / name).generic_string());
+            return String((_path / name).View());
         }
 
         /// Writes a file and returns its absolute path, which the file system takes as it is
@@ -54,7 +50,7 @@ namespace BECore::Tests {
         }
 
     private:
-        std::filesystem::path _path;
+        Path _path;
     };
 
 }  // namespace BECore::Tests

@@ -1,3 +1,4 @@
+#include <BECore/File/FilePath.h>
 #include <BECore/FileSystem/IFileWatchBackend.h>
 #include <BECore/FileSystem/PlatformFileWatchBackend.h>
 #include <BECore/FileSystem/PollingFileWatchBackend.h>
