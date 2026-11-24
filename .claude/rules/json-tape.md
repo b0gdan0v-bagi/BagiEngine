@@ -7,7 +7,7 @@ paths:
 
 # Reading JSON without a DOM: `JsonTape`, `JsonView`, `JsonDeserializer::Load`
 
-The module: `src/Modules/BECore/Control/CLAUDE.md`; what the reflected reader accepts: `Reflection/CLAUDE.md`, "JSON shapes of the reflection pair". The callers of `Json` (control service, handlers, rooms, widgets) move to the tape slice by slice, and the last one removes nlohmann; the control service and the handlers of `BECore` and `SDL` are over already ("The request path").
+The module: `src/Modules/BECore/Control/CLAUDE.md`; what the reflected reader accepts: `Reflection/CLAUDE.md`, "JSON shapes of the reflection pair". The callers of `Json` move to the tape slice by slice, and the last one removes nlohmann; everything is over but the ArtGen panel (`src/Widgets/ArtGen/`) and the DOM overloads of `Control` it still calls ("The request path").
 
 ## `JsonTape` (`Control/JsonTape.h`)
 
@@ -35,7 +35,7 @@ The same `IDeserializer` rules as before (strict values, the messages, findings,
 - A key is found among the members of the open object from a cursor after the last match, so a document in the order the type reads costs one compare per field and any other order is found too. The unknown-key findings come in the document's order (the DOM gave them alphabetically); a scope reports when it ends, so a nested object's findings come before its parent's.
 - A rejected number quotes its token's text as written; an integer token past 64 bits is `Invalid integer value '<text>' (out of range)` for an integer target and a number for a `float` / `double`.
 - **Zero allocations in a steady state:** a second `Load` of a message of the same shape into the same target allocates nothing in `Off`, `Warn` and `Error` (clean documents; a finding or an error allocates), provided the target's containers kept their capacity, its strings fit what they held and the field names fit a string's inline buffer. `JsonDeserializerTextTest` pins it; `JsonReadBenchTest` (disabled, run by hand in `macos-profile`) prints allocations and time per read against the DOM path.
-- `JsonDeserializer(const Json&)` is the **interim bridge** (it writes the DOM as text into a member `String` and loads that, so the DOM's own number text is what a message quotes); it exists so `GamePanelModel` and the tests compile until their slices move, and the last slice deletes it.
+- `JsonDeserializer(const Json&)` is the **interim bridge** (it writes the DOM as text into a member `String` and loads that, so the DOM's own number text is what a message quotes); no code in `src` calls it any more, only tests that build a DOM, and the last slice deletes it.
 
 ## Views in the game layer (`Control/JsonViewOps.h`)
 
@@ -47,6 +47,6 @@ The game layer holds JSON as text with a tape of its own, never a DOM: `JsonEqua
 
 ## The request path of the control API
 
-`ControlService::Post` copies the request text into a pooled `RequestBuffers` (text and tape, recycled through the service's free list) and tapes it on the posting thread; `ControlCall::Params()` is a `JsonView` into that tape and `id` the raw text of the request's id, echoed as written (a string with an escape or non-ASCII comes back as sent). A handler reads with `Control/ControlParams.h`; `ParamsJson()` is a DOM made on first use for the readers not moved yet. `JsonDeserializer::Load(JsonView)` reads any value of a tape the caller keeps (the `arguments` of `call_method`). A second `Post` and `Drain` of a message of a shape seen before allocates nothing (`ControlRequestAllocationTest`, `macos-profile`).
+`ControlService::Post` copies the request text into a pooled `RequestBuffers` (text and tape, recycled through the service's free list) and tapes it on the posting thread; `ControlCall::Params()` is a `JsonView` into that tape and `id` the raw text of the request's id, echoed as written (a string with an escape or non-ASCII comes back as sent). A handler reads with `Control/ControlParams.h`; `ParamsJson()` is a DOM made on first use for the one reader not moved yet (`ArtGenSessionControl`). `JsonDeserializer::Load(JsonView)` reads any value of a tape the caller keeps (the `arguments` of `call_method`). A second `Post` and `Drain` of a message of a shape seen before allocates nothing (`ControlRequestAllocationTest`, `macos-profile`).
 
 What a client of the control API sees differently from the DOM: a BOM, a NUL outside a string and a document the tape refuses are `parse_error` with the tape's message and offset; of two equal keys the first wins; `1e999` parses, and a reader that needs a finite number (`GetParamNumber`) refuses it with `invalid_params`; `-0` is accepted as an id and echoed as written.

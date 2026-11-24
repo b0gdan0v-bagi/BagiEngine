@@ -30,8 +30,7 @@ namespace BECore {
         /**
          * @brief The interim bridge from the DOM: writes @p document as text into a string the reader keeps, and loads that
          *
-         * Costs a dump and a parse; the callers that still hold a `Json` use it until they read from text, and the last step of the move to the
-         * tape removes it. @p document is not needed after the call.
+         * Costs a dump and a parse; only tests that build a DOM call it, and the last step of the move to the tape removes it. @p document is not needed after the call.
          */
         explicit JsonDeserializer(const Json& document);
         ~JsonDeserializer() override;

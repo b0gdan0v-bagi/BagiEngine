@@ -75,8 +75,8 @@ namespace BECore {
             return _params;
         }
 
-        /// The request parameters as a DOM, parsed from Params() on first use. Interim, for the readers that still hold a DOM (`GameControl` and `ReplayControl`,
-        /// `ArtGenSessionControl`); it goes with them
+        /// The request parameters as a DOM, parsed from Params() on first use. Interim, for the reader that still holds a DOM (`ArtGenSessionControl`);
+        /// it goes with it
         [[nodiscard]] const Json& ParamsJson() const;
 
         /// Answers with success; @p result is written as the `result` of the response
