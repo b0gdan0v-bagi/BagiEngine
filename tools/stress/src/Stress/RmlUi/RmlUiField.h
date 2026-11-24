@@ -7,8 +7,8 @@
 
 namespace BECore::Stress {
 
-    /// The text lines of a generated document, each at its own font size: a document makes one glyph texture per size, so the count of
-    /// documents times this decides how many textures the renderer holds
+    /// The text lines of a generated document, each at its own font size: the glyph pages belong to the font engine, so the sizes add
+    /// their pages once and every document shares them (the texture count does not grow with the documents)
     inline constexpr uint32_t kRmlUiSizes = 6;
 
     /// The `font-size` of line `k` of a document, in `dp`; all distinct

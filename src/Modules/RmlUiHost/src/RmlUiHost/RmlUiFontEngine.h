@@ -13,7 +13,7 @@ namespace BECore {
      *
      * A face is a `Font` registered under a family, a style and a weight. A handle (what `GetFontFaceHandle` returns) is a face at one pixel size: it keeps the
      * metrics, the glyphs drawn so far and the pages they sit on. A page is an RGBA picture (white, coverage in alpha, premultiplied as RmlUi wants) that
-     * becomes a texture for each RmlUi context on first use, through a callback texture; the page is then sealed, and a glyph that comes later goes to a new
+     * becomes one texture on first use, shared by every RmlUi context, through a callback texture; the page is then sealed, and a glyph that comes later goes to a new
      * page, so the pixels a texture was made from never change. Text is laid out with fractional advances and kerning (the `kern` table, as `Font` reads it)
      * and each glyph is put on a whole pixel, as `TextRenderer` does; the widths RmlUi asks for are whole pixels.
      *

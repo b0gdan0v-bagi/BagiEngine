@@ -4,7 +4,8 @@
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
 #include <BECore/Control/JsonSerializer.h>
-#include <BECore/File/FilePath.h>
+#include <BECore/File/File.h>
+#include <BECore/File/Path.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Logger/LogEvent.h>
@@ -145,15 +146,14 @@ namespace BECore::Stress::Tests {
             }
 
             void StartRmlUi(uint32_t count) {
-                StartGame({"--stress-scene=rmlui", Format("--stress-count={}", count).c_str()});
+                ASSERT_NO_FATAL_FAILURE(StartGame({"--stress-scene=rmlui", Format("--stress-count={}", count).c_str()}));
                 ASSERT_EQ(_manager->GetActiveScene()->GetName(), StressNames::rmlui);
                 _renderer->width = kOutputWidth;
                 _renderer->height = kOutputHeight;
                 // The app's own content is not mounted in the test environment: the panel is read from the sources
-                const std::filesystem::path panel = ShippedSceneConfig().parent_path().parent_path() / "assets" / "ui" / "stress_rmlui.rml";
-                ASSERT_TRUE(std::filesystem::exists(panel)) << panel.string();
-                const String path = PathToUtf8(panel);
-                Component().SetPanelSource(PoolString::Intern(StringView(path.data(), path.size())));
+                const Path panel = ShippedSceneConfig().Parent().Parent() / "assets" / "ui" / "stress_rmlui.rml";
+                ASSERT_TRUE(GetFileInfo(panel).has_value()) << panel.CStr();
+                Component().SetPanelSource(PoolString::Intern(panel.View()));
             }
 
             StressRmlUiComponent& Component() const {

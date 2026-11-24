@@ -53,7 +53,7 @@
         </node>
       </nodes>
     </scene>
-    <!-- Many RmlUi contexts, each with text at several font sizes (texture churn), and a scrollable panel; only a build with ENGINE_UI_RMLUI lists it and fills it (the component does nothing without) -->
+    <!-- Many RmlUi contexts, each with text at several font sizes (many contexts), and a scrollable panel; only a build with ENGINE_UI_RMLUI lists it and fills it (the component does nothing without) -->
     <scene type="Scene" name="StressRmlUi" viewWidth="1920" viewHeight="1080">
       <nodes>
         <node name="Field">

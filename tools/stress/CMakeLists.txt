@@ -10,7 +10,7 @@ be_add_module(Stress LINK
 )
 be_add_game_reflection(StressModule)
 
-# The scene `rmlui` (many RmlUi contexts: texture churn) exists only in a build with the RmlUi host; PUBLIC so StressTests and BagiStress see both
+# The scene `rmlui` (many RmlUi contexts) exists only in a build with the RmlUi host; PUBLIC so StressTests and BagiStress see both
 if(TARGET RmlUiHostModule)
     target_compile_definitions(StressModule PUBLIC STRESS_WITH_RMLUI=1)
     target_link_libraries(StressModule PUBLIC RmlUiHostModule)

@@ -29,7 +29,7 @@ namespace BECore {
     /**
      * @brief Registers the control API methods `click_at` and `wheel_at`.
      *
-     * `click_at`: a click at a point, through `UIInput`, with no element name.: a click at a point, through `UIInput`, with no element name.
+     * `click_at`: a click at a point, through `UIInput`, with no element name.
      *
      * | Method | Params | Result |
      * |--------|--------|--------|
