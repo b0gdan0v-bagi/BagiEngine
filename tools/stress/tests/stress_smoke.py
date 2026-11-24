@@ -3,7 +3,9 @@
 Starts the app in a fresh process per scene (sprites 500, entities 500, ui 200), `--headless --control --manual-clock`, and drives
 it over the control API: the state, `set_count` shown in the next frame (`frame_stats` draw calls and the `Stress objects` counter),
 the bad values, screenshots that are not flat, `set_language` rewording the `ui` scene, `set_scene`, `ui_tree`, the `set_window` step of smoke.py
-on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
+on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `rmlui` scenario probes `get_state.scenes`
+and prints a skip line when the build has no `rmlui` (only `ENGINE_UI_RMLUI` builds list it), so the same script passes in every preset; with it the scene's documents, textures,
+`wheel_at` on both axes, `ReloadRmlUiDocuments` and the scene switch are checked. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
 `get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
@@ -37,6 +39,12 @@ SPRITES_COUNT = 500
 ENTITIES_COUNT = 500
 UI_COUNT = 200
 REFLECTION_COUNT = 50
+RMLUI_COUNT = 20
+RMLUI_COUNTER_PREFIX = "Stress rmlui "
+RMLUI_STEPS = 30  # RmlUi scrolls a wheel step smoothly over the frames of the game clock that follow
+# Inside the scroller of the panel (tools/stress/assets/ui/stress_rmlui.rcss: 360 x 240 dp, 40 dp from the right and bottom of the 1920 x 1080 reference, which is the headless output)
+RMLUI_PANEL_X = 1700
+RMLUI_PANEL_Y = 920
 RUN_NUMBER_MAX = 1000  # the range of the field `runNumber` of StressGame
 ENGINE_CONFIG_DIR = ENGINE_DIR / "config"
 # The engine's config files whose reflected type is not named like their stem (tools/schema/CLAUDE.md, "What the XSD says")
@@ -159,6 +167,76 @@ def scenario_scenes(client: BagiControlClient) -> None:
     check(stress_state(client)["scene"] == "ui" and frame["drawCalls"] > 0, f"after set_scene ui the frame drew {frame['drawCalls']}")
     check_ui_tree(client, "StressUi")
     check(client.call("list_games")["active"] == "Stress", "list_games lost the game after set_scene")
+
+
+def rmlui_counters(client: BagiControlClient) -> dict[str, float]:
+    counters = last_frame(client)["counters"]
+    return {name.removeprefix(RMLUI_COUNTER_PREFIX): value for name, value in counters.items() if name.startswith(RMLUI_COUNTER_PREFIX)}
+
+
+def rmlui_counter(client: BagiControlClient, name: str) -> float:
+    counters = rmlui_counters(client)
+    check(name in counters, f"frame_stats has no counter '{RMLUI_COUNTER_PREFIX}{name}': {sorted(counters)}")
+    return counters[name]
+
+
+def rmlui_wheel(client: BagiControlClient, dx: int, dy: int, flipped: bool = False) -> None:
+    answer = client.call("wheel_at", {"x": RMLUI_PANEL_X, "y": RMLUI_PANEL_Y, "dx": dx, "dy": dy, "flipped": flipped})
+    check(answer["consumed"] is True, f"wheel_at over the panel was not consumed: {answer}")
+    client.call("step", {"frames": RMLUI_STEPS})
+
+
+def scenario_rmlui(client: BagiControlClient) -> None:
+    """Starts as sprites; the scene exists only in a build with the RmlUi host, so the scenario probes for it and skips itself otherwise."""
+    if "rmlui" not in client.call("get_state")["state"]["scenes"]:
+        print("rmlui: SKIPPED, get_state.scenes has no rmlui (the build has no ENGINE_UI_RMLUI)", flush=True)
+        return
+    check_state(client, "sprites", RMLUI_COUNT)
+    client.call("perform_action", {"type": "set_scene", "scene": "rmlui"})
+    settle(client)
+    check_state(client, "rmlui", RMLUI_COUNT)
+    check(rmlui_counter(client, "documents") == RMLUI_COUNT, f"the documents counter is {rmlui_counter(client, 'documents')}, the count is {RMLUI_COUNT}")
+    check(rmlui_counter(client, "textures") > 0, "the scene made no texture")
+    check(rmlui_counter(client, "scroll x") == 0 and rmlui_counter(client, "scroll y") == 0, "the panel starts scrolled")
+    check(last_frame(client)["drawCalls"] > 0, "the rmlui scene drew nothing")
+    check_not_flat(client, "rmlui")
+
+    for count in (RMLUI_COUNT * 2, RMLUI_COUNT // 2):
+        set_count(client, count)
+        check(rmlui_counter(client, "documents") == count, f"the documents counter is {rmlui_counter(client, 'documents')} after set_count {count}")
+    check_bad_counts(client)
+    client.call("perform_action", {"type": "set_language", "language": "ru"})
+    client.call("step", {"frames": SETTLE_FRAMES})
+    check(rmlui_counter(client, "documents") == RMLUI_COUNT // 2, "set_language changed the documents counter")
+    client.call("perform_action", {"type": "set_language", "language": "en"})
+
+    # SDL: y negative scrolls down, x positive scrolls right, `flipped` reverses both
+    client.call("step", {"frames": SETTLE_FRAMES})
+    rmlui_wheel(client, 0, -1)
+    down = rmlui_counter(client, "scroll y")
+    check(down > 0 and rmlui_counter(client, "scroll x") == 0, f"a wheel down scrolled y to {down} and x to {rmlui_counter(client, 'scroll x')}")
+    rmlui_wheel(client, 0, 1)
+    check(rmlui_counter(client, "scroll y") < down, "the opposite wheel did not scroll y back")
+    rmlui_wheel(client, 1, 0)
+    right = rmlui_counter(client, "scroll x")
+    check(right > 0, "a wheel to the right did not scroll x")
+    rmlui_wheel(client, 1, 0, flipped=True)
+    check(rmlui_counter(client, "scroll x") < right, "a flipped wheel to the right did not scroll x back")
+
+    reloads = rmlui_counter(client, "reloads")
+    client.call("call_method", {"root": "game", "method": "ReloadRmlUiDocuments"})
+    client.call("step", {"frames": SETTLE_FRAMES})
+    check(rmlui_counter(client, "reloads") == reloads + 1, f"the reloads counter is {rmlui_counter(client, 'reloads')} after one request")
+    check(rmlui_counter(client, "scroll x") == 0 and rmlui_counter(client, "scroll y") == 0, "the panel is still scrolled after a reload")
+    check(rmlui_counter(client, "documents") == RMLUI_COUNT // 2, "the reload changed the documents")
+    check_not_flat(client, "rmlui after the reload")
+
+    client.call("perform_action", {"type": "set_scene", "scene": "sprites"})
+    settle(client)
+    check(stress_state(client)["scene"] == "sprites" and last_frame(client)["drawCalls"] > 0, "the switch from rmlui to sprites did not draw sprites")
+    client.call("perform_action", {"type": "set_scene", "scene": "rmlui"})
+    settle(client)
+    check(rmlui_counter(client, "documents") == RMLUI_COUNT // 2, "the switch back to rmlui lost its documents")
 
 
 def keys_named(value: object, name: str) -> list[str]:
@@ -302,6 +380,7 @@ SCENARIOS: list[tuple[str, list[str], Callable[[BagiControlClient], None]]] = [
     ("ui", ["--stress-scene=ui", f"--stress-count={UI_COUNT}"], scenario_ui),
     ("scenes", ["--stress-scene=sprites", f"--stress-count={SPRITES_COUNT}"], scenario_scenes),
     ("reflection", ["--stress-scene=sprites", f"--stress-count={REFLECTION_COUNT}"], scenario_reflection),
+    ("rmlui", ["--stress-scene=sprites", f"--stress-count={RMLUI_COUNT}"], scenario_rmlui),
 ]
 
 
