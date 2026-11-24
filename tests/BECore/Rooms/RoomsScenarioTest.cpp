@@ -163,14 +163,14 @@ namespace BECore::Tests {
 
         ActionMessage steal;
         steal.version = version;
-        steal.action = CardAction(Format("c{}_0", otherSeat));
+        steal.action = CardActionText(Format("c{}_0", otherSeat));
         harness.Send(onTurn, steal);
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kIllegalAction);
         expectUnchanged();
 
         ActionMessage nothing;
         nothing.version = version;
-        nothing.action = CardAction("c9_9");
+        nothing.action = CardActionText("c9_9");
         harness.Send(onTurn, nothing);
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kIllegalAction);
         ActionMessage shapeless;
@@ -183,7 +183,7 @@ namespace BECore::Tests {
         const size_t viewsBefore = harness.Client(onTurn).Count(RoomMessageTypes::kView);
         ActionMessage stale;
         stale.version = version + 1;
-        stale.action = CardAction(Format("c{}_0", seat));
+        stale.action = CardActionText(Format("c{}_0", seat));
         harness.Send(onTurn, stale);
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kStaleAction);
         EXPECT_EQ(harness.Client(onTurn).Count(RoomMessageTypes::kView), viewsBefore + 1);
@@ -194,7 +194,7 @@ namespace BECore::Tests {
 
         ActionMessage early;
         early.version = version;
-        early.action = CardAction(Format("c{}_0", otherSeat));
+        early.action = CardActionText(Format("c{}_0", otherSeat));
         harness.Send(other, early);
         EXPECT_NE(harness.Client(other).LastErrorCode(), "");
         expectUnchanged();
@@ -277,7 +277,7 @@ namespace BECore::Tests {
                         ActionMessage action;
                         const FakeSeatedGame* game = harness.GetGame(client.roomCode);
                         action.version = game && pick(3) != 0 ? game->GetStateVersion() : pick(30);
-                        action.action = CardAction(Format("c{}_{}", pick(5), pick(4)));
+                        action.action = CardActionText(Format("c{}_{}", pick(5), pick(4)));
                         harness.Send(id, action);
                         break;
                     }

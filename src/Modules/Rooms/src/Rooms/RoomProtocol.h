@@ -2,6 +2,7 @@
 
 #include <BECore/Control/Json.h>
 #include <BECore/Control/JsonTape.h>
+#include <BECore/Control/JsonView.h>
 #include <Games/SeatedAnswers.h>
 #include <Rooms/RoomLimits.h>
 #include <Rooms/RoomTypes.h>
@@ -39,8 +40,8 @@ namespace BECore {
         String game;
         /// Already sanitised (SanitizePlayerName)
         String name;
-        /// An object (empty when the client sent none); the game reads it in Start(), untrusted
-        Json options = Json::object();
+        /// The compact text of an object (`{}` when the client sent none; empty is written as `{}`); the game reads it in Start(), untrusted
+        String options;
         /// The host's wish that the room is listed for `list_rooms`; absent means false (the code is then known to its members only)
         bool isPublic = false;
     };
@@ -70,7 +71,8 @@ namespace BECore {
     /// `action {version, action}`: @c version is the game version the client saw; @c action is an object for the game, untrusted
     struct ActionMessage {
         uint64_t version = 0;
-        Json action = Json::object();
+        /// The compact text of an object (empty is written as `{}`)
+        String action;
     };
 
     /// `leave {}`
@@ -110,6 +112,19 @@ namespace BECore {
     /// The same over a tape of the caller's, which a connection's handler keeps so a message of a known shape allocates no tokens. @p tape borrows
     /// @p text and is used only during the call: the result owns its texts
     [[nodiscard]] std::expected<ClientMessage, ControlError> ParseClientMessage(JsonTape& tape, StringView text, size_t maxBytes = RoomLimits::kMaxMessageBytes);
+
+    /// A public option of a room: a key and its value, a boolean or an integer (`IsPublicOptionValue`)
+    struct PublicOptionRef {
+        String key;
+        JsonView value;
+    };
+
+    /// Whether @p value may stand in the public options of a room: a boolean, or an integer that fits 64 bits, signed or not
+    [[nodiscard]] bool IsPublicOptionValue(JsonView value);
+
+    /// Appends the options as the compact text of an object in alphabetical key order (of two equal keys the first of the document) to @p out,
+    /// which is never cleared; nothing at all for no options. @p options is sorted; the values are written from their views
+    void AppendPublicOptions(String& out, Vector<PublicOptionRef>& options);
 
     /// The `type` of a parsed message
     [[nodiscard]] StringView GetClientMessageType(const ClientMessage& message);
@@ -151,9 +166,9 @@ namespace BECore {
         /// The seat of the host, or -1 when no human is left
         int hostSeat = -1;
         Vector<LobbySeat> seats;
-        /// The public options of the room (`SeatedGameInfo::publicOptions`): an object of booleans and integers, empty when the game
-        /// names none. Not written when empty; a reader keeps only boolean and integer members.
-        Json options = Json::object();
+        /// The public options of the room (`SeatedGameInfo::publicOptions`): the compact text of an object of booleans and integers, keys in alphabetical
+        /// order; empty when the game names none. Not written when empty; a reader keeps only boolean and integer members.
+        String options;
     };
 
     /// One room in a `rooms` message
@@ -167,8 +182,8 @@ namespace BECore {
         /// The seat count of the game
         int seats = 0;
         bool started = false;
-        /// The public options of the room, as the `lobby` message carries them; not written when empty
-        Json options = Json::object();
+        /// The public options of the room, as the `lobby` message carries them (the text of an object, empty for none); not written when empty
+        String options;
     };
 
     /// What a `rooms` message says: the answer to `list_rooms`, as plain data

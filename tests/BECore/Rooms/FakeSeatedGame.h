@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/JsonWriter.h>
+#include <Common/JsonDoc.h>
 #include <RoomServer/DemoCardGame.h>
 
 namespace BECore::Tests {
@@ -17,6 +18,14 @@ namespace BECore::Tests {
         action["type"] = "play";
         action["card"] = card.c_str();
         return action;
+    }
+
+    /// The same action as the compact text a client sends, and as the document a room is handed
+    [[nodiscard]] inline String CardActionText(const String& card) {
+        return DumpJson(CardAction(card));
+    }
+    [[nodiscard]] inline JsonDoc CardActionDoc(const String& card) {
+        return JsonDoc(CardActionText(card));
     }
 
     /// The answers of a seated game as the `Json` they are written as: what the old tests read, and what a client of the wire sees

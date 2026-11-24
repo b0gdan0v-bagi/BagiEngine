@@ -47,7 +47,7 @@ namespace BECore::Tests {
         }
 
         void Create(StringView name, StringView game = "fake") {
-            Send(CreateRoomMessage{String(game), String(name), Json::object()});
+            Send(CreateRoomMessage{String(game), String(name), String()});
         }
 
         void JoinByName(StringView code, StringView name) {

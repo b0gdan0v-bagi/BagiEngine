@@ -100,7 +100,7 @@ namespace BECore {
                 return ProbeStep::Running;
             }
             _actedVersion = _client.GetViewVersion();
-            if (const auto result = _client.SendAction(actions.front()); !result) {
+            if (const auto result = _client.SendAction(DumpJson(actions.front())); !result) {
                 return Fail(Format("{}: {}", result.error().code, result.error().message));
             }
             ++_actions;

@@ -11,6 +11,16 @@ namespace BECore {
             return ControlError{String(code), String(message)};
         }
 
+        /// The DOM that the `ISeatedGame` of this tree still takes (its Start and PerformSeatAction); the step that gives the game views removes it.
+        /// A document the DOM refuses (`1e999`) or a view that is not valid is refused as a bad message, as it was before the tape
+        [[nodiscard]] std::expected<Json, ControlError> GameDocument(JsonView view) {
+            auto document = ParseJson(view.Raw());
+            if (!document) {
+                return std::unexpected(MakeError(RoomErrors::kBadMessage, "The document is not valid JSON"));
+            }
+            return std::move(*document);
+        }
+
         /// How many tokens AddMember draws before it gives up (a collision of 128 bits never happens, a constant RandomFn does)
         constexpr int kMaxTokenAttempts = 16;
 
@@ -126,7 +136,7 @@ namespace BECore {
         }
     }
 
-    std::expected<void, ControlError> Room::Start(PlayerId host, RoomTime now, const Json& options) {
+    std::expected<void, ControlError> Room::Start(PlayerId host, RoomTime now, JsonView options) {
         if (!HasMember(host)) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
         }
@@ -140,7 +150,11 @@ namespace BECore {
         if (!game || game->GetSeatCount() != _info.seatCount) {
             return std::unexpected(MakeError(RoomErrors::kInternalError, "The game could not be created"));
         }
-        if (auto started = game->Start(_random(), options); !started) {
+        auto document = options.IsValid() ? GameDocument(options) : std::expected<Json, ControlError>(Json::object());
+        if (!document) {
+            return std::unexpected(std::move(document.error()));
+        }
+        if (auto started = game->Start(_random(), *document); !started) {
             return std::unexpected(std::move(started.error()));
         }
         _game = std::move(game);
@@ -162,7 +176,7 @@ namespace BECore {
         return _game ? _game->GetStateVersion() : 0;
     }
 
-    std::expected<UniquePtr<SeatedOutcome>, ControlError> Room::PerformAction(PlayerId player, uint64_t version, const Json& action) {
+    std::expected<UniquePtr<SeatedOutcome>, ControlError> Room::PerformAction(PlayerId player, uint64_t version, JsonView action) {
         const Member* member = FindMember(player);
         if (!member) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
@@ -176,7 +190,11 @@ namespace BECore {
         if (!member->connected) {
             return std::unexpected(MakeError(RoomErrors::kNotYourTurn, "The player is away"));
         }
-        auto outcome = _game->PerformSeatAction(member->seat, action);
+        const auto document = GameDocument(action);
+        if (!document) {
+            return std::unexpected(document.error());
+        }
+        auto outcome = _game->PerformSeatAction(member->seat, *document);
         if (outcome) {
             FinishIfDone();
         }
@@ -354,18 +372,21 @@ namespace BECore {
         return FindMember(player) != nullptr;
     }
 
-    void Room::SetLobbyOptions(const Json& options) {
-        Json kept = Json::object();
-        if (options.is_object()) {
-            for (const String& key : _info.publicOptions) {
-                if (kept.size() >= RoomLimits::kMaxLobbyOptions) {
+    void Room::SetLobbyOptions(JsonView options) {
+        String kept;
+        if (options.IsObject()) {
+            Vector<PublicOptionRef> found;
+            for (const String& name : _info.publicOptions) {
+                if (found.size() >= RoomLimits::kMaxLobbyOptions) {
                     break;
                 }
-                const Json* value = FindJsonMember(options, key);
-                if (value != nullptr && (value->is_boolean() || value->is_number_integer())) {
-                    kept[ToStdString(key)] = *value;
+                const Optional<JsonView> value = options.Find(StringView(name.data(), name.size()));
+                const bool listed = std::any_of(found.begin(), found.end(), [&name](const PublicOptionRef& option) { return option.key == name; });
+                if (value && IsPublicOptionValue(*value) && !listed) {
+                    found.push_back({name, *value});
                 }
             }
+            AppendPublicOptions(kept, found);
         }
         if (kept != _lobbyOptions) {
             _lobbyOptions = std::move(kept);

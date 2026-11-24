@@ -64,7 +64,7 @@ namespace BECore::Tests {
             if (acted && actedVersion == client->GetViewVersion()) {
                 return true;
             }
-            if (!client->SendAction(client->GetActions()[0]).has_value()) {
+            if (!client->SendAction(DumpJson(client->GetActions()[0])).has_value()) {
                 return false;
             }
             acted = true;

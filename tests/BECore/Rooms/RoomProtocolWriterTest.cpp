@@ -116,13 +116,13 @@ namespace BECore::Tests {
             RoomListMessage list = MakeRoomList(kLongListedRooms);
             Json view = Json{{"hand", Json::array({1, 2, 3})}, {"table", MakeJsonString(String(kLongText))}};
             Json actions = Json::array({Json{{"play", 1}}, Json{{"pass", true}}});
-            ClientMessage create = CreateRoomMessage{String(kLongGame), String(kLongText), Json{{"rounds", 3}}, true};
+            ClientMessage create = CreateRoomMessage{String(kLongGame), String(kLongText), DumpJson(Json{{"rounds", 3}}), true};
             ClientMessage join = JoinRoomMessage{String(kRoomCode), String(), String(kLongToken)};
             ClientMessage listRooms = ListRoomsMessage{String(kLongGame)};
 
             LongMessages() {
                 lobby.game = kLongGame;
-                lobby.options = Json{{"fast", true}, {"rounds", 3}};
+                lobby.options = DumpJson(Json{{"fast", true}, {"rounds", 3}});
                 for (LobbySeat& seat : lobby.seats) {
                     if (seat.kind == SeatKind::Human) {
                         seat.name = kLongText;
@@ -130,7 +130,7 @@ namespace BECore::Tests {
                 }
                 for (RoomListing& listing : list.rooms) {
                     listing.host = kLongText;
-                    listing.options = Json{{"fast", true}};
+                    listing.options = DumpJson(Json{{"fast", true}});
                 }
             }
 
@@ -173,7 +173,7 @@ namespace BECore::Tests {
         list.rooms[0].taken = 1;
         list.rooms[1].host = "Bob";
         list.rooms[1].taken = 2;
-        list.rooms[1].options = Json{{"fast", true}};
+        list.rooms[1].options = DumpJson(Json{{"fast", true}});
         EXPECT_EQ(MakeRoomListMessage(list), R"({"game":"cards","more":false,"rooms":[{"host":"Ann","room":"ABCDE","seats":4,"started":false,"taken":1},)"
                                              R"({"host":"Bob","options":{"fast":true},"room":"ABCDE","seats":4,"started":true,"taken":2}],"type":"rooms","v":1})");
 
@@ -188,15 +188,15 @@ namespace BECore::Tests {
             ExpectLobby(MakeLobby(seatCount));
         }
         LobbySnapshot lobby = MakeLobby(3);
-        lobby.options = Json{{"fast", true}, {"rounds", 3}};
+        lobby.options = DumpJson(Json{{"fast", true}, {"rounds", 3}});
         ExpectLobby(lobby);
         EXPECT_NE(MakeLobbyMessage(lobby).find(R"("options":{"fast":true,"rounds":3})"), String::npos);
 
-        // options that is not a non-empty object is left out, as the DOM path leaves it out
-        for (const Json& options : {Json::object(), Json::array({1}), Json(5), Json("text"), Json(nullptr)}) {
+        // no options, or an empty object, is left out, as the DOM path leaves it out
+        for (const char* options : {"", "{}"}) {
             lobby.options = options;
             ExpectLobby(lobby);
-            EXPECT_EQ(MakeLobbyMessage(lobby).find("options"), String::npos) << options.dump();
+            EXPECT_EQ(MakeLobbyMessage(lobby).find("options"), String::npos) << options;
         }
         lobby.phase = RoomPhase::Finished;
         lobby.hostSeat = -1;
@@ -231,10 +231,9 @@ namespace BECore::Tests {
         RoomListMessage list = MakeRoomList(20);
         list.more = true;
         ExpectRoomList(list);
-        list.rooms[0].options = Json{{"fast", true}};
-        list.rooms[1].options = Json::object();
-        list.rooms[2].options = Json::array({1});
-        list.rooms[3].options = Json(7);
+        list.rooms[0].options = DumpJson(Json{{"fast", true}});
+        list.rooms[1].options = "{}";
+        list.rooms[2].options = "";
         ExpectRoomList(list);
         const String text = MakeRoomListMessage(list);
         EXPECT_NE(text.find(R"("options":{"fast":true})"), String::npos);
@@ -372,7 +371,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(joinedMessage->host);
 
         LobbySnapshot lobby = MakeLobby(kFullSeatCount);
-        lobby.options = Json{{"fast", true}, {"rounds", 3}};
+        lobby.options = DumpJson(Json{{"fast", true}, {"rounds", 3}});
         const auto lobbyParsed = ParseServerMessage(MakeLobbyMessage(lobby));
         ASSERT_TRUE(lobbyParsed.has_value());
         const auto* lobbyMessage = std::get_if<LobbyMessage>(&*lobbyParsed);
@@ -405,7 +404,7 @@ namespace BECore::Tests {
 
         RoomListMessage list = MakeRoomList(3);
         list.more = true;
-        list.rooms[1].options = Json{{"fast", true}};
+        list.rooms[1].options = DumpJson(Json{{"fast", true}});
         const auto listParsed = ParseServerMessage(MakeRoomListMessage(list));
         ASSERT_TRUE(listParsed.has_value());
         const auto* listMessage = std::get_if<RoomListMessage>(&*listParsed);
@@ -447,7 +446,7 @@ namespace BECore::Tests {
             ClientMessage createPublic = [&] {
                 CreateRoomMessage message = create;
                 message.isPublic = true;
-                message.options = MakeHardJson(false);
+                message.options = DumpJson(MakeHardJson(false));
                 return message;
             }();
             JoinRoomMessage joinNew;
@@ -458,10 +457,10 @@ namespace BECore::Tests {
             joinBack.token = kToken;
             ActionMessage action;
             action.version = actionVersion;
-            action.action = MakeHardJson(false);
+            action.action = DumpJson(MakeHardJson(false));
             ActionMessage smallAction;
             smallAction.version = 3;
-            smallAction.action = Json{{"card", 4}};
+            smallAction.action = DumpJson(Json{{"card", 4}});
             ListRoomsMessage list;
             list.game = "cards";
             return {create,      createPublic,   joinNew,       joinBack, ChooseSeatMessage{std::numeric_limits<int64_t>::min()}, ChooseSeatMessage{2}, StartMessage{}, action,
@@ -476,7 +475,7 @@ namespace BECore::Tests {
         create.name = "Ann";
         EXPECT_EQ(SerializeClientMessage(create), R"({"game":"cards","name":"Ann","options":{},"type":"create_room","v":1})");
         create.isPublic = true;
-        create.options = Json{{"fast", true}};
+        create.options = DumpJson(Json{{"fast", true}});
         EXPECT_EQ(SerializeClientMessage(create), R"({"game":"cards","name":"Ann","options":{"fast":true},"public":true,"type":"create_room","v":1})");
 
         JoinRoomMessage join;
@@ -491,7 +490,7 @@ namespace BECore::Tests {
         EXPECT_EQ(SerializeClientMessage(StartMessage{}), R"({"type":"start","v":1})");
         ActionMessage action;
         action.version = 7;
-        action.action = Json{{"card", 4}};
+        action.action = DumpJson(Json{{"card", 4}});
         EXPECT_EQ(SerializeClientMessage(action), R"({"action":{"card":4},"type":"action","v":1,"version":7})");
         EXPECT_EQ(SerializeClientMessage(LeaveMessage{}), R"({"type":"leave","v":1})");
         EXPECT_EQ(SerializeClientMessage(PingMessage{}), R"({"type":"ping","v":1})");
@@ -517,13 +516,13 @@ namespace BECore::Tests {
             message = join;
             EXPECT_EQ(SerializeClientMessage(message), RoomMessageReference::MakeClientMessage(message));
         }
-        // an options or an action that is not an object is written as it is, and a deep one is cut as on the DOM path
+        // an options or an action text is written as it is, and an empty one as the empty object
         CreateRoomMessage create;
-        create.options = Json::array({1});
+        create.options = "[1]";
         EXPECT_EQ(SerializeClientMessage(create), RoomMessageReference::MakeClientMessage(create));
+        EXPECT_NE(SerializeClientMessage(CreateRoomMessage{}).find(R"("options":{})"), String::npos);
         ActionMessage action;
-        action.action = MakeDeepArray(kDeepLevels);
-        EXPECT_EQ(SerializeClientMessage(action), RoomMessageReference::MakeClientMessage(action));
+        EXPECT_NE(SerializeClientMessage(action).find(R"("action":{})"), String::npos);
     }
 
     TEST(RoomProtocolWriterTest, AClientMessageReadsBackToTheValuesItWasWrittenFrom) {
@@ -537,7 +536,7 @@ namespace BECore::Tests {
                 EXPECT_EQ(std::get<ActionMessage>(*parsed).action, action->action);
             }
             if (const auto* create = std::get_if<CreateRoomMessage>(&message)) {
-                EXPECT_EQ(std::get<CreateRoomMessage>(*parsed).options, create->options);
+                EXPECT_EQ(std::get<CreateRoomMessage>(*parsed).options, create->options.empty() ? String("{}") : create->options);
                 EXPECT_EQ(std::get<CreateRoomMessage>(*parsed).isPublic, create->isPublic);
             }
         }

@@ -181,8 +181,8 @@ namespace BECore::Tests {
             SendText(id, SerializeClientMessage(message));
         }
 
-        void Create(ConnectionId id, StringView name, StringView game = "fake", Json options = Json::object(), bool isPublic = false) {
-            Send(id, CreateRoomMessage{String(game), String(name), std::move(options), isPublic});
+        void Create(ConnectionId id, StringView name, StringView game = "fake", const Json& options = Json::object(), bool isPublic = false) {
+            Send(id, CreateRoomMessage{String(game), String(name), DumpJson(options), isPublic});
         }
 
         void List(ConnectionId id, StringView game = "fake") {
@@ -257,7 +257,7 @@ namespace BECore::Tests {
             }
             ActionMessage action;
             action.version = static_cast<uint64_t>(view->GetInt("version", 0));
-            action.action = (*actions)[0];
+            action.action = DumpJson((*actions)[0]);
             Send(id, action);
             return true;
         }

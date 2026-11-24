@@ -170,7 +170,7 @@ namespace {
             const Json& actions = client.GetActions();
             if (client.HasView() && actions.is_array() && !actions.empty() && client.GetViewVersion() != actedVersion) {
                 actedVersion = client.GetViewVersion();
-                if (const auto result = client.SendAction(actions.front()); !result) {
+                if (const auto result = client.SendAction(DumpJson(actions.front())); !result) {
                     return Fail(Format("{}: {}", result.error().code, result.error().message));
                 }
             }

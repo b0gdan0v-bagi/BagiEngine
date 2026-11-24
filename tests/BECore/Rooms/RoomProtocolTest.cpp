@@ -69,15 +69,21 @@ namespace BECore::Tests {
         ASSERT_NE(message, nullptr);
         EXPECT_EQ(message->game, "mahjong");
         EXPECT_EQ(message->name, "Ann");
-        EXPECT_EQ(GetJsonInt(message->options, "rounds"), 2);
+        EXPECT_EQ(message->options, R"({"rounds":2})");
+    }
+
+    TEST(RoomProtocolTest, CreateRoomKeepsTheOptionsCompactWhateverBlanksTheClientSent) {
+        const auto parsed = ParseClientMessage(Message("create_room", "\"game\":\"g\",\"name\":\"Bob\",\"options\":{ \"b\" : [ 1 , {\"x\":\"a\\u0041\\n\"} ] ,\n \"a\" : null }"));
+        const auto* message = As<CreateRoomMessage>(parsed);
+        ASSERT_NE(message, nullptr);
+        EXPECT_EQ(message->options, R"({"b":[1,{"x":"aA\n"}],"a":null})");
     }
 
     TEST(RoomProtocolTest, CreateRoomWithoutOptionsHasAnEmptyObject) {
         const auto parsed = ParseClientMessage(Message("create_room", R"("game":"g","name":"Bob")"));
         const auto* message = As<CreateRoomMessage>(parsed);
         ASSERT_NE(message, nullptr);
-        EXPECT_TRUE(message->options.is_object());
-        EXPECT_TRUE(message->options.empty());
+        EXPECT_EQ(message->options, "{}");
     }
 
     TEST(RoomProtocolTest, CreateRoomOptionsMustBeAnObject) {
@@ -119,7 +125,7 @@ namespace BECore::Tests {
         const auto* message = As<ActionMessage>(parsed);
         ASSERT_NE(message, nullptr);
         EXPECT_EQ(message->version, 7u);
-        EXPECT_EQ(GetJsonString(message->action, "card"), "c1_2");
+        EXPECT_EQ(message->action, R"({"type":"play","card":"c1_2"})");
     }
 
     TEST(RoomProtocolTest, MessagesWithoutFieldsParse) {
@@ -210,8 +216,7 @@ namespace BECore::Tests {
         CreateRoomMessage create;
         create.game = "mahjong";
         create.name = "Ann";
-        create.options = Json::object();
-        create.options["rounds"] = 4;
+        create.options = R"({"rounds":4})";
         CreateRoomMessage publicCreate = create;
         publicCreate.isPublic = true;
         JoinRoomMessage joinByName;
@@ -222,8 +227,7 @@ namespace BECore::Tests {
         reconnect.token = "00112233445566778899aabbccddeeff";
         ActionMessage action;
         action.version = 12;
-        action.action = Json::object();
-        action.action["type"] = "play";
+        action.action = R"({"type":"play"})";
 
         const Vector<ClientMessage> messages = {
             create, publicCreate, joinByName, reconnect, ChooseSeatMessage{2}, StartMessage{}, action, LeaveMessage{}, PingMessage{}, ListRoomsMessage{"mahjong"},
@@ -683,8 +687,7 @@ namespace BECore::Tests {
         lobby.seats.push_back(LobbySeat{0, SeatKind::Human, "Ann", true});
         EXPECT_EQ(FindJsonMember(ParseOrNull(MakeLobbyMessage(lobby)), "options"), nullptr);
 
-        lobby.options["hintsAllowed"] = true;
-        lobby.options["hands"] = 8;
+        lobby.options = R"({"hands":8,"hintsAllowed":true})";
         const auto parsed = ParseServerMessage(MakeLobbyMessage(lobby));
         const auto* read = ServerAs<LobbyMessage>(parsed);
         ASSERT_NE(read, nullptr);
@@ -696,10 +699,13 @@ namespace BECore::Tests {
         const auto mixedParsed = ParseServerMessage(mixed);
         const auto* kept = ServerAs<LobbyMessage>(mixedParsed);
         ASSERT_NE(kept, nullptr);
-        Json expected = Json::object();
-        expected["a"] = true;
-        expected["b"] = 2;
-        EXPECT_EQ(kept->options, expected);
+        EXPECT_EQ(kept->options, R"({"a":true,"b":2})");
+        // A server may write them in any order and with an escaped name: a reader keeps them alphabetical, from the decoded names
+        const String shuffled = R"({"v":1,"type":"lobby","room":"ABCDE","game":"fake","phase":"lobby","host":0,"seats":[],"options":{"z":1,"\u0061":true,"m":-5}})";
+        const auto shuffledParsed = ParseServerMessage(shuffled);
+        const auto* sorted = ServerAs<LobbyMessage>(shuffledParsed);
+        ASSERT_NE(sorted, nullptr);
+        EXPECT_EQ(sorted->options, R"({"a":true,"m":-5,"z":1})");
         const String notAnObject = R"({"v":1,"type":"lobby","room":"ABCDE","game":"fake","phase":"lobby","host":0,"seats":[],"options":[1]})";
         EXPECT_FALSE(ParseServerMessage(notAnObject).has_value());
     }
@@ -973,8 +979,7 @@ namespace BECore::Tests {
         RoomListing second = MakeListing("FGHJK", 4, 4);
         second.host = "Bob";
         second.started = true;
-        second.options["hintsAllowed"] = true;
-        second.options["hands"] = 8;
+        second.options = R"({"hands":8,"hintsAllowed":true})";
         list.rooms.push_back(second);
         list.more = true;
 
@@ -1029,9 +1034,11 @@ namespace BECore::Tests {
         for (size_t i = 0; i < RoomLimits::kMaxListedRooms; ++i) {
             RoomListing listing = MakeListing("ABCDE", 1, static_cast<int>(RoomLimits::kMaxLobbySeats));
             listing.host = Repeat('h', RoomLimits::kMaxNameBytes);
+            listing.options = "{";
             for (size_t option = 0; option < RoomLimits::kMaxLobbyOptions; ++option) {
-                listing.options[Format("option{}", option).c_str()] = 1000000;
+                listing.options += Format(R"({}"option{}":1000000)", option == 0 ? "" : ",", option);
             }
+            listing.options += "}";
             full.rooms.push_back(listing);
         }
         EXPECT_LT(MakeRoomListMessage(full).size(), RoomLimits::kMaxMessageBytes);
@@ -1120,6 +1127,14 @@ namespace BECore::Tests {
         EXPECT_EQ(client.error().code, RoomErrors::kBadMessage);
         EXPECT_EQ(client.error().message, "the message is not valid JSON");
         EXPECT_EQ(ServerErrorCodeOf(bom + R"({"v":1,"type":"pong"})"), RoomErrors::kBadMessage);
+    }
+
+    TEST(RoomProtocolTest, APayloadCarriesANumberPastADoubleAsNull) {
+        // `1e999` is valid JSON for the tape; the writer of a document has no text for an infinity
+        const auto parsed = ParseClientMessage(Message("create_room", R"("game":"g","name":"Bob","options":{"x":1e999})"));
+        const auto* message = As<CreateRoomMessage>(parsed);
+        ASSERT_NE(message, nullptr);
+        EXPECT_EQ(message->options, R"({"x":null})");
     }
 
     TEST(RoomProtocolTest, ANumberThatIsNoInt64IsRefusedByAnIntegerField) {

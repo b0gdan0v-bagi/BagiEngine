@@ -1,7 +1,9 @@
 #include "RoomProtocol.h"
 
 #include <BECore/Control/ControlParams.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/Memory/ScratchArena.h>
+#include <EASTL/sort.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomWire.h>
@@ -14,6 +16,8 @@ namespace BECore {
             uint32_t codePoint = 0;
             size_t length = 0;
         };
+
+        constexpr StringView kEmptyDocument = "{}";
 
         constexpr uint32_t kMaxCodePoint = 0x10FFFF;
         constexpr uint32_t kSurrogateFirst = 0xD800;
@@ -152,14 +156,27 @@ namespace BECore {
             return std::move(*game);
         }
 
-        /// The bridge of the payload members of the messages, which are still a `Json`: removed with the text form of `options`, `action`, `view` and `actions`
-        /// (the following steps of the slice). A document the tape accepted and the DOM refuses (`1e999`) is the same `bad_message` as before the tape
+        /// The text of a document member of a message: an empty one is the empty object
+        [[nodiscard]] StringView DocumentText(const String& text) {
+            return text.empty() ? kEmptyDocument : StringView(text.data(), text.size());
+        }
+
+        /// The bridge of the `view` and `actions` of a `ViewMessage`, which are still a `Json`: removed with their text form (the next step of the slice).
+        /// A document the tape accepted and the DOM refuses (`1e999`) is the `bad_message` it was before the tape
         [[nodiscard]] std::expected<Json, ControlError> PayloadToJson(JsonView payload) {
             auto parsed = ParseJson(payload.Raw());
             if (!parsed) {
                 return BadMessage("the message is not valid JSON");
             }
             return std::move(*parsed);
+        }
+
+        /// A document as compact text: what a message keeps of the game's `options` and `action` (blanks of the client's text are dropped)
+        [[nodiscard]] String CompactText(JsonView document) {
+            String text;
+            JsonWriter writer(text);
+            WriteJson(writer, document);
+            return text;
         }
 
         [[nodiscard]] std::expected<ClientMessage, ControlError> ParseCreateRoom(JsonView root) {
@@ -178,11 +195,9 @@ namespace BECore {
                 if (!options->IsObject()) {
                     return BadMessage("'options' must be an object");
                 }
-                auto document = PayloadToJson(*options);
-                if (!document) {
-                    return std::unexpected(document.error());
-                }
-                message.options = std::move(*document);
+                message.options = CompactText(*options);
+            } else {
+                message.options = kEmptyDocument;
             }
             if (const Optional<JsonView> isPublic = FindParam(root, "public")) {
                 if (!isPublic->IsBool()) {
@@ -253,20 +268,16 @@ namespace BECore {
             if (!action || !action->IsObject()) {
                 return BadMessage("'action' must be an object");
             }
-            auto document = PayloadToJson(*action);
-            if (!document) {
-                return std::unexpected(document.error());
-            }
             ActionMessage message;
             message.version = static_cast<uint64_t>(*version);
-            message.action = std::move(*document);
+            message.action = CompactText(*action);
             return ClientMessage(std::move(message));
         }
 
-        /// `options` of `lobby` and of a `rooms` listing: absent unless it is a non-empty object
-        [[nodiscard]] Optional<JsonPayload> PublicOptions(const Json& options) {
-            if (options.is_object() && !options.empty()) {
-                return JsonPayload::Borrowed(options);
+        /// `options` of `lobby` and of a `rooms` listing: absent unless there are members
+        [[nodiscard]] Optional<JsonPayload> PublicOptions(const String& options) {
+            if (!options.empty() && options != kEmptyDocument) {
+                return JsonPayload::Text(StringView(options.data(), options.size()));
             }
             return std::nullopt;
         }
@@ -373,17 +384,6 @@ namespace BECore {
             return ServerMessage(std::move(message));
         }
 
-        /// The boolean and integer members of `options`, at most kMaxLobbyOptions (what a `lobby` message may carry)
-        [[nodiscard]] Json PublicOptionValues(const Json& options) {
-            Json kept = Json::object();
-            for (auto it = options.begin(); it != options.end() && kept.size() < RoomLimits::kMaxLobbyOptions; ++it) {
-                if (it.value().is_boolean() || it.value().is_number_integer()) {
-                    kept[it.key()] = it.value();
-                }
-            }
-            return kept;
-        }
-
         [[nodiscard]] std::expected<ServerMessage, ControlError> ParseLobby(JsonView root) {
             LobbyMessage message;
             auto room = RequireString(root, "room");
@@ -426,11 +426,16 @@ namespace BECore {
                 if (!options->IsObject() || options->Size() > RoomLimits::kMaxLobbyOptions) {
                     return BadMessage(Format("'options' must be an object of at most {} members", RoomLimits::kMaxLobbyOptions));
                 }
-                const auto document = PayloadToJson(*options);
-                if (!document) {
-                    return std::unexpected(document.error());
+                // What a reader keeps of a `lobby`: the booleans and integers (the other members are left out, not refused)
+                Vector<PublicOptionRef> kept;
+                for (const JsonMember member : options->Members()) {
+                    if (IsPublicOptionValue(member.value)) {
+                        PublicOptionRef& option = kept.emplace_back();
+                        member.key.ReadText(option.key);
+                        option.value = member.value;
+                    }
                 }
-                message.options = PublicOptionValues(*document);
+                AppendPublicOptions(message.options, kept);
             }
             return ServerMessage(std::move(message));
         }
@@ -472,16 +477,16 @@ namespace BECore {
                 if (!options->IsObject() || options->Size() > RoomLimits::kMaxLobbyOptions) {
                     return BadMessage(Format("'options' must be an object of at most {} members", RoomLimits::kMaxLobbyOptions));
                 }
-                auto document = PayloadToJson(*options);
-                if (!document) {
-                    return std::unexpected(document.error());
-                }
-                for (auto it = document->begin(); it != document->end(); ++it) {
-                    if (!it.value().is_boolean() && !it.value().is_number_integer()) {
+                Vector<PublicOptionRef> kept;
+                for (const JsonMember member : options->Members()) {
+                    if (!IsPublicOptionValue(member.value)) {
                         return BadMessage("'options' may hold only booleans and integers");
                     }
+                    PublicOptionRef& option = kept.emplace_back();
+                    member.key.ReadText(option.key);
+                    option.value = member.value;
                 }
-                listing.options = std::move(*document);
+                AppendPublicOptions(listing.options, kept);
             }
             return listing;
         }
@@ -585,6 +590,27 @@ namespace BECore {
 
     }  // namespace
 
+    bool IsPublicOptionValue(JsonView value) {
+        return value.IsBool() || value.AsInt64() || value.AsUint64();
+    }
+
+    void AppendPublicOptions(String& out, Vector<PublicOptionRef>& options) {
+        if (options.empty()) {
+            return;
+        }
+        // Alphabetical, as the DOM kept them (the bytes of the `lobby` message); of two equal keys the first of the document counts
+        eastl::sort(options.begin(), options.end(), [](const PublicOptionRef& a, const PublicOptionRef& b) { return a.key != b.key ? a.key < b.key : a.value.Index() < b.value.Index(); });
+        JsonWriter writer(out);
+        writer.BeginObject();
+        for (size_t i = 0; i < options.size(); ++i) {
+            if (i == 0 || options[i].key != options[i - 1].key) {
+                writer.Key(StringView(options[i].key.data(), options[i].key.size()));
+                WriteJson(writer, options[i].value);
+            }
+        }
+        writer.EndObject();
+    }
+
     std::expected<ClientMessage, ControlError> ParseClientMessage(StringView text, size_t maxBytes) {
         JsonTape tape;
         return ParseClientMessage(tape, text, maxBytes);
@@ -656,7 +682,7 @@ namespace BECore {
                            RoomWireCreateRoom wire;
                            wire.game = TextView(m.game);
                            wire.name = TextView(m.name);
-                           wire.options = JsonPayload::Borrowed(m.options);
+                           wire.options = JsonPayload::Text(DocumentText(m.options));
                            if (m.isPublic) {
                                wire._public = true;
                            }
@@ -664,7 +690,7 @@ namespace BECore {
                        },
                        [&](const ActionMessage& m) {
                            RoomWireAction wire;
-                           wire.action = JsonPayload::Borrowed(m.action);
+                           wire.action = JsonPayload::Text(DocumentText(m.action));
                            wire.version = m.version;
                            wire.WriteJson(writer);
                        },

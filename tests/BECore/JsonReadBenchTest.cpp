@@ -77,7 +77,7 @@ namespace BECore::Tests {
             lobby.phase = RoomPhase::Lobby;
             lobby.hostSeat = 0;
             lobby.seats = {{0, SeatKind::Human, "Ann", true}, {1, SeatKind::Human, "Bob", false}, {2, SeatKind::Computer, {}, false}, {3, SeatKind::Empty, {}, false}};
-            lobby.options = Json{{"fast", true}, {"rounds", 3}};
+            lobby.options = R"({"fast":true,"rounds":3})";
             return lobby;
         }
 
@@ -91,7 +91,7 @@ namespace BECore::Tests {
                 listing.taken = i % kLobbySeats;
                 listing.seats = kLobbySeats;
                 listing.started = i % 2 == 0;
-                listing.options = Json{{"fast", true}, {"rounds", 3}};
+                listing.options = R"({"fast":true,"rounds":3})";
                 list.rooms.push_back(listing);
             }
             return list;

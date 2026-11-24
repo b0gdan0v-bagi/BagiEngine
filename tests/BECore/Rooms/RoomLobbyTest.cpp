@@ -1,4 +1,5 @@
 #include <BECore/Rooms/TestRandom.h>
+#include <Common/JsonDoc.h>
 #include <Common/Printers.h>
 #include <Rooms/Room.h>
 #include <Rooms/RoomErrors.h>
@@ -26,6 +27,17 @@ namespace BECore::Tests {
 
     }  // namespace
 
+    TEST(RoomLobbyTest, TheLobbyOptionsAreAlphabeticalWhateverTheOrderOfTheClientAndOfThePublicNames) {
+        Room room("ABCDE", SeatedGameInfo{"fake", 4, {"zeta", "alpha", "mid"}}, MakeSequence(7));
+        room.SetLobbyOptions(JsonDoc(R"({ "mid" : 3 ,
+            "zeta":false, "alpha" : true, "other":1 })"));
+        EXPECT_EQ(room.GetLobbySnapshot().options, R"({"alpha":true,"mid":3,"zeta":false})");
+        // The same members in another order are the same options: no new revision
+        const uint64_t revision = room.GetLobbyRevision();
+        room.SetLobbyOptions(JsonDoc(R"({"alpha":true,"zeta":false,"mid":3})"));
+        EXPECT_EQ(room.GetLobbyRevision(), revision);
+    }
+
     TEST(RoomLobbyTest, TheLobbyKeepsOnlyThePublicBooleanAndIntegerOptions) {
         Room room("ABCDE", SeatedGameInfo{"fake", 4, {"hints", "hands", "name", "nested"}}, MakeSequence(7));
         EXPECT_TRUE(room.GetLobbySnapshot().options.empty());
@@ -37,21 +49,18 @@ namespace BECore::Tests {
         options["name"] = "a string is never shown";
         options["nested"] = Json::object();
         options["other"] = 1;  // not public
-        room.SetLobbyOptions(options);
+        room.SetLobbyOptions(JsonDoc(DumpJson(options)));
 
-        Json expected = Json::object();
-        expected["hints"] = true;
-        expected["hands"] = 8;
-        EXPECT_EQ(room.GetLobbySnapshot().options, expected);
+        EXPECT_EQ(room.GetLobbySnapshot().options, R"({"hands":8,"hints":true})");
         EXPECT_GT(room.GetLobbyRevision(), before);
 
         // The same options again change nothing
         const uint64_t after = room.GetLobbyRevision();
-        room.SetLobbyOptions(options);
+        room.SetLobbyOptions(JsonDoc(DumpJson(options)));
         EXPECT_EQ(room.GetLobbyRevision(), after);
 
         // Not an object: nothing is public
-        room.SetLobbyOptions(Json::array());
+        room.SetLobbyOptions(JsonDoc("[]"));
         EXPECT_TRUE(room.GetLobbySnapshot().options.empty());
     }
 

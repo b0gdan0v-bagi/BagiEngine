@@ -203,7 +203,7 @@ namespace BECore::Tests {
             /// everybody is in the room afterwards, nobody has started
             void MakeTable(StringView game, size_t humans, const Json& options = Json::object(), FunctionRef<void(RoomClientSettings&)> tuneGuest = [](RoomClientSettings&) {}) {
                 Player& host = AddPlayer();
-                ASSERT_TRUE(host.client->Host(url, game, "P0", options).has_value());
+                ASSERT_TRUE(host.client->Host(url, game, "P0", DumpJson(options)).has_value());
                 ASSERT_TRUE(WaitFor([&] { return host.client->IsInRoom(); }, kShortLimit));
                 for (size_t i = 1; i < humans; ++i) {
                     RoomClientSettings guestSettings = MakeClientSettings();

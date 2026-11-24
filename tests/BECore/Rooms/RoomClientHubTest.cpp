@@ -63,7 +63,7 @@ namespace BECore::Tests {
             /// The host makes a room of @p game and everybody else joins it; the client of every player is in the room afterwards
             void MakeLobby(StringView game, size_t humans, const Json& options = Json::object()) {
                 Player& host = AddPlayer();
-                ASSERT_TRUE(host.client->Host(kUrl, game, "P0", options).has_value());
+                ASSERT_TRUE(host.client->Host(kUrl, game, "P0", DumpJson(options)).has_value());
                 ASSERT_TRUE(StepUntil([&] { return host.client->IsInRoom(); }));
                 for (size_t i = 1; i < humans; ++i) {
                     Player& guest = AddPlayer();
@@ -172,7 +172,7 @@ namespace BECore::Tests {
 
     TEST_F(RoomClientHubTest, APublicRoomIsListedAndJoinedFromTheListOnTheSameConnectionAndAHandIsPlayed) {
         Player& host = AddPlayer();
-        ASSERT_TRUE(host.client->Host(kUrl, "cards", "P0", Json::object(), true).has_value());
+        ASSERT_TRUE(host.client->Host(kUrl, "cards", "P0", "{}", true).has_value());
         ASSERT_TRUE(StepUntil([&] { return host.client->IsInRoom(); }));
 
         Player& browser = AddPlayer();

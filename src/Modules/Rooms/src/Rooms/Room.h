@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlTypes.h>
+#include <BECore/Control/JsonView.h>
 #include <Games/SeatedGameRegistry.h>
 #include <Rooms/RoomLimits.h>
 #include <Rooms/RoomProtocol.h>
@@ -50,12 +51,13 @@ namespace BECore {
          * @brief Starts the game. Empty seats become computers.
          *
          * @param host Must be the host.
-         * @param options The game's options (from `create_room`, untrusted), handed to ISeatedGame::Start as they are.
+         * @param options The game's options (an object, from `create_room`, untrusted), handed to ISeatedGame::Start as they are; a view that
+         *        is not valid is an empty object. A document the game's interface cannot hold yet (`1e999`) is `bad_message`.
          * @return `not_in_room`, `not_host`, `game_started` (already started), `internal_error` (no factory, the factory gave no
          *         game or one with another seat count than the registry said), or the error of ISeatedGame::Start. On an error the
          *         room stays in the lobby, unchanged.
          */
-        [[nodiscard]] std::expected<void, ControlError> Start(PlayerId host, RoomTime now, const Json& options = Json::object());
+        [[nodiscard]] std::expected<void, ControlError> Start(PlayerId host, RoomTime now, JsonView options = {});
 
         /**
          * @brief A member plays an action for its seat.
@@ -66,7 +68,7 @@ namespace BECore {
          *         (also for a member who is away), or the game's own error (`illegal_action`, `invalid_params`). Nothing changes on an
          *         error. When the action ends the game the phase becomes Finished.
          */
-        [[nodiscard]] std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformAction(PlayerId player, uint64_t version, const Json& action);
+        [[nodiscard]] std::expected<UniquePtr<SeatedOutcome>, ControlError> PerformAction(PlayerId player, uint64_t version, JsonView action);
 
         /// What the member's seat may see now (`not_in_room`, `not_started`)
         [[nodiscard]] std::expected<UniquePtr<SeatedView>, ControlError> GetSeatView(PlayerId player) const;
@@ -145,9 +147,11 @@ namespace BECore {
         /**
          * @brief Keeps the public part of the room's `options` (from `create_room`, untrusted) for the lobby: the members whose key is
          *        in `SeatedGameInfo::publicOptions` and whose value is a boolean or an integer, at most kMaxLobbyOptions. Anything
-         *        else is left out, never refused (the game judges the options at `Start`). Bumps the lobby revision when it changed.
+         *        else is left out, never refused (the game judges the options at `Start`). They are kept as the compact text of an
+         *        object in alphabetical key order, whatever the order of @p options or of `publicOptions`. Bumps the lobby revision
+         *        only when that text changed.
          */
-        void SetLobbyOptions(const Json& options);
+        void SetLobbyOptions(JsonView options);
 
         /// Grows with every change that GetLobbySnapshot shows (a join, a leave, a seat, the host, the phase, an away or a return); a call
         /// that changes nothing leaves it as it is. Never goes back.
@@ -209,8 +213,8 @@ namespace BECore {
         /// 0 when no human is left
         PlayerId _host = 0;
         uint64_t _lobbyRevision = 1;
-        /// The public options the lobby shows (SetLobbyOptions)
-        Json _lobbyOptions = Json::object();
+        /// The public options the lobby shows (SetLobbyOptions): the text of an object, empty when there are none
+        String _lobbyOptions;
         bool _public = false;
     };
 

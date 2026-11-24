@@ -106,7 +106,7 @@ namespace BECore::Tests {
         /// Three members in one room of the fake game; what they were sent so far is cleared
         void MakeRoomOfThree(ReferenceSinkWorld& world) {
             world.Connect(1);
-            world.Send(1, CreateRoomMessage{"fake", "P0", Json::object(), false});
+            world.Send(1, CreateRoomMessage{"fake", "P0", String(), false});
             ASSERT_FALSE(world.sent.empty());
             const auto joined = ParseServerMessage(world.sent.front().text);
             ASSERT_TRUE(joined.has_value());
@@ -279,6 +279,15 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(second).token, secondToken);
     }
 
+    TEST(RoomHubTest, ThePublicOptionsAreWrittenAlphabeticalWhateverOrderAndBlanksTheClientUsed) {
+        HubHarness harness;
+        const ConnectionId host = harness.Connect();
+        harness.SendText(host, "{\"v\":1,\"type\":\"create_room\",\"game\":\"fake-public\",\"name\":\"Ann\",\n \"options\" : { \"open\" : true ,\n \"secret\":7, \"count\" : 3 }}");
+        const ReceivedMessage* lobby = harness.Client(host).Last(RoomMessageTypes::kLobby);
+        ASSERT_NE(lobby, nullptr);
+        EXPECT_NE(lobby->text.find(R"("options":{"count":3,"open":true},)"), String::npos) << lobby->text.c_str();
+    }
+
     TEST(RoomHubTest, TheLobbyShowsEveryMemberThePublicOptionsOfTheRoomAndNothingElse) {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
@@ -357,7 +366,7 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kNotInRoom);
         harness.Leave(stranger);
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kNotInRoom);
-        harness.Send(stranger, ActionMessage{0, Json::object()});
+        harness.Send(stranger, ActionMessage{0, String()});
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kNotInRoom);
         harness.Create(stranger, "Zed", "no_such_game");
         EXPECT_EQ(harness.Client(stranger).LastErrorCode(), RoomErrors::kUnknownGame);
@@ -384,7 +393,7 @@ namespace BECore::Tests {
         // Wrong role, wrong time
         harness.Start(ids[1]);
         EXPECT_EQ(harness.Client(ids[1]).LastErrorCode(), RoomErrors::kNotHost);
-        harness.Send(ids[1], ActionMessage{0, CardAction("c1_0")});
+        harness.Send(ids[1], ActionMessage{0, CardActionText("c1_0")});
         EXPECT_EQ(harness.Client(ids[1]).LastErrorCode(), RoomErrors::kNotStarted);
         harness.Start(ids[0]);
         EXPECT_EQ(harness.Client(ids[0]).LastErrorCode(), "");
@@ -406,12 +415,12 @@ namespace BECore::Tests {
         const int turnSeat = harness.Client(onTurn).seat;
         const int otherSeat = harness.Client(other).seat;
         // A card nobody holds: the game quotes what the client sent in its error, so a hidden card would be echoed back
-        harness.Send(onTurn, ActionMessage{version, CardAction("c9_9")});
+        harness.Send(onTurn, ActionMessage{version, CardActionText("c9_9")});
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kIllegalAction);
-        harness.Send(other, ActionMessage{version, CardAction(Format("c{}_0", otherSeat))});
+        harness.Send(other, ActionMessage{version, CardActionText(Format("c{}_0", otherSeat))});
         EXPECT_EQ(harness.Client(other).LastErrorCode(), RoomErrors::kNotYourTurn);
         const size_t viewsBefore = harness.Client(onTurn).Count(RoomMessageTypes::kView);
-        harness.Send(onTurn, ActionMessage{version + 7, CardAction(Format("c{}_0", turnSeat))});
+        harness.Send(onTurn, ActionMessage{version + 7, CardActionText(Format("c{}_0", turnSeat))});
         EXPECT_EQ(harness.Client(onTurn).LastErrorCode(), RoomErrors::kStaleAction);
         // The current view comes again after a stale action
         EXPECT_EQ(harness.Client(onTurn).Count(RoomMessageTypes::kView), viewsBefore + 1);

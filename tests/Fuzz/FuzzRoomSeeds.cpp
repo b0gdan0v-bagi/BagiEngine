@@ -45,13 +45,13 @@ namespace BECore::Fuzz {
             Json options = Json::object();
             options["firstSeat"] = 2;
             options["rules"] = Json::array({"fast", 3, nullptr, true});
-            client("client-create-room.bin", CreateRoomMessage{String(kGame), "Ann", options});
-            client("client-create-room-name-spaces.bin", CreateRoomMessage{String(kGame), "   Bob the Builder  ", Json::object()});
-            client("client-create-room-name-utf8.bin", CreateRoomMessage{String(kGame), "Zo\xC3\xAB \xF0\x9F\x98\x80", Json::object()});
-            client("client-create-room-name-bidi.bin", CreateRoomMessage{String(kGame), "Mal\xE2\x80\xAEory", Json::object()});
-            client("client-create-room-name-too-long.bin", CreateRoomMessage{String(kGame), String(RoomLimits::kMaxNameBytes + 1, 'n'), Json::object()});
-            client("client-create-room-small-limit.bin", CreateRoomMessage{String(kGame), "Ann", options}, 1);
-            client("client-create-room-public.bin", CreateRoomMessage{String(kGame), "Ann", options, true});
+            client("client-create-room.bin", CreateRoomMessage{String(kGame), "Ann", DumpJson(options)});
+            client("client-create-room-name-spaces.bin", CreateRoomMessage{String(kGame), "   Bob the Builder  ", String()});
+            client("client-create-room-name-utf8.bin", CreateRoomMessage{String(kGame), "Zo\xC3\xAB \xF0\x9F\x98\x80", String()});
+            client("client-create-room-name-bidi.bin", CreateRoomMessage{String(kGame), "Mal\xE2\x80\xAEory", String()});
+            client("client-create-room-name-too-long.bin", CreateRoomMessage{String(kGame), String(RoomLimits::kMaxNameBytes + 1, 'n'), String()});
+            client("client-create-room-small-limit.bin", CreateRoomMessage{String(kGame), "Ann", DumpJson(options)}, 1);
+            client("client-create-room-public.bin", CreateRoomMessage{String(kGame), "Ann", DumpJson(options), true});
             client("client-list-rooms.bin", ListRoomsMessage{String(kGame)});
             JoinRoomMessage joinByName;
             joinByName.code = "ABCDE";
@@ -67,7 +67,7 @@ namespace BECore::Fuzz {
             Json card = Json::object();
             card["type"] = "play";
             card["card"] = "c1_2";
-            client("client-action.bin", ActionMessage{12, card});
+            client("client-action.bin", ActionMessage{12, DumpJson(card)});
             client("client-leave.bin", LeaveMessage{});
             client("client-ping.bin", PingMessage{});
 
@@ -94,7 +94,7 @@ namespace BECore::Fuzz {
             list.game = kGame;
             Json listedOptions = Json::object();
             listedOptions["firstSeat"] = 2;
-            list.rooms = {RoomListing{"ABCDE", "Ann", 1, DemoCardGame::kSeatCount, false, listedOptions}, RoomListing{"FGHJK", "Bob", 3, DemoCardGame::kSeatCount, false, Json::object()}};
+            list.rooms = {RoomListing{"ABCDE", "Ann", 1, DemoCardGame::kSeatCount, false, DumpJson(listedOptions)}, RoomListing{"FGHJK", "Bob", 3, DemoCardGame::kSeatCount, false, String()}};
             server("server-rooms.bin", MakeRoomListMessage(list));
             list.rooms.clear();
             list.more = true;
@@ -135,7 +135,7 @@ namespace BECore::Fuzz {
             }
 
             void Create(uint8_t number, StringView name, StringView game = kGame, bool isPublic = false) {
-                Send(number, CreateRoomMessage{String(game), String(name), Json::object(), isPublic});
+                Send(number, CreateRoomMessage{String(game), String(name), String(), isPublic});
             }
 
             void List(uint8_t number, StringView game = kGame) {
@@ -162,7 +162,7 @@ namespace BECore::Fuzz {
                 if (!known.actions.is_array() || known.actions.empty()) {
                     return;
                 }
-                Send(number, ActionMessage{known.version, known.actions[0]});
+                Send(number, ActionMessage{known.version, DumpJson(known.actions[0])});
             }
 
             [[nodiscard]] const String& RoomOf(uint8_t number) {
@@ -283,7 +283,7 @@ namespace BECore::Fuzz {
             recorder.Create(1, "Host", "nogame");
             recorder.Send(1, StartMessage{});
             recorder.Send(1, ChooseSeatMessage{9});
-            recorder.Send(1, ActionMessage{0, Json::object()});
+            recorder.Send(1, ActionMessage{0, String()});
             recorder.Send(1, LeaveMessage{});
             recorder.Create(1, "Host");
             const String code = recorder.RoomOf(1);
@@ -295,17 +295,17 @@ namespace BECore::Fuzz {
             recorder.Send(1, ChooseSeatMessage{1});
             recorder.Send(1, StartMessage{});
             recorder.Send(1, ChooseSeatMessage{2});
-            recorder.Send(1, ActionMessage{99, Json::object()});
+            recorder.Send(1, ActionMessage{99, String()});
             Json card = Json::object();
             card["type"] = "play";
             card["card"] = "c3_0";
-            recorder.Send(1, ActionMessage{0, card});
+            recorder.Send(1, ActionMessage{0, DumpJson(card)});
             recorder.Connect(3);
             recorder.JoinByName(3, code, "Late");
             recorder.JoinByToken(3, code, String(RoomLimits::kTokenLength, '0'));
             Json padding = Json::object();
             padding["pad"] = String(kBigOptionsBytes, 'x').c_str();
-            recorder.Send(3, CreateRoomMessage{String(kGame), "Big", padding});
+            recorder.Send(3, CreateRoomMessage{String(kGame), "Big", DumpJson(padding)});
             recorder.Tick(kLongPause);
             return recorder.TakeBytes();
         }

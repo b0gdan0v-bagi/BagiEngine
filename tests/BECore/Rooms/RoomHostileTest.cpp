@@ -176,7 +176,7 @@ namespace BECore::Tests {
         const size_t receivedAtTheLeave = harness.Client(leaver).received.size();
 
         // The others play on to the end, the leaver's seat with them, and the leaver tries to come back and to act
-        harness.Send(leaver, ActionMessage{0, CardAction("c2_0")});
+        harness.Send(leaver, ActionMessage{0, CardActionText("c2_0")});
         EXPECT_EQ(harness.Client(leaver).LastErrorCode(), RoomErrors::kNotInRoom);
         harness.JoinByToken(leaver, code, token);
         EXPECT_EQ(harness.Client(leaver).LastErrorCode(), RoomErrors::kBadToken);
@@ -232,7 +232,7 @@ namespace BECore::Tests {
         harness.JoinByName(late, code, "Late");
         EXPECT_EQ(harness.Client(late).LastErrorCode(), RoomErrors::kUnknownRoom);
         harness.Tick(seconds(5));
-        harness.Send(ids[0], ActionMessage{0, CardAction("c0_0")});
+        harness.Send(ids[0], ActionMessage{0, CardActionText("c0_0")});
         EXPECT_EQ(harness.Client(ids[0]).LastErrorCode(), RoomErrors::kNotInRoom);
         EXPECT_EQ(harness.Client(ids[0]).received.size(), sizes[0] + 1);
         EXPECT_EQ(harness.Client(ids[1]).received.size(), sizes[1]);
@@ -323,7 +323,7 @@ namespace BECore::Tests {
         // The right version and a card the seat does hold: only the turn is wrong
         ActionMessage early;
         early.version = version;
-        early.action = CardAction(Format("c{}_0", otherSeat));
+        early.action = CardActionText(Format("c{}_0", otherSeat));
         for (int i = 0; i < kReplays; ++i) {
             harness.Advance(seconds(1));
             harness.Send(other, early);

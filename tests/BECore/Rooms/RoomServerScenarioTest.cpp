@@ -345,8 +345,8 @@ namespace BECore::Tests {
         auto open = RoomSocketClient::Connect(port);
         auto closed = RoomSocketClient::Connect(port);
         ASSERT_TRUE(open.has_value() && closed.has_value());
-        open->Send(CreateRoomMessage{"cards", "OpenHost", Json::object(), true});
-        closed->Send(CreateRoomMessage{"cards", "ClosedHost", Json::object()});
+        open->Send(CreateRoomMessage{"cards", "OpenHost", String(), true});
+        closed->Send(CreateRoomMessage{"cards", "ClosedHost", String()});
         ASSERT_TRUE(open->WaitFor(RoomMessageTypes::kLobby).has_value());
         ASSERT_TRUE(closed->WaitFor(RoomMessageTypes::kLobby).has_value());
 

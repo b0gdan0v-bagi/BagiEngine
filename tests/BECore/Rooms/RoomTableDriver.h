@@ -87,7 +87,7 @@ namespace BECore::Tests {
             }
             ActionMessage action;
             action.version = version;
-            action.action = Require(FindJsonMember(view->json, "actions"))[0];
+            action.action = DumpJson(Require(FindJsonMember(view->json, "actions"))[0]);
             _client.Send(action);
             _acted = true;
             _actedVersion = version;
@@ -193,7 +193,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(client.has_value());
             const String name = Format("Player{}", i);
             if (i == 0) {
-                client->Send(CreateRoomMessage{String(game), name, options});
+                client->Send(CreateRoomMessage{String(game), name, DumpJson(options)});
             } else {
                 client->JoinByName(out.front()->roomCode, name);
             }

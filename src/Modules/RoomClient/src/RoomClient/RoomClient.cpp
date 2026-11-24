@@ -1,5 +1,6 @@
 #include "RoomClient.h"
 
+#include <BECore/Control/JsonViewOps.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomErrors.h>
 
@@ -21,17 +22,32 @@ namespace BECore {
             return SerializeClientMessage(message);
         }
 
+        /// @p text as compact text when it is one JSON object; `invalid_params` otherwise (the argument is the caller's, so it is refused here, not on the server)
+        [[nodiscard]] std::expected<String, ControlError> CompactObject(JsonTape& tape, StringView text, StringView argument) {
+            if (!tape.Parse(text) || !JsonView(tape, 0).IsObject()) {
+                return Fail(ControlErrors::kInvalidParams, Format("'{}' must be the text of a JSON object", argument));
+            }
+            String compact;
+            JsonWriter writer(compact);
+            WriteJson(writer, JsonView(tape, 0));
+            return compact;
+        }
+
     }  // namespace
 
     RoomClient::RoomClient(RoomClientSettings settings) : _settings(std::move(settings)) {}
 
     RoomClient::~RoomClient() = default;
 
-    std::expected<void, ControlError> RoomClient::Host(StringView url, StringView game, StringView name, const Json& options, bool isPublic) {
+    std::expected<void, ControlError> RoomClient::Host(StringView url, StringView game, StringView name, StringView optionsJson, bool isPublic) {
+        auto options = CompactObject(_tape, optionsJson, "options");
+        if (!options) {
+            return std::unexpected(options.error());
+        }
         CreateRoomMessage message;
         message.game = String(game);
         message.name = String(name);
-        message.options = options;
+        message.options = std::move(*options);
         message.isPublic = isPublic;
         return BeginRequest(url, SerializeClientMessage(message));
     }
@@ -148,16 +164,20 @@ namespace BECore {
         return SendToServer(StartMessage{});
     }
 
-    std::expected<void, ControlError> RoomClient::SendAction(const Json& action) {
+    std::expected<void, ControlError> RoomClient::SendAction(StringView actionJson) {
         if (auto inRoom = RequireRoom(); !inRoom) {
             return inRoom;
         }
         if (!_hasView) {
             return Fail(RoomClientErrors::kWrongState, "no view yet: the game has not started");
         }
+        auto action = CompactObject(_tape, actionJson, "action");
+        if (!action) {
+            return std::unexpected(action.error());
+        }
         ActionMessage message;
         message.version = _viewVersion;
-        message.action = action;
+        message.action = std::move(*action);
         return SendToServer(message);
     }
 
@@ -279,7 +299,7 @@ namespace BECore {
         // Any text is life, one that does not parse too
         _lastReceived = _now;
         _pingOutstanding = false;
-        auto parsed = ParseServerMessage(text, RoomLimits::kMaxServerMessageBytes);
+        auto parsed = ParseServerMessage(_tape, text, RoomLimits::kMaxServerMessageBytes);
         if (!parsed) {
             LOG_WARNING("Room client: a message from the server was dropped: {}", parsed.error().message);
             _lastError = MakeControlError(RoomClientErrors::kBadServerMessage, parsed.error().message);

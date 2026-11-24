@@ -10,6 +10,12 @@ namespace BECore::Tests {
     /// are compared with these, in the tests and the benchmark.
     namespace RoomMessageReference {
 
+        /// The DOM of the text a message member holds (`options`, `action`); an empty text is the empty object
+        inline Json DocumentOf(const String& text) {
+            auto parsed = ParseJson(text.empty() ? StringView("{}") : StringView(text.data(), text.size()));
+            return parsed ? std::move(*parsed) : Json();
+        }
+
         inline Json MakeEnvelope(StringView type) {
             Json root = Json::object();
             root["v"] = kRoomProtocolVersion;
@@ -45,8 +51,8 @@ namespace BECore::Tests {
                 seats.push_back(std::move(entry));
             }
             root["seats"] = std::move(seats);
-            if (lobby.options.is_object() && !lobby.options.empty()) {
-                root["options"] = lobby.options;
+            if (const Json options = DocumentOf(lobby.options); !options.empty()) {
+                root["options"] = options;
             }
             return DumpJson(root);
         }
@@ -62,8 +68,8 @@ namespace BECore::Tests {
                 entry["taken"] = listing.taken;
                 entry["seats"] = listing.seats;
                 entry["started"] = listing.started;
-                if (listing.options.is_object() && !listing.options.empty()) {
-                    entry["options"] = listing.options;
+                if (const Json options = DocumentOf(listing.options); !options.empty()) {
+                    entry["options"] = options;
                 }
                 rooms.push_back(std::move(entry));
             }
@@ -109,7 +115,7 @@ namespace BECore::Tests {
                            [&](const CreateRoomMessage& m) {
                                root["game"] = MakeJsonString(m.game);
                                root["name"] = MakeJsonString(m.name);
-                               root["options"] = m.options;
+                               root["options"] = DocumentOf(m.options);
                                if (m.isPublic) {
                                    root["public"] = true;
                                }
@@ -125,7 +131,7 @@ namespace BECore::Tests {
                            [&](const ChooseSeatMessage& m) { root["seat"] = m.seat; },
                            [&](const ActionMessage& m) {
                                root["version"] = m.version;
-                               root["action"] = m.action;
+                               root["action"] = DocumentOf(m.action);
                            },
                            [](const StartMessage&) {},
                            [](const LeaveMessage&) {},

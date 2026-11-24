@@ -191,7 +191,7 @@ namespace BECore {
         }
         connection.rateLimitedInRow = 0;
 
-        auto parsed = ParseClientMessage(text, _settings.maxMessageBytes);
+        auto parsed = ParseClientMessage(_tape, text, _settings.maxMessageBytes);
         if (!parsed) {
             // Only `join_room` can give these two at parse time: a code or a token that cannot exist is a guess. It is answered as
             // it is (unknown_room / bad_token, not rate_limited) even when the budgets are empty, and spends a token if one is left
@@ -283,7 +283,7 @@ namespace BECore {
         entry->room = MakeUnique<Room>(code, *info, [random]() { return (*random)(); }, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
         entry->creation = ++_roomsCreated;
         entry->options = message.options;
-        entry->room->SetLobbyOptions(message.options);
+        entry->room->SetLobbyOptions(TapeDocument(message.options));
         entry->room->SetPublic(message.isPublic);
         entry->address = connection.address;
         entry->lastActivity = now;
@@ -433,13 +433,21 @@ namespace BECore {
         Flush(*entry, now);
     }
 
+    JsonView RoomHub::TapeDocument(StringView text) {
+        constexpr StringView kEmptyObject = "{}";
+        if (!_tape.Parse(text.empty() ? kEmptyObject : text)) {
+            return {};
+        }
+        return JsonView(_tape, 0);
+    }
+
     void RoomHub::HandleStart(ConnectionId id, Connection& connection, RoomTime now) {
         RoomEntry* entry = FindRoom(connection.roomCode);
         if (!entry) {
             SendError(id, RoomErrors::kNotInRoom, "You are not in a room", RoomMessageTypes::kStart);
             return;
         }
-        if (auto started = entry->room->Start(connection.player, now, entry->options); !started) {
+        if (auto started = entry->room->Start(connection.player, now, TapeDocument(entry->options)); !started) {
             SendError(id, started.error(), RoomMessageTypes::kStart);
             return;
         }
@@ -453,7 +461,7 @@ namespace BECore {
             return;
         }
         // The outcome is public information, but the clients learn the result from the next `view`, so it is not sent
-        if (auto performed = entry->room->PerformAction(connection.player, message.version, message.action); !performed) {
+        if (auto performed = entry->room->PerformAction(connection.player, message.version, TapeDocument(message.action)); !performed) {
             SendError(id, performed.error(), RoomMessageTypes::kAction);
             if (performed.error().code == RoomErrors::kStaleAction) {
                 ResendView(id, connection, *entry);

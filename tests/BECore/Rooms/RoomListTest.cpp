@@ -1,4 +1,5 @@
 #include <BECore/Rooms/TestClient.h>
+#include <Common/JsonDoc.h>
 #include <Common/Require.h>
 
 namespace BECore::Tests {
@@ -104,7 +105,7 @@ namespace BECore::Tests {
     TEST(RoomListTest, ACreateWithPublicFalseIsPrivateAndTheLobbyDoesNotSayWhetherARoomIsListed) {
         HubHarness harness;
         const ConnectionId host = harness.Connect();
-        harness.Send(host, CreateRoomMessage{"fake", "Ann", Json::object(), false});
+        harness.Send(host, CreateRoomMessage{"fake", "Ann", String(), false});
         const ConnectionId publicHost = MakePublicRoom(harness, "Bob");
         EXPECT_EQ(ListedCount(harness.Client(Browse(harness))), 1u);
         EXPECT_EQ(FindJsonMember(Require(harness.Client(publicHost).Last(RoomMessageTypes::kLobby)).json, "public"), nullptr);
@@ -541,7 +542,7 @@ namespace BECore::Tests {
         Json options = Json::object();
         options["hints"] = true;
         options["other"] = 1;
-        room.SetLobbyOptions(options);
+        room.SetLobbyOptions(JsonDoc(DumpJson(options)));
         EXPECT_TRUE(room.GetListing().host.empty());
         EXPECT_EQ(room.GetListing().taken, 0);
 
@@ -554,9 +555,7 @@ namespace BECore::Tests {
         EXPECT_EQ(listing.taken, 2);
         EXPECT_EQ(listing.seats, 4);
         EXPECT_FALSE(listing.started);
-        Json expected = Json::object();
-        expected["hints"] = true;
-        EXPECT_EQ(listing.options, expected);
+        EXPECT_EQ(listing.options, R"({"hints":true})");
 
         EXPECT_TRUE(room.RemoveMember(first->player));
         EXPECT_EQ(room.GetListing().host, "Bob");
