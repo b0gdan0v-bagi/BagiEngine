@@ -1,12 +1,12 @@
 #include "Application.h"
 
+#include <Application/ReplayRequest.h>
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/ApplicationFabric.h>
 #include <BECore/Application/CommandLine.h>
 #include <BECore/Application/RunMode.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlSettings.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Cook/CookCommand.h>
 #include <BECore/FileSystem/FileWatchSetting.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -39,9 +39,6 @@
 namespace BECore {
 
     namespace {
-        // The only request the application posts to itself, so its id needs no other meaning
-        constexpr int64_t kReplayRequestId = 1;
-
         /// The condition that turns ASSERT on (Assert/AssertMacros.h): the Debug builds, where FileWatchSetting::Auto watches
         constexpr bool kAssertsOn = ENGINE_ENABLE_ASSERTS != 0;
 #if defined(__EMSCRIPTEN__)
@@ -191,26 +188,19 @@ namespace BECore {
     }
 
     void Application::PostReplay(const String& path, bool quitWhenDone) {
-        // A request, not an answer: `ControlService::Post` takes the request as text and nothing reads it back as a struct
-        Json request = Json::object();
-        request["id"] = kReplayRequestId;
-        request["method"] = "replay";
-        request["params"] = Json::object({{"path", MakeJsonString(path)}});
-
         // Answered on the main thread, from a frame or from Shutdown(); the application outlives the control service
-        CoreManager::GetControlService().Post(DumpJson(request), [this, quitWhenDone](const String& text) {
-            const auto answer = ParseJson(text);
-            const Json* result = answer ? FindJsonMember(*answer, "result") : nullptr;
-            const Json* error = answer ? FindJsonMember(*answer, "error") : nullptr;
-            if (result != nullptr && GetJsonBool(*result, "ok").value_or(false)) {
-                LOG_INFO("Replay: {} entries played", GetJsonInt(*result, "entries").value_or(0));
-            } else if (error != nullptr && GetJsonString(*error, "code").value_or(String()) == ControlErrors::kShuttingDown) {
-                return;  // the application ended before the replay did: nothing to report, and the exit code stays
-            } else {
-                const Json* mismatch = result != nullptr ? FindJsonMember(*result, "mismatch") : nullptr;
-                const Json* named = mismatch != nullptr ? mismatch : error;
-                LOG_ERROR("Replay: {} {}", mismatch != nullptr ? "mismatch" : "failed", named != nullptr ? DumpJson(*named) : text);
-                SetExitCode(1);
+        CoreManager::GetControlService().Post(MakeReplayRequestText(path), [this, quitWhenDone](const String& text) {
+            const ReplayOutcome outcome = ReadReplayAnswer(text);
+            switch (outcome.kind) {
+                case ReplayOutcomeKind::Played:
+                    LOG_INFO("Replay: {} entries played", outcome.entries);
+                    break;
+                case ReplayOutcomeKind::ShuttingDown:
+                    return;  // the application ended before the replay did: nothing to report, and the exit code stays
+                case ReplayOutcomeKind::Failed:
+                    LOG_ERROR("Replay: {} {}", outcome.isMismatch ? "mismatch" : "failed", outcome.detail);
+                    SetExitCode(1);
+                    break;
             }
             if (quitWhenDone) {
                 ApplicationEvents::QuitEvent::Emit();

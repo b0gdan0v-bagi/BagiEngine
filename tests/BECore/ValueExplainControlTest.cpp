@@ -59,6 +59,31 @@ namespace BECore::Tests {
                 return CallControl(service, ++nextId, "explain_value", params);
             }
 
+            /// The reply text of `explain_value` for @p formula over a hand of @p length tiles, as the service wrote it
+            String ExplainLoopText(StringView formula, size_t length) {
+                ContextDecl declaration;
+                EXPECT_TRUE(declaration.Add<ProgramListHand>("hand").has_value());
+                ProgramListHand hand;
+                hand.none.resize(length);
+                const auto total = CompileValue<int32_t>(formula, declaration);
+                EXPECT_TRUE(total.has_value());
+                if (!total) {
+                    return String();
+                }
+                document.damage = *total;
+                Context context(declaration);
+                context.Set(0, hand);
+                ValueContextRegistry::GetInstance().Register(kBattle, [&]() -> Optional<ExplainContext> { return ExplainContext{&declaration, context}; });
+                Json params = Json::object();
+                params["root"] = "doc";
+                params["path"] = "damage";
+                params["context"] = ToStdString(kBattle);
+                String reply;
+                service.Post(MakeRequest(++nextId, "explain_value", params), [&reply](String text) { reply = std::move(text); });
+                service.Drain();
+                return reply;
+            }
+
             static const Json& Result(const Json& response) {
                 const Json* result = FindJsonMember(response, "result");
                 static const Json kNone = Json::object();
@@ -92,6 +117,18 @@ namespace BECore::Tests {
                 }
             }
             return count;
+        }
+
+        /// How many containers the deepest value of @p json is inside
+        size_t ContainerDepth(const Json& json) {
+            size_t deepest = 0;
+            if (json.is_object() || json.is_array()) {
+                for (const Json& child : json) {
+                    deepest = std::max(deepest, ContainerDepth(child));
+                }
+                return deepest + 1;
+            }
+            return 0;
         }
 
         bool Contains(const Vector<String>& labels, StringView label) {
@@ -210,6 +247,31 @@ namespace BECore::Tests {
         ASSERT_NE(trace, nullptr);
         EXPECT_LE(CountNodes(*trace), kMaxFormattedLines);
         EXPECT_LE(DumpJson(result).size(), kMaxFormattedLines * 400U);
+    }
+
+    TEST_F(ValueExplainControlTest, ATraceDeeperThanTheWriterIsCutToNullWhereTheWriterEnds) {
+        constexpr size_t kLoopLength = 300;
+        const String reply = ExplainLoopText("sum(hand.none, t, 1)", kLoopLength);
+
+        const auto response = ParseJson(reply);
+        ASSERT_TRUE(response.has_value()) << reply.c_str();
+        const Json& result = Result(*response);
+        EXPECT_EQ(StringOf(&result, "value"), "300");
+        EXPECT_EQ(ContainerDepth(*response), JsonWriter::kMaxDepth);
+        EXPECT_NE(reply.find(R"("children":[null)"), String::npos);
+    }
+
+    TEST_F(ValueExplainControlTest, AnAnswerListsTheKeysInAlphabeticalOrderWithTruncatedAfterTheTrace) {
+        const String reply = ExplainLoopText("sum(hand.none, t, t.rank)", kLongList);
+
+        const size_t hasValue = reply.find(R"("has_value")");
+        const size_t trace = reply.find(R"("trace")");
+        const size_t truncated = reply.rfind(R"("truncated":true)");
+        const size_t value = reply.rfind(R"("value":"0"})");
+        ASSERT_NE(truncated, String::npos) << "a loop over " << kLongList << " tiles is cut";
+        EXPECT_LT(hasValue, trace);
+        EXPECT_LT(trace, truncated);
+        EXPECT_LT(truncated, value);
     }
 
     TEST_F(ValueExplainControlTest, TheRefusalsHaveTheirOwnCodes) {
