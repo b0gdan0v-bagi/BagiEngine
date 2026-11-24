@@ -1,9 +1,10 @@
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/JsonDoc.h>
+#include <Common/JsonEdit.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
@@ -20,33 +21,27 @@ namespace BECore::Tests {
         constexpr int kFrameGuard = 100;
         constexpr int64_t kSetSeed = 40;
 
-        /// The manifest `WriteArtGenSet` writes, as a DOM to compare with the answers the oracle `Call` parses
-        Json ManifestJson(const ArtGenSet& set) {
+        /// The manifest `WriteArtGenSet` writes: the text of an answer's set member and of a file on disk, compared as bytes
+        String ManifestText(const ArtGenSet& set) {
             String text;
             JsonWriter writer(text);
             WriteArtGenSet(writer, set);
-            return Require(ParseJson(text));
+            return text;
         }
 
-        Json ReadyPoll() {
-            Json preset = Json::object();
-            preset["name"] = "wood";
-            preset["title"] = "wood";
-            Json knock = Json::object();
-            knock["name"] = "knock";
-            knock["title"] = "knock";
-            knock["kind"] = "audio";
-            Json params = Json::object();
-            params["state"] = "ready";
-            params["generator"] = "fake";
-            params["presets"] = Json::array({preset, knock});
-            return params;
+        /// The JSON text of the string @p text, quoted and escaped: a member of a request that a test builds with `JsonWith`
+        String Str(StringView text) {
+            String written;
+            JsonWriter writer(written);
+            writer.Value(text);
+            return written;
         }
 
-        Json Report(uint32_t id) {
-            Json params = Json::object();
-            params["id"] = id;
-            return params;
+        constexpr StringView kReadyPoll = R"({"generator":"fake","presets":[{"name":"wood","title":"wood"},{"kind":"audio","name":"knock","title":"knock"}],"state":"ready"})";
+
+        /// A report of the service about the run @p id with the members @p members (`"seed":1,"path":"x.png"`)
+        String Report(uint32_t id, StringView members = {}) {
+            return members.empty() ? Format(R"({{"id":{}}})", id) : Format(R"({{"id":{},{}}})", id, members);
         }
 
         /// What the fake acceptors were called with, in order (a function pointer cannot capture, so the test reads it here)
@@ -93,11 +88,11 @@ namespace BECore::Tests {
             return reply;
         }
 
-        /// The member names of a JSON object, sorted: the parsed DOM sorts them, and the generated writer writes them in the same order by design
-        Vector<String> KeysOf(const Json& object) {
+        /// The member names of a JSON object in the order they are written: the generated writer writes them in byte order by design
+        Vector<String> KeysOf(JsonView object) {
             Vector<String> keys;
-            for (const auto& [key, value] : object.items()) {
-                keys.push_back(String(key.c_str()));
+            for (const JsonMember member : object.Members()) {
+                keys.push_back(String(member.key.Text().value_or(StringView())));
             }
             return keys;
         }
@@ -204,32 +199,32 @@ namespace BECore::Tests {
             RemoveDirectory(_root);
         }
 
-        Json Call(StringView method, const Json& params = Json::object()) {
-            Json request = Json::object();
-            request["id"] = ++_nextId;
-            request["method"] = ToStdString(method);
-            request["params"] = params;
-            Optional<Json> response;
-            service.Post(DumpJson(request), [&response](String reply) {
-                auto parsed = ParseJson(reply);
-                response = parsed ? std::move(*parsed) : Json();
+        /// One control call through the service, as the bridge makes it; the answer, empty when none came
+        ControlReply Call(StringView method, StringView params = "{}") {
+            ControlReply response;
+            bool answered = false;
+            service.Post(MakeRequestText(++_nextId, method, params), [&](const String& reply) {
+                response = ControlReply(StringView(reply.c_str(), reply.size()));
+                answered = true;
             });
-            for (int frame = 0; !response && frame < kFrameGuard; ++frame) {
+            for (int frame = 0; !answered && frame < kFrameGuard; ++frame) {
                 service.Drain();
                 service.EndFrame();
             }
-            return response ? std::move(*response) : Json();
+            return response;
         }
 
-        static const Json& Result(const Json& response) {
-            static const Json kNull;
-            const Json* result = FindJsonMember(response, "result");
-            return result != nullptr ? *result : kNull;
+        ControlReply Call(StringView method, const char* params) {
+            return Call(method, StringView(params));
         }
 
-        /// A poll of the service; its reply
-        Json Poll() {
-            return Result(Call("artgen_poll", ReadyPoll()));
+        ControlReply Call(StringView method, const String& params) {
+            return Call(method, StringView(params.c_str(), params.size()));
+        }
+
+        /// A poll of the service: its whole answer, the `result` of it is what the service is told
+        ControlReply Poll() {
+            return Call("artgen_poll", kReadyPoll);
         }
 
         std::expected<String, String> Enqueue(StringView name, StringView lines, int32_t count = 2, Optional<int64_t> seed = kSetSeed) {
@@ -242,59 +237,51 @@ namespace BECore::Tests {
             return session.EnqueueSet(std::move(request));
         }
 
-        /// The job the last poll handed over: its request, or null
-        static const Json* RequestOf(const Json& reply) {
-            return FindJsonMember(reply, "request");
+        /// The job a poll handed over: its request, a view that is not valid when none
+        static JsonView RequestOf(const ControlReply& poll) {
+            return MemberOf(poll.Result(), "request");
         }
 
         /// What the service does for the request it got: an image per seed, then the end
-        void Finish(const Json& request, StringView status, StringView error = {}, StringView kind = "image") {
-            const uint32_t id = static_cast<uint32_t>(Require(GetJsonInt(request, "id")));
-            const int64_t seed = Require(GetJsonInt(request, "seed"));
-            const String outDir = Require(GetJsonString(request, "outDir"));
-            const String name = Require(GetJsonString(request, "name"));
+        void Finish(JsonView request, StringView status, StringView error = {}, StringView kind = "image") {
+            const uint32_t id = static_cast<uint32_t>(Require(IntOf(request, "id")));
+            const int64_t seed = Require(IntOf(request, "seed"));
+            const String outDir = StringOf(request, "outDir");
+            const String name = StringOf(request, "name");
             const StringView extension = kind == "audio" ? "flac" : "png";
             if (status == "ok") {
-                const int64_t count = Require(GetJsonInt(request, "count"));
+                const int64_t count = Require(IntOf(request, "count"));
                 for (int64_t i = 0; i < count; ++i) {
-                    Json image = Report(id);
-                    image["seed"] = seed + i;
-                    image["kind"] = ToStdString(kind);
-                    image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.{}", _root.View(), outDir, name, seed + i, extension));
-                    image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", _root.View(), outDir, name, seed + i));
-                    Call("artgen_image", image);
+                    const String path = Format("{}/artgen/out/{}/{}_{}.{}", _root.View(), outDir, name, seed + i, extension);
+                    const String provenance = Format("{}/artgen/out/{}/{}_{}.artgen.json", _root.View(), outDir, name, seed + i);
+                    Call("artgen_image", Report(id, Format(R"("kind":{},"path":{},"provenance":{},"seed":{})", Str(kind), Str(path), Str(provenance), seed + i)));
                 }
             }
-            Json done = Report(id);
-            done["status"] = ToStdString(status);
+            String done = Report(id, Format(R"("status":{})", Str(status)));
             if (!error.empty()) {
-                done["error"] = ToStdString(error);
+                done = JsonWith(done, "/error", Str(error));
             }
             Call("artgen_done", done);
         }
 
         /// What the service does when it makes @p images images for a request that asked for fewer (extra images of a regenerating run): seeds from the request's, then the end
-        void FinishWithImages(const Json& request, int64_t images) {
-            const uint32_t id = static_cast<uint32_t>(GetJsonInt(request, "id").value());
-            const int64_t seed = GetJsonInt(request, "seed").value();
-            const String outDir = GetJsonString(request, "outDir").value();
-            const String name = GetJsonString(request, "name").value();
+        void FinishWithImages(JsonView request, int64_t images) {
+            const uint32_t id = static_cast<uint32_t>(Require(IntOf(request, "id")));
+            const int64_t seed = Require(IntOf(request, "seed"));
+            const String outDir = StringOf(request, "outDir");
+            const String name = StringOf(request, "name");
             for (int64_t i = 0; i < images; ++i) {
-                Json image = Report(id);
-                image["seed"] = seed + i;
-                image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.png", _root.View(), outDir, name, seed + i));
-                image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", _root.View(), outDir, name, seed + i));
-                Call("artgen_image", image);
+                const String path = Format("{}/artgen/out/{}/{}_{}.png", _root.View(), outDir, name, seed + i);
+                const String provenance = Format("{}/artgen/out/{}/{}_{}.artgen.json", _root.View(), outDir, name, seed + i);
+                Call("artgen_image", Report(id, Format(R"("path":{},"provenance":{},"seed":{})", Str(path), Str(provenance), seed + i)));
             }
-            Json done = Report(id);
-            done["status"] = "ok";
-            Call("artgen_done", done);
+            Call("artgen_done", Report(id, R"("status":"ok")"));
         }
 
         /// Runs every job of the set to its end (the service made all the images) and picks the second variant of each
         void RunAndPickAll(StringView set, StringView kind = "image") {
-            while (const Json* request = RequestOf(pollReply = Poll())) {
-                Finish(*request, "ok", {}, kind);
+            while (RequestOf(pollReply = Poll()).IsValid()) {
+                Finish(RequestOf(pollReply), "ok", {}, kind);
             }
             for (const ArtGenSetJob& job : Require(session.FindSet(set)).jobs) {
                 ASSERT_EQ(session.PickVariant(set, job.name, kSetSeed + 1), ArtGenSetEdit::Ok);
@@ -316,8 +303,8 @@ namespace BECore::Tests {
 
         /// Runs every job of the set to its end and leaves every row unpicked
         void RunAll(StringView kind = "image") {
-            while (const Json* request = RequestOf(pollReply = Poll())) {
-                Finish(*request, "ok", {}, kind);
+            while (RequestOf(pollReply = Poll()).IsValid()) {
+                Finish(RequestOf(pollReply), "ok", {}, kind);
             }
         }
 
@@ -347,32 +334,24 @@ namespace BECore::Tests {
             ASSERT_EQ(session.PickVariant("second", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
             ASSERT_NO_FATAL_FAILURE(MakeFiles("first"));
             ASSERT_NO_FATAL_FAILURE(MakeFiles("second"));
-            ASSERT_EQ(ErrorCode(AcceptAllCall("first")), "");
-            ASSERT_EQ(ErrorCode(AcceptAllCall("second")), "");
+            ASSERT_EQ(AcceptAllCall("first").ErrorCode(), "");
+            ASSERT_EQ(AcceptAllCall("second").ErrorCode(), "");
             gAccepted.clear();
             gKept.clear();
         }
 
-        Json AcceptAllCall(StringView set) {
-            Json params = Json::object();
-            params["set"] = ToStdString(set);
-            return Call("artgen_accept_set", params);
+        ControlReply AcceptAllCall(StringView set) {
+            return Call("artgen_accept_set", Format(R"({{"set":{}}})", Str(set)));
         }
 
-        /// `artgen_more` of @p set with the members of @p extra (count, seed, jobs)
-        Json MoreCall(StringView set, Json extra = Json::object()) {
-            extra["set"] = ToStdString(set);
-            return Call("artgen_more", extra);
+        /// `artgen_more` of @p set with the members of @p extra (count, seed, jobs: the text of an object)
+        ControlReply MoreCall(StringView set, StringView extra = "{}") {
+            return Call("artgen_more", JsonWith(extra, "/set", Str(set)));
         }
 
         /// `artgen_keep` of @p set, or of one job of it
-        Json KeepCall(StringView set, StringView job = {}) {
-            Json params = Json::object();
-            params["set"] = ToStdString(set);
-            if (!job.empty()) {
-                params["job"] = ToStdString(job);
-            }
-            return Call("artgen_keep", params);
+        ControlReply KeepCall(StringView set, StringView job = {}) {
+            return Call("artgen_keep", job.empty() ? Format(R"({{"set":{}}})", Str(set)) : Format(R"({{"job":{},"set":{}}})", Str(job), Str(set)));
         }
 
         /// A finished set accepted into the game: every row picked on its second variant (seed kSetSeed + 1) and live, files made
@@ -380,7 +359,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(Enqueue(set, lines, count).has_value());
             ASSERT_NO_FATAL_FAILURE(RunAndPickAll(set));
             ASSERT_NO_FATAL_FAILURE(MakeFiles(set));
-            ASSERT_EQ(ErrorCode(AcceptAllCall(set)), "");
+            ASSERT_EQ(AcceptAllCall(set).ErrorCode(), "");
             gAccepted.clear();
             gPlans.clear();
             gMeasures.clear();
@@ -397,7 +376,7 @@ namespace BECore::Tests {
             return set.jobs[job].state;
         }
 
-        Json pollReply;
+        ControlReply pollReply;
         double now = 100.0;
         ControlService service;
         ArtGenSession session;
@@ -412,21 +391,21 @@ namespace BECore::Tests {
         EXPECT_TRUE(session.IsBusy());
         EXPECT_EQ(OnDisk("pieces").jobs.size(), 3u);
 
-        const Json first = Poll();
-        const Json* request = RequestOf(first);
-        ASSERT_NE(request, nullptr);
-        EXPECT_EQ(GetJsonString(*request, "outDir"), Optional<String>("pieces/rook"));
-        EXPECT_EQ(GetJsonString(*request, "name"), Optional<String>("rook"));
-        EXPECT_EQ(GetJsonString(*request, "subject"), Optional<String>("a rook"));
-        EXPECT_EQ(GetJsonInt(*request, "seed"), Optional<int64_t>(kSetSeed));
-        EXPECT_EQ(GetJsonInt(*request, "count"), Optional<int64_t>(2));
+        const ControlReply first = Poll();
+        JsonView request = RequestOf(first);
+        ASSERT_TRUE(request.IsValid());
+        EXPECT_EQ(StringOf(request, "outDir"), "pieces/rook");
+        EXPECT_EQ(StringOf(request, "name"), "rook");
+        EXPECT_EQ(StringOf(request, "subject"), "a rook");
+        EXPECT_EQ(IntOf(request, "seed"), Optional<int64_t>(kSetSeed));
+        EXPECT_EQ(IntOf(request, "count"), Optional<int64_t>(2));
         EXPECT_EQ(StateOf(OnDisk("pieces"), 0), ArtGenSetJobState::Running);
         EXPECT_EQ(StateOf(OnDisk("pieces"), 1), ArtGenSetJobState::Pending);
 
         // One job at a time: a poll while it runs hands over nothing
-        EXPECT_EQ(RequestOf(Poll()), nullptr);
+        EXPECT_FALSE(RequestOf(Poll()).IsValid());
 
-        Finish(*request, "ok");
+        Finish(request, "ok");
         {
             const ArtGenSet disk = OnDisk("pieces");
             EXPECT_EQ(StateOf(disk, 0), ArtGenSetJobState::Done);
@@ -436,22 +415,22 @@ namespace BECore::Tests {
             EXPECT_EQ(disk.jobs[0].variants[1].provenance, "rook/rook_41.artgen.json");
         }
 
-        const Json second = Poll();
+        const ControlReply second = Poll();
         request = RequestOf(second);
-        ASSERT_NE(request, nullptr);
-        EXPECT_EQ(GetJsonString(*request, "outDir"), Optional<String>("pieces/knight"));
-        EXPECT_EQ(GetJsonInt(*request, "seed"), Optional<int64_t>(kSetSeed));
-        Finish(*request, "ok");
+        ASSERT_TRUE(request.IsValid());
+        EXPECT_EQ(StringOf(request, "outDir"), "pieces/knight");
+        EXPECT_EQ(IntOf(request, "seed"), Optional<int64_t>(kSetSeed));
+        Finish(request, "ok");
 
-        const Json third = Poll();
+        const ControlReply third = Poll();
         request = RequestOf(third);
-        ASSERT_NE(request, nullptr);
-        EXPECT_EQ(GetJsonString(*request, "outDir"), Optional<String>("pieces/bishop"));
-        Finish(*request, "ok");
+        ASSERT_TRUE(request.IsValid());
+        EXPECT_EQ(StringOf(request, "outDir"), "pieces/bishop");
+        Finish(request, "ok");
 
         EXPECT_FALSE(session.IsBusy());
         EXPECT_EQ(CountJobs(Require(session.FindSet("pieces")), ArtGenSetJobState::Done), 3);
-        EXPECT_EQ(RequestOf(Poll()), nullptr);
+        EXPECT_FALSE(RequestOf(Poll()).IsValid());
     }
 
     TEST_F(ArtGenSetSessionTest, TheSetDrawsASharedSeedWhenNoneIsGiven) {
@@ -459,26 +438,26 @@ namespace BECore::Tests {
         const ArtGenSet& set = Require(session.FindSet("drawn"));
         EXPECT_GE(set.seed, 0);
         EXPECT_EQ(OnDisk("drawn").seed, set.seed);
-        const Json first = Poll();
-        EXPECT_EQ(GetJsonInt(*RequestOf(first), "seed"), Optional<int64_t>(set.seed));
-        Finish(*RequestOf(first), "ok");
-        const Json second = Poll();
-        EXPECT_EQ(GetJsonInt(*RequestOf(second), "seed"), Optional<int64_t>(set.seed));
+        const ControlReply first = Poll();
+        EXPECT_EQ(IntOf(RequestOf(first), "seed"), Optional<int64_t>(set.seed));
+        Finish(RequestOf(first), "ok");
+        const ControlReply second = Poll();
+        EXPECT_EQ(IntOf(RequestOf(second), "seed"), Optional<int64_t>(set.seed));
     }
 
     TEST_F(ArtGenSetSessionTest, AFailedMiddleJobDoesNotStopTheSet) {
         ASSERT_TRUE(Enqueue("fails", "a\nb\nc").has_value());
-        Finish(*RequestOf(Poll()), "ok");
-        Finish(*RequestOf(Poll()), "failed", "out of memory");
+        Finish(RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "failed", "out of memory");
         {
             const ArtGenSet disk = OnDisk("fails");
             EXPECT_EQ(StateOf(disk, 1), ArtGenSetJobState::Failed);
             EXPECT_EQ(disk.jobs[1].error, "out of memory");
         }
-        const Json third = Poll();
-        ASSERT_NE(RequestOf(third), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(third), "name"), Optional<String>("c"));
-        Finish(*RequestOf(third), "ok");
+        const ControlReply third = Poll();
+        ASSERT_TRUE(RequestOf(third).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(third), "name"), "c");
+        Finish(RequestOf(third), "ok");
         EXPECT_FALSE(session.IsBusy());
         EXPECT_EQ(StateOf(OnDisk("fails"), 2), ArtGenSetJobState::Done);
     }
@@ -488,44 +467,44 @@ namespace BECore::Tests {
         EXPECT_EQ(session.CancelJob("skip", "b"), ArtGenSetEdit::Ok);
         EXPECT_EQ(StateOf(OnDisk("skip"), 1), ArtGenSetJobState::Cancelled);
         EXPECT_EQ(OnDisk("skip").jobs[1].error, "cancelled");
-        Finish(*RequestOf(Poll()), "ok");
-        const Json next = Poll();
-        EXPECT_EQ(GetJsonString(*RequestOf(next), "name"), Optional<String>("c"));
+        Finish(RequestOf(Poll()), "ok");
+        const ControlReply next = Poll();
+        EXPECT_EQ(StringOf(RequestOf(next), "name"), "c");
         EXPECT_EQ(session.CancelJob("skip", "nothing"), ArtGenSetEdit::NoSet);
         EXPECT_EQ(session.CancelJob("nothing", "a"), ArtGenSetEdit::NoSet);
     }
 
     TEST_F(ArtGenSetSessionTest, CancellingTheRunningJobReachesThePollAndTheSetGoesOn) {
         ASSERT_TRUE(Enqueue("running", "a\nb").has_value());
-        const Json first = Poll();
-        ASSERT_NE(RequestOf(first), nullptr);
+        const ControlReply first = Poll();
+        ASSERT_TRUE(RequestOf(first).IsValid());
         EXPECT_EQ(session.CancelJob("running", "a"), ArtGenSetEdit::Ok);
         // The job ends when the service says so, not before
         EXPECT_EQ(StateOf(OnDisk("running"), 0), ArtGenSetJobState::Running);
-        const Json cancel = Poll();
-        EXPECT_EQ(GetJsonInt(cancel, "cancel"), GetJsonInt(*RequestOf(first), "id"));
-        Finish(*RequestOf(first), "cancelled");
+        const ControlReply cancel = Poll();
+        EXPECT_EQ(IntOf(cancel.Result(), "cancel"), IntOf(RequestOf(first), "id"));
+        Finish(RequestOf(first), "cancelled");
         EXPECT_EQ(StateOf(OnDisk("running"), 0), ArtGenSetJobState::Cancelled);
-        const Json next = Poll();
-        ASSERT_NE(RequestOf(next), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(next), "name"), Optional<String>("b"));
+        const ControlReply next = Poll();
+        ASSERT_TRUE(RequestOf(next).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(next), "name"), "b");
     }
 
     TEST_F(ArtGenSetSessionTest, ArtgenCancelWithoutParamsCancelsOnlyTheRunningJob) {
         ASSERT_TRUE(Enqueue("plain", "a\nb").has_value());
-        const Json first = Poll();
+        const ControlReply first = Poll();
         Call("artgen_cancel");
         Poll();
-        Finish(*RequestOf(first), "cancelled");
-        const Json next = Poll();
-        ASSERT_NE(RequestOf(next), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(next), "name"), Optional<String>("b"));
+        Finish(RequestOf(first), "cancelled");
+        const ControlReply next = Poll();
+        ASSERT_TRUE(RequestOf(next).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(next), "name"), "b");
     }
 
     TEST_F(ArtGenSetSessionTest, CancellingASetStopsEverythingOfIt) {
         ASSERT_TRUE(Enqueue("all", "a\nb\nc").has_value());
         ASSERT_TRUE(Enqueue("later", "x").has_value());
-        const Json first = Poll();
+        const ControlReply first = Poll();
         EXPECT_EQ(session.CancelSet("all"), ArtGenSetEdit::Ok);
         {
             const ArtGenSet disk = OnDisk("all");
@@ -533,18 +512,18 @@ namespace BECore::Tests {
             EXPECT_EQ(StateOf(disk, 2), ArtGenSetJobState::Cancelled);
         }
         Poll();
-        Finish(*RequestOf(first), "cancelled");
+        Finish(RequestOf(first), "cancelled");
         EXPECT_FALSE(IsActive(Require(session.FindSet("all"))));
         // The next set in line starts
-        const Json next = Poll();
-        ASSERT_NE(RequestOf(next), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(next), "outDir"), Optional<String>("later/x"));
+        const ControlReply next = Poll();
+        ASSERT_TRUE(RequestOf(next).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(next), "outDir"), "later/x");
         EXPECT_EQ(session.CancelSet("nothing"), ArtGenSetEdit::NoSet);
     }
 
     TEST_F(ArtGenSetSessionTest, CancellingARunNobodyPolledYetNeedsNoService) {
         ASSERT_TRUE(Enqueue("queued", "a\nb\nc").has_value());
-        Finish(*RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "ok");
         // The end of the first job starts the next as a queued run that the service has not seen yet
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Queued);
         EXPECT_EQ(session.GetRun().jobName, "b");
@@ -552,13 +531,13 @@ namespace BECore::Tests {
         EXPECT_EQ(StateOf(OnDisk("queued"), 1), ArtGenSetJobState::Cancelled);
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Queued);
         EXPECT_EQ(session.GetRun().jobName, "c");
-        EXPECT_EQ(GetJsonString(*RequestOf(Poll()), "name"), Optional<String>("c"));
+        EXPECT_EQ(StringOf(RequestOf(Poll()), "name"), "c");
     }
 
     TEST_F(ArtGenSetSessionTest, RetryPutsFailedAndCancelledJobsBackAndClearsTheEarlierTry) {
         ASSERT_TRUE(Enqueue("retry", "a\nb\nc").has_value());
-        Finish(*RequestOf(Poll()), "ok");
-        Finish(*RequestOf(Poll()), "failed", "boom");
+        Finish(RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "failed", "boom");
         session.CancelJob("retry", "c");
         EXPECT_FALSE(IsActive(Require(session.FindSet("retry"))));
         ASSERT_TRUE(session.PickVariant("retry", "a", kSetSeed) == ArtGenSetEdit::Ok);
@@ -576,21 +555,21 @@ namespace BECore::Tests {
         EXPECT_EQ(StateOf(OnDisk("retry"), 2), ArtGenSetJobState::Pending);
         EXPECT_EQ(StateOf(OnDisk("retry"), 0), ArtGenSetJobState::Done);
 
-        const Json next = Poll();
-        ASSERT_NE(RequestOf(next), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(next), "name"), Optional<String>("b"));
+        const ControlReply next = Poll();
+        ASSERT_TRUE(RequestOf(next).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(next), "name"), "b");
         EXPECT_EQ(session.RetryJobs("retry", "nothing"), ArtGenSetEdit::NoSet);
     }
 
     TEST_F(ArtGenSetSessionTest, ARetryOfAnOlderSetWaitsBehindTheSetsQueuedBefore) {
         ASSERT_TRUE(Enqueue("old", "a").has_value());
-        Finish(*RequestOf(Poll()), "failed", "boom");
+        Finish(RequestOf(Poll()), "failed", "boom");
         ASSERT_TRUE(Enqueue("newer", "x").has_value());
         session.RetryJobs("old");
-        const Json next = Poll();
-        EXPECT_EQ(GetJsonString(*RequestOf(next), "outDir"), Optional<String>("newer/x"));
-        Finish(*RequestOf(next), "ok");
-        EXPECT_EQ(GetJsonString(*RequestOf(Poll()), "outDir"), Optional<String>("old/a"));
+        const ControlReply next = Poll();
+        EXPECT_EQ(StringOf(RequestOf(next), "outDir"), "newer/x");
+        Finish(RequestOf(next), "ok");
+        EXPECT_EQ(StringOf(RequestOf(Poll()), "outDir"), "old/a");
     }
 
     TEST_F(ArtGenSetSessionTest, OrdinaryRunsAreRefusedWhileASetIsActive) {
@@ -598,15 +577,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(session.IsBusy());
         EXPECT_FALSE(session.Request("wood", "queen", 1, 1).has_value());
         EXPECT_FALSE(session.RequestSetup(ArtGenSetupAction::Plan).has_value());
-        Json params = Json::object();
-        params["preset"] = "wood";
-        params["subject"] = "queen";
-        const Json refused = Call("artgen_generate", params);
-        const Json* error = FindJsonMember(refused, "error");
-        ASSERT_NE(error, nullptr);
-        EXPECT_EQ(GetJsonString(*error, "code"), Optional<String>("artgen_busy"));
+        EXPECT_EQ(Call("artgen_generate", R"({"preset":"wood","subject":"queen"})").ErrorCode(), "artgen_busy");
 
-        Finish(*RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "ok");
         EXPECT_FALSE(session.IsBusy());
         EXPECT_TRUE(session.Request("wood", "queen", 1, 1).has_value());
     }
@@ -617,21 +590,21 @@ namespace BECore::Tests {
         EXPECT_EQ(session.GetRun().state, ArtGenRunState::Idle);
         EXPECT_EQ(StateOf(Require(session.FindSet("wait")), 0), ArtGenSetJobState::Pending);
 
-        const Json first = Poll();
-        ASSERT_NE(RequestOf(first), nullptr);
+        const ControlReply first = Poll();
+        ASSERT_TRUE(RequestOf(first).IsValid());
         // The service is silent past the timeout when the job ends: the next one waits for a poll
         now += ArtGenSession::kServiceTimeoutSeconds + 1.0;
-        Finish(*RequestOf(first), "ok");
+        Finish(RequestOf(first), "ok");
         EXPECT_EQ(StateOf(Require(session.FindSet("wait")), 1), ArtGenSetJobState::Pending);
-        EXPECT_EQ(GetJsonString(*RequestOf(Poll()), "name"), Optional<String>("b"));
+        EXPECT_EQ(StringOf(RequestOf(Poll()), "name"), "b");
     }
 
     TEST_F(ArtGenSetSessionTest, DisconnectCancelsTheRunningJobAndLeavesTheRestPending) {
         ASSERT_TRUE(Enqueue("bye", "a\nb\nc").has_value());
-        ASSERT_NE(RequestOf(Poll()), nullptr);
+        ASSERT_TRUE(RequestOf(Poll()).IsValid());
         session.RequestServiceStop();
-        const Json answer = Poll();
-        EXPECT_EQ(GetJsonBool(answer, "shutdown"), Optional<bool>(true));
+        const ControlReply answer = Poll();
+        EXPECT_EQ(BoolOf(answer.Result(), "shutdown"), Optional<bool>(true));
         {
             const ArtGenSet disk = OnDisk("bye");
             EXPECT_EQ(StateOf(disk, 0), ArtGenSetJobState::Cancelled);
@@ -642,15 +615,15 @@ namespace BECore::Tests {
         // No pump while the service is gone; a service that polls again takes the next job
         session.PumpSets();
         EXPECT_EQ(StateOf(Require(session.FindSet("bye")), 1), ArtGenSetJobState::Pending);
-        const Json again = Poll();
-        ASSERT_NE(RequestOf(again), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(again), "name"), Optional<String>("b"));
+        const ControlReply again = Poll();
+        ASSERT_TRUE(RequestOf(again).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(again), "name"), "b");
     }
 
     TEST_F(ArtGenSetSessionTest, ARestartShowsTheInterruptedJobsCancelled) {
         ASSERT_TRUE(Enqueue("crash", "a\nb\nc").has_value());
-        Finish(*RequestOf(Poll()), "ok");
-        ASSERT_NE(RequestOf(Poll()), nullptr);
+        Finish(RequestOf(Poll()), "ok");
+        ASSERT_TRUE(RequestOf(Poll()).IsValid());
 
         ArtGenSession restarted([this] { return now; });
         restarted.SetGameRoot(_root.View());
@@ -669,7 +642,7 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, TheSameRootAgainKeepsTheSetsInMemory) {
         ASSERT_TRUE(Enqueue("keep", "a").has_value());
-        ASSERT_NE(RequestOf(Poll()), nullptr);
+        ASSERT_TRUE(RequestOf(Poll()).IsValid());
         // The panel calls this at every switch of the run mode; a reload would turn the running job into Cancelled
         session.SetGameRoot(_root.View());
         EXPECT_EQ(StateOf(Require(session.FindSet("keep")), 0), ArtGenSetJobState::Running);
@@ -677,20 +650,14 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, AReportOfAnOlderRunIsStale) {
         ASSERT_TRUE(Enqueue("stale", "a\nb").has_value());
-        const Json first = Poll();
-        const uint32_t firstId = static_cast<uint32_t>(Require(GetJsonInt(*RequestOf(first), "id")));
-        Finish(*RequestOf(first), "ok");
-        const Json second = Poll();
-        ASSERT_NE(RequestOf(second), nullptr);
+        const ControlReply first = Poll();
+        const uint32_t firstId = static_cast<uint32_t>(Require(IntOf(RequestOf(first), "id")));
+        Finish(RequestOf(first), "ok");
+        const ControlReply second = Poll();
+        ASSERT_TRUE(RequestOf(second).IsValid());
 
-        Json late = Report(firstId);
-        late["seed"] = 99;
-        late["path"] = "x.png";
-        EXPECT_EQ(GetJsonBool(Result(Call("artgen_image", late)), "stale"), Optional<bool>(true));
-        Json done = Report(firstId);
-        done["status"] = "failed";
-        done["error"] = "late";
-        EXPECT_EQ(GetJsonBool(Result(Call("artgen_done", done)), "stale"), Optional<bool>(true));
+        EXPECT_EQ(BoolOf(Call("artgen_image", Report(firstId, R"("path":"x.png","seed":99)")).Result(), "stale"), Optional<bool>(true));
+        EXPECT_EQ(BoolOf(Call("artgen_done", Report(firstId, R"("error":"late","status":"failed")")).Result(), "stale"), Optional<bool>(true));
 
         const ArtGenSet disk = OnDisk("stale");
         EXPECT_EQ(disk.jobs[0].variants.size(), 2u);
@@ -701,7 +668,7 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, APickIsKeptInTheManifest) {
         ASSERT_TRUE(Enqueue("pick", "a").has_value());
-        Finish(*RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "ok");
         EXPECT_EQ(session.PickVariant("pick", "a", 12345), ArtGenSetEdit::NoVariant);
         EXPECT_EQ(session.PickVariant("pick", "zzz", kSetSeed), ArtGenSetEdit::NoSet);
         EXPECT_EQ(session.PickVariant("pick", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
@@ -735,12 +702,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSetSessionTest, ABrokenPresetByNameIsRefusedAndADraftIsChecked) {
-        Json broken = Json::object();
-        broken["name"] = "broken";
-        broken["error"] = "no workflow";
-        Json params = ReadyPoll();
-        params["presets"].push_back(broken);
-        Call("artgen_poll", params);
+        Call("artgen_poll", JsonWith(kReadyPoll, "/presets/-", R"({"error":"no workflow","name":"broken"})"));
         ArtGenSetRequest request;
         request.preset = "broken";
         request.subjects = Require(ParseArtGenSubjects("a"));
@@ -763,156 +725,115 @@ namespace BECore::Tests {
         request.name = "drafted";
         request.seed = 3;
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
-        const Json first = Poll();
-        const Json* sent = RequestOf(first);
-        ASSERT_NE(sent, nullptr);
-        EXPECT_EQ(Require(FindJsonMember(*sent, "preset")).type(), Json::value_t::object);
-        EXPECT_EQ(GetJsonString(*sent, "presetName"), Optional<String>("form"));
+        const ControlReply first = Poll();
+        const JsonView sent = RequestOf(first);
+        ASSERT_TRUE(sent.IsValid());
+        EXPECT_TRUE(MemberOf(sent, "preset").IsObject());
+        EXPECT_EQ(StringOf(sent, "presetName"), "form");
         EXPECT_EQ(OnDisk("drafted").presetData, request.presetData);
     }
 
     TEST_F(ArtGenSetSessionTest, EnqueueTakesSubjectsAsLinesAsAListAndAsObjects) {
-        Json lines = Json::object();
-        lines["preset"] = "wood";
-        lines["subjects"] = "# pieces\nrook: a rook\n\nWhite Knight!";
-        lines["set"] = "from_lines";
-        lines["seed"] = 5;
-        lines["count"] = 3;
-        const Json first = Result(Call("artgen_enqueue", lines));
-        EXPECT_EQ(GetJsonString(first, "set"), Optional<String>("from_lines"));
-        EXPECT_EQ(GetJsonInt(first, "seed"), Optional<int64_t>(5));
-        ASSERT_NE(FindJsonMember(first, "jobs"), nullptr);
-        EXPECT_EQ(Require(FindJsonMember(first, "jobs")), (Json::array({"rook", "white_knight"})));
-        EXPECT_EQ(GetJsonBool(first, "serviceConnected"), Optional<bool>(false));
+        const ControlReply firstReply = Call("artgen_enqueue", R"({"count":3,"preset":"wood","seed":5,"set":"from_lines","subjects":"# pieces\nrook: a rook\n\nWhite Knight!"})");
+        const JsonView first = firstReply.Result();
+        EXPECT_EQ(StringOf(first, "set"), "from_lines");
+        EXPECT_EQ(IntOf(first, "seed"), Optional<int64_t>(5));
+        EXPECT_EQ(RawOf(first, "jobs"), R"(["rook","white_knight"])");
+        EXPECT_EQ(BoolOf(first, "serviceConnected"), Optional<bool>(false));
         EXPECT_EQ(KeysOf(first), (Vector<String>{"jobs", "seed", "serviceConnected", "set"}));
         EXPECT_EQ(OnDisk("from_lines").count, 3);
 
-        Json list = Json::object();
-        list["preset"] = "wood";
-        list["subjects"] = Json::array({"bishop: a bishop", "a queen"});
-        list["set"] = "from_list";
-        const Json second = Result(Call("artgen_enqueue", list));
-        ASSERT_NE(FindJsonMember(second, "jobs"), nullptr);
-        EXPECT_EQ(Require(FindJsonMember(second, "jobs")), (Json::array({"bishop", "a_queen"})));
+        const ControlReply secondReply = Call("artgen_enqueue", R"({"preset":"wood","set":"from_list","subjects":["bishop: a bishop","a queen"]})");
+        const JsonView second = secondReply.Result();
+        EXPECT_EQ(RawOf(second, "jobs"), R"(["bishop","a_queen"])");
         EXPECT_EQ(OnDisk("from_list").count, kArtGenSetDefaultCount);
 
-        Json objects = Json::object();
-        objects["preset"] = "wood";
-        objects["subjects"] = Json::array({Json{{"name", "pawn"}, {"subject", "a small pawn"}}, Json{{"subject", "A Tall King"}}});
-        objects["set"] = "from_objects";
-        objects["seed"] = nullptr;
-        const Json third = Result(Call("artgen_enqueue", objects));
-        ASSERT_NE(FindJsonMember(third, "jobs"), nullptr);
-        EXPECT_EQ(Require(FindJsonMember(third, "jobs")), (Json::array({"pawn", "a_tall_king"})));
+        const ControlReply thirdReply = Call("artgen_enqueue", R"({"preset":"wood","seed":null,"set":"from_objects","subjects":[{"name":"pawn","subject":"a small pawn"},{"subject":"A Tall King"}]})");
+        const JsonView third = thirdReply.Result();
+        EXPECT_EQ(RawOf(third, "jobs"), R"(["pawn","a_tall_king"])");
         const ArtGenSet disk = OnDisk("from_objects");
         EXPECT_EQ(disk.jobs[0].subject, "a small pawn");
-        EXPECT_EQ(GetJsonInt(third, "seed"), Optional<int64_t>(disk.seed)) << "no seed: one is drawn and told";
+        EXPECT_EQ(IntOf(third, "seed"), Optional<int64_t>(disk.seed)) << "no seed: one is drawn and told";
 
-        Json draft = Json::object();
-        draft["preset"] = Require(ParseJson(R"({"preset":1,"title":"form","workflow":"txt2img","prompt":"{subject}"})"));
-        draft["presetName"] = "form";
-        draft["subjects"] = "a";
-        draft["set"] = "from_draft";
-        EXPECT_EQ(GetJsonString(Result(Call("artgen_enqueue", draft)), "set"), Optional<String>("from_draft"));
+        const String draft = R"({"preset":{"preset":1,"prompt":"{subject}","title":"form","workflow":"txt2img"},"presetName":"form","set":"from_draft","subjects":"a"})";
+        EXPECT_EQ(StringOf(Call("artgen_enqueue", draft).Result(), "set"), "from_draft");
         EXPECT_EQ(OnDisk("from_draft").preset, "form");
     }
 
     TEST_F(ArtGenSetSessionTest, EnqueueRefusesBadParamsAsInvalidParams) {
-        const auto code = [this](const Json& params) {
-            const String found = ErrorCode(Call("artgen_enqueue", params));
+        const auto code = [this](StringView params) {
+            const String found = Call("artgen_enqueue", params).ErrorCode();
             return found.empty() ? String("ok") : found;
         };
-        Json good = Json::object();
-        good["preset"] = "wood";
-        good["subjects"] = "a\nb";
+        constexpr StringView kGood = R"({"preset":"wood","subjects":"a\nb"})";
 
-        Json noPreset = good;
-        noPreset.erase("preset");
-        EXPECT_EQ(code(noPreset), "invalid_params");
-        Json numberPreset = good;
-        numberPreset["preset"] = 5;
-        EXPECT_EQ(code(numberPreset), "invalid_params");
-        Json emptyPreset = good;
-        emptyPreset["preset"] = "";
-        EXPECT_EQ(code(emptyPreset), "invalid_params");
-        Json badDraft = good;
-        badDraft["preset"] = Json::object();
-        EXPECT_EQ(code(badDraft), "invalid_params") << "an object that is not a preset";
+        EXPECT_EQ(code(JsonWithout(kGood, "/preset")), "invalid_params");
+        EXPECT_EQ(code(JsonWith(kGood, "/preset", "5")), "invalid_params");
+        EXPECT_EQ(code(JsonWith(kGood, "/preset", R"("")")), "invalid_params");
+        EXPECT_EQ(code(JsonWith(kGood, "/preset", "{}")), "invalid_params") << "an object that is not a preset";
+        EXPECT_EQ(code(JsonWithout(kGood, "/subjects")), "invalid_params");
 
-        Json noSubjects = good;
-        noSubjects.erase("subjects");
-        EXPECT_EQ(code(noSubjects), "invalid_params");
-        const Json badSubjects = Json::array({Json::array(), Json(""), Json("# only a comment"), Json(5), Json::array({5}), Json::array({Json::object()}), Json::array({"a: x", "a: y"}),
-                                              Json::array({Json{{"name", "bad name"}, {"subject", "x"}}}), Json::array({Json{{"name", 3}, {"subject", "x"}}}), Json::array({"!!!"})});
-        for (const Json& subjects : badSubjects) {
-            Json bad = good;
-            bad["subjects"] = subjects;
-            EXPECT_EQ(code(bad), "invalid_params") << DumpJson(subjects).c_str();
+        const StringView badSubjects[] = {
+            R"([])", R"("")", R"("# only a comment")", R"(5)", R"([5])", R"([{}])", R"(["a: x","a: y"])", R"([{"name":"bad name","subject":"x"}])", R"([{"name":3,"subject":"x"}])", R"(["!!!"])"};
+        for (const StringView subjects : badSubjects) {
+            EXPECT_EQ(code(JsonWith(kGood, "/subjects", subjects)), "invalid_params") << String(subjects).c_str();
         }
 
-        const Json badCounts = Json::array({0, 17, -1, "4", 1.5, int64_t{1} << 40});
-        for (const Json& count : badCounts) {
-            Json bad = good;
-            bad["count"] = count;
-            EXPECT_EQ(code(bad), "invalid_params") << DumpJson(count).c_str();
+        const StringView badCounts[] = {"0", "17", "-1", R"("4")", "1.5", "1099511627776"};
+        for (const StringView count : badCounts) {
+            EXPECT_EQ(code(JsonWith(kGood, "/count", count)), "invalid_params") << String(count).c_str();
         }
-        Json negativeSeed = good;
-        negativeSeed["seed"] = -3;
-        EXPECT_EQ(code(negativeSeed), "invalid_params");
-        Json textSeed = good;
-        textSeed["seed"] = "7";
-        EXPECT_EQ(code(textSeed), "invalid_params");
-        const Json badNames = Json::array({"bad name", "../up", "", 3, ToStdString(String(65, 'a'))});
-        for (const Json& name : badNames) {
-            Json bad = good;
-            bad["set"] = name;
-            EXPECT_EQ(code(bad), "invalid_params") << DumpJson(name).c_str();
+        EXPECT_EQ(code(JsonWith(kGood, "/seed", "-3")), "invalid_params");
+        EXPECT_EQ(code(JsonWith(kGood, "/seed", R"("7")")), "invalid_params");
+        const String longName = Str(String(65, 'a'));
+        const StringView badNames[] = {R"("bad name")", R"("../up")", R"("")", "3", longName};
+        for (const StringView name : badNames) {
+            EXPECT_EQ(code(JsonWith(kGood, "/set", name)), "invalid_params") << String(name).c_str();
         }
 
-        Json tooMany = good;
         String lines;
         for (int32_t i = 0; i <= kMaxSetJobs; ++i) {
             lines += Format("job{}: x\n", i);
         }
-        tooMany["subjects"] = ToStdString(lines);
-        EXPECT_EQ(code(tooMany), "invalid_params");
+        EXPECT_EQ(code(JsonWith(kGood, "/subjects", Str(lines))), "invalid_params");
 
         EXPECT_TRUE(session.GetSets().empty()) << "a refusal keeps nothing";
-        good["set"] = "taken";
-        EXPECT_EQ(code(good), "ok");
-        EXPECT_EQ(code(good), "invalid_params") << "the folder exists";
+        const String taken = JsonWith(kGood, "/set", R"("taken")");
+        EXPECT_EQ(code(taken), "ok");
+        EXPECT_EQ(code(taken), "invalid_params") << "the folder exists";
     }
 
     TEST_F(ArtGenSetSessionTest, ArtgenSetAnswersTheManifestAndItsState) {
         ASSERT_TRUE(Enqueue("shown", "a\nb").has_value());
-        Json params = Json::object();
-        params["set"] = "shown";
+        constexpr StringView kShown = R"({"set":"shown"})";
+        const auto expectManifest = [this](JsonView answer) {
+            const JsonDoc withoutState(JsonWithout(String(answer.Raw()), "/state"));
+            const JsonDoc manifest(ManifestText(OnDisk("shown")));
+            EXPECT_TRUE(JsonEquals(withoutState, manifest)) << String(answer.Raw()).c_str();
+        };
         {
-            const Json answer = Result(Call("artgen_set", params));
-            EXPECT_EQ(GetJsonString(answer, "state"), Optional<String>("Active"));
-            Json withoutState = answer;
-            withoutState.erase("state");
-            EXPECT_EQ(withoutState, ManifestJson(OnDisk("shown")));
+            const ControlReply answerReply = Call("artgen_set", kShown);
+            const JsonView answer = answerReply.Result();
+            EXPECT_EQ(StringOf(answer, "state"), "Active");
+            expectManifest(answer);
         }
-        Finish(*RequestOf(Poll()), "ok");
-        Finish(*RequestOf(Poll()), "failed", "boom");
-        const Json answer = Result(Call("artgen_set", params));
-        EXPECT_EQ(GetJsonString(answer, "state"), Optional<String>("Complete"));
-        Json withoutState = answer;
-        withoutState.erase("state");
-        EXPECT_EQ(withoutState, ManifestJson(OnDisk("shown")));
-        const Json* jobs = FindJsonMember(answer, "jobs");
-        ASSERT_NE(jobs, nullptr);
-        ASSERT_EQ(jobs->size(), 2u);
-        EXPECT_EQ(GetJsonString((*jobs)[1], "error"), Optional<String>("boom"));
-        const Json* variants = FindJsonMember((*jobs)[0], "variants");
-        ASSERT_NE(variants, nullptr);
-        ASSERT_EQ(variants->size(), 2u);
-        EXPECT_EQ(GetJsonString((*variants)[0], "file"), Optional<String>("a/a_40.png"));
+        Finish(RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "failed", "boom");
+        const ControlReply answerReply = Call("artgen_set", kShown);
+        const JsonView answer = answerReply.Result();
+        EXPECT_EQ(StringOf(answer, "state"), "Complete");
+        expectManifest(answer);
+        const JsonView jobs = MemberOf(answer, "jobs");
+        ASSERT_TRUE(jobs.IsValid());
+        ASSERT_EQ(jobs.Size(), 2u);
+        EXPECT_EQ(StringOf(ItemAt(jobs, 1), "error"), "boom");
+        const JsonView variants = MemberOf(ItemAt(jobs, 0), "variants");
+        ASSERT_TRUE(variants.IsValid());
+        ASSERT_EQ(variants.Size(), 2u);
+        EXPECT_EQ(StringOf(ItemAt(variants, 0), "file"), "a/a_40.png");
 
-        EXPECT_EQ(ErrorCode(Call("artgen_set", Json::object())), "invalid_params");
-        params["set"] = "nothing";
-        EXPECT_EQ(ErrorCode(Call("artgen_set", params)), "artgen_no_set");
+        EXPECT_EQ(Call("artgen_set").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("artgen_set", R"({"set":"nothing"})").ErrorCode(), "artgen_no_set");
     }
 
     TEST_F(ArtGenSetSessionTest, OfTwoEqualSetKeysOfACallTheFirstIsTheSet) {
@@ -932,151 +853,141 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, ArtgenPickAndRetryAnswerWhatTheyDid) {
         ASSERT_TRUE(Enqueue("edit", "a\nb\nc").has_value());
-        Finish(*RequestOf(Poll()), "ok");
-        Finish(*RequestOf(Poll()), "failed", "boom");
+        Finish(RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "failed", "boom");
         session.CancelJob("edit", "c");
 
-        Json pick = Json::object();
-        pick["set"] = "edit";
-        pick["job"] = "a";
-        pick["seed"] = kSetSeed + 1;
-        const Json picked = Result(Call("artgen_pick", pick));
-        EXPECT_EQ(GetJsonInt(picked, "pick"), Optional<int64_t>(kSetSeed + 1));
+        String pick = Format(R"({{"set":"edit","job":"a","seed":{}}})", kSetSeed + 1);
+        const ControlReply pickedReply = Call("artgen_pick", pick);
+        const JsonView picked = pickedReply.Result();
+        EXPECT_EQ(IntOf(picked, "pick"), Optional<int64_t>(kSetSeed + 1));
         EXPECT_EQ(OnDisk("edit").jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
 
-        pick["seed"] = 999;
-        EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "artgen_no_variant");
-        pick["job"] = "zzz";
-        EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "artgen_no_set");
-        pick["set"] = "zzz";
-        EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "artgen_no_set");
-        pick["seed"] = "1";
-        EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "invalid_params");
-        EXPECT_EQ(ErrorCode(Call("artgen_pick", Json::object())), "invalid_params");
+        pick = JsonWith(pick, "/seed", "999");
+        EXPECT_EQ(Call("artgen_pick", pick).ErrorCode(), "artgen_no_variant");
+        pick = JsonWith(pick, "/job", R"("zzz")");
+        EXPECT_EQ(Call("artgen_pick", pick).ErrorCode(), "artgen_no_set");
+        pick = JsonWith(pick, "/set", R"("zzz")");
+        EXPECT_EQ(Call("artgen_pick", pick).ErrorCode(), "artgen_no_set");
+        pick = JsonWith(pick, "/seed", R"("1")");
+        EXPECT_EQ(Call("artgen_pick", pick).ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("artgen_pick").ErrorCode(), "invalid_params");
 
-        Json retry = Json::object();
-        retry["set"] = "edit";
-        retry["job"] = "b";
-        EXPECT_EQ(GetJsonInt(Result(Call("artgen_retry", retry)), "retried"), Optional<int64_t>(1));
-        EXPECT_EQ(KeysOf(Result(Call("artgen_retry", retry))), (Vector<String>{"retried", "set"}));
+        String retry = R"({"set":"edit","job":"b"})";
+        EXPECT_EQ(IntOf(Call("artgen_retry", retry).Result(), "retried"), Optional<int64_t>(1));
+        EXPECT_EQ(KeysOf(Call("artgen_retry", retry).Result()), (Vector<String>{"retried", "set"}));
         EXPECT_EQ(StateOf(OnDisk("edit"), 1), ArtGenSetJobState::Pending);
         EXPECT_EQ(StateOf(OnDisk("edit"), 2), ArtGenSetJobState::Cancelled);
-        retry.erase("job");
-        EXPECT_EQ(GetJsonInt(Result(Call("artgen_retry", retry)), "retried"), Optional<int64_t>(1)) << "b is already waiting";
-        EXPECT_EQ(GetJsonInt(Result(Call("artgen_retry", retry)), "retried"), Optional<int64_t>(0));
+        retry = JsonWithout(retry, "/job");
+        EXPECT_EQ(IntOf(Call("artgen_retry", retry).Result(), "retried"), Optional<int64_t>(1)) << "b is already waiting";
+        EXPECT_EQ(IntOf(Call("artgen_retry", retry).Result(), "retried"), Optional<int64_t>(0));
 
-        retry["job"] = "zzz";
-        EXPECT_EQ(ErrorCode(Call("artgen_retry", retry)), "artgen_no_set");
-        retry["job"] = 4;
-        EXPECT_EQ(ErrorCode(Call("artgen_retry", retry)), "invalid_params");
-        retry["set"] = "zzz";
-        retry.erase("job");
-        EXPECT_EQ(ErrorCode(Call("artgen_retry", retry)), "artgen_no_set");
-        EXPECT_EQ(ErrorCode(Call("artgen_retry", Json::object())), "invalid_params");
+        retry = JsonWith(retry, "/job", R"("zzz")");
+        EXPECT_EQ(Call("artgen_retry", retry).ErrorCode(), "artgen_no_set");
+        retry = JsonWith(retry, "/job", "4");
+        EXPECT_EQ(Call("artgen_retry", retry).ErrorCode(), "invalid_params");
+        retry = JsonWith(retry, "/set", R"("zzz")");
+        retry = JsonWithout(retry, "/job");
+        EXPECT_EQ(Call("artgen_retry", retry).ErrorCode(), "artgen_no_set");
+        EXPECT_EQ(Call("artgen_retry").ErrorCode(), "invalid_params");
     }
 
     TEST_F(ArtGenSetSessionTest, ArtgenCancelNamesAJobOrASet) {
         ASSERT_TRUE(Enqueue("one", "a\nb\nc").has_value());
         ASSERT_TRUE(Enqueue("two", "a\nx").has_value());
-        const Json first = Poll();
-        ASSERT_NE(RequestOf(first), nullptr);
+        const ControlReply first = Poll();
+        ASSERT_TRUE(RequestOf(first).IsValid());
 
         // Both sets have an "a" in work (one running, one waiting): the name alone is ambiguous
-        Json ambiguous = Json::object();
-        ambiguous["job"] = "a";
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", ambiguous)), "invalid_params");
+        String ambiguous = R"({"job":"a"})";
+        EXPECT_EQ(Call("artgen_cancel", ambiguous).ErrorCode(), "invalid_params");
 
-        Json alone = Json::object();
-        alone["job"] = "c";
-        const Json cancelled = Result(Call("artgen_cancel", alone));
-        EXPECT_EQ(cancelled, (Json{{"job", "c"}, {"set", "one"}, {"state", "Cancelled"}}));
+        String alone = R"({"job":"c"})";
+        const ControlReply cancelledReply = Call("artgen_cancel", alone);
+        const JsonView cancelled = cancelledReply.Result();
+        EXPECT_EQ(cancelled.Raw(), R"({"job":"c","set":"one","state":"Cancelled"})");
         EXPECT_EQ(StateOf(OnDisk("one"), 2), ArtGenSetJobState::Cancelled);
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", alone)), "artgen_no_set") << "no longer in work";
+        EXPECT_EQ(Call("artgen_cancel", alone).ErrorCode(), "artgen_no_set") << "no longer in work";
 
-        Json running = Json::object();
-        running["job"] = "a";
-        running["set"] = "one";
-        EXPECT_EQ(GetJsonString(Result(Call("artgen_cancel", running)), "state"), Optional<String>("Running")) << "the service ends it";
-        EXPECT_EQ(GetJsonInt(Poll(), "cancel"), GetJsonInt(*RequestOf(first), "id"));
-        Finish(*RequestOf(first), "cancelled");
+        String running = R"({"job":"a","set":"one"})";
+        EXPECT_EQ(StringOf(Call("artgen_cancel", running).Result(), "state"), "Running") << "the service ends it";
+        EXPECT_EQ(IntOf(Poll().Result(), "cancel"), IntOf(RequestOf(first), "id"));
+        Finish(RequestOf(first), "cancelled");
         EXPECT_EQ(StateOf(OnDisk("one"), 0), ArtGenSetJobState::Cancelled);
 
-        running["set"] = "nothing";
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", running)), "artgen_no_set");
-        running["set"] = "two";
-        running["job"] = "nothing";
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", running)), "artgen_no_set");
+        running = JsonWith(running, "/set", R"("nothing")");
+        EXPECT_EQ(Call("artgen_cancel", running).ErrorCode(), "artgen_no_set");
+        running = JsonWith(running, "/set", R"("two")");
+        running = JsonWith(running, "/job", R"("nothing")");
+        EXPECT_EQ(Call("artgen_cancel", running).ErrorCode(), "artgen_no_set");
 
-        Json whole = Json::object();
-        whole["set"] = "one";
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", whole)), "invalid_params") << "a set needs all";
-        whole["all"] = false;
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", whole)), "invalid_params");
-        whole["all"] = "yes";
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", whole)), "invalid_params");
-        whole["all"] = true;
-        whole["job"] = "b";
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", whole)), "invalid_params") << "a job and all";
+        String whole = R"({"set":"one"})";
+        EXPECT_EQ(Call("artgen_cancel", whole).ErrorCode(), "invalid_params") << "a set needs all";
+        whole = JsonWith(whole, "/all", "false");
+        EXPECT_EQ(Call("artgen_cancel", whole).ErrorCode(), "invalid_params");
+        whole = JsonWith(whole, "/all", R"("yes")");
+        EXPECT_EQ(Call("artgen_cancel", whole).ErrorCode(), "invalid_params");
+        whole = JsonWith(whole, "/all", "true");
+        whole = JsonWith(whole, "/job", R"("b")");
+        EXPECT_EQ(Call("artgen_cancel", whole).ErrorCode(), "invalid_params") << "a job and all";
 
         // The end of "a" left "b" of the first set as the next job; cancelling the other set leaves it running
-        const Json next = Poll();
-        ASSERT_NE(RequestOf(next), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(next), "outDir"), Optional<String>("one/b"));
-        Json all = Json::object();
-        all["set"] = "two";
-        all["all"] = true;
-        EXPECT_EQ(Result(Call("artgen_cancel", all)), (Json{{"set", "two"}, {"state", "Complete"}}));
+        const ControlReply next = Poll();
+        ASSERT_TRUE(RequestOf(next).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(next), "outDir"), "one/b");
+        String all = R"({"set":"two","all":true})";
+        EXPECT_EQ(Call("artgen_cancel", all).Result().Raw(), R"({"set":"two","state":"Complete"})");
         EXPECT_EQ(CountJobs(OnDisk("two"), ArtGenSetJobState::Cancelled), 2);
-        all["set"] = "nothing";
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel", all)), "artgen_no_set");
+        all = JsonWith(all, "/set", R"("nothing")");
+        EXPECT_EQ(Call("artgen_cancel", all).ErrorCode(), "artgen_no_set");
 
         // Without params only the run in work is meant, as before
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel")), "");
-        Finish(*RequestOf(next), "cancelled");
-        EXPECT_EQ(ErrorCode(Call("artgen_cancel")), "artgen_no_run");
+        EXPECT_EQ(Call("artgen_cancel").ErrorCode(), "");
+        Finish(RequestOf(next), "cancelled");
+        EXPECT_EQ(Call("artgen_cancel").ErrorCode(), "artgen_no_run");
     }
 
     TEST_F(ArtGenSetSessionTest, ArtgenStateSummarisesTheSets) {
         ASSERT_TRUE(Enqueue("older", "a\nb\nc").has_value());
-        Finish(*RequestOf(Poll()), "ok");
-        Finish(*RequestOf(Poll()), "failed", "boom");
+        Finish(RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "failed", "boom");
         session.CancelJob("older", "c");
         ASSERT_EQ(session.PickVariant("older", "a", kSetSeed), ArtGenSetEdit::Ok);
         ASSERT_TRUE(Enqueue("active", "x\ny").has_value());
-        ASSERT_NE(RequestOf(Poll()), nullptr);
+        ASSERT_TRUE(RequestOf(Poll()).IsValid());
 
-        const Json state = Result(Call("artgen_state"));
-        const Json* sets = FindJsonMember(state, "sets");
-        ASSERT_NE(sets, nullptr);
-        ASSERT_EQ(sets->size(), 2u);
-        const Json& older = (*sets)[0];
-        EXPECT_EQ(GetJsonString(older, "name"), Optional<String>("older"));
-        EXPECT_EQ(GetJsonString(older, "preset"), Optional<String>("wood"));
-        EXPECT_EQ(GetJsonString(older, "kind"), Optional<String>("image"));
-        EXPECT_EQ(GetJsonString(older, "state"), Optional<String>("Complete"));
-        EXPECT_EQ(GetJsonInt(older, "count"), Optional<int64_t>(2));
-        EXPECT_EQ(GetJsonInt(older, "seed"), Optional<int64_t>(kSetSeed));
-        EXPECT_EQ(GetJsonInt(older, "picked"), Optional<int64_t>(1));
-        EXPECT_EQ(GetJsonInt(older, "accepted"), Optional<int64_t>(0));
-        const Json* olderJobs = FindJsonMember(older, "jobs");
-        ASSERT_NE(olderJobs, nullptr);
-        EXPECT_EQ(GetJsonInt(*olderJobs, "done"), Optional<int64_t>(1));
-        EXPECT_EQ(GetJsonInt(*olderJobs, "failed"), Optional<int64_t>(1));
-        EXPECT_EQ(GetJsonInt(*olderJobs, "cancelled"), Optional<int64_t>(1));
-        EXPECT_EQ(GetJsonInt(*olderJobs, "pending"), Optional<int64_t>(0));
-        const Json& active = (*sets)[1];
-        EXPECT_EQ(GetJsonString(active, "state"), Optional<String>("Active"));
-        const Json* activeJobs = FindJsonMember(active, "jobs");
-        ASSERT_NE(activeJobs, nullptr);
-        EXPECT_EQ(GetJsonInt(*activeJobs, "running"), Optional<int64_t>(1));
-        EXPECT_EQ(GetJsonInt(*activeJobs, "pending"), Optional<int64_t>(1));
+        const ControlReply stateReply = Call("artgen_state");
+        const JsonView state = stateReply.Result();
+        const JsonView sets = MemberOf(state, "sets");
+        ASSERT_TRUE(sets.IsValid());
+        ASSERT_EQ(sets.Size(), 2u);
+        const JsonView older = ItemAt(sets, 0);
+        EXPECT_EQ(StringOf(older, "name"), "older");
+        EXPECT_EQ(StringOf(older, "preset"), "wood");
+        EXPECT_EQ(StringOf(older, "kind"), "image");
+        EXPECT_EQ(StringOf(older, "state"), "Complete");
+        EXPECT_EQ(IntOf(older, "count"), Optional<int64_t>(2));
+        EXPECT_EQ(IntOf(older, "seed"), Optional<int64_t>(kSetSeed));
+        EXPECT_EQ(IntOf(older, "picked"), Optional<int64_t>(1));
+        EXPECT_EQ(IntOf(older, "accepted"), Optional<int64_t>(0));
+        const JsonView olderJobs = MemberOf(older, "jobs");
+        ASSERT_TRUE(olderJobs.IsValid());
+        EXPECT_EQ(IntOf(olderJobs, "done"), Optional<int64_t>(1));
+        EXPECT_EQ(IntOf(olderJobs, "failed"), Optional<int64_t>(1));
+        EXPECT_EQ(IntOf(olderJobs, "cancelled"), Optional<int64_t>(1));
+        EXPECT_EQ(IntOf(olderJobs, "pending"), Optional<int64_t>(0));
+        const JsonView active = ItemAt(sets, 1);
+        EXPECT_EQ(StringOf(active, "state"), "Active");
+        const JsonView activeJobs = MemberOf(active, "jobs");
+        ASSERT_TRUE(activeJobs.IsValid());
+        EXPECT_EQ(IntOf(activeJobs, "running"), Optional<int64_t>(1));
+        EXPECT_EQ(IntOf(activeJobs, "pending"), Optional<int64_t>(1));
     }
 
     TEST_F(ArtGenSetSessionTest, ASetupActionIsRefusedWhileASetIsActive) {
         ASSERT_TRUE(Enqueue("hold", "a").has_value());
-        Json setup = Json::object();
-        setup["action"] = "Plan";
-        EXPECT_EQ(ErrorCode(Call("artgen_setup", setup)), "artgen_busy");
+        String setup = R"({"action":"Plan"})";
+        EXPECT_EQ(Call("artgen_setup", setup).ErrorCode(), "artgen_busy");
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllTakesThePickedVariantOfEveryJobUnderTheJobName) {
@@ -1085,18 +996,18 @@ namespace BECore::Tests {
         ASSERT_EQ(session.PickVariant("pieces", "knight", kSetSeed), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("pieces"));
 
-        Json params = Json::object();
-        params["set"] = "pieces";
-        const Json answer = Result(Call("artgen_accept_set", params));
-        EXPECT_EQ(GetJsonString(answer, "set"), Optional<String>("pieces"));
-        const Json* accepted = FindJsonMember(answer, "accepted");
-        ASSERT_NE(accepted, nullptr);
-        ASSERT_EQ(accepted->size(), 3u);
-        EXPECT_EQ(GetJsonString((*accepted)[1], "job"), Optional<String>("knight"));
-        EXPECT_EQ(GetJsonString((*accepted)[1], "as"), Optional<String>("knight"));
-        EXPECT_EQ(GetJsonString((*accepted)[1], "sprite"), Optional<String>("knight")) << "the acceptor's answer is part of the row";
-        EXPECT_EQ(GetJsonInt((*accepted)[1], "seed"), Optional<int64_t>(kSetSeed));
-        EXPECT_EQ(GetJsonInt((*accepted)[1], "alternatives"), Optional<int64_t>(1));
+        String params = R"({"set":"pieces"})";
+        const ControlReply answerReply = Call("artgen_accept_set", params);
+        const JsonView answer = answerReply.Result();
+        EXPECT_EQ(StringOf(answer, "set"), "pieces");
+        const JsonView accepted = MemberOf(answer, "accepted");
+        ASSERT_TRUE(accepted.IsValid());
+        ASSERT_EQ(accepted.Size(), 3u);
+        EXPECT_EQ(StringOf(ItemAt(accepted, 1), "job"), "knight");
+        EXPECT_EQ(StringOf(ItemAt(accepted, 1), "as"), "knight");
+        EXPECT_EQ(StringOf(ItemAt(accepted, 1), "sprite"), "knight") << "the acceptor's answer is part of the row";
+        EXPECT_EQ(IntOf(ItemAt(accepted, 1), "seed"), Optional<int64_t>(kSetSeed));
+        EXPECT_EQ(IntOf(ItemAt(accepted, 1), "alternatives"), Optional<int64_t>(1));
 
         ASSERT_EQ(gAccepted.size(), 3u);
         const char* const names[] = {"rook", "knight", "bishop"};
@@ -1117,8 +1028,9 @@ namespace BECore::Tests {
             EXPECT_FALSE(disk.jobs[row].accepted->date.empty());
             EXPECT_FALSE(disk.jobs[row].accepted->kept) << "a written row is live";
         }
-        const Json state = Result(Call("artgen_state"));
-        EXPECT_EQ(GetJsonInt((Require(FindJsonMember(state, "sets")))[0], "accepted"), Optional<int64_t>(3));
+        const ControlReply stateReply = Call("artgen_state");
+        const JsonView state = stateReply.Result();
+        EXPECT_EQ(IntOf(ItemAt(MemberOf(state, "sets"), 0), "accepted"), Optional<int64_t>(3));
     }
 
     TEST_F(ArtGenSetSessionTest, ASetOfAGameWhoseRootHasANonAsciiNameKeepsRelativeFilesAndAcceptsAll) {
@@ -1137,12 +1049,12 @@ namespace BECore::Tests {
         }
 
         ASSERT_NO_FATAL_FAILURE(MakeFiles("pieces"));
-        Json params = Json::object();
-        params["set"] = "pieces";
-        const Json answer = Result(Call("artgen_accept_set", params));
-        const Json* accepted = FindJsonMember(answer, "accepted");
-        ASSERT_NE(accepted, nullptr) << DumpJson(answer).c_str();
-        EXPECT_EQ(accepted->size(), 2u);
+        String params = R"({"set":"pieces"})";
+        const ControlReply answerReply = Call("artgen_accept_set", params);
+        const JsonView answer = answerReply.Result();
+        const JsonView accepted = MemberOf(answer, "accepted");
+        ASSERT_TRUE(accepted.IsValid()) << String(answer.Raw()).c_str();
+        EXPECT_EQ(accepted.Size(), 2u);
         ASSERT_EQ(gAccepted.size(), 2u);
         EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/pieces/rook/rook_41.png", _root.View()));
 
@@ -1153,20 +1065,19 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, AcceptAllRefusesASetThatIsNotReadyAndChangesNothing) {
         ASSERT_TRUE(Enqueue("gaps", "a\nb\nc\nd").has_value());
-        Json params = Json::object();
-        params["set"] = "gaps";
-        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_busy") << "the set is still active";
+        String params = R"({"set":"gaps"})";
+        EXPECT_EQ(Call("artgen_accept_set", params).ErrorCode(), "artgen_busy") << "the set is still active";
 
-        Finish(*RequestOf(Poll()), "ok");
-        Finish(*RequestOf(Poll()), "ok");
-        Finish(*RequestOf(Poll()), "failed", "boom");
+        Finish(RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "failed", "boom");
         session.CancelJob("gaps", "d");
         ASSERT_EQ(session.PickVariant("gaps", "a", kSetSeed), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("gaps"));
 
-        const Json refused = Call("artgen_accept_set", params);
-        EXPECT_EQ(ErrorCode(refused), "artgen_set_incomplete");
-        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
+        const ControlReply refused = Call("artgen_accept_set", params);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_set_incomplete");
+        const String message = refused.ErrorMessage();
         EXPECT_EQ(message.find("not picked"), String::npos) << "an image row with no pick takes its first variant: " << message.c_str();
         EXPECT_NE(message.find("failed: c"), String::npos) << message.c_str();
         EXPECT_NE(message.find("cancelled: d"), String::npos) << message.c_str();
@@ -1174,23 +1085,22 @@ namespace BECore::Tests {
         EXPECT_EQ(CountJobs(OnDisk("gaps"), ArtGenSetJobState::Done), 2);
         EXPECT_FALSE(OnDisk("gaps").jobs[0].accepted.has_value());
 
-        params["set"] = "nothing";
-        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_no_set");
-        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", Json::object())), "invalid_params");
+        params = JsonWith(params, "/set", R"("nothing")");
+        EXPECT_EQ(Call("artgen_accept_set", params).ErrorCode(), "artgen_no_set");
+        EXPECT_EQ(Call("artgen_accept_set").ErrorCode(), "invalid_params");
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllChecksEveryRowsFilesBeforeTheFirstAccept) {
         ASSERT_TRUE(Enqueue("files", "a\nb\nc").has_value());
         RunAndPickAll("files");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("files"));
-        Json params = Json::object();
-        params["set"] = "files";
+        String params = R"({"set":"files"})";
 
         // The picked file of the last row is gone: the first two are not accepted either
         RemoveFileIfPresent(AbsoluteInSet(_root, "files", "c/c_41.png"));
-        Json refused = Call("artgen_accept_set", params);
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
+        ControlReply refused = Call("artgen_accept_set", params);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("'c'"), String::npos) << message.c_str();
         EXPECT_TRUE(gAccepted.empty());
         EXPECT_FALSE(OnDisk("files").jobs[0].accepted.has_value());
@@ -1198,17 +1108,17 @@ namespace BECore::Tests {
         // The provenance of a row is gone
         ASSERT_TRUE(WriteFileAtomically(AbsoluteInSet(_root, "files", "c/c_41.png"), "x").has_value());
         RemoveFileIfPresent(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"));
-        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_accept_failed");
+        EXPECT_EQ(Call("artgen_accept_set", params).ErrorCode(), "artgen_accept_failed");
         EXPECT_TRUE(gAccepted.empty());
 
         // No acceptor here
         ASSERT_TRUE(WriteFileAtomically(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"), "x").has_value());
         session.SetAcceptor(nullptr);
-        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_accept_failed");
+        EXPECT_EQ(Call("artgen_accept_set", params).ErrorCode(), "artgen_accept_failed");
         session.SetAcceptor(&FakeAcceptor);
 
         // Everything in place: the same call goes through
-        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "") << "everything is in place now";
+        EXPECT_EQ(Call("artgen_accept_set", params).ErrorCode(), "") << "everything is in place now";
         EXPECT_EQ(gAccepted.size(), 3u);
     }
 
@@ -1216,13 +1126,12 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("five", "a\nb\nc\nd\ne").has_value());
         RunAndPickAll("five");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("five"));
-        Json params = Json::object();
-        params["set"] = "five";
+        String params = R"({"set":"five"})";
 
         gFailOn = "c";
-        const Json refused = Call("artgen_accept_set", params);
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
+        const ControlReply refused = Call("artgen_accept_set", params);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("'c'"), String::npos) << message.c_str();
         EXPECT_NE(message.find("row 3 of 5"), String::npos) << message.c_str();
         EXPECT_NE(message.find("the disk is full"), String::npos) << message.c_str();
@@ -1237,9 +1146,10 @@ namespace BECore::Tests {
         }
 
         gFailOn.clear();
-        const Json again = Result(Call("artgen_accept_set", params));
-        ASSERT_NE(FindJsonMember(again, "accepted"), nullptr);
-        EXPECT_EQ(Require(FindJsonMember(again, "accepted")).size(), 5u);
+        const ControlReply againReply = Call("artgen_accept_set", params);
+        const JsonView again = againReply.Result();
+        ASSERT_TRUE(MemberOf(again, "accepted").IsValid());
+        EXPECT_EQ(MemberOf(again, "accepted").Size(), 5u);
         ASSERT_EQ(gAccepted.size(), 7u) << "the first two replace themselves";
         EXPECT_EQ(gAccepted[2].name, "a");
         EXPECT_EQ(gAccepted[6].name, "e");
@@ -1261,17 +1171,18 @@ namespace BECore::Tests {
             }
         };
 
-        const Json answer = Result(AcceptAllCall("batch"));
+        const ControlReply answerReply = AcceptAllCall("batch");
+        const JsonView answer = answerReply.Result();
 
         const Vector<String> expected{"begin", "accept a", "accept b", "accept c", "end"};
         EXPECT_EQ(gEvents, expected);
         EXPECT_EQ(markedWhileEnding, 0u) << "the library is saved before any row is marked";
-        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
-        const Json& rows = *FindJsonMember(answer, "accepted");
-        ASSERT_EQ(rows.size(), 3u);
-        EXPECT_EQ(GetJsonString(rows[2], "as"), Optional<String>("c"));
-        EXPECT_EQ(GetJsonString(rows[2], "sprite"), Optional<String>("c"));
-        EXPECT_EQ(GetJsonInt(rows[2], "seed"), Optional<int64_t>(kSetSeed + 1));
+        ASSERT_TRUE(MemberOf(answer, "accepted").IsValid());
+        const JsonView rows = MemberOf(answer, "accepted");
+        ASSERT_EQ(rows.Size(), 3u);
+        EXPECT_EQ(StringOf(ItemAt(rows, 2), "as"), "c");
+        EXPECT_EQ(StringOf(ItemAt(rows, 2), "sprite"), "c");
+        EXPECT_EQ(IntOf(ItemAt(rows, 2), "seed"), Optional<int64_t>(kSetSeed + 1));
         const ArtGenSet disk = OnDisk("batch");
         for (const ArtGenSetJob& job : disk.jobs) {
             ASSERT_TRUE(job.accepted.has_value());
@@ -1288,14 +1199,15 @@ namespace BECore::Tests {
         ASSERT_EQ(session.PickVariant("nopick", "b", kSetSeed + 1), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("nopick"));
 
-        const Json answer = Result(AcceptAllCall("nopick"));
+        const ControlReply answerReply = AcceptAllCall("nopick");
+        const JsonView answer = answerReply.Result();
 
-        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
-        const Json& rows = *FindJsonMember(answer, "accepted");
-        ASSERT_EQ(rows.size(), 2u);
-        EXPECT_EQ(GetJsonInt(rows[0], "seed"), Optional<int64_t>(kSetSeed)) << "the first variant is the candidate of a row without a pick";
-        EXPECT_EQ(GetJsonInt(rows[0], "alternatives"), Optional<int64_t>(1));
-        EXPECT_EQ(GetJsonInt(rows[1], "alternatives"), Optional<int64_t>(1));
+        ASSERT_TRUE(MemberOf(answer, "accepted").IsValid());
+        const JsonView rows = MemberOf(answer, "accepted");
+        ASSERT_EQ(rows.Size(), 2u);
+        EXPECT_EQ(IntOf(ItemAt(rows, 0), "seed"), Optional<int64_t>(kSetSeed)) << "the first variant is the candidate of a row without a pick";
+        EXPECT_EQ(IntOf(ItemAt(rows, 0), "alternatives"), Optional<int64_t>(1));
+        EXPECT_EQ(IntOf(ItemAt(rows, 1), "alternatives"), Optional<int64_t>(1));
     }
 
     TEST_F(ArtGenSetSessionTest, AFailureHalfwayInABatchEndsItMarksTheRowsDoneAndTheNextCallFinishes) {
@@ -1305,10 +1217,10 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("five"));
 
         gFailOn = "c";
-        const Json refused = AcceptAllCall("five");
+        const ControlReply refused = AcceptAllCall("five");
 
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = ErrorMessage(refused);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("row 3 of 5"), String::npos) << message.c_str();
         EXPECT_NE(message.find("accepted before it: a, b"), String::npos) << message.c_str();
         const Vector<String> expected{"begin", "accept a", "accept b", "end"};
@@ -1320,7 +1232,7 @@ namespace BECore::Tests {
 
         gFailOn.clear();
         gEvents.clear();
-        EXPECT_EQ(ErrorCode(AcceptAllCall("five")), "");
+        EXPECT_EQ(AcceptAllCall("five").ErrorCode(), "");
         EXPECT_EQ(gEvents.size(), 7u) << "begin, five accepts, end";
         for (const ArtGenSetJob& job : OnDisk("five").jobs) {
             EXPECT_TRUE(job.accepted.has_value());
@@ -1335,10 +1247,10 @@ namespace BECore::Tests {
         const uint64_t versionBefore = session.Version();
 
         gEndFails = true;
-        const Json refused = AcceptAllCall("lost");
+        const ControlReply refused = AcceptAllCall("lost");
 
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = ErrorMessage(refused);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("files written: a, b, c"), String::npos) << message.c_str();
         EXPECT_NE(message.find("library was not saved"), String::npos) << message.c_str();
         EXPECT_NE(message.find("call again"), String::npos) << message.c_str();
@@ -1349,7 +1261,7 @@ namespace BECore::Tests {
         EXPECT_EQ(session.Version(), versionBefore) << "nothing of the set changed";
 
         gEndFails = false;
-        EXPECT_EQ(ErrorCode(AcceptAllCall("lost")), "");
+        EXPECT_EQ(AcceptAllCall("lost").ErrorCode(), "");
         for (const ArtGenSetJob& job : OnDisk("lost").jobs) {
             EXPECT_TRUE(job.accepted.has_value());
         }
@@ -1363,7 +1275,7 @@ namespace BECore::Tests {
 
         gFailOn = "b";
         gEndFails = true;
-        const String message = ErrorMessage(AcceptAllCall("both"));
+        const String message = AcceptAllCall("both").ErrorMessage();
 
         EXPECT_NE(message.find("'b'"), String::npos) << message.c_str();
         EXPECT_NE(message.find("the disk is full"), String::npos) << message.c_str();
@@ -1376,10 +1288,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("done", "a").has_value());
         RunAndPickAll("done");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("done"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("done")), "");
+        ASSERT_EQ(AcceptAllCall("done").ErrorCode(), "");
         ASSERT_NO_FATAL_FAILURE(KeepOnDisk("done", "a"));
         gEvents.clear();
-        EXPECT_EQ(ErrorCode(AcceptAllCall("done")), "");
+        EXPECT_EQ(AcceptAllCall("done").ErrorCode(), "");
         EXPECT_TRUE(gEvents.empty()) << "every row is kept: nothing is written, no batch is opened";
 
         Poll();
@@ -1395,7 +1307,7 @@ namespace BECore::Tests {
         ASSERT_EQ(session.PickVariant("heard", "tap", kSetSeed), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("heard"));
         gEvents.clear();
-        EXPECT_EQ(ErrorCode(AcceptAllCall("heard")), "");
+        EXPECT_EQ(AcceptAllCall("heard").ErrorCode(), "");
         const Vector<String> expected{"accept knock", "accept tap"};
         EXPECT_EQ(gEvents, expected) << "a sound touches no library";
         EXPECT_TRUE(OnDisk("heard").jobs[1].accepted.has_value());
@@ -1407,8 +1319,9 @@ namespace BECore::Tests {
         ASSERT_EQ(session.PickVariant("firsts", "b", kSetSeed + 1), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("firsts"));
 
-        const Json answer = Result(AcceptAllCall("firsts"));
-        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr) << "the answer: " << DumpJson(answer).c_str();
+        const ControlReply answerReply = AcceptAllCall("firsts");
+        const JsonView answer = answerReply.Result();
+        ASSERT_TRUE(MemberOf(answer, "accepted").IsValid()) << "the answer: " << String(answer.Raw()).c_str();
         ASSERT_EQ(gAccepted.size(), 2u);
         EXPECT_EQ(gAccepted[0].seed, kSetSeed) << "a has no pick: its first variant";
         EXPECT_EQ(gAccepted[1].seed, kSetSeed + 1) << "b keeps its pick";
@@ -1416,7 +1329,7 @@ namespace BECore::Tests {
         EXPECT_EQ(disk.jobs[0].pick, Optional<int64_t>(kSetSeed));
         EXPECT_EQ(disk.jobs[1].pick, Optional<int64_t>(kSetSeed + 1));
         EXPECT_TRUE(IsLive(disk.jobs[0]));
-        EXPECT_EQ(GetJsonInt((Require(FindJsonMember(answer, "accepted")))[0], "seed"), Optional<int64_t>(kSetSeed));
+        EXPECT_EQ(IntOf(ItemAt(MemberOf(answer, "accepted"), 0), "seed"), Optional<int64_t>(kSetSeed));
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfASoundSetStillNeedsAPickOnEveryRow) {
@@ -1432,9 +1345,9 @@ namespace BECore::Tests {
         ASSERT_EQ(session.PickVariant("heard", "knock", kSetSeed), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("heard"));
 
-        const Json refused = AcceptAllCall("heard");
-        EXPECT_EQ(ErrorCode(refused), "artgen_set_incomplete");
-        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
+        const ControlReply refused = AcceptAllCall("heard");
+        EXPECT_EQ(refused.ErrorCode(), "artgen_set_incomplete");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("not picked: tap"), String::npos) << message.c_str();
         EXPECT_TRUE(gAccepted.empty());
         EXPECT_FALSE(OnDisk("heard").jobs[1].pick.has_value()) << "nothing was picked for the person";
@@ -1445,21 +1358,22 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("mixed", "a\nb\nc").has_value());
         RunAndPickAll("mixed");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("mixed"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("mixed")), "");
+        ASSERT_EQ(AcceptAllCall("mixed").ErrorCode(), "");
         ASSERT_EQ(gAccepted.size(), 3u);
         ASSERT_NO_FATAL_FAILURE(KeepOnDisk("mixed", "b"));
 
         gAccepted.clear();
-        const Json answer = Result(AcceptAllCall("mixed"));
+        const ControlReply answerReply = AcceptAllCall("mixed");
+        const JsonView answer = answerReply.Result();
         ASSERT_EQ(gAccepted.size(), 2u);
         EXPECT_EQ(gAccepted[0].name, "a");
         EXPECT_EQ(gAccepted[1].name, "c");
-        const Json& rows = Require(FindJsonMember(answer, "accepted"));
-        ASSERT_EQ(rows.size(), 3u);
-        EXPECT_EQ(GetJsonString(rows[1], "job"), Optional<String>("b"));
-        EXPECT_EQ(GetJsonBool(rows[1], "kept"), Optional<bool>(true));
-        EXPECT_EQ(FindJsonMember(rows[1], "as"), nullptr) << "nothing was written for it";
-        EXPECT_EQ(KeysOf(rows[1]), (Vector<String>{"job", "kept"}));
+        const JsonView rows = MemberOf(answer, "accepted");
+        ASSERT_EQ(rows.Size(), 3u);
+        EXPECT_EQ(StringOf(ItemAt(rows, 1), "job"), "b");
+        EXPECT_EQ(BoolOf(ItemAt(rows, 1), "kept"), Optional<bool>(true));
+        EXPECT_FALSE(MemberOf(ItemAt(rows, 1), "as").IsValid()) << "nothing was written for it";
+        EXPECT_EQ(KeysOf(ItemAt(rows, 1)), (Vector<String>{"job", "kept"}));
         EXPECT_TRUE(OnDisk("mixed").jobs[1].accepted->kept);
     }
 
@@ -1467,11 +1381,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("done", "a").has_value());
         RunAndPickAll("done");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("done"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("done")), "");
+        ASSERT_EQ(AcceptAllCall("done").ErrorCode(), "");
         ASSERT_NO_FATAL_FAILURE(KeepOnDisk("done", "a"));
         session.SetAcceptor(nullptr);
         gAccepted.clear();
-        EXPECT_EQ(ErrorCode(AcceptAllCall("done")), "");
+        EXPECT_EQ(AcceptAllCall("done").ErrorCode(), "");
         EXPECT_TRUE(gAccepted.empty());
     }
 
@@ -1479,17 +1393,15 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("live", "a\nb").has_value());
         RunAndPickAll("live");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("live"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("live")), "");
+        ASSERT_EQ(AcceptAllCall("live").ErrorCode(), "");
         gAccepted.clear();
 
-        Json pick = Json::object();
-        pick["set"] = "live";
-        pick["job"] = "a";
-        pick["seed"] = kSetSeed;
-        const Json reply = Result(Call("artgen_pick", pick));
-        EXPECT_EQ(GetJsonInt(reply, "pick"), Optional<int64_t>(kSetSeed));
-        ASSERT_NE(FindJsonMember(reply, "switched"), nullptr) << DumpJson(reply).c_str();
-        EXPECT_EQ(GetJsonString(Require(FindJsonMember(reply, "switched")), "sprite"), Optional<String>("a"));
+        String pick = Format(R"({{"set":"live","job":"a","seed":{}}})", kSetSeed);
+        const ControlReply replyReply = Call("artgen_pick", pick);
+        const JsonView reply = replyReply.Result();
+        EXPECT_EQ(IntOf(reply, "pick"), Optional<int64_t>(kSetSeed));
+        ASSERT_TRUE(MemberOf(reply, "switched").IsValid()) << String(reply.Raw()).c_str();
+        EXPECT_EQ(StringOf(MemberOf(reply, "switched"), "sprite"), "a");
 
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_EQ(gAccepted[0].name, "a") << "the same name: the file is replaced";
@@ -1504,7 +1416,7 @@ namespace BECore::Tests {
         gAccepted.clear();
         EXPECT_EQ(session.PickVariant("live", "a", kSetSeed), ArtGenSetEdit::Ok);
         EXPECT_TRUE(gAccepted.empty()) << "the pick the game already holds is not written again";
-        EXPECT_EQ(FindJsonMember(Result(Call("artgen_pick", pick)), "switched"), nullptr);
+        EXPECT_FALSE(MemberOf(Call("artgen_pick", pick).Result(), "switched").IsValid());
     }
 
     TEST_F(ArtGenSetSessionTest, APickOfARowThatIsNotAcceptedWritesNothing) {
@@ -1520,14 +1432,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("lack", "a").has_value());
         RunAndPickAll("lack");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("lack"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("lack")), "");
+        ASSERT_EQ(AcceptAllCall("lack").ErrorCode(), "");
         gAccepted.clear();
 
-        Json pick = Json::object();
-        pick["set"] = "lack";
-        pick["job"] = "a";
-        pick["seed"] = 999;
-        EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "artgen_no_variant");
+        String pick = R"({"set":"lack","job":"a","seed":999})";
+        EXPECT_EQ(Call("artgen_pick", pick).ErrorCode(), "artgen_no_variant");
         EXPECT_TRUE(gAccepted.empty());
         EXPECT_EQ(OnDisk("lack").jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
     }
@@ -1536,23 +1445,20 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("fail", "a").has_value());
         RunAndPickAll("fail");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("fail"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("fail")), "");
+        ASSERT_EQ(AcceptAllCall("fail").ErrorCode(), "");
         const ArtGenSet before = OnDisk("fail");
         gAccepted.clear();
 
-        Json pick = Json::object();
-        pick["set"] = "fail";
-        pick["job"] = "a";
-        pick["seed"] = kSetSeed;
+        String pick = Format(R"({{"set":"fail","job":"a","seed":{}}})", kSetSeed);
 
         gFailOn = "a";
         ArtGenSwitch write;
         EXPECT_EQ(session.PickVariant("fail", "a", kSetSeed, &write), ArtGenSetEdit::WriteFailed);
         EXPECT_NE(write.error.find("the disk is full"), String::npos) << write.error.c_str();
         EXPECT_NE(write.error.find(Format("the row still names seed {}", kSetSeed + 1)), String::npos) << write.error.c_str();
-        const Json refused = Call("artgen_pick", pick);
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        EXPECT_EQ(ManifestJson(OnDisk("fail")), ManifestJson(before));
+        const ControlReply refused = Call("artgen_pick", pick);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        EXPECT_EQ(ManifestText(OnDisk("fail")), ManifestText(before));
         EXPECT_EQ(Require(session.FindSet("fail")).jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
 
         gFailOn.clear();
@@ -1562,7 +1468,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(gAccepted.empty()) << "the files are checked before the acceptor is asked";
 
         session.SetAcceptor(nullptr);
-        EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "artgen_accept_failed");
+        EXPECT_EQ(Call("artgen_pick", pick).ErrorCode(), "artgen_accept_failed");
         EXPECT_EQ(Require(session.FindSet("fail")).jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
     }
 
@@ -1570,7 +1476,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("again", "a").has_value());
         RunAndPickAll("again");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("again"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("again")), "");
+        ASSERT_EQ(AcceptAllCall("again").ErrorCode(), "");
         ReloadFromDisk();
         gAccepted.clear();
 
@@ -1591,7 +1497,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         RunAndPickAll("clips", "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("clips"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("clips")), "");
+        ASSERT_EQ(AcceptAllCall("clips").ErrorCode(), "");
         gAccepted.clear();
 
         EXPECT_EQ(session.PickVariant("clips", "knock", kSetSeed), ArtGenSetEdit::Ok);
@@ -1605,16 +1511,15 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("keep", "a\nb").has_value());
         RunAndPickAll("keep");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("keep"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("keep")), "");
+        ASSERT_EQ(AcceptAllCall("keep").ErrorCode(), "");
 
-        Json params = Json::object();
-        params["set"] = "keep";
-        params["job"] = "a";
-        const Json answer = Result(Call("artgen_keep", params));
-        const Json* kept = FindJsonMember(answer, "kept");
-        ASSERT_NE(kept, nullptr) << DumpJson(answer).c_str();
-        ASSERT_EQ(kept->size(), 1u);
-        EXPECT_EQ((*kept)[0], "a");
+        String params = R"({"set":"keep","job":"a"})";
+        const ControlReply answerReply = Call("artgen_keep", params);
+        const JsonView answer = answerReply.Result();
+        const JsonView kept = MemberOf(answer, "kept");
+        ASSERT_TRUE(kept.IsValid()) << String(answer.Raw()).c_str();
+        ASSERT_EQ(kept.Size(), 1u);
+        EXPECT_EQ(ItemAt(kept, 0).Raw(), R"("a")");
         EXPECT_EQ(KeysOf(answer), (Vector<String>{"kept", "set"})) << "no `replaced` when no row was left alone";
 
         ASSERT_EQ(gKept.size(), 1u);
@@ -1629,12 +1534,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsLive(disk.jobs[1])) << "the other row is untouched";
         EXPECT_EQ(disk.jobs[1].variants.size(), 2u);
 
-        Json pick = Json::object();
-        pick["set"] = "keep";
-        pick["job"] = "a";
-        pick["seed"] = kSetSeed;
+        String pick = Format(R"({{"set":"keep","job":"a","seed":{}}})", kSetSeed);
         gAccepted.clear();
-        EXPECT_EQ(ErrorCode(Call("artgen_pick", pick)), "artgen_no_variant") << "the alternatives are gone";
+        EXPECT_EQ(Call("artgen_pick", pick).ErrorCode(), "artgen_no_variant") << "the alternatives are gone";
         EXPECT_TRUE(gAccepted.empty());
     }
 
@@ -1642,18 +1544,17 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("notlive", "a\nb").has_value());
         RunAndPickAll("notlive");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("notlive"));
-        Json params = Json::object();
-        params["set"] = "notlive";
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params") << "nothing is accepted yet";
-        params["job"] = "a";
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params");
+        String params = R"({"set":"notlive"})";
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "invalid_params") << "nothing is accepted yet";
+        params = JsonWith(params, "/job", R"("a")");
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "invalid_params");
 
-        ASSERT_EQ(ErrorCode(AcceptAllCall("notlive")), "");
-        ASSERT_EQ(ErrorCode(Call("artgen_keep", params)), "");
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params") << "already kept";
-        params.erase("job");
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "") << "b is still live";
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params") << "nothing live is left";
+        ASSERT_EQ(AcceptAllCall("notlive").ErrorCode(), "");
+        ASSERT_EQ(Call("artgen_keep", params).ErrorCode(), "");
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "invalid_params") << "already kept";
+        params = JsonWithout(params, "/job");
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "") << "b is still live";
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "invalid_params") << "nothing live is left";
         EXPECT_EQ(gKept.size(), 2u);
     }
 
@@ -1661,13 +1562,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("all", "a\nb\nc").has_value());
         RunAndPickAll("all");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("all"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("all")), "");
+        ASSERT_EQ(AcceptAllCall("all").ErrorCode(), "");
 
-        Json params = Json::object();
-        params["set"] = "all";
-        const Json answer = Result(Call("artgen_keep", params));
-        ASSERT_NE(FindJsonMember(answer, "kept"), nullptr);
-        EXPECT_EQ(Require(FindJsonMember(answer, "kept")).size(), 3u);
+        String params = R"({"set":"all"})";
+        const ControlReply answerReply = Call("artgen_keep", params);
+        const JsonView answer = answerReply.Result();
+        ASSERT_TRUE(MemberOf(answer, "kept").IsValid());
+        EXPECT_EQ(MemberOf(answer, "kept").Size(), 3u);
         EXPECT_EQ(gKept.size(), 3u);
         const ArtGenSet disk = OnDisk("all");
         EXPECT_EQ(CountKept(disk), 3);
@@ -1678,21 +1579,20 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("unk", "a").has_value());
         RunAndPickAll("unk");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("unk"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("unk")), "");
+        ASSERT_EQ(AcceptAllCall("unk").ErrorCode(), "");
 
-        Json params = Json::object();
-        params["set"] = "nothing";
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "artgen_no_set");
-        params["set"] = "unk";
-        params["job"] = "zzz";
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "artgen_no_set");
-        params["job"] = 3;
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "invalid_params");
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", Json::object())), "invalid_params");
+        String params = R"({"set":"nothing"})";
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "artgen_no_set");
+        params = JsonWith(params, "/set", R"("unk")");
+        params = JsonWith(params, "/job", R"("zzz")");
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "artgen_no_set");
+        params = JsonWith(params, "/job", "3");
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("artgen_keep").ErrorCode(), "invalid_params");
 
-        params.erase("job");
+        params = JsonWithout(params, "/job");
         session.SetKeeper(nullptr);
-        EXPECT_EQ(ErrorCode(Call("artgen_keep", params)), "artgen_accept_failed");
+        EXPECT_EQ(Call("artgen_keep", params).ErrorCode(), "artgen_accept_failed");
         EXPECT_TRUE(IsLive(OnDisk("unk").jobs[0]));
     }
 
@@ -1700,14 +1600,13 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("kfail", "a\nb\nc").has_value());
         RunAndPickAll("kfail");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("kfail"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("kfail")), "");
+        ASSERT_EQ(AcceptAllCall("kfail").ErrorCode(), "");
 
-        Json params = Json::object();
-        params["set"] = "kfail";
+        String params = R"({"set":"kfail"})";
         gKeepFailOn = "b";
-        const Json refused = Call("artgen_keep", params);
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
+        const ControlReply refused = Call("artgen_keep", params);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("'b'"), String::npos) << message.c_str();
         EXPECT_NE(message.find("read-only"), String::npos) << message.c_str();
         EXPECT_NE(message.find("kept before it: a"), String::npos) << message.c_str();
@@ -1719,8 +1618,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsLive(disk.jobs[2]));
 
         gKeepFailOn.clear();
-        const Json again = Result(Call("artgen_keep", params));
-        EXPECT_EQ(Require(FindJsonMember(again, "kept")).size(), 2u);
+        const ControlReply againReply = Call("artgen_keep", params);
+        const JsonView again = againReply.Result();
+        EXPECT_EQ(MemberOf(again, "kept").Size(), 2u);
         EXPECT_EQ(CountKept(OnDisk("kfail")), 3);
     }
 
@@ -1735,7 +1635,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         RunAndPickAll("kclips", "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("kclips"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("kclips")), "");
+        ASSERT_EQ(AcceptAllCall("kclips").ErrorCode(), "");
         EXPECT_TRUE(session.KeepSet("kclips").has_value());
         ASSERT_EQ(gKept.size(), 1u);
         EXPECT_EQ(gKept[0].kind, "audio");
@@ -1746,34 +1646,35 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("counts", "a\nb\nc").has_value());
         RunAndPickAll("counts");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("counts"));
-        const auto setState = [this] { return (Require(FindJsonMember(Result(Call("artgen_state")), "sets")))[0]; };
-        EXPECT_EQ(GetJsonInt(setState(), "live"), Optional<int64_t>(0));
-        EXPECT_EQ(GetJsonInt(setState(), "kept"), Optional<int64_t>(0));
+        const auto setState = [this](StringView key) {
+            const ControlReply state = Call("artgen_state");
+            return IntOf(ItemAt(MemberOf(state.Result(), "sets"), 0), key);
+        };
+        EXPECT_EQ(setState("live"), Optional<int64_t>(0));
+        EXPECT_EQ(setState("kept"), Optional<int64_t>(0));
 
-        ASSERT_EQ(ErrorCode(AcceptAllCall("counts")), "");
-        EXPECT_EQ(GetJsonInt(setState(), "live"), Optional<int64_t>(3));
-        EXPECT_EQ(GetJsonInt(setState(), "kept"), Optional<int64_t>(0));
+        ASSERT_EQ(AcceptAllCall("counts").ErrorCode(), "");
+        EXPECT_EQ(setState("live"), Optional<int64_t>(3));
+        EXPECT_EQ(setState("kept"), Optional<int64_t>(0));
 
         ASSERT_TRUE(session.KeepSet("counts", "b").has_value());
-        EXPECT_EQ(GetJsonInt(setState(), "live"), Optional<int64_t>(2));
-        EXPECT_EQ(GetJsonInt(setState(), "kept"), Optional<int64_t>(1));
-        EXPECT_EQ(GetJsonInt(setState(), "accepted"), Optional<int64_t>(3));
+        EXPECT_EQ(setState("live"), Optional<int64_t>(2));
+        EXPECT_EQ(setState("kept"), Optional<int64_t>(1));
+        EXPECT_EQ(setState("accepted"), Optional<int64_t>(3));
     }
 
     TEST_F(ArtGenSetSessionTest, AConnectedServiceWhoseGeneratorIsNotReadyLeavesTheJobsPending) {
         ASSERT_TRUE(Enqueue("down", "a\nb").has_value());
-        Json notRunning = ReadyPoll();
-        notRunning["state"] = "not_running";
-        notRunning["reason"] = "ComfyUI is not started";
-        const Json first = Result(Call("artgen_poll", notRunning));
-        EXPECT_EQ(RequestOf(first), nullptr);
+        const String notRunning = JsonWith(JsonWith(kReadyPoll, "/state", R"("not_running")"), "/reason", R"("ComfyUI is not started")");
+        const ControlReply first = Call("artgen_poll", notRunning);
+        EXPECT_FALSE(RequestOf(first).IsValid());
         EXPECT_EQ(CountJobs(Require(session.FindSet("down")), ArtGenSetJobState::Pending), 2);
         EXPECT_EQ(CountJobs(Require(session.FindSet("down")), ArtGenSetJobState::Running), 0);
         EXPECT_FALSE(session.IsGeneratorReady());
         EXPECT_TRUE(session.IsServiceConnected());
 
-        const Json ready = Poll();
-        ASSERT_NE(RequestOf(ready), nullptr) << "the first poll with a ready generator starts a job";
+        const ControlReply ready = Poll();
+        ASSERT_TRUE(RequestOf(ready).IsValid()) << "the first poll with a ready generator starts a job";
         EXPECT_EQ(CountJobs(Require(session.FindSet("down")), ArtGenSetJobState::Running), 1);
         EXPECT_TRUE(session.IsGeneratorReady());
     }
@@ -1785,15 +1686,12 @@ namespace BECore::Tests {
         ArtGenSwitch write;
         EXPECT_EQ(session.PickVariant("first", "a", kSetSeed, &write), ArtGenSetEdit::WriteFailed);
         EXPECT_NE(write.error.find("'second'"), String::npos) << write.error.c_str();
-        Json pick = Json::object();
-        pick["set"] = "first";
-        pick["job"] = "a";
-        pick["seed"] = kSetSeed;
-        const Json refused = Call("artgen_pick", pick);
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        EXPECT_NE(ErrorMessage(refused).find("'second'"), String::npos) << ErrorMessage(refused).c_str();
+        String pick = Format(R"({{"set":"first","job":"a","seed":{}}})", kSetSeed);
+        const ControlReply refused = Call("artgen_pick", pick);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        EXPECT_NE(refused.ErrorMessage().find("'second'"), String::npos) << refused.ErrorMessage().c_str();
         EXPECT_TRUE(gAccepted.empty()) << "the game's file was not written";
-        EXPECT_EQ(ManifestJson(OnDisk("first")), ManifestJson(before));
+        EXPECT_EQ(ManifestText(OnDisk("first")), ManifestText(before));
 
         EXPECT_EQ(session.PickVariant("first", "b", kSetSeed), ArtGenSetEdit::Ok) << "a row nobody replaced switches as before";
         gAccepted.clear();
@@ -1823,13 +1721,13 @@ namespace BECore::Tests {
         ASSERT_EQ(session.PickVariant("second", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("first"));
         ASSERT_NO_FATAL_FAILURE(MakeFiles("second"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("second")), "");
+        ASSERT_EQ(AcceptAllCall("second").ErrorCode(), "");
         ArtGenSet disk = OnDisk("second");
         disk.jobs[0].accepted->date = "2999-01-01T00:00:00Z";
         ASSERT_TRUE(WriteManifest(_root, disk).has_value());
         ReloadFromDisk();
 
-        ASSERT_EQ(ErrorCode(AcceptAllCall("first")), "");
+        ASSERT_EQ(AcceptAllCall("first").ErrorCode(), "");
 
         const ArtGenSet& first = *session.FindSet("first");
         const ArtGenSet& second = *session.FindSet("second");
@@ -1889,8 +1787,8 @@ namespace BECore::Tests {
         ASSERT_EQ(session.PickVariant("clips", "knock", kSetSeed + 1), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("pictures"));
         ASSERT_NO_FATAL_FAILURE(MakeFiles("clips"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("pictures")), "");
-        ASSERT_EQ(ErrorCode(AcceptAllCall("clips")), "");
+        ASSERT_EQ(AcceptAllCall("pictures").ErrorCode(), "");
+        ASSERT_EQ(AcceptAllCall("clips").ErrorCode(), "");
         gAccepted.clear();
 
         EXPECT_EQ(session.PickVariant("pictures", "knock", kSetSeed), ArtGenSetEdit::Ok) << "assets/artgen/knock.png is not knock.wav";
@@ -1900,37 +1798,36 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, KeepOfARowAnotherSetAcceptedLaterIsRefusedAndTheNewerSetKeeps) {
         ASSERT_NO_FATAL_FAILURE(AcceptTwoSetsOfOneName());
 
-        Json params = Json::object();
-        params["set"] = "first";
-        params["job"] = "a";
-        const Json refused = Call("artgen_keep", params);
-        EXPECT_EQ(ErrorCode(refused), "invalid_params");
-        EXPECT_NE(ErrorMessage(refused).find("'second'"), String::npos) << ErrorMessage(refused).c_str();
+        String params = R"({"set":"first","job":"a"})";
+        const ControlReply refused = Call("artgen_keep", params);
+        EXPECT_EQ(refused.ErrorCode(), "invalid_params");
+        EXPECT_NE(refused.ErrorMessage().find("'second'"), String::npos) << refused.ErrorMessage().c_str();
         EXPECT_TRUE(gKept.empty()) << "no false kept seed reached the game's file";
         EXPECT_TRUE(IsLive(OnDisk("first").jobs[0]));
 
         // The whole set keeps what it still owns and says what it left
-        params.erase("job");
-        const Json answer = Result(Call("artgen_keep", params));
-        ASSERT_NE(FindJsonMember(answer, "kept"), nullptr) << DumpJson(answer).c_str();
-        ASSERT_EQ(Require(FindJsonMember(answer, "kept")).size(), 1u);
-        EXPECT_EQ((Require(FindJsonMember(answer, "kept")))[0], "b");
-        const Json* replaced = FindJsonMember(answer, "replaced");
-        ASSERT_NE(replaced, nullptr);
-        ASSERT_EQ(replaced->size(), 1u);
-        EXPECT_EQ(GetJsonString((*replaced)[0], "job"), Optional<String>("a"));
-        EXPECT_EQ(GetJsonString((*replaced)[0], "by"), Optional<String>("second"));
+        params = JsonWithout(params, "/job");
+        const ControlReply answerReply = Call("artgen_keep", params);
+        const JsonView answer = answerReply.Result();
+        ASSERT_TRUE(MemberOf(answer, "kept").IsValid()) << String(answer.Raw()).c_str();
+        ASSERT_EQ(MemberOf(answer, "kept").Size(), 1u);
+        EXPECT_EQ(ItemAt(MemberOf(answer, "kept"), 0).Raw(), R"("b")");
+        const JsonView replaced = MemberOf(answer, "replaced");
+        ASSERT_TRUE(replaced.IsValid());
+        ASSERT_EQ(replaced.Size(), 1u);
+        EXPECT_EQ(StringOf(ItemAt(replaced, 0), "job"), "a");
+        EXPECT_EQ(StringOf(ItemAt(replaced, 0), "by"), "second");
         EXPECT_EQ(KeysOf(answer), (Vector<String>{"kept", "replaced", "set"}));
-        EXPECT_EQ(KeysOf((*replaced)[0]), (Vector<String>{"by", "job"}));
+        EXPECT_EQ(KeysOf(ItemAt(replaced, 0)), (Vector<String>{"by", "job"}));
         ASSERT_EQ(gKept.size(), 1u);
         EXPECT_EQ(gKept[0].name, "b");
 
-        const Json onlyReplaced = Call("artgen_keep", params);
-        EXPECT_EQ(ErrorCode(onlyReplaced), "invalid_params");
-        EXPECT_NE(ErrorMessage(onlyReplaced).find("second"), String::npos) << ErrorMessage(onlyReplaced).c_str();
+        const ControlReply onlyReplaced = Call("artgen_keep", params);
+        EXPECT_EQ(onlyReplaced.ErrorCode(), "invalid_params");
+        EXPECT_NE(onlyReplaced.ErrorMessage().find("second"), String::npos) << onlyReplaced.ErrorMessage().c_str();
 
-        params["set"] = "second";
-        ASSERT_EQ(ErrorCode(Call("artgen_keep", params)), "");
+        params = JsonWith(params, "/set", R"("second")");
+        ASSERT_EQ(Call("artgen_keep", params).ErrorCode(), "");
         ASSERT_EQ(gKept.size(), 2u);
         EXPECT_EQ(gKept[1].name, "a");
         EXPECT_EQ(gKept[1].seed, kSetSeed + 1);
@@ -1940,17 +1837,18 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(AcceptTwoSetsOfOneName());
         const ArtGenSet before = OnDisk("first");
 
-        const Json answer = Result(AcceptAllCall("first"));
+        const ControlReply answerReply = AcceptAllCall("first");
+        const JsonView answer = answerReply.Result();
         ASSERT_EQ(gAccepted.size(), 1u) << "b is written again, a is not";
         EXPECT_EQ(gAccepted[0].name, "b");
-        const Json& rows = Require(FindJsonMember(answer, "accepted"));
-        ASSERT_EQ(rows.size(), 2u);
-        EXPECT_EQ(GetJsonString(rows[0], "job"), Optional<String>("a"));
-        EXPECT_EQ(GetJsonString(rows[0], "replacedBy"), Optional<String>("second"));
-        EXPECT_EQ(FindJsonMember(rows[0], "as"), nullptr);
-        EXPECT_EQ(KeysOf(rows[0]), (Vector<String>{"job", "replacedBy"})) << "a row left as it is has none of the acceptor's members";
-        EXPECT_EQ(GetJsonString(rows[1], "as"), Optional<String>("b"));
-        EXPECT_EQ(KeysOf(rows[1]), (Vector<String>{"alternatives", "as", "job", "seed", "sprite"})) << "a row written: the acceptor's members, as, seed and alternatives";
+        const JsonView rows = MemberOf(answer, "accepted");
+        ASSERT_EQ(rows.Size(), 2u);
+        EXPECT_EQ(StringOf(ItemAt(rows, 0), "job"), "a");
+        EXPECT_EQ(StringOf(ItemAt(rows, 0), "replacedBy"), "second");
+        EXPECT_FALSE(MemberOf(ItemAt(rows, 0), "as").IsValid());
+        EXPECT_EQ(KeysOf(ItemAt(rows, 0)), (Vector<String>{"job", "replacedBy"})) << "a row left as it is has none of the acceptor's members";
+        EXPECT_EQ(StringOf(ItemAt(rows, 1), "as"), "b");
+        EXPECT_EQ(KeysOf(ItemAt(rows, 1)), (Vector<String>{"alternatives", "as", "job", "seed", "sprite"})) << "a row written: the acceptor's members, as, seed and alternatives";
         EXPECT_EQ(OnDisk("first").jobs[0].accepted->date, before.jobs[0].accepted->date) << "the row's mark did not move";
 
         // A set whose row of that name was never accepted writes it: it is the newest then
@@ -1958,7 +1856,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(RunAndPickAll("third"));
         ASSERT_NO_FATAL_FAILURE(MakeFiles("third"));
         gAccepted.clear();
-        ASSERT_EQ(ErrorCode(AcceptAllCall("third")), "");
+        ASSERT_EQ(AcceptAllCall("third").ErrorCode(), "");
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_EQ(session.PickVariant("second", "a", kSetSeed), ArtGenSetEdit::WriteFailed) << "the third holds it now";
     }
@@ -1967,18 +1865,15 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("old", "a").has_value());
         RunAndPickAll("old");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("old"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("old")), "");
+        ASSERT_EQ(AcceptAllCall("old").ErrorCode(), "");
         ASSERT_NO_FATAL_FAILURE(KeepOnDisk("old", "a"));
         ASSERT_EQ(Require(session.FindSet("old")).jobs[0].variants.size(), 2u);
         gAccepted.clear();
 
-        Json pick = Json::object();
-        pick["set"] = "old";
-        pick["job"] = "a";
-        pick["seed"] = kSetSeed;
-        const Json refused = Call("artgen_pick", pick);
-        EXPECT_EQ(ErrorCode(refused), "artgen_no_variant");
-        EXPECT_NE(ErrorMessage(refused).find("kept"), String::npos) << ErrorMessage(refused).c_str();
+        String pick = Format(R"({{"set":"old","job":"a","seed":{}}})", kSetSeed);
+        const ControlReply refused = Call("artgen_pick", pick);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_no_variant");
+        EXPECT_NE(refused.ErrorMessage().find("kept"), String::npos) << refused.ErrorMessage().c_str();
         EXPECT_EQ(Require(session.FindSet("old")).jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
         EXPECT_EQ(session.PickVariant("old", "a", kSetSeed + 1), ArtGenSetEdit::Ok) << "the pick it holds is no change";
         EXPECT_TRUE(gAccepted.empty());
@@ -2030,11 +1925,11 @@ namespace BECore::Tests {
         RunAndPickAll("sounds", "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("sounds"));
 
-        Json params = Json::object();
-        params["set"] = "sounds";
-        const Json answer = Result(Call("artgen_accept_set", params));
-        ASSERT_NE(FindJsonMember(answer, "accepted"), nullptr);
-        EXPECT_EQ(GetJsonString((Require(FindJsonMember(answer, "accepted")))[0], "clip"), Optional<String>("knock"));
+        String params = R"({"set":"sounds"})";
+        const ControlReply answerReply = Call("artgen_accept_set", params);
+        const JsonView answer = answerReply.Result();
+        ASSERT_TRUE(MemberOf(answer, "accepted").IsValid());
+        EXPECT_EQ(StringOf(ItemAt(MemberOf(answer, "accepted"), 0), "clip"), "knock");
         ASSERT_EQ(gAccepted.size(), 2u);
         for (const AcceptedRow& row : gAccepted) {
             EXPECT_FALSE(row.image);
@@ -2060,9 +1955,8 @@ namespace BECore::Tests {
         EXPECT_EQ(OnDisk("early").kind, "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("early"));
 
-        Json params = Json::object();
-        params["set"] = "early";
-        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "");
+        String params = R"({"set":"early"})";
+        EXPECT_EQ(Call("artgen_accept_set", params).ErrorCode(), "");
         ASSERT_EQ(gAccepted.size(), 2u);
         EXPECT_FALSE(gAccepted[0].image);
     }
@@ -2081,9 +1975,8 @@ namespace BECore::Tests {
         EXPECT_EQ(OnDisk("unlisted").kind, "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("unlisted"));
 
-        Json params = Json::object();
-        params["set"] = "unlisted";
-        EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "");
+        String params = R"({"set":"unlisted"})";
+        EXPECT_EQ(Call("artgen_accept_set", params).ErrorCode(), "");
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_FALSE(gAccepted[0].image);
     }
@@ -2092,70 +1985,53 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// A poll whose catalog gives the saved preset `wood` the content @p woodAtlas for its `atlas` key (null: no key)
-        Json PollWithWoodAtlas(const Json& woodAtlas) {
-            Json params = ReadyPoll();
-            Json wood = params["presets"][0];
-            wood["preset"] = Json{{"preset", 1}, {"workflow", "txt2img"}, {"prompt", "{subject}"}};
-            if (!woodAtlas.is_null()) {
-                wood["preset"]["atlas"] = woodAtlas;
-            }
-            Json knock = params["presets"][1];
-            knock["preset"] = Json{{"preset", 1}, {"workflow", "sound"}, {"prompt", "{subject}"}, {"atlas", "pieces"}};
-            params["presets"] = Json::array({wood, knock});
-            return params;
+        /// A poll whose catalog gives the saved preset `wood` the group @p woodAtlas (the text of its `atlas` value; empty: no key)
+        String PollWithWoodAtlas(StringView woodAtlas = {}) {
+            const String wood = woodAtlas.empty() ? String(R"({"name":"wood","preset":{"preset":1,"prompt":"{subject}","workflow":"txt2img"},"title":"wood"})")
+                                                  : Format(R"({{"name":"wood","preset":{{"atlas":{},"preset":1,"prompt":"{{subject}}","workflow":"txt2img"}},"title":"wood"}})", Str(woodAtlas));
+            return Format(
+                R"({{"generator":"fake","presets":[{},{{"kind":"audio","name":"knock","preset":{{"atlas":"pieces","preset":1,"prompt":"{{subject}}","workflow":"sound"}},"title":"knock"}}],"state":"ready"}})",
+                wood);
         }
 
-        Json EnqueueParams(StringView set) {
-            Json params = Json::object();
-            params["preset"] = "wood";
-            params["subjects"] = "a\nb";
-            params["set"] = ToStdString(set);
-            params["seed"] = kSetSeed;
-            return params;
+        String EnqueueParams(StringView set) {
+            return Format(R"({{"preset":"wood","seed":{},"set":{},"subjects":"a\nb"}})", kSetSeed, Str(set));
         }
 
     }  // namespace
 
     TEST_F(ArtGenSetSessionTest, EnqueueRecordsTheAtlasGroupInTheSetItsManifestAndTheState) {
-        Json params = EnqueueParams("grouped");
-        params["atlas"] = "pieces";
-        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+        ASSERT_EQ(Call("artgen_enqueue", JsonWith(EnqueueParams("grouped"), "/atlas", R"("pieces")")).ErrorCode(), "");
         EXPECT_EQ(session.FindSet("grouped")->atlas, "pieces");
         EXPECT_EQ(OnDisk("grouped").atlas, "pieces");
 
-        Json setParams = Json::object();
-        setParams["set"] = "grouped";
-        EXPECT_EQ(*FindJsonMember(Result(Call("artgen_set", setParams)), "atlas"), Json("pieces"));
-        const Json state = Result(Call("artgen_state"));
-        EXPECT_EQ(*FindJsonMember((*FindJsonMember(state, "sets"))[0], "atlas"), Json("pieces"));
+        EXPECT_EQ(RawOf(Call("artgen_set", R"({"set":"grouped"})").Result(), "atlas"), R"("pieces")");
+        const ControlReply stateReply = Call("artgen_state");
+        EXPECT_EQ(RawOf(ItemAt(MemberOf(stateReply.Result(), "sets"), 0), "atlas"), R"("pieces")");
 
-        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("plain"))), "");
+        ASSERT_EQ(Call("artgen_enqueue", EnqueueParams("plain")).ErrorCode(), "");
         EXPECT_TRUE(session.FindSet("plain")->atlas.empty());
-        EXPECT_EQ(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[1], "atlas"), nullptr);
+        const ControlReply plainState = Call("artgen_state");
+        EXPECT_FALSE(MemberOf(ItemAt(MemberOf(plainState.Result(), "sets"), 1), "atlas").IsValid());
         ReloadFromDisk();
         EXPECT_EQ(session.FindSet("grouped")->atlas, "pieces") << "a reload of the sets keeps it";
     }
 
     TEST_F(ArtGenSetSessionTest, EnqueueTakesTheGroupOfTheSavedPresetAndAnEmptyStringClearsIt) {
         Call("artgen_poll", PollWithWoodAtlas("icons"));
-        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("by_preset"))), "");
+        ASSERT_EQ(Call("artgen_enqueue", EnqueueParams("by_preset")).ErrorCode(), "");
         EXPECT_EQ(session.FindSet("by_preset")->atlas, "icons");
 
-        Json cleared = EnqueueParams("cleared");
-        cleared["atlas"] = "";
-        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", cleared)), "");
+        ASSERT_EQ(Call("artgen_enqueue", JsonWith(EnqueueParams("cleared"), "/atlas", R"("")")).ErrorCode(), "");
         EXPECT_TRUE(session.FindSet("cleared")->atlas.empty());
 
-        Json other = EnqueueParams("other");
-        other["atlas"] = "tiles";
-        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", other)), "");
+        ASSERT_EQ(Call("artgen_enqueue", JsonWith(EnqueueParams("other"), "/atlas", R"("tiles")")).ErrorCode(), "");
         EXPECT_EQ(session.FindSet("other")->atlas, "tiles");
 
         Call("artgen_poll", PollWithWoodAtlas("changed"));
         EXPECT_EQ(session.FindSet("by_preset")->atlas, "icons") << "editing the preset later does not reach the set";
-        Call("artgen_poll", PollWithWoodAtlas(Json()));
-        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", EnqueueParams("none"))), "");
+        Call("artgen_poll", PollWithWoodAtlas());
+        ASSERT_EQ(Call("artgen_enqueue", EnqueueParams("none")).ErrorCode(), "");
         EXPECT_TRUE(session.FindSet("none")->atlas.empty());
     }
 
@@ -2177,27 +2053,23 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSetSessionTest, ASoundSetTakesNoGroup) {
-        Call("artgen_poll", PollWithWoodAtlas(Json()));
-        Json params = Json::object();
-        params["preset"] = "knock";
-        params["subjects"] = "click";
-        params["set"] = "heard";
-        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "") << "a group the sound preset names is ignored";
+        Call("artgen_poll", PollWithWoodAtlas());
+        String params = R"({"preset":"knock","set":"heard","subjects":"click"})";
+        EXPECT_EQ(Call("artgen_enqueue", params).ErrorCode(), "") << "a group the sound preset names is ignored";
         EXPECT_TRUE(session.FindSet("heard")->atlas.empty());
 
-        params["set"] = "refused";
-        params["atlas"] = "pieces";
-        const Json refused = Call("artgen_enqueue", params);
-        EXPECT_EQ(ErrorCode(refused), "invalid_params");
-        EXPECT_NE(ErrorMessage(refused).find("only an image set can have an atlas"), String::npos) << ErrorMessage(refused).c_str();
+        params = JsonWith(params, "/set", R"("refused")");
+        params = JsonWith(params, "/atlas", R"("pieces")");
+        const ControlReply refused = Call("artgen_enqueue", params);
+        EXPECT_EQ(refused.ErrorCode(), "invalid_params");
+        EXPECT_NE(refused.ErrorMessage().find("only an image set can have an atlas"), String::npos) << refused.ErrorMessage().c_str();
         EXPECT_EQ(session.FindSet("refused"), nullptr);
     }
 
     TEST_F(ArtGenSetSessionTest, EnqueueRefusesABadAtlasAndKeepsNothing) {
-        for (const Json& bad : {Json("a b"), Json("../x"), Json(5), Json::array(), Json(true), Json(ToStdString(String(65, 'a')))}) {
-            Json params = EnqueueParams("bad");
-            params["atlas"] = bad;
-            EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "invalid_params") << DumpJson(bad).c_str();
+        const String longName = Str(String(65, 'a'));
+        for (const StringView bad : {StringView(R"("a b")"), StringView(R"("../x")"), StringView("5"), StringView("[]"), StringView("true"), StringView(longName)}) {
+            EXPECT_EQ(Call("artgen_enqueue", JsonWith(EnqueueParams("bad"), "/atlas", bad)).ErrorCode(), "invalid_params") << String(bad).c_str();
         }
         EXPECT_TRUE(session.GetSets().empty());
 
@@ -2219,7 +2091,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         RunAndPickAll("grouped");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("grouped")), "");
+        ASSERT_EQ(AcceptAllCall("grouped").ErrorCode(), "");
         gPlans.clear();
 
         ASSERT_EQ(session.PickVariant("grouped", "a", kSetSeed), ArtGenSetEdit::Ok);
@@ -2258,7 +2130,8 @@ namespace BECore::Tests {
         RunAndPickAll("grouped");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
 
-        const Json answer = Result(AcceptAllCall("grouped"));
+        const ControlReply answerReply = AcceptAllCall("grouped");
+        const JsonView answer = answerReply.Result();
         ASSERT_EQ(gPlans.size(), 3u);
         for (const ArtGenImagePlan& plan : gPlans) {
             EXPECT_EQ(plan.atlas, "pieces");
@@ -2267,10 +2140,10 @@ namespace BECore::Tests {
         ASSERT_EQ(gPacks.size(), 1u);
         EXPECT_EQ(gPacks[0].group, "pieces");
         EXPECT_EQ(gPacks[0].acceptedBefore, 3u) << "after the last row";
-        const Json* atlas = FindJsonMember(answer, "atlas");
-        ASSERT_NE(atlas, nullptr);
-        EXPECT_EQ(GetJsonString(*atlas, "name"), Optional<String>("pieces"));
-        EXPECT_EQ(FindJsonMember(answer, "accepted")->size(), 3u);
+        const JsonView atlas = MemberOf(answer, "atlas");
+        ASSERT_TRUE(atlas.IsValid());
+        EXPECT_EQ(StringOf(atlas, "name"), "pieces");
+        EXPECT_EQ(MemberOf(answer, "accepted").Size(), 3u);
         for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
             EXPECT_TRUE(job.accepted.has_value());
         }
@@ -2278,14 +2151,15 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfASetWithoutAGroupNeverCallsThePacker) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("loose", "a\nb"));
-        const Json answer = Result(AcceptAllCall("loose"));
+        const ControlReply answerReply = AcceptAllCall("loose");
+        const JsonView answer = answerReply.Result();
         EXPECT_TRUE(gPacks.empty());
         ASSERT_EQ(gPlans.size(), 2u);
         for (const ArtGenImagePlan& plan : gPlans) {
             EXPECT_TRUE(plan.atlas.empty());
             EXPECT_FALSE(plan.deferPack);
         }
-        EXPECT_EQ(FindJsonMember(answer, "atlas"), nullptr) << "no atlas member when none was packed";
+        EXPECT_FALSE(MemberOf(answer, "atlas").IsValid()) << "no atlas member when none was packed";
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetWithNoPackerLetsEveryRowPackByItself) {
@@ -2293,14 +2167,15 @@ namespace BECore::Tests {
         ASSERT_TRUE(EnqueueInGroup(session, "grouped", "a\nb", "pieces").has_value());
         RunAndPickAll("grouped");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
-        const Json answer = Result(AcceptAllCall("grouped"));
+        const ControlReply answerReply = AcceptAllCall("grouped");
+        const JsonView answer = answerReply.Result();
         ASSERT_EQ(gPlans.size(), 2u);
         for (const ArtGenImagePlan& plan : gPlans) {
             EXPECT_EQ(plan.atlas, "pieces");
             EXPECT_FALSE(plan.deferPack);
         }
         EXPECT_TRUE(gPacks.empty());
-        EXPECT_EQ(FindJsonMember(answer, "atlas"), nullptr);
+        EXPECT_FALSE(MemberOf(answer, "atlas").IsValid());
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetPacksNothingWhenEveryRowIsKeptOrReplaced) {
@@ -2310,17 +2185,18 @@ namespace BECore::Tests {
         ASSERT_EQ(session.PickVariant("second", "a", kSetSeed + 1), ArtGenSetEdit::Ok);
         ASSERT_NO_FATAL_FAILURE(MakeFiles("first"));
         ASSERT_NO_FATAL_FAILURE(MakeFiles("second"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("first")), "");
-        ASSERT_EQ(ErrorCode(AcceptAllCall("second")), "");
+        ASSERT_EQ(AcceptAllCall("first").ErrorCode(), "");
+        ASSERT_EQ(AcceptAllCall("second").ErrorCode(), "");
         ASSERT_NO_FATAL_FAILURE(KeepOnDisk("first", "b"));
         gAccepted.clear();
         gPacks.clear();
 
         // Row a of the first set is held by the second, row b is kept: nothing is written, so nothing is packed
-        const Json answer = Result(AcceptAllCall("first"));
+        const ControlReply answerReply = AcceptAllCall("first");
+        const JsonView answer = answerReply.Result();
         EXPECT_TRUE(gAccepted.empty());
         EXPECT_TRUE(gPacks.empty());
-        EXPECT_EQ(FindJsonMember(answer, "atlas"), nullptr);
+        EXPECT_FALSE(MemberOf(answer, "atlas").IsValid());
     }
 
     TEST_F(ArtGenSetSessionTest, AFailedRowOfAGroupSetPacksNothingAndTheNextCallFinishesAndPacksOnce) {
@@ -2329,9 +2205,9 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
 
         gFailOn = "c";
-        const Json refused = AcceptAllCall("grouped");
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = ErrorMessage(refused);
+        const ControlReply refused = AcceptAllCall("grouped");
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("accepted before it: a, b"), String::npos) << message.c_str();
         EXPECT_NE(message.find("atlas 'pieces' is not packed"), String::npos) << message.c_str();
         EXPECT_TRUE(gPacks.empty());
@@ -2341,10 +2217,11 @@ namespace BECore::Tests {
         EXPECT_FALSE(disk.jobs[2].accepted.has_value());
 
         gFailOn.clear();
-        const Json again = Result(AcceptAllCall("grouped"));
+        const ControlReply againReply = AcceptAllCall("grouped");
+        const JsonView again = againReply.Result();
         ASSERT_EQ(gPacks.size(), 1u);
         EXPECT_EQ(gPacks[0].acceptedBefore, 5u) << "the first two rows replace themselves";
-        EXPECT_NE(FindJsonMember(again, "atlas"), nullptr);
+        EXPECT_TRUE(MemberOf(again, "atlas").IsValid());
     }
 
     TEST_F(ArtGenSetSessionTest, AFailedFirstRowOfAGroupSetSaysNothingAboutTheAtlas) {
@@ -2352,9 +2229,9 @@ namespace BECore::Tests {
         RunAndPickAll("grouped");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
         gFailOn = "a";
-        const Json refused = AcceptAllCall("grouped");
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        EXPECT_EQ(ErrorMessage(refused).find("atlas"), String::npos) << ErrorMessage(refused).c_str();
+        const ControlReply refused = AcceptAllCall("grouped");
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        EXPECT_EQ(refused.ErrorMessage().find("atlas"), String::npos) << refused.ErrorMessage().c_str();
         EXPECT_TRUE(gPacks.empty());
     }
 
@@ -2364,9 +2241,9 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
 
         gPackFail = "the atlas file is locked";
-        const Json refused = AcceptAllCall("grouped");
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = ErrorMessage(refused);
+        const ControlReply refused = AcceptAllCall("grouped");
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("the atlas file is locked"), String::npos) << message.c_str();
         EXPECT_NE(message.find("'pieces' is not packed"), String::npos) << message.c_str();
         EXPECT_NE(message.find("call artgen_accept_set again"), String::npos) << message.c_str();
@@ -2378,9 +2255,10 @@ namespace BECore::Tests {
         }
 
         gPackFail.clear();
-        const Json again = Result(AcceptAllCall("grouped"));
+        const ControlReply againReply = AcceptAllCall("grouped");
+        const JsonView again = againReply.Result();
         EXPECT_EQ(gPacks.size(), 2u);
-        EXPECT_NE(FindJsonMember(again, "atlas"), nullptr);
+        EXPECT_TRUE(MemberOf(again, "atlas").IsValid());
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllOfAGroupSetPacksInsideTheBatchAndMarksTheRowsAfterItsSave) {
@@ -2396,12 +2274,13 @@ namespace BECore::Tests {
             }
         };
 
-        const Json answer = Result(AcceptAllCall("grouped"));
+        const ControlReply answerReply = AcceptAllCall("grouped");
+        const JsonView answer = answerReply.Result();
 
         const Vector<String> expected{"begin", "accept a", "accept b", "accept c", "pack pieces", "end"};
         EXPECT_EQ(gEvents, expected) << "the pack is a step of the batch, so the library is written once, by its end";
         EXPECT_EQ(markedWhileEnding, 0u);
-        EXPECT_NE(FindJsonMember(answer, "atlas"), nullptr);
+        EXPECT_TRUE(MemberOf(answer, "atlas").IsValid());
         for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
             EXPECT_TRUE(job.accepted.has_value());
         }
@@ -2414,10 +2293,10 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
         gEndFails = true;
 
-        const Json refused = AcceptAllCall("grouped");
+        const ControlReply refused = AcceptAllCall("grouped");
 
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        const String message = ErrorMessage(refused);
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        const String message = refused.ErrorMessage();
         EXPECT_NE(message.find("the library was not saved"), String::npos) << message.c_str();
         const Vector<String> expected{"begin", "accept a", "accept b", "pack pieces", "end"};
         EXPECT_EQ(gEvents, expected);
@@ -2433,10 +2312,10 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
         gPackFail = "the atlas file is locked";
 
-        const Json refused = AcceptAllCall("grouped");
+        const ControlReply refused = AcceptAllCall("grouped");
 
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
-        EXPECT_NE(ErrorMessage(refused).find("'pieces' is not packed"), String::npos) << ErrorMessage(refused).c_str();
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
+        EXPECT_NE(refused.ErrorMessage().find("'pieces' is not packed"), String::npos) << refused.ErrorMessage().c_str();
         const Vector<String> expected{"begin", "accept a", "accept b", "pack pieces", "end"};
         EXPECT_EQ(gEvents, expected) << "the loose members are saved by the batch's end";
         for (const ArtGenSetJob& job : OnDisk("grouped").jobs) {
@@ -2451,9 +2330,9 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("grouped"));
         gFailOn = "c";
 
-        const Json refused = AcceptAllCall("grouped");
+        const ControlReply refused = AcceptAllCall("grouped");
 
-        EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
+        EXPECT_EQ(refused.ErrorCode(), "artgen_accept_failed");
         const Vector<String> expected{"begin", "accept a", "accept b", "end"};
         EXPECT_EQ(gEvents, expected);
         const ArtGenSet disk = OnDisk("grouped");
@@ -2473,9 +2352,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         RunAndPickAll("heard", "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("heard"));
-        const Json answer = Result(AcceptAllCall("heard"));
+        const ControlReply answerReply = AcceptAllCall("heard");
+        const JsonView answer = answerReply.Result();
         EXPECT_TRUE(gPacks.empty());
-        EXPECT_EQ(FindJsonMember(answer, "atlas"), nullptr);
+        EXPECT_FALSE(MemberOf(answer, "atlas").IsValid());
     }
 
     // ---- one frame for the whole set (Sets/CLAUDE.md, "Accept all") ----
@@ -2486,7 +2366,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
         EXPECT_FALSE(Require(session.FindSet("framed")).processing.has_value());
 
-        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        ASSERT_EQ(AcceptAllCall("framed").ErrorCode(), "");
 
         ASSERT_EQ(gMeasures.size(), 1u);
         ASSERT_EQ(gMeasures[0].files.size(), 4u) << "the drafts that were not picked count as much as the picks";
@@ -2507,12 +2387,12 @@ namespace BECore::Tests {
         EXPECT_EQ(Require(session.FindSet("framed")).processing, expected);
         EXPECT_EQ(OnDisk("framed").processing, expected);
 
-        Json params = Json::object();
-        params["set"] = "framed";
-        const Json shown = Result(Call("artgen_set", params));
-        const Json* processing = FindJsonMember(shown, "processing");
-        ASSERT_NE(processing, nullptr);
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(*processing, "frame")), "outWidth"), Optional<int64_t>(150));
+        String params = R"({"set":"framed"})";
+        const ControlReply shownReply = Call("artgen_set", params);
+        const JsonView shown = shownReply.Result();
+        const JsonView processing = MemberOf(shown, "processing");
+        ASSERT_TRUE(processing.IsValid());
+        EXPECT_EQ(IntOf(MemberOf(processing, "frame"), "outWidth"), Optional<int64_t>(150));
     }
 
     TEST_F(ArtGenSetSessionTest, TheFrameOfAnAcceptAllUsesTheSettingsOfTheSetsDraft) {
@@ -2526,7 +2406,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         RunAndPickAll("drafted");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("drafted"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("drafted")), "");
+        ASSERT_EQ(AcceptAllCall("drafted").ErrorCode(), "");
 
         ASSERT_EQ(gMeasures.size(), 1u);
         EXPECT_EQ(gMeasures[0].settings, (ArtGenImageSettings{true, 7, 128}));
@@ -2537,14 +2417,14 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("framed", "a\nb").has_value());
         RunAndPickAll("framed");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        ASSERT_EQ(AcceptAllCall("framed").ErrorCode(), "");
         const Optional<ArtGenSetProcessing> stored = Require(session.FindSet("framed")).processing;
         ASSERT_TRUE(stored.has_value());
         gMeasures.clear();
         gAccepted.clear();
         gPlans.clear();
 
-        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        ASSERT_EQ(AcceptAllCall("framed").ErrorCode(), "");
         EXPECT_TRUE(gMeasures.empty());
         ASSERT_EQ(gPlans.size(), 2u);
         EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(stored->frame));
@@ -2567,15 +2447,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("framed", "a").has_value());
         RunAndPickAll("framed");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        ASSERT_EQ(AcceptAllCall("framed").ErrorCode(), "");
 
-        Json preset = Json::object();
-        preset["name"] = "wood";
-        preset["title"] = "wood";
-        preset["preset"] = Require(ParseJson(R"({"accept":{"trim":false,"maxSize":0}})"));
-        Json poll = ReadyPoll();
-        poll["presets"] = Json::array({preset});
-        Call("artgen_poll", poll);
+        Call("artgen_poll", JsonWith(kReadyPoll, "/presets", R"([{"name":"wood","preset":{"accept":{"maxSize":0,"trim":false}},"title":"wood"}])"));
 
         gPlans.clear();
         ASSERT_EQ(session.PickVariant("framed", "a", kSetSeed), ArtGenSetEdit::Ok);
@@ -2588,12 +2462,10 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("framed", "a\nb").has_value());
         RunAndPickAll("framed");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        ASSERT_EQ(AcceptAllCall("framed").ErrorCode(), "");
 
-        Json params = Json::object();
-        params["set"] = "framed";
-        params["job"] = "a";
-        ASSERT_EQ(ErrorCode(Call("artgen_keep", params)), "");
+        String params = R"({"set":"framed","job":"a"})";
+        ASSERT_EQ(Call("artgen_keep", params).ErrorCode(), "");
         const Optional<ArtGenSetProcessing> expected = ArtGenSetProcessing{ArtGenImageSettings{}, kFakeFrame};
         EXPECT_EQ(Require(session.FindSet("framed")).processing, expected) << "Keep cuts a row's variants, the frame is the set's";
         EXPECT_EQ(OnDisk("framed").processing, expected);
@@ -2622,7 +2494,7 @@ namespace BECore::Tests {
         ReloadFromDisk();
         ASSERT_TRUE(IsLegacyAccepted(Require(session.FindSet("old"))));
 
-        ASSERT_EQ(ErrorCode(AcceptAllCall("old")), "");
+        ASSERT_EQ(AcceptAllCall("old").ErrorCode(), "");
         EXPECT_TRUE(gMeasures.empty());
         ASSERT_EQ(gPlans.size(), 2u);
         for (const ArtGenImagePlan& plan : gPlans) {
@@ -2649,7 +2521,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         RunAndPickAll("plain");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("plain"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("plain")), "");
+        ASSERT_EQ(AcceptAllCall("plain").ErrorCode(), "");
 
         EXPECT_TRUE(gMeasures.empty());
         ASSERT_EQ(gPlans.size(), 1u);
@@ -2663,16 +2535,16 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
         gMeasureFail = "nothing drawn in any of the pictures";
 
-        const Json response = AcceptAllCall("framed");
-        EXPECT_EQ(ErrorCode(response), "artgen_accept_failed");
-        EXPECT_NE(ErrorMessage(response).find("nothing drawn in any"), String::npos) << ErrorMessage(response).c_str();
+        const ControlReply response = AcceptAllCall("framed");
+        EXPECT_EQ(response.ErrorCode(), "artgen_accept_failed");
+        EXPECT_NE(response.ErrorMessage().find("nothing drawn in any"), String::npos) << response.ErrorMessage().c_str();
         EXPECT_TRUE(gAccepted.empty());
         const ArtGenSet disk = OnDisk("framed");
         EXPECT_FALSE(disk.processing.has_value());
         EXPECT_FALSE(disk.jobs[0].accepted.has_value());
 
         gMeasureFail.clear();
-        EXPECT_EQ(ErrorCode(AcceptAllCall("framed")), "") << "the next call measures again";
+        EXPECT_EQ(AcceptAllCall("framed").ErrorCode(), "") << "the next call measures again";
         EXPECT_TRUE(Require(session.FindSet("framed")).processing.has_value());
     }
 
@@ -2682,13 +2554,13 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
         gFailOn = "a";
 
-        EXPECT_EQ(ErrorCode(AcceptAllCall("framed")), "artgen_accept_failed");
+        EXPECT_EQ(AcceptAllCall("framed").ErrorCode(), "artgen_accept_failed");
         EXPECT_FALSE(Require(session.FindSet("framed")).processing.has_value());
         EXPECT_FALSE(OnDisk("framed").processing.has_value());
         EXPECT_FALSE(IsLegacyAccepted(Require(session.FindSet("framed")))) << "nothing was written, so the set is not legacy";
 
         gFailOn.clear();
-        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        ASSERT_EQ(AcceptAllCall("framed").ErrorCode(), "");
         EXPECT_TRUE(Require(session.FindSet("framed")).processing.has_value());
         EXPECT_EQ(gMeasures.size(), 2u);
     }
@@ -2718,7 +2590,7 @@ namespace BECore::Tests {
 
         RunAndPickAll("fix");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("fix"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("fix")), "");
+        ASSERT_EQ(AcceptAllCall("fix").ErrorCode(), "");
         EXPECT_TRUE(gMeasures.empty()) << "a frame that was given is not measured again";
         ASSERT_EQ(gPlans.size(), 1u);
         EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(kOldProcessing.frame));
@@ -2771,18 +2643,15 @@ namespace BECore::Tests {
         ASSERT_TRUE(WriteManifest(_root, disk).has_value());
         ReloadFromDisk();
 
-        Json params = Json::object();
-        params["preset"] = "wood";
-        params["subjects"] = "a";
-        params["set"] = "fix";
-        for (const Json& bad : {Json(3), Json(""), Json("nowhere")}) {
-            params["frameOf"] = bad;
-            EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "invalid_params") << DumpJson(bad).c_str();
+        String params = R"({"preset":"wood","subjects":"a","set":"fix"})";
+        for (const StringView bad : {StringView("3"), StringView(R"("")"), StringView(R"("nowhere")")}) {
+            params = JsonWith(params, "/frameOf", bad);
+            EXPECT_EQ(Call("artgen_enqueue", params).ErrorCode(), "invalid_params") << String(bad).c_str();
         }
         EXPECT_EQ(session.FindSet("fix"), nullptr);
 
-        params["frameOf"] = "old";
-        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+        params = JsonWith(params, "/frameOf", R"("old")");
+        EXPECT_EQ(Call("artgen_enqueue", params).ErrorCode(), "");
         ASSERT_NE(session.FindSet("fix"), nullptr);
         EXPECT_EQ(Require(session.FindSet("fix")).processing, Optional<ArtGenSetProcessing>(kOldProcessing));
     }
@@ -2798,7 +2667,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         RunAndPickAll("sounds", "audio");
         ASSERT_NO_FATAL_FAILURE(MakeFiles("sounds"));
-        EXPECT_EQ(ErrorCode(AcceptAllCall("sounds")), "");
+        EXPECT_EQ(AcceptAllCall("sounds").ErrorCode(), "");
         EXPECT_TRUE(gMeasures.empty());
         EXPECT_FALSE(Require(session.FindSet("sounds")).processing.has_value());
     }
@@ -2807,37 +2676,33 @@ namespace BECore::Tests {
 
         constexpr StringView kStyleSource = "assets/artgen/white_knight.png";
 
-        Json StyleReferenceJson() {
-            return Json{{"mode", "style"}, {"image", ToStdString(kStyleSource)}, {"weight", 0.7}};
+        /// The reference the set carries, as the writer writes it (members in byte order)
+        String StyleReferenceText() {
+            return Format(R"({{"image":{},"mode":"style","weight":0.7}})", Str(kStyleSource));
         }
 
     }  // namespace
 
     TEST_F(ArtGenSetSessionTest, AReferenceOfAnEnqueuedSetGoesOutWithEveryJobAndIsKeptInTheSet) {
-        Json params = Json::object();
-        params["preset"] = "wood";
-        params["subjects"] = "a\nb";
-        params["set"] = "styled";
-        params["seed"] = kSetSeed;
-        params["reference"] = StyleReferenceJson();
-        ASSERT_EQ(ErrorCode(Call("artgen_enqueue", params)), "");
+        const String params = JsonWith(EnqueueParams("styled"), "/reference", StyleReferenceText());
+        ASSERT_EQ(Call("artgen_enqueue", params).ErrorCode(), "");
 
-        const Json first = Poll();
-        const Json* sent = RequestOf(first);
-        ASSERT_NE(sent, nullptr);
-        EXPECT_EQ(*FindJsonMember(*sent, "reference"), StyleReferenceJson());
-        EXPECT_EQ(*FindJsonMember(*FindJsonMember(Result(Call("artgen_state")), "run"), "reference"), StyleReferenceJson()) << "the run in work shows it";
-        Finish(*sent, "ok");
-        const Json second = Poll();
-        ASSERT_NE(RequestOf(second), nullptr);
-        EXPECT_EQ(*FindJsonMember(*RequestOf(second), "reference"), StyleReferenceJson()) << "every job, not only the first";
-        Finish(*RequestOf(second), "ok");
+        const ControlReply first = Poll();
+        const JsonView sent = RequestOf(first);
+        ASSERT_TRUE(sent.IsValid());
+        EXPECT_EQ(RawOf(sent, "reference"), StyleReferenceText());
+        const ControlReply runState = Call("artgen_state");
+        EXPECT_EQ(RawOf(MemberOf(runState.Result(), "run"), "reference"), StyleReferenceText()) << "the run in work shows it";
+        Finish(sent, "ok");
+        const ControlReply second = Poll();
+        ASSERT_TRUE(RequestOf(second).IsValid());
+        EXPECT_EQ(RawOf(RequestOf(second), "reference"), StyleReferenceText()) << "every job, not only the first";
+        Finish(RequestOf(second), "ok");
 
-        const Json state = Result(Call("artgen_state"));
-        EXPECT_EQ(*FindJsonMember((*FindJsonMember(state, "sets"))[0], "reference"), StyleReferenceJson());
-        Json setParams = Json::object();
-        setParams["set"] = "styled";
-        EXPECT_EQ(*FindJsonMember(Result(Call("artgen_set", setParams)), "reference"), StyleReferenceJson());
+        const ControlReply stateReply = Call("artgen_state");
+        const JsonView state = stateReply.Result();
+        EXPECT_EQ(RawOf(ItemAt(MemberOf(state, "sets"), 0), "reference"), StyleReferenceText());
+        EXPECT_EQ(RawOf(Call("artgen_set", R"({"set":"styled"})").Result(), "reference"), StyleReferenceText());
         ASSERT_TRUE(OnDisk("styled").reference.has_value());
         EXPECT_EQ(OnDisk("styled").reference->image, String(kStyleSource));
 
@@ -2857,75 +2722,69 @@ namespace BECore::Tests {
         request.reference = ArtGenReference{"style", String(kStyleSource), {}};
         ASSERT_TRUE(session.EnqueueSet(std::move(request)).has_value());
 
-        const Json first = Poll();
-        Finish(*RequestOf(first), "failed", "the generator fell over");
-        const Json second = Poll();
-        Finish(*RequestOf(second), "ok");
+        const ControlReply first = Poll();
+        Finish(RequestOf(first), "failed", "the generator fell over");
+        const ControlReply second = Poll();
+        Finish(RequestOf(second), "ok");
         ASSERT_EQ(session.RetryJobs("styled", {}), ArtGenSetEdit::Ok);
-        const Json retried = Poll();
-        const Json* retriedRequest = RequestOf(retried);
-        ASSERT_NE(retriedRequest, nullptr);
-        EXPECT_EQ(GetJsonString(*retriedRequest, "name"), Optional<String>("a"));
-        const Json* retriedReference = FindJsonMember(*retriedRequest, "reference");
-        ASSERT_NE(retriedReference, nullptr) << "a Retry runs with the set's reference";
-        EXPECT_EQ(GetJsonString(*retriedReference, "image"), Optional<String>(String(kStyleSource)));
-        EXPECT_EQ(FindJsonMember(*retriedReference, "weight"), nullptr) << "no weight: the mode's default, as the set was made";
-        Finish(*retriedRequest, "ok");
+        const ControlReply retried = Poll();
+        const JsonView retriedRequest = RequestOf(retried);
+        ASSERT_TRUE(retriedRequest.IsValid());
+        EXPECT_EQ(StringOf(retriedRequest, "name"), "a");
+        const JsonView retriedReference = MemberOf(retriedRequest, "reference");
+        ASSERT_TRUE(retriedReference.IsValid()) << "a Retry runs with the set's reference";
+        EXPECT_EQ(StringOf(retriedReference, "image"), String(kStyleSource));
+        EXPECT_FALSE(MemberOf(retriedReference, "weight").IsValid()) << "no weight: the mode's default, as the set was made";
+        Finish(retriedRequest, "ok");
 
-        ASSERT_EQ(ErrorCode(MoreCall("styled")), "");
-        const Json more = Poll();
-        const Json* moreRequest = RequestOf(more);
-        ASSERT_NE(moreRequest, nullptr);
-        EXPECT_NE(GetJsonInt(*moreRequest, "seed"), Optional<int64_t>(kSetSeed)) << "this is the more-run";
-        EXPECT_EQ(GetJsonString(*FindJsonMember(*moreRequest, "reference"), "mode"), Optional<String>("style"));
+        ASSERT_EQ(MoreCall("styled").ErrorCode(), "");
+        const ControlReply more = Poll();
+        const JsonView moreRequest = RequestOf(more);
+        ASSERT_TRUE(moreRequest.IsValid());
+        EXPECT_NE(IntOf(moreRequest, "seed"), Optional<int64_t>(kSetSeed)) << "this is the more-run";
+        EXPECT_EQ(StringOf(MemberOf(moreRequest, "reference"), "mode"), "style");
     }
 
     TEST_F(ArtGenSetSessionTest, ASetWithNoReferenceSendsNoneAndTheSlotIsNotTakenForOne) {
         session.SetReferenceSlot(ArtGenReference{"init", String(kStyleSource), {}});
         ASSERT_TRUE(Enqueue("plain", "a").has_value());
         EXPECT_FALSE(session.FindSet("plain")->reference.has_value()) << "only the panel passes the slot";
-        const Json first = Poll();
-        ASSERT_NE(RequestOf(first), nullptr);
-        EXPECT_EQ(FindJsonMember(*RequestOf(first), "reference"), nullptr);
-        EXPECT_EQ(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[0], "reference"), nullptr);
-        const Json manifest = ParseJson(ReadTextFile(ManifestPath(_root, "plain")).value()).value();
-        EXPECT_TRUE(FindJsonMember(manifest, "reference")->is_null());
+        const ControlReply first = Poll();
+        ASSERT_TRUE(RequestOf(first).IsValid());
+        EXPECT_FALSE(MemberOf(RequestOf(first), "reference").IsValid());
+        const ControlReply plainState = Call("artgen_state");
+        EXPECT_FALSE(MemberOf(ItemAt(MemberOf(plainState.Result(), "sets"), 0), "reference").IsValid());
+        const JsonDoc manifest(Require(ReadTextFile(ManifestPath(_root, "plain"))));
+        EXPECT_EQ(RawOf(manifest, "reference"), "null");
     }
 
     TEST_F(ArtGenSetSessionTest, ABadReferenceOfEnqueueIsInvalidParamsThatNamesTheKey) {
-        Json good = Json::object();
-        good["preset"] = "wood";
-        good["subjects"] = "a";
-        const Json bad = Json::array({Json("yes"), Json{{"image", "a.png"}}, Json{{"mode", "style"}}, Json{{"mode", "style"}, {"image", "a.png"}, {"weight", "x"}}});
-        for (const Json& reference : bad) {
-            Json params = good;
-            params["reference"] = reference;
-            const Json response = Call("artgen_enqueue", params);
-            EXPECT_EQ(ErrorCode(response), "invalid_params") << DumpJson(reference).c_str();
-            EXPECT_TRUE(ErrorMessage(response).find("'reference") != String::npos) << ErrorMessage(response);
+        constexpr StringView kGood = R"({"preset":"wood","subjects":"a"})";
+        const StringView bad[] = {R"("yes")", R"({"image":"a.png"})", R"({"mode":"style"})", R"({"image":"a.png","mode":"style","weight":"x"})"};
+        for (const StringView reference : bad) {
+            const ControlReply response = Call("artgen_enqueue", JsonWith(kGood, "/reference", reference));
+            EXPECT_EQ(response.ErrorCode(), "invalid_params") << String(reference).c_str();
+            EXPECT_TRUE(response.ErrorMessage().find("'reference") != String::npos) << response.ErrorMessage();
         }
         EXPECT_TRUE(session.GetSets().empty()) << "a refusal keeps nothing";
-        good["reference"] = nullptr;
-        EXPECT_EQ(ErrorCode(Call("artgen_enqueue", good)), "") << "a null reference is none";
+        EXPECT_EQ(Call("artgen_enqueue", JsonWith(kGood, "/reference", "null")).ErrorCode(), "") << "a null reference is none";
     }
 
     TEST_F(ArtGenSetSessionTest, MoreQueuesEveryDoneRowOnTheGivenSeedAndTheRunAppendsToTheVariants) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
         constexpr int64_t kMoreSeed = 5000;
-        Json extra = Json::object();
-        extra["count"] = 2;
-        extra["seed"] = kMoreSeed;
-        const Json answer = Result(MoreCall("m", extra));
-        EXPECT_EQ(GetJsonString(answer, "set"), Optional<String>("m"));
-        EXPECT_EQ(GetJsonInt(answer, "seed"), Optional<int64_t>(kMoreSeed));
-        EXPECT_EQ(GetJsonInt(answer, "count"), Optional<int64_t>(2));
-        const Json* names = FindJsonMember(answer, "jobs");
-        ASSERT_NE(names, nullptr);
-        ASSERT_EQ(names->size(), 2u);
-        EXPECT_EQ((*names)[0], "a");
-        EXPECT_EQ((*names)[1], "b");
-        ASSERT_NE(FindJsonMember(answer, "skipped"), nullptr);
-        EXPECT_TRUE(Require(FindJsonMember(answer, "skipped")).empty());
+        const ControlReply answerReply = MoreCall("m", Format(R"({{"count":2,"seed":{}}})", kMoreSeed));
+        const JsonView answer = answerReply.Result();
+        EXPECT_EQ(StringOf(answer, "set"), "m");
+        EXPECT_EQ(IntOf(answer, "seed"), Optional<int64_t>(kMoreSeed));
+        EXPECT_EQ(IntOf(answer, "count"), Optional<int64_t>(2));
+        const JsonView names = MemberOf(answer, "jobs");
+        ASSERT_TRUE(names.IsValid());
+        ASSERT_EQ(names.Size(), 2u);
+        EXPECT_EQ(ItemAt(names, 0).Raw(), R"("a")");
+        EXPECT_EQ(ItemAt(names, 1).Raw(), R"("b")");
+        ASSERT_TRUE(MemberOf(answer, "skipped").IsValid());
+        EXPECT_EQ(MemberOf(answer, "skipped").Size(), 0u);
 
         EXPECT_TRUE(session.IsBusy());
         for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
@@ -2935,23 +2794,22 @@ namespace BECore::Tests {
             EXPECT_EQ(job.more->count, 2);
             EXPECT_EQ(job.variants.size(), 2u) << "nothing is dropped while the row waits";
         }
-        const Json state = Result(Call("artgen_state"));
-        EXPECT_EQ(GetJsonString((Require(FindJsonMember(state, "sets")))[0], "state"), Optional<String>("Active"));
-        Json setParams = Json::object();
-        setParams["set"] = "m";
-        const Json shown = Result(Call("artgen_set", setParams));
-        const Json& shownMore = (Require(FindJsonMember(shown, "jobs")))[0]["more"];
-        EXPECT_EQ(GetJsonInt(shownMore, "seed"), Optional<int64_t>(kMoreSeed));
-        EXPECT_EQ(GetJsonInt(shownMore, "count"), Optional<int64_t>(2));
+        const ControlReply stateReply = Call("artgen_state");
+        const JsonView state = stateReply.Result();
+        EXPECT_EQ(StringOf(ItemAt(MemberOf(state, "sets"), 0), "state"), "Active");
+        const ControlReply shownReply = Call("artgen_set", R"({"set":"m"})");
+        const JsonView shownMore = MemberOf(ItemAt(MemberOf(shownReply.Result(), "jobs"), 0), "more");
+        EXPECT_EQ(IntOf(shownMore, "seed"), Optional<int64_t>(kMoreSeed));
+        EXPECT_EQ(IntOf(shownMore, "count"), Optional<int64_t>(2));
 
-        const Json first = Poll();
-        const Json* request = RequestOf(first);
-        ASSERT_NE(request, nullptr);
-        EXPECT_EQ(GetJsonInt(*request, "seed"), Optional<int64_t>(kMoreSeed));
-        EXPECT_EQ(GetJsonInt(*request, "count"), Optional<int64_t>(2));
-        EXPECT_EQ(GetJsonString(*request, "outDir"), Optional<String>("m/a"));
-        EXPECT_EQ(GetJsonString(*request, "name"), Optional<String>("a"));
-        Finish(*request, "ok");
+        const ControlReply first = Poll();
+        const JsonView request = RequestOf(first);
+        ASSERT_TRUE(request.IsValid());
+        EXPECT_EQ(IntOf(request, "seed"), Optional<int64_t>(kMoreSeed));
+        EXPECT_EQ(IntOf(request, "count"), Optional<int64_t>(2));
+        EXPECT_EQ(StringOf(request, "outDir"), "m/a");
+        EXPECT_EQ(StringOf(request, "name"), "a");
+        Finish(request, "ok");
         EXPECT_EQ(Require(session.FindSet("m")).jobs[0].state, ArtGenSetJobState::Done);
         EXPECT_FALSE(Require(session.FindSet("m")).jobs[0].more.has_value());
         ASSERT_NO_FATAL_FAILURE(RunAll());
@@ -2972,14 +2830,15 @@ namespace BECore::Tests {
             EXPECT_FALSE(job.accepted->kept);
         }
         EXPECT_TRUE(gAccepted.empty()) << "more variants write nothing into the game";
-        EXPECT_EQ(GetJsonString((Require(FindJsonMember(Result(Call("artgen_state")), "sets")))[0], "state"), Optional<String>("Complete"));
+        EXPECT_EQ(StringOf(ItemAt(MemberOf(Call("artgen_state").Result(), "sets"), 0), "state"), "Complete");
     }
 
     TEST_F(ArtGenSetSessionTest, MoreDrawsOneFreshSeedForTheRowsOfTheCall) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb\nc"));
-        const Json answer = Result(MoreCall("m"));
-        EXPECT_EQ(GetJsonInt(answer, "count"), Optional<int64_t>(1)) << "the default is one variant per row";
-        const int64_t seed = Require(GetJsonInt(answer, "seed"));
+        const ControlReply answerReply = MoreCall("m");
+        const JsonView answer = answerReply.Result();
+        EXPECT_EQ(IntOf(answer, "count"), Optional<int64_t>(1)) << "the default is one variant per row";
+        const int64_t seed = Require(IntOf(answer, "seed"));
         for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             ASSERT_TRUE(job.more.has_value());
             EXPECT_EQ(job.more->seed, seed) << "one seed keeps the look of the rows together";
@@ -2996,12 +2855,11 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, ASeedThatMeetsAVariantIsRefusedAndNothingChanges) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
         const uint64_t before = session.Version();
-        Json extra = Json::object();
-        extra["count"] = 3;
-        extra["seed"] = kSetSeed - 2;  // 38, 39, 40: meets the first variant
-        const Json refused = MoreCall("m", extra);
-        EXPECT_EQ(ErrorCode(refused), "invalid_params");
-        EXPECT_NE(ErrorMessage(refused).find("'a'"), String::npos) << ErrorMessage(refused).c_str();
+        String extra = R"({"count":3})";
+        extra = JsonWith(extra, "/seed", Format("{}", kSetSeed - 2));  // 38, 39, 40: meets the first variant
+        const ControlReply refused = MoreCall("m", extra);
+        EXPECT_EQ(refused.ErrorCode(), "invalid_params");
+        EXPECT_NE(refused.ErrorMessage().find("'a'"), String::npos) << refused.ErrorMessage().c_str();
         EXPECT_FALSE(session.IsBusy());
         EXPECT_EQ(session.Version(), before);
         for (const ArtGenSetJob& job : OnDisk("m").jobs) {
@@ -3009,28 +2867,29 @@ namespace BECore::Tests {
             EXPECT_FALSE(job.more.has_value());
         }
 
-        extra["seed"] = -1;
-        EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "invalid_params");
+        extra = JsonWith(extra, "/seed", "-1");
+        EXPECT_EQ(MoreCall("m", extra).ErrorCode(), "invalid_params");
         EXPECT_FALSE(session.IsBusy());
-        extra["seed"] = kSetSeed - 3;  // 37, 38, 39: ends right before the first variant
-        EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "");
+        extra = JsonWith(extra, "/seed", Format("{}", kSetSeed - 3));  // 37, 38, 39: ends right before the first variant
+        EXPECT_EQ(MoreCall("m", extra).ErrorCode(), "");
     }
 
     TEST_F(ArtGenSetSessionTest, AKeptRowIsLeftOutAndAnAllKeptSetIsNothingToRun) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
-        ASSERT_EQ(ErrorCode(KeepCall("m", "a")), "");
-        const Json answer = Result(MoreCall("m"));
-        const Json* names = FindJsonMember(answer, "jobs");
-        ASSERT_NE(names, nullptr);
-        ASSERT_EQ(names->size(), 1u);
-        EXPECT_EQ((*names)[0], "b");
-        const Json* skipped = FindJsonMember(answer, "skipped");
-        ASSERT_NE(skipped, nullptr);
-        ASSERT_EQ(skipped->size(), 1u);
-        EXPECT_EQ(GetJsonString((*skipped)[0], "job"), Optional<String>("a"));
-        EXPECT_EQ(GetJsonString((*skipped)[0], "reason"), Optional<String>("kept"));
+        ASSERT_EQ(KeepCall("m", "a").ErrorCode(), "");
+        const ControlReply answerReply = MoreCall("m");
+        const JsonView answer = answerReply.Result();
+        const JsonView names = MemberOf(answer, "jobs");
+        ASSERT_TRUE(names.IsValid());
+        ASSERT_EQ(names.Size(), 1u);
+        EXPECT_EQ(ItemAt(names, 0).Raw(), R"("b")");
+        const JsonView skipped = MemberOf(answer, "skipped");
+        ASSERT_TRUE(skipped.IsValid());
+        ASSERT_EQ(skipped.Size(), 1u);
+        EXPECT_EQ(StringOf(ItemAt(skipped, 0), "job"), "a");
+        EXPECT_EQ(StringOf(ItemAt(skipped, 0), "reason"), "kept");
         EXPECT_EQ(KeysOf(answer), (Vector<String>{"count", "jobs", "seed", "set", "skipped"}));
-        EXPECT_EQ(KeysOf((*skipped)[0]), (Vector<String>{"job", "reason"}));
+        EXPECT_EQ(KeysOf(ItemAt(skipped, 0)), (Vector<String>{"job", "reason"}));
         const ArtGenSetJob* kept = FindJob(Require(session.FindSet("m")), "a");
         EXPECT_EQ(kept->state, ArtGenSetJobState::Done);
         EXPECT_FALSE(kept->more.has_value());
@@ -3039,21 +2898,21 @@ namespace BECore::Tests {
         EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "a")).variants.size(), 1u);
         EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).variants.size(), 3u);
 
-        ASSERT_EQ(ErrorCode(KeepCall("m")), "");
-        const Json refused = MoreCall("m");
-        EXPECT_EQ(ErrorCode(refused), "invalid_params");
-        EXPECT_NE(ErrorMessage(refused).find("a (kept)"), String::npos) << ErrorMessage(refused).c_str();
-        EXPECT_NE(ErrorMessage(refused).find("b (kept)"), String::npos) << ErrorMessage(refused).c_str();
+        ASSERT_EQ(KeepCall("m").ErrorCode(), "");
+        const ControlReply refused = MoreCall("m");
+        EXPECT_EQ(refused.ErrorCode(), "invalid_params");
+        EXPECT_NE(refused.ErrorMessage().find("a (kept)"), String::npos) << refused.ErrorMessage().c_str();
+        EXPECT_NE(refused.ErrorMessage().find("b (kept)"), String::npos) << refused.ErrorMessage().c_str();
         EXPECT_FALSE(session.IsBusy());
     }
 
     TEST_F(ArtGenSetSessionTest, KeepWaitsForARunningMoreRunAndNoKeptRowGrows) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
-        ASSERT_EQ(ErrorCode(MoreCall("m")), "");
+        ASSERT_EQ(MoreCall("m").ErrorCode(), "");
         const uint64_t before = session.Version();
 
-        EXPECT_EQ(ErrorCode(KeepCall("m")), "artgen_busy");
-        EXPECT_EQ(ErrorCode(KeepCall("m", "a")), "artgen_busy");
+        EXPECT_EQ(KeepCall("m").ErrorCode(), "artgen_busy");
+        EXPECT_EQ(KeepCall("m", "a").ErrorCode(), "artgen_busy");
         EXPECT_EQ(session.Version(), before);
         for (const ArtGenSetJob& job : OnDisk("m").jobs) {
             EXPECT_FALSE(job.accepted->kept);
@@ -3064,7 +2923,7 @@ namespace BECore::Tests {
             EXPECT_EQ(job.variants.size(), 3u);
             EXPECT_FALSE(job.accepted->kept);
         }
-        ASSERT_EQ(ErrorCode(KeepCall("m")), "");
+        ASSERT_EQ(KeepCall("m").ErrorCode(), "");
         for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             EXPECT_EQ(job.variants.size(), 1u);
         }
@@ -3072,68 +2931,63 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, FailedAndCancelledRowsAreLeftOutForRetry) {
         ASSERT_TRUE(Enqueue("m", "a\nb\nc").has_value());
-        Finish(*RequestOf(Poll()), "ok");
-        Finish(*RequestOf(Poll()), "failed", "boom");
+        Finish(RequestOf(Poll()), "ok");
+        Finish(RequestOf(Poll()), "failed", "boom");
         session.CancelJob("m", "c");
-        const Json answer = Result(MoreCall("m"));
-        ASSERT_EQ(Require(FindJsonMember(answer, "jobs")).size(), 1u);
-        const Json& skipped = Require(FindJsonMember(answer, "skipped"));
-        ASSERT_EQ(skipped.size(), 2u);
-        EXPECT_EQ(GetJsonString(skipped[0], "reason"), Optional<String>("failed"));
-        EXPECT_EQ(GetJsonString(skipped[1], "reason"), Optional<String>("cancelled"));
+        const ControlReply answerReply = MoreCall("m");
+        const JsonView answer = answerReply.Result();
+        ASSERT_EQ(MemberOf(answer, "jobs").Size(), 1u);
+        const JsonView skipped = MemberOf(answer, "skipped");
+        ASSERT_EQ(skipped.Size(), 2u);
+        EXPECT_EQ(StringOf(ItemAt(skipped, 0), "reason"), "failed");
+        EXPECT_EQ(StringOf(ItemAt(skipped, 1), "reason"), "cancelled");
         EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).state, ArtGenSetJobState::Failed);
         EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).error, "boom");
     }
 
     TEST_F(ArtGenSetSessionTest, MoreNarrowsToTheNamedRowsAndNamesTheUnknownOne) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb\nc"));
-        Json extra = Json::object();
-        extra["jobs"] = Json::array({"c"});
-        extra["seed"] = 7000;
-        const Json answer = Result(MoreCall("m", extra));
-        ASSERT_EQ(Require(FindJsonMember(answer, "jobs")).size(), 1u);
-        EXPECT_EQ((Require(FindJsonMember(answer, "jobs")))[0], "c");
-        EXPECT_TRUE(Require(FindJsonMember(answer, "skipped")).empty()) << "a row that was not named is not a skipped one";
+        String extra = R"({"jobs":["c"],"seed":7000})";
+        const ControlReply answerReply = MoreCall("m", extra);
+        const JsonView answer = answerReply.Result();
+        ASSERT_EQ(MemberOf(answer, "jobs").Size(), 1u);
+        EXPECT_EQ(ItemAt(MemberOf(answer, "jobs"), 0).Raw(), R"("c")");
+        EXPECT_EQ(MemberOf(answer, "skipped").Size(), 0u) << "a row that was not named is not a skipped one";
         EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "a")).state, ArtGenSetJobState::Done);
         ASSERT_NO_FATAL_FAILURE(RunAll());
 
-        extra["jobs"] = Json::array({"c", "nope"});
-        const Json unknown = MoreCall("m", extra);
-        EXPECT_EQ(ErrorCode(unknown), "artgen_no_set");
-        EXPECT_NE(ErrorMessage(unknown).find("nope"), String::npos);
-        extra["jobs"] = Json::array();
-        EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "invalid_params");
-        extra["jobs"] = "c";
-        EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "invalid_params");
-        extra["jobs"] = Json::array({3});
-        EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "invalid_params");
+        extra = JsonWith(extra, "/jobs", R"(["c","nope"])");
+        const ControlReply unknown = MoreCall("m", extra);
+        EXPECT_EQ(unknown.ErrorCode(), "artgen_no_set");
+        EXPECT_NE(unknown.ErrorMessage().find("nope"), String::npos);
+        extra = JsonWith(extra, "/jobs", "[]");
+        EXPECT_EQ(MoreCall("m", extra).ErrorCode(), "invalid_params");
+        extra = JsonWith(extra, "/jobs", R"("c")");
+        EXPECT_EQ(MoreCall("m", extra).ErrorCode(), "invalid_params");
+        extra = JsonWith(extra, "/jobs", R"([3])");
+        EXPECT_EQ(MoreCall("m", extra).ErrorCode(), "invalid_params");
         EXPECT_FALSE(session.IsBusy());
     }
 
     TEST_F(ArtGenSetSessionTest, MoreRefusesABadCountAnUnknownSetAndAnActiveSet) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
         for (const int64_t count : {int64_t{0}, int64_t{17}, int64_t{-1}, int64_t{1} << 40}) {
-            Json extra = Json::object();
-            extra["count"] = count;
-            EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "invalid_params") << count;
+            String extra = Format(R"({{"count":{}}})", count);
+            EXPECT_EQ(MoreCall("m", extra).ErrorCode(), "invalid_params") << count;
         }
-        Json text = Json::object();
-        text["count"] = "two";
-        EXPECT_EQ(ErrorCode(MoreCall("m", text)), "invalid_params");
-        Json fractional = Json::object();
-        fractional["count"] = 1.5;
-        EXPECT_EQ(ErrorCode(MoreCall("m", fractional)), "invalid_params");
-        Json badSeed = Json::object();
-        badSeed["seed"] = "x";
-        EXPECT_EQ(ErrorCode(MoreCall("m", badSeed)), "invalid_params");
-        EXPECT_EQ(ErrorCode(MoreCall("nope")), "artgen_no_set");
-        EXPECT_EQ(ErrorCode(Call("artgen_more", Json::object())), "invalid_params");
+        String text = R"({"count":"two"})";
+        EXPECT_EQ(MoreCall("m", text).ErrorCode(), "invalid_params");
+        String fractional = R"({"count":1.5})";
+        EXPECT_EQ(MoreCall("m", fractional).ErrorCode(), "invalid_params");
+        String badSeed = R"({"seed":"x"})";
+        EXPECT_EQ(MoreCall("m", badSeed).ErrorCode(), "invalid_params");
+        EXPECT_EQ(MoreCall("nope").ErrorCode(), "artgen_no_set");
+        EXPECT_EQ(Call("artgen_more").ErrorCode(), "invalid_params");
         EXPECT_FALSE(session.IsBusy());
 
-        ASSERT_EQ(ErrorCode(MoreCall("m")), "");
-        Json two = Json::object();
-        two["count"] = 2;
-        EXPECT_EQ(ErrorCode(MoreCall("m", two)), "artgen_busy");
+        ASSERT_EQ(MoreCall("m").ErrorCode(), "");
+        String two = R"({"count":2})";
+        EXPECT_EQ(MoreCall("m", two).ErrorCode(), "artgen_busy");
         for (const ArtGenSetJob& job : Require(session.FindSet("m")).jobs) {
             EXPECT_EQ(job.more->count, 1) << "a refusal changes nothing";
         }
@@ -3142,22 +2996,22 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, ASingleRunInWorkDoesNotRefuseMoreAndTheRowsWait) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a"));
         ASSERT_TRUE(session.Request("wood", "a lone sprite", 1, 9, false).has_value());
-        EXPECT_EQ(ErrorCode(MoreCall("m")), "");
+        EXPECT_EQ(MoreCall("m").ErrorCode(), "");
         EXPECT_EQ(Require(session.FindSet("m")).jobs[0].state, ArtGenSetJobState::Pending);
     }
 
     TEST_F(ArtGenSetSessionTest, ACancelledMoreRunLeavesTheRowDoneWithItsVariantsAndPick) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb\nc"));
-        ASSERT_EQ(ErrorCode(MoreCall("m")), "");
-        const Json first = Poll();
-        ASSERT_NE(RequestOf(first), nullptr);
+        ASSERT_EQ(MoreCall("m").ErrorCode(), "");
+        const ControlReply first = Poll();
+        ASSERT_TRUE(RequestOf(first).IsValid());
         EXPECT_EQ(session.CancelSet("m"), ArtGenSetEdit::Ok);
         // The pending rows end at once; the running one when the service says so
         EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).state, ArtGenSetJobState::Done);
         EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "b")).error, "cancelled");
         EXPECT_EQ(Require(FindJob(Require(session.FindSet("m")), "a")).state, ArtGenSetJobState::Running);
-        EXPECT_EQ(GetJsonInt(Poll(), "cancel"), GetJsonInt(*RequestOf(first), "id"));
-        Finish(*RequestOf(first), "cancelled");
+        EXPECT_EQ(IntOf(Poll().Result(), "cancel"), IntOf(RequestOf(first), "id"));
+        Finish(RequestOf(first), "cancelled");
 
         EXPECT_FALSE(session.IsBusy());
         for (const ArtGenSetJob& job : OnDisk("m").jobs) {
@@ -3169,47 +3023,37 @@ namespace BECore::Tests {
             EXPECT_TRUE(job.accepted.has_value());
         }
         // Retry takes only Failed and Cancelled rows, so it cannot wipe what these hold
-        Json retry = Json::object();
-        retry["set"] = "m";
-        EXPECT_EQ(GetJsonInt(Result(Call("artgen_retry", retry)), "retried"), Optional<int64_t>(0));
+        String retry = R"({"set":"m"})";
+        EXPECT_EQ(IntOf(Call("artgen_retry", retry).Result(), "retried"), Optional<int64_t>(0));
         EXPECT_FALSE(session.IsBusy());
         EXPECT_EQ(Require(session.FindSet("m")).jobs[0].variants.size(), 2u);
     }
 
     TEST_F(ArtGenSetSessionTest, ACancelOfOneRunningMoreJobLeavesTheOthersToRun) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
-        ASSERT_EQ(ErrorCode(MoreCall("m")), "");
-        const Json first = Poll();
-        ASSERT_NE(RequestOf(first), nullptr);
+        ASSERT_EQ(MoreCall("m").ErrorCode(), "");
+        const ControlReply first = Poll();
+        ASSERT_TRUE(RequestOf(first).IsValid());
         EXPECT_EQ(session.CancelJob("m", "a"), ArtGenSetEdit::Ok);
         Poll();
-        Finish(*RequestOf(first), "cancelled");
+        Finish(RequestOf(first), "cancelled");
         const ArtGenSetJob* a = FindJob(Require(session.FindSet("m")), "a");
         EXPECT_EQ(a->state, ArtGenSetJobState::Done);
         EXPECT_EQ(a->variants.size(), 2u);
         EXPECT_EQ(a->pick, Optional<int64_t>(kSetSeed + 1));
-        const Json next = Poll();
-        ASSERT_NE(RequestOf(next), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(next), "name"), Optional<String>("b"));
+        const ControlReply next = Poll();
+        ASSERT_TRUE(RequestOf(next).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(next), "name"), "b");
     }
 
     TEST_F(ArtGenSetSessionTest, AFailedMoreRunKeepsTheImagesItMadeAndTheRest) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a"));
-        Json extra = Json::object();
-        extra["count"] = 3;
-        extra["seed"] = 6000;
-        ASSERT_EQ(ErrorCode(MoreCall("m", extra)), "");
-        const Json* request = RequestOf(pollReply = Poll());
-        ASSERT_NE(request, nullptr);
-        const uint32_t id = static_cast<uint32_t>(Require(GetJsonInt(*request, "id")));
-        Json image = Report(id);
-        image["seed"] = 6000;
-        image["path"] = ToStdString(Format("{}/artgen/out/m/a/a_6000.png", _root.View()));
-        Call("artgen_image", image);
-        Json done = Report(id);
-        done["status"] = "failed";
-        done["error"] = "out of memory";
-        Call("artgen_done", done);
+        ASSERT_EQ(MoreCall("m", R"({"count":3,"seed":6000})").ErrorCode(), "");
+        const JsonView request = RequestOf(pollReply = Poll());
+        ASSERT_TRUE(request.IsValid());
+        const uint32_t id = static_cast<uint32_t>(Require(IntOf(request, "id")));
+        Call("artgen_image", Report(id, Format(R"("path":{},"seed":6000)", Str(Format("{}/artgen/out/m/a/a_6000.png", _root.View())))));
+        Call("artgen_done", Report(id, R"("error":"out of memory","status":"failed")"));
 
         const ArtGenSetJob& job = Require(session.FindSet("m")).jobs[0];
         EXPECT_EQ(job.state, ArtGenSetJobState::Done) << "a Failed row would be Retry's to wipe";
@@ -3226,10 +3070,10 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, AServiceStopLeavesTheRunningMoreRowDoneAndTheRestWait) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
-        ASSERT_EQ(ErrorCode(MoreCall("m")), "");
-        ASSERT_NE(RequestOf(Poll()), nullptr);
+        ASSERT_EQ(MoreCall("m").ErrorCode(), "");
+        ASSERT_TRUE(RequestOf(Poll()).IsValid());
         session.RequestServiceStop();
-        EXPECT_EQ(GetJsonBool(Poll(), "shutdown"), Optional<bool>(true));
+        EXPECT_EQ(BoolOf(Poll().Result(), "shutdown"), Optional<bool>(true));
         const ArtGenSet disk = OnDisk("m");
         EXPECT_EQ(disk.jobs[0].state, ArtGenSetJobState::Done);
         EXPECT_EQ(disk.jobs[0].error, "the service was stopped");
@@ -3237,15 +3081,15 @@ namespace BECore::Tests {
         EXPECT_EQ(disk.jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
         EXPECT_EQ(disk.jobs[1].state, ArtGenSetJobState::Pending);
         EXPECT_TRUE(disk.jobs[1].more.has_value()) << "it goes when a service polls again";
-        const Json again = Poll();
-        ASSERT_NE(RequestOf(again), nullptr);
-        EXPECT_EQ(GetJsonString(*RequestOf(again), "name"), Optional<String>("b"));
+        const ControlReply again = Poll();
+        ASSERT_TRUE(RequestOf(again).IsValid());
+        EXPECT_EQ(StringOf(RequestOf(again), "name"), "b");
     }
 
     TEST_F(ArtGenSetSessionTest, ARestartInTheMiddleOfAMoreRunShowsDoneRowsWithTheNote) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a\nb"));
-        ASSERT_EQ(ErrorCode(MoreCall("m")), "");
-        ASSERT_NE(RequestOf(Poll()), nullptr);
+        ASSERT_EQ(MoreCall("m").ErrorCode(), "");
+        ASSERT_TRUE(RequestOf(Poll()).IsValid());
 
         ArtGenSession restarted([this] { return now; });
         restarted.SetGameRoot(_root.View());
@@ -3263,9 +3107,7 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, ALiveRowSwitchesToANewVariantAfterMore) {
         ASSERT_NO_FATAL_FAILURE(FinishAndAccept("m", "a"));
-        Json extra = Json::object();
-        extra["seed"] = 8000;
-        ASSERT_EQ(ErrorCode(MoreCall("m", extra)), "");
+        ASSERT_EQ(MoreCall("m", R"({"seed":8000})").ErrorCode(), "");
         ASSERT_NO_FATAL_FAILURE(RunAll());
         ASSERT_NO_FATAL_FAILURE(MakeFiles("m"));
         ASSERT_EQ(session.PickVariant("m", "a", 8000), ArtGenSetEdit::Ok);
@@ -3278,10 +3120,10 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, TheFirstAcceptAllAfterMoreMeasuresTheNewVariantsToo) {
         ASSERT_TRUE(Enqueue("m", "a\nb").has_value());
         ASSERT_NO_FATAL_FAILURE(RunAndPickAll("m"));
-        ASSERT_EQ(ErrorCode(MoreCall("m")), "");
+        ASSERT_EQ(MoreCall("m").ErrorCode(), "");
         ASSERT_NO_FATAL_FAILURE(RunAll());
         ASSERT_NO_FATAL_FAILURE(MakeFiles("m"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("m")), "");
+        ASSERT_EQ(AcceptAllCall("m").ErrorCode(), "");
         ASSERT_EQ(gMeasures.size(), 1u);
         EXPECT_EQ(gMeasures[0].files.size(), 6u) << "two rows of two old and one new variant";
         ASSERT_EQ(gAccepted.size(), 2u);
@@ -3292,32 +3134,31 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetSessionTest, AFullRowIsLeftOutWhileTheOthersGrow) {
         ASSERT_TRUE(Enqueue("m", "a\nb", kArtGenSetMaxCount).has_value());
         ASSERT_NO_FATAL_FAILURE(RunAll());
-        Json grow = Json::object();
-        grow["count"] = kArtGenSetMaxCount;
-        grow["jobs"] = Json::array({"a"});
+        const String grow = Format(R"({{"count":{},"jobs":["a"]}})", kArtGenSetMaxCount);
         for (int round = 0; round < 3; ++round) {
-            ASSERT_EQ(ErrorCode(MoreCall("m", grow)), "") << round;
+            ASSERT_EQ(MoreCall("m", grow).ErrorCode(), "") << round;
             ASSERT_NO_FATAL_FAILURE(RunAll());
         }
         EXPECT_EQ(static_cast<int32_t>(Require(FindJob(Require(session.FindSet("m")), "a")).variants.size()), kArtGenJobMaxVariants);
 
-        const Json answer = Result(MoreCall("m"));
-        ASSERT_EQ(Require(FindJsonMember(answer, "jobs")).size(), 1u);
-        EXPECT_EQ((Require(FindJsonMember(answer, "jobs")))[0], "b");
-        const Json& skipped = Require(FindJsonMember(answer, "skipped"));
-        ASSERT_EQ(skipped.size(), 1u);
-        EXPECT_EQ(GetJsonString(skipped[0], "job"), Optional<String>("a"));
-        EXPECT_EQ(GetJsonString(skipped[0], "reason"), Optional<String>("full"));
+        const ControlReply answerReply = MoreCall("m");
+        const JsonView answer = answerReply.Result();
+        ASSERT_EQ(MemberOf(answer, "jobs").Size(), 1u);
+        EXPECT_EQ(ItemAt(MemberOf(answer, "jobs"), 0).Raw(), R"("b")");
+        const JsonView skipped = MemberOf(answer, "skipped");
+        ASSERT_EQ(skipped.Size(), 1u);
+        EXPECT_EQ(StringOf(ItemAt(skipped, 0), "job"), "a");
+        EXPECT_EQ(StringOf(ItemAt(skipped, 0), "reason"), "full");
     }
 
     // The service regenerates what failed its checks: a job asked for `count` images may come back with more, on the seeds after its own
 
     TEST_F(ArtGenSetSessionTest, AJobThatGetsMoreImagesThanItsCountEndsDoneWithAllOfThem) {
         ASSERT_TRUE(Enqueue("m", "a", 2).has_value());
-        const Json* request = RequestOf(pollReply = Poll());
-        ASSERT_NE(request, nullptr);
-        ASSERT_EQ(GetJsonInt(*request, "count"), Optional<int64_t>(2));
-        FinishWithImages(*request, 4);
+        const JsonView request = RequestOf(pollReply = Poll());
+        ASSERT_TRUE(request.IsValid());
+        ASSERT_EQ(IntOf(request, "count"), Optional<int64_t>(2));
+        FinishWithImages(request, 4);
 
         EXPECT_FALSE(session.IsBusy());
         for (const ArtGenSet& set : {*session.FindSet("m"), OnDisk("m")}) {
@@ -3334,27 +3175,23 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetSessionTest, MoreAfterExtraImagesKeepsOffTheirSeeds) {
         ASSERT_TRUE(Enqueue("m", "a", 2).has_value());
-        FinishWithImages(*RequestOf(pollReply = Poll()), 4);  // seeds 40..43, the last two are extras
+        FinishWithImages(RequestOf(pollReply = Poll()), 4);  // seeds 40..43, the last two are extras
         const ArtGenSetJob& job = session.FindSet("m")->jobs[0];
         ASSERT_EQ(job.variants.size(), 4u);
 
         // An explicit seed whose range meets an extra is refused and changes nothing
         const Pair<int64_t, int64_t> meeting[] = {{42, 1}, {43, 2}, {41, 3}, {39, 5}};
         for (const auto& [seed, count] : meeting) {
-            Json extra = Json::object();
-            extra["seed"] = seed;
-            extra["count"] = count;
-            EXPECT_EQ(ErrorCode(MoreCall("m", extra)), "invalid_params") << seed << " x " << count;
+            String extra = Format(R"({{"seed":{},"count":{}}})", seed, count);
+            EXPECT_EQ(MoreCall("m", extra).ErrorCode(), "invalid_params") << seed << " x " << count;
             EXPECT_FALSE(session.IsBusy());
             EXPECT_FALSE(job.more.has_value());
             EXPECT_EQ(job.variants.size(), 4u);
         }
 
         // One that does not is queued
-        Json clear = Json::object();
-        clear["seed"] = 44;
-        clear["count"] = 2;
-        ASSERT_EQ(ErrorCode(MoreCall("m", clear)), "");
+        String clear = R"({"seed":44,"count":2})";
+        ASSERT_EQ(MoreCall("m", clear).ErrorCode(), "");
         EXPECT_TRUE(job.more.has_value());
         ASSERT_NO_FATAL_FAILURE(RunAll());
         ASSERT_EQ(job.variants.size(), 6u);
@@ -3363,10 +3200,10 @@ namespace BECore::Tests {
 
         // A drawn seed meets no variant the row holds, the extras among them
         for (int round = 0; round < 5; ++round) {
-            Json two = Json::object();
-            two["count"] = 2;
-            const Json answer = Result(MoreCall("m", two));
-            const Optional<int64_t> seed = GetJsonInt(answer, "seed");
+            String two = R"({"count":2})";
+            const ControlReply answerReply = MoreCall("m", two);
+            const JsonView answer = answerReply.Result();
+            const Optional<int64_t> seed = IntOf(answer, "seed");
             ASSERT_TRUE(seed.has_value()) << round;
             EXPECT_TRUE(ArtGenSeedRangeFree(job, *seed, 2)) << "round " << round << " drew " << *seed;
             ASSERT_NO_FATAL_FAILURE(RunAll());
@@ -3384,7 +3221,7 @@ namespace BECore::Tests {
         request.name = "sounds";
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         ASSERT_NO_FATAL_FAILURE(RunAndPickAll("sounds", "audio"));
-        ASSERT_EQ(ErrorCode(MoreCall("sounds")), "");
+        ASSERT_EQ(MoreCall("sounds").ErrorCode(), "");
         ASSERT_NO_FATAL_FAILURE(RunAll("audio"));
         const ArtGenSetJob& job = Require(session.FindSet("sounds")).jobs[0];
         ASSERT_EQ(job.variants.size(), 3u);
@@ -3404,7 +3241,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(session.EnqueueSet(request).has_value());
         ASSERT_NO_FATAL_FAILURE(RunAndPickAll("framed"));
         ASSERT_NO_FATAL_FAILURE(MakeFiles("framed"));
-        ASSERT_EQ(ErrorCode(AcceptAllCall("framed")), "");
+        ASSERT_EQ(AcceptAllCall("framed").ErrorCode(), "");
         gAccepted.clear();
         gPlans.clear();
         const ArtGenSet before = OnDisk("framed");
@@ -3424,7 +3261,7 @@ namespace BECore::Tests {
         EXPECT_EQ(gPlans[0].atlas, "pieces");
         EXPECT_FALSE(gPlans[0].deferPack);
 
-        EXPECT_EQ(ManifestJson(OnDisk("framed")), ManifestJson(before)) << "no pick, no accepted, nothing in the manifest";
+        EXPECT_EQ(ManifestText(OnDisk("framed")), ManifestText(before)) << "no pick, no accepted, nothing in the manifest";
         EXPECT_EQ(session.FindSet("framed")->jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
         EXPECT_EQ(session.FindSet("framed")->jobs[0].accepted->as, "a");
     }
