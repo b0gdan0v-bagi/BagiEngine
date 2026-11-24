@@ -33,7 +33,7 @@ namespace BECore {
         void Initialize();
 
         /**
-         * @brief Update the scene: first the fixed step lists once per fixed step due this frame, then the frame list.
+         * @brief Update the scene: first the fixed update list once per fixed step due this frame, then the frame list.
          *
          * Each pass runs the update list of the scene (components that registered with SubscribeInScene of SceneFixedUpdateEvent or
          * SceneUpdateEvent; see IComponent::OnAttached()) and then emits the event for the plain subscribers, which are not scene bound. The
@@ -216,7 +216,7 @@ namespace BECore {
         /// Called by SceneNode::RemoveChild() only: destroys the entity of @p node and of its descendants and resets their GetEntity() to entt::null.
         void DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>);
 
-        /// Called by IComponent::SubscribeInScene() only, through RegisterSceneUpdate(): @p component joins the update list of @p kind
+        /// Called by IComponent::SubscribeInScene() only, through RegisterSceneUpdate(): @p component joins the update list of @p kind, unless its node is not in the tree under the root (removed)
         void AddUpdater(SceneUpdateKind kind, IComponent& component, SceneUpdateInvoker invoke, PassKey<IComponent>);
 
         /// Called by SceneNode::RemoveComponent() only, before the component can die: @p component leaves both update lists

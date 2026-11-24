@@ -402,6 +402,14 @@ namespace BECore {
     }
 
     void Scene::AddUpdater(SceneUpdateKind kind, IComponent& component, SceneUpdateInvoker invoke, PassKey<IComponent>) {
+        // A node that RemoveChild() took out keeps its scene (and so does a child made under it), but no exit of the list would ever reach its components
+        const SceneNode* top = &component.GetNode();
+        while (top->_parent != nullptr) {
+            top = top->_parent;
+        }
+        if (top != _rootNode.Get()) {
+            return;
+        }
         GetUpdateList(kind).Add(component, invoke);
     }
 

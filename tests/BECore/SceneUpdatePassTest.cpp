@@ -353,6 +353,20 @@ namespace BECore::Tests {
         EXPECT_EQ(ProbeOf(grandchild).updates, 0);
     }
 
+    TEST_F(SceneUpdatePassTest, AComponentAddedToARemovedNodeNeverJoinsTheList) {
+        auto node = AddProbe("Node", Main());
+        Main().GetRootNode().RemoveChild(node.Get());
+        IntrusivePtr<SceneNode> child = node->AddChild("Child"_intern);
+
+        node->AddComponent(BECore::New<UpdateProbe>());
+        child->AddComponent(BECore::New<UpdateProbe>());
+        EXPECT_EQ(Frames(), 0u);
+
+        child.Reset();
+        node.Reset();
+        EXPECT_TRUE(Pass().empty());
+    }
+
     TEST_F(SceneUpdatePassTest, TheLastReferenceOfARemovedNodeCanGoWithoutATrace) {
         auto node = AddProbe("Node", Main());
         Main().GetRootNode().RemoveChild(node.Get());
