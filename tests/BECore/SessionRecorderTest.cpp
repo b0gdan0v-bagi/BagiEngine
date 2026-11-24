@@ -1,10 +1,10 @@
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonViewOps.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/JsonDoc.h>
@@ -48,11 +48,6 @@ namespace BECore::Tests {
                 return *GameManager::GetInstance().GetActive()->Cast<ReplayTestGame>();
             }
 
-            static Json Params(StringView text) {
-                auto parsed = ParseJson(text);
-                return parsed ? std::move(*parsed) : Json();
-            }
-
             [[nodiscard]] String PathText() const {
                 return String(_path.View());
             }
@@ -79,20 +74,8 @@ namespace BECore::Tests {
             }
 
             /// A control request the way a client sends it, answered on the spot
-            static Json Call(StringView method, const Json& params) {
-                Json request = Json::object();
-                request["id"] = 1;
-                request["method"] = ToStdString(method);
-                request["params"] = params;
-                Json response;
-                CoreManager::GetControlService().Post(DumpJson(request), [&response](String text) {
-                    auto parsed = ParseJson(text);
-                    if (parsed) {
-                        response = std::move(*parsed);
-                    }
-                });
-                CoreManager::GetControlService().Drain();
-                return response;
+            static ControlReply Call(StringView method, StringView paramsText) {
+                return CallControlText(CoreManager::GetControlService(), 1, method, paramsText);
             }
 
             Path _path;
@@ -322,10 +305,10 @@ namespace BECore::Tests {
 
     TEST_F(SessionRecorderTest, TheControlMethodsAndTheDirectCallsWriteTheSameFile) {
         ASSERT_TRUE(StartRecording().has_value());
-        ASSERT_TRUE(GetJsonBool(Call("reset", Params(R"({"seed":5})")), "ok").value_or(false));
-        ASSERT_TRUE(GetJsonBool(Call("perform_action", Params(R"({"type":"roll"})")), "ok").value_or(false));
-        ASSERT_TRUE(GetJsonBool(Call("set_state", Params(R"({"rolls":[4]})")), "ok").value_or(false));
-        EXPECT_FALSE(GetJsonBool(Call("perform_action", Params(R"({"type":"jump"})")), "ok").value_or(true));
+        ASSERT_TRUE(Call("reset", R"({"seed":5})").IsOk());
+        ASSERT_TRUE(Call("perform_action", R"({"type":"roll"})").IsOk());
+        ASSERT_TRUE(Call("set_state", R"({"rolls":[4]})").IsOk());
+        EXPECT_FALSE(Call("perform_action", R"({"type":"jump"})").IsOk());
         SessionRecorder::GetInstance().Stop();
         const String throughMethods = ReadRecording();
 
@@ -340,10 +323,10 @@ namespace BECore::Tests {
 
     TEST_F(SessionRecorderTest, SwitchingGameEndsTheRecordingButSwitchingToTheActiveOneDoesNot) {
         ASSERT_TRUE(StartRecording().has_value());
-        ASSERT_TRUE(GetJsonBool(Call("switch_game", Params(R"({"name":"ReplayTest"})")), "ok").value_or(false));
+        ASSERT_TRUE(Call("switch_game", R"({"name":"ReplayTest"})").IsOk());
         EXPECT_TRUE(SessionRecorder::GetInstance().IsRecording());
 
-        ASSERT_TRUE(GetJsonBool(Call("switch_game", Params(R"({"name":"FakePlain"})")), "ok").value_or(false));
+        ASSERT_TRUE(Call("switch_game", R"({"name":"FakePlain"})").IsOk());
 
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
     }

@@ -3,7 +3,6 @@
 #include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/ControlTestSupport.h>
@@ -179,16 +178,16 @@ namespace BECore::Tests {
             }
 
             /// Posts one request, runs the queue and returns the response ({} when nothing was answered)
-            Json Call(StringView method, const Json& params = Json()) {
-                return CallControl(CoreManager::GetControlService(), ++_lastId, method, params);
+            ControlReply Call(StringView method, StringView paramsText = {}) {
+                return CallControlText(CoreManager::GetControlService(), ++_lastId, method, paramsText);
             }
 
-            static const Json* Result(const Json& response) {
-                return FindJsonMember(response, "result");
+            static JsonView Result(const ControlReply& response) {
+                return response.Result();
             }
 
-            static bool Succeeded(const Json& response) {
-                return GetJsonBool(response, "ok").value_or(false);
+            static bool Succeeded(const ControlReply& response) {
+                return response.IsOk();
             }
 
             /// The registered game of type @p T; nullptr when there is none
@@ -295,27 +294,26 @@ namespace BECore::Tests {
     }
 
     TEST_F(GameControlTest, ListGamesShowsEveryRegisteredGameAndTheActiveOne) {
-        const Json response = Call("list_games");
+        const ControlReply response = Call("list_games");
 
         ASSERT_TRUE(Succeeded(response));
-        const Json* result = Result(response);
-        ASSERT_NE(result, nullptr);
-        EXPECT_EQ(GetJsonString(*result, "active").value_or("").c_str(), String("FakeControllable"));
+        const JsonView result = Result(response);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_EQ(StringOf(result, "active"), String("FakeControllable"));
 
-        const Json* games = FindJsonMember(*result, "games");
-        ASSERT_NE(games, nullptr);
-        ASSERT_TRUE(games->is_array());
-        ASSERT_EQ(games->size(), 3u);  // the two fakes and ReplayTestGame
+        const JsonView games = MemberOf(result, "games");
+        ASSERT_TRUE(games.IsArray());
+        ASSERT_EQ(games.Size(), 3u);  // the two fakes and ReplayTestGame
         int controllable = 0;
         int plain = 0;
-        for (const Json& game : *games) {
-            const String name = GetJsonString(game, "name").value_or("").c_str();
-            EXPECT_EQ(GetJsonString(game, "scene").value_or("x").c_str(), String());
+        for (const JsonView game : games.Items()) {
+            const String name = StringOf(game, "name");
+            EXPECT_TRUE(MemberOf(game, "scene").TextEquals(""));
             if (name == "FakeControllable") {
-                EXPECT_EQ(GetJsonBool(game, "controllable"), true);
+                EXPECT_EQ(BoolOf(game, "controllable"), true);
                 ++controllable;
             } else if (name == "FakePlain") {
-                EXPECT_EQ(GetJsonBool(game, "controllable"), false);
+                EXPECT_EQ(BoolOf(game, "controllable"), false);
                 ++plain;
             }
         }
@@ -326,41 +324,30 @@ namespace BECore::Tests {
     TEST_F(GameControlTest, ListGamesWithoutAnActiveGameLeavesActiveOut) {
         GameManager::GetInstance().Shutdown();
 
-        const Json response = Call("list_games");
+        const ControlReply response = Call("list_games");
 
         ASSERT_TRUE(Succeeded(response));
-        EXPECT_EQ(FindJsonMember(Require(Result(response)), "active"), nullptr);
+        EXPECT_FALSE(MemberOf(Result(response), "active").IsValid());
     }
 
     TEST_F(GameControlTest, SwitchGameActivatesTheNamedGame) {
-        Json params = Json::object();
-        params["name"] = "FakePlain";
-
-        const Json response = Call("switch_game", params);
+        const ControlReply response = Call("switch_game", R"({"name":"FakePlain"})");
 
         ASSERT_TRUE(Succeeded(response));
-        EXPECT_EQ(GetJsonString(Require(Result(response)), "active").value_or("").c_str(), String("FakePlain"));
+        EXPECT_EQ(StringOf(Result(response), "active"), String("FakePlain"));
         ASSERT_NE(GameManager::GetInstance().GetActive(), nullptr);
         EXPECT_EQ(GameManager::GetInstance().GetActive()->GetName(), "FakePlain"_intern);
     }
 
     TEST_F(GameControlTest, SwitchGameRefusesAnUnknownOrMissingName) {
-        Json unknown = Json::object();
-        unknown["name"] = "NoSuchGame";
-        Json notAString = Json::object();
-        notAString["name"] = 7;
-
-        EXPECT_EQ(ErrorCode(Call("switch_game", unknown)), "unknown_game");
-        EXPECT_EQ(ErrorCode(Call("switch_game")), "invalid_params");
-        EXPECT_EQ(ErrorCode(Call("switch_game", notAString)), "invalid_params");
+        EXPECT_EQ(Call("switch_game", R"({"name":"NoSuchGame"})").ErrorCode(), "unknown_game");
+        EXPECT_EQ(Call("switch_game").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("switch_game", R"({"name":7})").ErrorCode(), "invalid_params");
         EXPECT_EQ(GameManager::GetInstance().GetActive()->GetName(), "FakeControllable"_intern);
     }
 
     TEST_F(GameControlTest, SwitchGameDoesNotInternTheNameOfAClient) {
-        Json unknown = Json::object();
-        unknown["name"] = "client_only_game_7f3a91";
-
-        EXPECT_EQ(ErrorCode(Call("switch_game", unknown)), "unknown_game");
+        EXPECT_EQ(Call("switch_game", R"({"name":"client_only_game_7f3a91"})").ErrorCode(), "unknown_game");
         EXPECT_FALSE(PoolString::Find(StringView{"client_only_game_7f3a91"}).has_value());
     }
 
@@ -368,170 +355,132 @@ namespace BECore::Tests {
         Find<FakeControllableGame>()->counter = 5;
         Find<FakeControllableGame>()->version = 9;
 
-        const Json response = Call("get_state");
+        const ControlReply response = Call("get_state");
 
         ASSERT_TRUE(Succeeded(response));
-        const Json* result = Result(response);
-        ASSERT_NE(result, nullptr);
-        EXPECT_EQ(GetJsonString(*result, "game").value_or("").c_str(), String("FakeControllable"));
-        EXPECT_EQ(GetJsonInt(*result, "version"), 9);
-        const Json* state = FindJsonMember(*result, "state");
-        ASSERT_NE(state, nullptr);
-        EXPECT_EQ(GetJsonInt(*state, "counter"), 5);
+        const JsonView result = Result(response);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_EQ(StringOf(result, "game"), String("FakeControllable"));
+        EXPECT_EQ(IntOf(result, "version"), 9);
+        const JsonView state = MemberOf(result, "state");
+        ASSERT_TRUE(state.IsObject());
+        EXPECT_EQ(IntOf(state, "counter"), 5);
     }
 
     TEST_F(GameControlTest, ListActionsWrapsTheActionsOfTheGame) {
-        const Json response = Call("list_actions");
+        const ControlReply response = Call("list_actions");
 
         ASSERT_TRUE(Succeeded(response));
-        const Json* actions = FindJsonMember(Require(Result(response)), "actions");
-        ASSERT_NE(actions, nullptr);
-        ASSERT_TRUE(actions->is_array());
-        ASSERT_EQ(actions->size(), 1u);
-        EXPECT_EQ(GetJsonString((*actions)[0], "type").value_or("").c_str(), String("inc"));
+        const JsonView actions = MemberOf(Result(response), "actions");
+        ASSERT_TRUE(actions.IsArray());
+        ASSERT_EQ(actions.Size(), 1u);
+        EXPECT_EQ(StringOf(ItemAt(actions, 0), "type"), String("inc"));
     }
 
     TEST_F(GameControlTest, PerformActionTakesTheActionAsTheParamsAndAnswersWithTheNewVersion) {
-        Json action = Json::object();
-        action["type"] = "inc";
-        const Json before = Call("get_state");
+        const ControlReply before = Call("get_state");
         ASSERT_TRUE(Succeeded(before));
-        const int64_t versionBefore = GetJsonInt(Require(Result(before)), "version").value_or(-1);
+        const int64_t versionBefore = IntOf(Result(before), "version").value_or(-1);
 
-        const Json response = Call("perform_action", action);
+        const ControlReply response = Call("perform_action", R"({"type":"inc"})");
 
         ASSERT_TRUE(Succeeded(response));
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 1);
-        const Json* result = Result(response);
-        ASSERT_NE(result, nullptr);
-        EXPECT_EQ(GetJsonInt(*result, "version"), versionBefore + 1);
-        const Json* outcome = FindJsonMember(*result, "outcome");
-        ASSERT_NE(outcome, nullptr);
-        EXPECT_EQ(GetJsonInt(*outcome, "counter"), 1);
+        const JsonView result = Result(response);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_EQ(IntOf(result, "version"), versionBefore + 1);
+        const JsonView outcome = MemberOf(result, "outcome");
+        ASSERT_TRUE(outcome.IsObject());
+        EXPECT_EQ(IntOf(outcome, "counter"), 1);
     }
 
     TEST_F(GameControlTest, PerformActionPassesTheErrorOfTheGameOn) {
-        Json illegal = Json::object();
-        illegal["type"] = "dec";
-
-        const Json illegalResponse = Call("perform_action", illegal);
-        const Json emptyResponse = Call("perform_action");
+        const ControlReply illegalResponse = Call("perform_action", R"({"type":"dec"})");
+        const ControlReply emptyResponse = Call("perform_action");
 
         EXPECT_FALSE(Succeeded(illegalResponse));
-        EXPECT_EQ(ErrorCode(illegalResponse), "illegal_action");
-        EXPECT_EQ(ErrorCode(emptyResponse), "invalid_params");
+        EXPECT_EQ(illegalResponse.ErrorCode(), "illegal_action");
+        EXPECT_EQ(emptyResponse.ErrorCode(), "invalid_params");
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 0);
     }
 
     TEST_F(GameControlTest, AnActionAcceptedWithoutAnOutcomeIsAnInternalError) {
         Find<FakeControllableGame>()->silentAction = true;
-        Json action = Json::object();
-        action["type"] = "inc";
-
-        const Json response = Call("perform_action", action);
+        const ControlReply response = Call("perform_action", R"({"type":"inc"})");
 
         EXPECT_FALSE(Succeeded(response));
-        EXPECT_EQ(ErrorCode(response), "internal_error");
+        EXPECT_EQ(response.ErrorCode(), "internal_error");
     }
 
     TEST_F(GameControlTest, TheParamsOfAGameAreReadDecodedAndCheckedWhateverTheTextSays) {
-        ControlService& service = CoreManager::GetControlService();
-        const auto callText = [&](StringView method, StringView paramsText) {
-            Json response;
-            service.Post(Format(R"({{"id":{},"method":"{}","params":{}}})", ++_lastId, method, paramsText), [&response](String text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            service.Drain();
-            return response;
-        };
+        const auto callText = [&](StringView method, StringView paramsText) { return Call(method, paramsText); };
 
         // An escape stands for its character, so the action below is "inc"
         EXPECT_TRUE(Succeeded(callText("perform_action", R"({"type":"\u0069nc"})")));
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 1);
 
         // An integer past 64 bits is no integer for the helper, and the game answers invalid_params instead of wrapping it
-        EXPECT_EQ(ErrorCode(callText("reset", R"({"start":18446744073709551616})")), "invalid_params");
-        EXPECT_EQ(ErrorCode(callText("reset", R"({"start":1.5})")), "invalid_params");
-        EXPECT_EQ(ErrorCode(callText("perform_action", R"({"type":["inc"]})")), "invalid_params");
+        EXPECT_EQ(callText("reset", R"({"start":18446744073709551616})").ErrorCode(), "invalid_params");
+        EXPECT_EQ(callText("reset", R"({"start":1.5})").ErrorCode(), "invalid_params");
+        EXPECT_EQ(callText("perform_action", R"({"type":["inc"]})").ErrorCode(), "invalid_params");
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 1);
     }
 
     TEST_F(GameControlTest, PipelinedActionsRunInOrderBeforeTheStateIsRead) {
         ControlService& service = CoreManager::GetControlService();
-        Vector<Json> responses;
-        auto collect = [&responses](String text) {
-            auto parsed = ParseJson(text);
-            responses.push_back(parsed ? std::move(*parsed) : Json());
-        };
-        const auto post = [&](int64_t id, const char* method, const char* actionType) {
-            Json request = Json::object();
-            request["id"] = id;
-            request["method"] = method;
-            if (actionType != nullptr) {
-                Json params = Json::object();
-                params["type"] = actionType;
-                request["params"] = params;
-            }
-            service.Post(DumpJson(request), collect);
-        };
+        Vector<ControlReply> responses;
+        auto collect = [&responses](const String& text) { responses.push_back(ControlReply(StringView(text.c_str(), text.size()))); };
+        const auto post = [&](int64_t id, StringView method, StringView paramsText) { service.Post(MakeRequestText(id, method, paramsText), collect); };
 
-        post(1, "perform_action", "inc");
-        post(2, "perform_action", "inc");
-        post(3, "perform_action", "inc");
-        post(4, "get_state", nullptr);
+        post(1, "perform_action", R"({"type":"inc"})");
+        post(2, "perform_action", R"({"type":"inc"})");
+        post(3, "perform_action", R"({"type":"inc"})");
+        post(4, "get_state", {});
         service.Drain();
 
         ASSERT_EQ(responses.size(), 4u);
-        const Json* state = FindJsonMember(Require(Result(responses[3])), "state");
-        ASSERT_NE(state, nullptr);
-        EXPECT_EQ(GetJsonInt(*state, "counter"), 3);
+        const JsonView state = MemberOf(Result(responses[3]), "state");
+        ASSERT_TRUE(state.IsObject());
+        EXPECT_EQ(IntOf(state, "counter"), 3);
     }
 
     TEST_F(GameControlTest, ResetPassesTheOptionsToTheGame) {
         Find<FakeControllableGame>()->counter = 8;
-        Json options = Json::object();
-        options["start"] = 4;
 
-        const Json response = Call("reset", options);
+        const ControlReply response = Call("reset", R"({"start":4})");
 
         ASSERT_TRUE(Succeeded(response));
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 4);
         EXPECT_EQ(Find<FakeControllableGame>()->plainResetCalls, 0);  // the controllable path, not IGame::Reset()
-        EXPECT_TRUE(FindJsonMember(Require(Result(response)), "version") != nullptr);
+        EXPECT_TRUE(MemberOf(Result(response), "version").IsValid());
     }
 
     TEST_F(GameControlTest, ResetRefusesBadOptionsAndChangesNothing) {
         Find<FakeControllableGame>()->counter = 8;
-        Json options = Json::object();
-        options["start"] = "four";
 
-        const Json response = Call("reset", options);
+        const ControlReply response = Call("reset", R"({"start":"four"})");
 
-        EXPECT_EQ(ErrorCode(response), "invalid_params");
+        EXPECT_EQ(response.ErrorCode(), "invalid_params");
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 8);
     }
 
     TEST_F(GameControlTest, ResetOfAGameThatCannotBeControlledCallsIGameReset) {
         GameManager::GetInstance().SwitchTo("FakePlain"_intern);
 
-        const Json response = Call("reset");
+        const ControlReply response = Call("reset");
 
         ASSERT_TRUE(Succeeded(response));
         EXPECT_EQ(Find<FakePlainGame>()->resetCalls, 1);
-        EXPECT_EQ(GetJsonString(Require(Result(response)), "game").value_or("").c_str(), String("FakePlain"));
-        EXPECT_EQ(FindJsonMember(Require(Result(response)), "version"), nullptr);  // it has no version to report
+        EXPECT_EQ(StringOf(Result(response), "game"), String("FakePlain"));
+        EXPECT_FALSE(MemberOf(Result(response), "version").IsValid());  // it has no version to report
     }
 
     TEST_F(GameControlTest, SetStateLoadsTheStateOfTheGame) {
-        Json state = Json::object();
-        state["counter"] = 41;
-
-        const Json response = Call("set_state", state);
+        const ControlReply response = Call("set_state", R"({"counter":41})");
 
         ASSERT_TRUE(Succeeded(response));
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 41);
-        EXPECT_EQ(ErrorCode(Call("set_state")), "invalid_params");
+        EXPECT_EQ(Call("set_state").ErrorCode(), "invalid_params");
         EXPECT_EQ(Find<FakeControllableGame>()->counter, 41);
     }
 
@@ -539,7 +488,7 @@ namespace BECore::Tests {
         GameManager::GetInstance().SwitchTo("FakePlain"_intern);
 
         for (const char* method : {"get_state", "list_actions", "perform_action", "set_state"}) {
-            EXPECT_EQ(ErrorCode(Call(method)), "not_controllable") << method;
+            EXPECT_EQ(Call(method).ErrorCode(), "not_controllable") << method;
         }
     }
 
@@ -547,7 +496,7 @@ namespace BECore::Tests {
         GameManager::GetInstance().Shutdown();
 
         for (const char* method : {"get_state", "list_actions", "perform_action", "set_state", "reset"}) {
-            EXPECT_EQ(ErrorCode(Call(method)), "no_active_game") << method;
+            EXPECT_EQ(Call(method).ErrorCode(), "no_active_game") << method;
         }
     }
 
@@ -557,10 +506,7 @@ namespace BECore::Tests {
         class EventCollector {
         public:
             EventCollector() {
-                CoreManager::GetControlService().SetEventSink([this](const String& text) {
-                    auto parsed = ParseJson(text);
-                    events.push_back(parsed ? std::move(*parsed) : Json());
-                });
+                CoreManager::GetControlService().SetEventSink([this](const String& text) { events.push_back(ControlReply(StringView(text.c_str(), text.size()))); });
             }
 
             ~EventCollector() {
@@ -570,16 +516,15 @@ namespace BECore::Tests {
             EventCollector(const EventCollector&) = delete;
             EventCollector& operator=(const EventCollector&) = delete;
 
-            Vector<Json> events;
+            Vector<ControlReply> events;
         };
 
-        String EventName(const Json& event) {
-            const auto name = GetJsonString(event, "event");
-            return name ? String(name->c_str(), name->size()) : String();
+        String EventName(const ControlReply& event) {
+            return StringOf(event.View(), "event");
         }
 
-        const Json* EventData(const Json& event) {
-            return FindJsonMember(event, "data");
+        JsonView EventData(const ControlReply& event) {
+            return MemberOf(event.View(), "data");
         }
 
     }  // namespace
@@ -589,24 +534,20 @@ namespace BECore::Tests {
         EventCollector collector;
         service.EndFrame();  // the first look only records the version
 
-        const Json acted = Call("perform_action", [] {
-            Json inc = Json::object();
-            inc["type"] = "inc";
-            return inc;
-        }());
+        const ControlReply acted = Call("perform_action", R"({"type":"inc"})");
         ASSERT_TRUE(Succeeded(acted));
         EXPECT_TRUE(collector.events.empty());  // not before the frame ends
         service.EndFrame();
 
         ASSERT_EQ(collector.events.size(), 1u);
         EXPECT_EQ(EventName(collector.events[0]), "state_changed");
-        const Json* data = EventData(collector.events[0]);
-        ASSERT_NE(data, nullptr);
-        EXPECT_EQ(GetJsonString(*data, "game").value_or("").c_str(), String("FakeControllable"));
-        EXPECT_EQ(GetJsonInt(*data, "version").value_or(-1), 1);
-        const Json* state = FindJsonMember(*data, "state");
-        ASSERT_NE(state, nullptr);
-        EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 1);
+        const JsonView data = EventData(collector.events[0]);
+        ASSERT_TRUE(data.IsObject());
+        EXPECT_EQ(StringOf(data, "game"), String("FakeControllable"));
+        EXPECT_EQ(IntOf(data, "version").value_or(-1), 1);
+        const JsonView state = MemberOf(data, "state");
+        ASSERT_TRUE(state.IsObject());
+        EXPECT_EQ(IntOf(state, "counter").value_or(-1), 1);
     }
 
     TEST_F(GameControlTest, NothingIsPushedWhenTheStateDidNotMove) {
@@ -642,7 +583,7 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(collector.events.size(), 1u);
-        EXPECT_EQ(GetJsonInt(*EventData(collector.events[0]), "version").value_or(-1), 5);
+        EXPECT_EQ(IntOf(EventData(collector.events[0]), "version").value_or(-1), 5);
     }
 
     TEST_F(GameControlTest, AChangeThatNoClientMadeIsPushedToo) {
@@ -656,9 +597,9 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(collector.events.size(), 1u);
-        const Json* state = FindJsonMember(*EventData(collector.events[0]), "state");
-        ASSERT_NE(state, nullptr);
-        EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 41);
+        const JsonView state = MemberOf(EventData(collector.events[0]), "state");
+        ASSERT_TRUE(state.IsObject());
+        EXPECT_EQ(IntOf(state, "counter").value_or(-1), 41);
     }
 
     TEST_F(GameControlTest, ResetAndSetStateArePushedToo) {
@@ -666,18 +607,14 @@ namespace BECore::Tests {
         EventCollector collector;
         service.EndFrame();
 
-        Json start = Json::object();
-        start["start"] = 10;
-        ASSERT_TRUE(Succeeded(Call("reset", start)));
+        ASSERT_TRUE(Succeeded(Call("reset", R"({"start":10})")));
         service.EndFrame();
-        Json state = Json::object();
-        state["counter"] = 20;
-        ASSERT_TRUE(Succeeded(Call("set_state", state)));
+        ASSERT_TRUE(Succeeded(Call("set_state", R"({"counter":20})")));
         service.EndFrame();
 
         ASSERT_EQ(collector.events.size(), 2u);
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(*EventData(collector.events[0]), "state")), "counter").value_or(-1), 10);
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember(*EventData(collector.events[1]), "state")), "counter").value_or(-1), 20);
+        EXPECT_EQ(IntOf(MemberOf(EventData(collector.events[0]), "state"), "counter").value_or(-1), 10);
+        EXPECT_EQ(IntOf(MemberOf(EventData(collector.events[1]), "state"), "counter").value_or(-1), 20);
     }
 
     TEST_F(GameControlTest, AGameThatCannotBeControlledPushesNothing) {

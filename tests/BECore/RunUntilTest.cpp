@@ -22,37 +22,27 @@ namespace BECore::Tests {
             return text;
         }
 
-        Json ConditionPointer(StringView pointer, Json equals) {
-            Json condition = Json::object();
-            condition["pointer"] = ToStdString(pointer);
-            condition["equals"] = std::move(equals);
-            return condition;
+        /// The conditions and params below are JSON texts; @p equalsText and @p equalText are JSON values, and a name or a pointer holds nothing that needs an escape
+        String ConditionPointer(StringView pointer, StringView equalsText) {
+            return Format(R"({{"equals":{},"pointer":"{}"}})", equalsText, pointer);
         }
 
-        Json ConditionVersionMoved() {
-            Json condition = Json::object();
-            condition["versionMoved"] = true;
-            return condition;
+        String ConditionVersionMoved() {
+            return String(R"({"versionMoved":true})");
         }
 
-        Json ConditionEvent(StringView name, Json equal = Json()) {
-            Json event = Json::object();
-            event["name"] = ToStdString(name);
-            if (!equal.is_null()) {
-                event["equal"] = std::move(equal);
+        String ConditionEvent(StringView name, StringView equalText = {}) {
+            if (equalText.empty()) {
+                return Format(R"({{"event":{{"name":"{}"}}}})", name);
             }
-            Json condition = Json::object();
-            condition["event"] = std::move(event);
-            return condition;
+            return Format(R"({{"event":{{"equal":{},"name":"{}"}}}})", equalText, name);
         }
 
-        Json RunUntilParams(Json condition, int64_t maxFrames = 0) {
-            Json params = Json::object();
-            params["condition"] = std::move(condition);
+        String RunUntilParams(StringView conditionText, int64_t maxFrames = 0) {
             if (maxFrames > 0) {
-                params["maxFrames"] = maxFrames;
+                return Format(R"({{"condition":{},"maxFrames":{}}})", conditionText, maxFrames);
             }
-            return params;
+            return Format(R"({{"condition":{}}})", conditionText);
         }
 
         class RunUntilTest : public ::testing::TestWithParam<RunUntilClock> {
@@ -108,19 +98,13 @@ namespace BECore::Tests {
                 });
             }
 
-            void Post(int64_t id, StringView method, const Json& params = Json()) {
-                service.Post(MakeRequest(id, method, params), [this](String text) {
-                    auto parsed = ParseJson(text);
-                    responses.push_back(parsed ? std::move(*parsed) : Json());
-                });
+            void Post(int64_t id, StringView method, StringView paramsText = {}) {
+                service.Post(MakeRequestText(id, method, paramsText), [this](const String& text) { responses.push_back(ControlReply(StringView(text.c_str(), text.size()))); });
             }
 
-            /// Posts a request whose params are the JSON text @p paramsText, for a value a `Json` cannot hold (`1e999`)
-            void PostText(int64_t id, StringView method, StringView paramsText) {
-                service.Post(Format(R"({{"id":{},"method":"{}","params":{}}})", id, method, paramsText), [this](String text) {
-                    auto parsed = ParseJson(text);
-                    responses.push_back(parsed ? std::move(*parsed) : Json());
-                });
+            /// Publishes the event @p name with the JSON object @p dataText as its data
+            void PublishText(StringView name, StringView dataText = R"({})") {
+                service.Publish(name, [dataText](JsonWriter& writer) { writer.Raw(dataText); });
             }
 
             /// The application loop over the pause, as the clock of the test would run it, until @p answers answers are in. Returns the kinds of the frames that ran
@@ -154,22 +138,23 @@ namespace BECore::Tests {
             }
 
             /// Posts a `run_until` and plays frames until it is answered; the answer is `responses.back()`
-            const Json* RunUntil(Json params) {
+            JsonView RunUntil(StringView params) {
                 const size_t answered = responses.size();
                 Post(++lastId, "run_until", params);
                 RunFrames(answered + 1);
                 return Result(responses.size() - 1);
             }
 
-            const Json* Result(size_t index) const {
-                return index < responses.size() ? FindJsonMember(responses[index], "result") : nullptr;
+            /// The `result` of the answer @p index; not valid when there is none
+            JsonView Result(size_t index) const {
+                return index < responses.size() ? responses[index].Result() : JsonView();
             }
 
             static constexpr double kRealFrameSeconds = 1.0 / 64;
 
             ControlService service;
             GamePause pause;
-            Vector<Json> responses;
+            Vector<ControlReply> responses;
             int64_t lastId = 0;
             uint64_t actionFrame = 0;
             MoveOnlyFunction<void()> action;
@@ -195,282 +180,249 @@ namespace BECore::Tests {
     TEST_P(RunUntilTest, PointerIsMetAfterTheFramesItTook) {
         SetCounterAtFrame(3, 7);
 
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", 7)));
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", "7")));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 3);
-        EXPECT_EQ(GetJsonString(*result, "reason").value_or(""), "pointer");
-        EXPECT_EQ(GetJsonString(*result, "game").value_or(""), "FakeControllable");
-        EXPECT_EQ(GetJsonInt(*result, "version").value_or(-1), 1);
-        EXPECT_EQ(GetJsonInt(*result, "frame").value_or(-1), 3);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 3);
+        EXPECT_EQ(StringOf(result, "reason"), "pointer");
+        EXPECT_EQ(StringOf(result, "game"), "FakeControllable");
+        EXPECT_EQ(IntOf(result, "version").value_or(-1), 1);
+        EXPECT_EQ(IntOf(result, "frame").value_or(-1), 3);
     }
 
     TEST_P(RunUntilTest, PointerAlreadyMetAnswersWithoutAFrame) {
-        Post(1, "run_until", RunUntilParams(ConditionPointer("/state/counter", 0)));
+        Post(1, "run_until", RunUntilParams(ConditionPointer("/state/counter", "0")));
         service.Drain();
 
         ASSERT_EQ(responses.size(), 1u);
-        const Json* result = Result(0);
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 0);
-        EXPECT_EQ(GetJsonInt(*result, "frame").value_or(-1), 0);
+        const JsonView result = Result(0);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 0);
+        EXPECT_EQ(IntOf(result, "frame").value_or(-1), 0);
         EXPECT_FALSE(service.IsStepDue());
         EXPECT_EQ(service.GetPublishObserverCount(), 0u);
     }
 
     TEST_P(RunUntilTest, TheLimitIsAnAnswerAndNotAnError) {
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", 99), 4));
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", "99"), 4));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(responses[0], "ok").value_or(false));
-        EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 4);
-        EXPECT_EQ(FindJsonMember(*result, "reason"), nullptr);
-        EXPECT_EQ(GetJsonInt(*result, "frame").value_or(-1), 4);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(responses[0].IsOk());
+        EXPECT_FALSE(BoolOf(result, "met").value_or(true));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 4);
+        EXPECT_FALSE(MemberOf(result, "reason").IsValid());
+        EXPECT_EQ(IntOf(result, "frame").value_or(-1), 4);
     }
 
     TEST_P(RunUntilTest, ConditionMetOnTheLastAllowedFrameCountsAsMet) {
         SetCounterAtFrame(2, 5);
 
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", 5), 2));
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", "5"), 2));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 2);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 2);
     }
 
     TEST_P(RunUntilTest, AMissingPointerPathIsNotMetAndNotAnError) {
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/nothing/here", 1), 2));
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state/nothing/here", "1"), 2));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 2);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_FALSE(BoolOf(result, "met").value_or(true));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 2);
     }
 
     TEST_P(RunUntilTest, PointerEqualityIsJsonEquality) {
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", true), 1));
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", "true"), 1));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_FALSE(BoolOf(result, "met").value_or(true));
     }
 
     TEST_P(RunUntilTest, EqualsComparesNumbersByValue) {
         Fake()->rawState = R"({"n":1.0})";
 
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/n", 1)));
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state/n", "1")));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 0);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 0);
     }
 
     TEST_P(RunUntilTest, ObjectEqualsIgnoresTheOrderOfKeys) {
         Fake()->rawState = R"({"a":1,"b":{"c":2,"d":[1,2]}})";
-        Json inner = Json::object();
-        inner["d"] = Json::array({1, 2});
-        inner["c"] = 2;
-        Json equals = Json::object();
-        equals["b"] = inner;
-        equals["a"] = 1;
 
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state", equals)));
+        // Written in another order than the state: the keys are matched by name
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state", R"({"b":{"d":[1,2],"c":2},"a":1})")));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
     }
 
     TEST_P(RunUntilTest, AStringEqualsByItsDecodedText) {
         Fake()->rawState = R"({"s":"\u0041\n","k\u0041":1})";
 
-        const Json* text = RunUntil(RunUntilParams(ConditionPointer("/state/s", "A\n")));
-        ASSERT_NE(text, nullptr);
-        EXPECT_TRUE(GetJsonBool(*text, "met").value_or(false));
+        const JsonView text = RunUntil(RunUntilParams(ConditionPointer("/state/s", R"("A\n")")));
+        ASSERT_TRUE(text.IsObject());
+        EXPECT_TRUE(BoolOf(text, "met").value_or(false));
 
-        const Json* key = RunUntil(RunUntilParams(ConditionPointer("/state/kA", 1)));
-        ASSERT_NE(key, nullptr);
-        EXPECT_TRUE(GetJsonBool(*key, "met").value_or(false));
+        const JsonView key = RunUntil(RunUntilParams(ConditionPointer("/state/kA", "1")));
+        ASSERT_TRUE(key.IsObject());
+        EXPECT_TRUE(BoolOf(key, "met").value_or(false));
     }
 
     TEST_P(RunUntilTest, ANumberPastADoubleInEqualsIsAValueAndNotAnError) {
-        PostText(1, "run_until", R"({"condition":{"pointer":"/state/counter","equals":1e999},"maxFrames":1})");
+        Post(1, "run_until", R"({"condition":{"pointer":"/state/counter","equals":1e999},"maxFrames":1})");
         RunFrames(1);
 
-        const Json* result = Result(0);
-        ASSERT_NE(result, nullptr);
-        EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 1);
+        const JsonView result = Result(0);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_FALSE(BoolOf(result, "met").value_or(true));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 1);
     }
 
     TEST_P(RunUntilTest, TheDocumentIsWrittenOncePerVersion) {
 
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", 9), 3));
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", "9"), 3));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_FALSE(BoolOf(result, "met").value_or(true));
         EXPECT_EQ(Fake()->writeStateCalls, 1);
     }
 
     TEST_P(RunUntilTest, AStateThatFailsToWriteFailsThePointerWait) {
         Fake()->failWrites = true;
 
-        RunUntil(RunUntilParams(ConditionPointer("/state/counter", 0), 2));
+        RunUntil(RunUntilParams(ConditionPointer("/state/counter", "0"), 2));
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(ErrorCode(responses[0]), "write_failed");
+        EXPECT_EQ(responses[0].ErrorCode(), "write_failed");
         EXPECT_EQ(service.GetPublishObserverCount(), 0u);
     }
 
     TEST_P(RunUntilTest, PointerCanNameTheWholeAnswerOrTheVersion) {
-        Json whole = Json::object();
-        whole["game"] = "FakeControllable";
-        whole["version"] = 0;
-        Json state = Json::object();
-        state["counter"] = 0;
-        whole["state"] = state;
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("", R"({"game":"FakeControllable","state":{"counter":0},"version":0})")));
 
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("", whole)));
-
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 0);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 0);
     }
 
     TEST_P(RunUntilTest, VersionMovedIsMetWhenTheVersionDiffersFromTheStart) {
         SetCounterAtFrame(2, 1);
 
-        const Json* result = RunUntil(RunUntilParams(ConditionVersionMoved()));
+        const JsonView result = RunUntil(RunUntilParams(ConditionVersionMoved()));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 2);
-        EXPECT_EQ(GetJsonString(*result, "reason").value_or(""), "versionMoved");
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 2);
+        EXPECT_EQ(StringOf(result, "reason"), "versionMoved");
     }
 
     TEST_P(RunUntilTest, VersionMovedStartsFromTheVersionAtTheCallEvenInsideABatchAfterAnAction) {
-        Json inc = Json::object();
-        inc["type"] = "inc";
-        Json calls = Json::array();
-        calls.push_back(Json{{"method", "perform_action"}, {"params", inc}});
-        calls.push_back(Json{{"method", "run_until"}, {"params", RunUntilParams(ConditionVersionMoved(), 2)}});
-        calls.push_back(Json{{"method", "perform_action"}, {"params", inc}});
-        calls.push_back(Json{{"method", "run_until"}, {"params", RunUntilParams(ConditionVersionMoved(), 2)}});
-        Json params = Json::object();
-        params["calls"] = calls;
+        const String moved = RunUntilParams(ConditionVersionMoved(), 2);
+        const String params = Format(
+            R"({{"calls":[{{"method":"perform_action","params":{{"type":"inc"}}}},{{"method":"run_until","params":{}}},{{"method":"perform_action","params":{{"type":"inc"}}}},{{"method":"run_until","params":{}}}]}})",
+            moved, moved);
 
         Post(1, "batch", params);
         RunFrames(1);
 
-        const Json* result = Result(0);
-        ASSERT_NE(result, nullptr);
-        const Json* results = FindJsonMember(*result, "results");
-        ASSERT_NE(results, nullptr);
-        ASSERT_EQ(results->size(), 4u);
-        EXPECT_FALSE(GetJsonBool(Require(FindJsonMember((*results)[1], "result")), "met").value_or(true));
-        EXPECT_FALSE(GetJsonBool(Require(FindJsonMember((*results)[3], "result")), "met").value_or(true));
-        EXPECT_EQ(GetJsonInt(Require(FindJsonMember((*results)[3], "result")), "version").value_or(-1), 2);
+        const JsonView result = Result(0);
+        ASSERT_TRUE(result.IsObject());
+        const JsonView results = MemberOf(result, "results");
+        ASSERT_TRUE(results.IsArray());
+        ASSERT_EQ(results.Size(), 4u);
+        EXPECT_FALSE(BoolOf(MemberOf(ItemAt(results, 1), "result"), "met").value_or(true));
+        EXPECT_FALSE(BoolOf(MemberOf(ItemAt(results, 3), "result"), "met").value_or(true));
+        EXPECT_EQ(IntOf(MemberOf(ItemAt(results, 3), "result"), "version").value_or(-1), 2);
     }
 
     TEST_P(RunUntilTest, EventIsMetWhenItIsPublished) {
-        AtFrame(2, [this] { service.Publish("ping", Json::object()); });
+        AtFrame(2, [this] { PublishText("ping"); });
 
-        const Json* result = RunUntil(RunUntilParams(ConditionEvent("ping")));
+        const JsonView result = RunUntil(RunUntilParams(ConditionEvent("ping")));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 2);
-        EXPECT_EQ(GetJsonString(*result, "reason").value_or(""), "event");
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 2);
+        EXPECT_EQ(StringOf(result, "reason"), "event");
         EXPECT_EQ(service.GetPublishObserverCount(), 0u);
     }
 
     TEST_P(RunUntilTest, EventWithEqualNeedsTheMembersToMatch) {
-        AtFrame(1, [this] {
-            Json other = Json::object();
-            other["n"] = 3;
-            service.Publish("ping", other);
-        });
+        AtFrame(1, [this] { PublishText("ping", R"({"n":3})"); });
 
-        const Json* missed = RunUntil(RunUntilParams(ConditionEvent("ping", Json{{"n", 2}}), 2));
-        ASSERT_NE(missed, nullptr);
-        EXPECT_FALSE(GetJsonBool(*missed, "met").value_or(true));
+        const JsonView missed = RunUntil(RunUntilParams(ConditionEvent("ping", R"({"n":2})"), 2));
+        ASSERT_TRUE(missed.IsObject());
+        EXPECT_FALSE(BoolOf(missed, "met").value_or(true));
 
         // The first wait took frames 1 and 2; the clock goes on from there
         const uint64_t frame = CoreManager::GetTime().GetFrameCount();
-        AtFrame(frame + 1, [this] { service.Publish("ping", Json{{"n", 2}, {"more", "x"}}); });
-        const Json* met = RunUntil(RunUntilParams(ConditionEvent("ping", Json{{"n", 2}}), 3));
-        ASSERT_NE(met, nullptr);
-        EXPECT_TRUE(GetJsonBool(*met, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*met, "frames").value_or(-1), 1);
+        AtFrame(frame + 1, [this] { PublishText("ping", R"({"more":"x","n":2})"); });
+        const JsonView met = RunUntil(RunUntilParams(ConditionEvent("ping", R"({"n":2})"), 3));
+        ASSERT_TRUE(met.IsObject());
+        EXPECT_TRUE(BoolOf(met, "met").value_or(false));
+        EXPECT_EQ(IntOf(met, "frames").value_or(-1), 1);
     }
 
     TEST_P(RunUntilTest, EventEqualComparesNestedValuesAndIgnoresOtherMembers) {
-        AtFrame(1, [this] {
-            Json data = Json::object();
-            data["n"] = Json::object();
-            data["n"]["a"] = Json::array({1, 2});
-            data["extra"] = true;
-            service.Publish("ping", data);
-        });
-        Json inner = Json::object();
-        inner["a"] = Json::array({1, 2.0});
-        Json equal = Json::object();
-        equal["n"] = inner;
+        AtFrame(1, [this] { PublishText("ping", R"({"extra":true,"n":{"a":[1,2]}})"); });
 
-        const Json* result = RunUntil(RunUntilParams(ConditionEvent("ping", equal), 3));
+        const JsonView result = RunUntil(RunUntilParams(ConditionEvent("ping", R"({"n":{"a":[1,2.0]}})"), 3));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 1);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 1);
     }
 
     TEST_P(RunUntilTest, AnEventOfAnotherNameOrBeforeTheCallDoesNotCount) {
-        service.Publish("ping", Json::object());
-        AtFrame(1, [this] { service.Publish("pong", Json::object()); });
+        PublishText("ping");
+        AtFrame(1, [this] { PublishText("pong"); });
 
-        const Json* result = RunUntil(RunUntilParams(ConditionEvent("ping"), 2));
+        const JsonView result = RunUntil(RunUntilParams(ConditionEvent("ping"), 2));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_FALSE(GetJsonBool(*result, "met").value_or(true));
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_FALSE(BoolOf(result, "met").value_or(true));
     }
 
     TEST_P(RunUntilTest, EventNeedsNoActiveGameAndLeavesTheGameOut) {
         GameManager::GetInstance().Shutdown();
-        AtFrame(1, [this] { service.Publish("ping", Json::object()); });
+        AtFrame(1, [this] { PublishText("ping"); });
 
-        const Json* result = RunUntil(RunUntilParams(ConditionEvent("ping")));
+        const JsonView result = RunUntil(RunUntilParams(ConditionEvent("ping")));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(FindJsonMember(*result, "game"), nullptr);
-        EXPECT_EQ(FindJsonMember(*result, "version"), nullptr);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_FALSE(MemberOf(result, "game").IsValid());
+        EXPECT_FALSE(MemberOf(result, "version").IsValid());
     }
 
     TEST_P(RunUntilTest, StateChangedOfTheFrameThatEndsTheWaitCounts) {
         AtFrame(2, [] { ++Fake()->version; });  // the state_changed hook of GameControl runs after this one, in the same frame
-        Json equal = Json::object();
-        equal["version"] = 1;
 
-        const Json* result = RunUntil(RunUntilParams(ConditionEvent("state_changed", equal)));
+        const JsonView result = RunUntil(RunUntilParams(ConditionEvent("state_changed", R"({"version":1})")));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonBool(*result, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*result, "frames").value_or(-1), 2);
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(BoolOf(result, "met").value_or(false));
+        EXPECT_EQ(IntOf(result, "frames").value_or(-1), 2);
     }
 
     TEST_P(RunUntilTest, WithoutAControllableGamePointerAndVersionMovedFail) {
         GameManager::GetInstance().Shutdown();
-        Post(1, "run_until", RunUntilParams(ConditionPointer("/state", 1)));
+        Post(1, "run_until", RunUntilParams(ConditionPointer("/state", "1")));
         Post(2, "run_until", RunUntilParams(ConditionVersionMoved()));
         service.Drain();
-        EXPECT_EQ(ErrorCode(responses[0]), "no_active_game");
-        EXPECT_EQ(ErrorCode(responses[1]), "no_active_game");
+        EXPECT_EQ(responses[0].ErrorCode(), "no_active_game");
+        EXPECT_EQ(responses[1].ErrorCode(), "no_active_game");
 
         GameManager::GetInstance().Initialize();
         GameManager::GetInstance().SwitchTo("FakePlain"_intern);
         Post(3, "run_until", RunUntilParams(ConditionVersionMoved()));
         service.Drain();
-        EXPECT_EQ(ErrorCode(responses[2]), "not_controllable");
+        EXPECT_EQ(responses[2].ErrorCode(), "not_controllable");
         EXPECT_FALSE(service.IsStepDue());
         EXPECT_EQ(service.GetPublishObserverCount(), 0u);
     }
@@ -481,27 +433,26 @@ namespace BECore::Tests {
         RunUntil(RunUntilParams(ConditionVersionMoved(), 5));
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(ErrorCode(responses[0]), "no_active_game");
+        EXPECT_EQ(responses[0].ErrorCode(), "no_active_game");
     }
 
     TEST_P(RunUntilTest, TheAnswerCarriesTheClockOfStep) {
-        const Json* result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", 9), 2));
+        const JsonView result = RunUntil(RunUntilParams(ConditionPointer("/state/counter", "9"), 2));
 
-        ASSERT_NE(result, nullptr);
-        EXPECT_TRUE(GetJsonInt(*result, "frame").has_value());
-        EXPECT_TRUE(GetJsonNumber(*result, "totalTime").has_value());
-        EXPECT_TRUE(GetJsonNumber(*result, "deltaTime").has_value());
-        EXPECT_TRUE(GetJsonNumber(*result, "fixedDeltaTime").has_value());
+        ASSERT_TRUE(result.IsObject());
+        EXPECT_TRUE(IntOf(result, "frame").has_value());
+        EXPECT_TRUE(MemberOf(result, "totalTime").AsDouble().has_value());
+        EXPECT_TRUE(MemberOf(result, "deltaTime").AsDouble().has_value());
+        EXPECT_TRUE(MemberOf(result, "fixedDeltaTime").AsDouble().has_value());
     }
 
     TEST_P(RunUntilTest, DtSetsTheLengthOfTheFramesOfTheManualClockOnly) {
-        Json params = RunUntilParams(ConditionPointer("/state/counter", 9), 2);
-        params["dt"] = 0.25;
+        const String params = Format(R"({{"condition":{},"dt":0.25,"maxFrames":2}})", ConditionPointer("/state/counter", "9"));
 
-        const Json* result = RunUntil(params);
+        const JsonView result = RunUntil(params);
 
-        ASSERT_NE(result, nullptr);
-        const double total = GetJsonNumber(*result, "totalTime").value_or(-1.0);
+        ASSERT_TRUE(result.IsObject());
+        const double total = MemberOf(result, "totalTime").AsDouble().value_or(-1.0);
         if (GetParam() == RunUntilClock::Manual) {
             EXPECT_DOUBLE_EQ(total, 0.5);
         } else if (GetParam() == RunUntilClock::RealPaused) {
@@ -513,7 +464,7 @@ namespace BECore::Tests {
 
     TEST_P(RunUntilTest, EveryFrameOfTheWaitIsASteppedOrRunningFrameNeverAnExtraHeldOne) {
         const size_t answered = responses.size();
-        Post(1, "run_until", RunUntilParams(ConditionPointer("/state/counter", 9), 3));
+        Post(1, "run_until", RunUntilParams(ConditionPointer("/state/counter", "9"), 3));
         const Vector<FrameKind> kinds = RunFrames(answered + 1);
 
         const size_t held = static_cast<size_t>(std::count(kinds.begin(), kinds.end(), FrameKind::Held));
@@ -524,16 +475,16 @@ namespace BECore::Tests {
 
     TEST_P(RunUntilTest, TheRequestsBehindAWaitingRunUntilWait) {
         SetCounterAtFrame(3, 4);
-        Post(1, "run_until", RunUntilParams(ConditionPointer("/state/counter", 4)));
+        Post(1, "run_until", RunUntilParams(ConditionPointer("/state/counter", "4")));
         Post(2, "ping");
 
         RunFrames(1);
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(GetJsonInt(responses[0], "id").value_or(-1), 1);
+        EXPECT_EQ(responses[0].IdText(), "1");
 
         service.Drain();
         ASSERT_EQ(responses.size(), 2u);
-        EXPECT_EQ(GetJsonInt(responses[1], "id").value_or(-1), 2);
+        EXPECT_EQ(responses[1].IdText(), "2");
     }
 
     TEST_P(RunUntilTest, ShutdownDuringTheWaitAnswersShuttingDownAndGivesTheObserverBack) {
@@ -545,14 +496,14 @@ namespace BECore::Tests {
         service.Shutdown();
 
         ASSERT_EQ(responses.size(), 1u);
-        EXPECT_EQ(ErrorCode(responses[0]), "shutting_down");
+        EXPECT_EQ(responses[0].ErrorCode(), "shutting_down");
         EXPECT_EQ(service.GetPublishObserverCount(), 0u);
     }
 
     TEST_P(RunUntilTest, ADroppedServiceGivesTheObserverBackToo) {
         auto owner = MakeUnique<ControlService>();
         RegisterGameControl(*owner);
-        owner->Post(MakeRequest(1, "run_until", RunUntilParams(ConditionEvent("never"))), [](String) {});
+        owner->Post(MakeRequestText(1, "run_until", RunUntilParams(ConditionEvent("never"))), [](String) {});
         owner->Drain();
         ASSERT_EQ(owner->GetPublishObserverCount(), 1u);
 
@@ -562,11 +513,7 @@ namespace BECore::Tests {
 
     TEST_P(RunUntilTest, InsideABatchTheNextCallRunsAfterTheWait) {
         SetCounterAtFrame(2, 2);
-        Json calls = Json::array();
-        calls.push_back(Json{{"method", "run_until"}, {"params", RunUntilParams(ConditionPointer("/state/counter", 2), 5)}});
-        calls.push_back(Json{{"method", "get_state"}});
-        Json params = Json::object();
-        params["calls"] = calls;
+        const String params = Format(R"({{"calls":[{{"method":"run_until","params":{}}},{{"method":"get_state"}}]}})", RunUntilParams(ConditionPointer("/state/counter", "2"), 5));
 
         Post(1, "batch", params);
         Post(2, "ping");
@@ -574,26 +521,22 @@ namespace BECore::Tests {
         service.Drain();
 
         ASSERT_EQ(responses.size(), 2u);
-        const Json* results = FindJsonMember(Require(Result(0)), "results");
-        ASSERT_NE(results, nullptr);
-        ASSERT_EQ(results->size(), 2u);
-        const Json* waited = FindJsonMember((*results)[0], "result");
-        ASSERT_NE(waited, nullptr);
-        EXPECT_TRUE(GetJsonBool(*waited, "met").value_or(false));
-        EXPECT_EQ(GetJsonInt(*waited, "frames").value_or(-1), 2);
-        const Json* state = FindJsonMember(Require(FindJsonMember((*results)[1], "result")), "state");
-        ASSERT_NE(state, nullptr);
-        EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 2);
-        EXPECT_EQ(GetJsonInt(responses[1], "id").value_or(-1), 2);
+        const JsonView results = MemberOf(Result(0), "results");
+        ASSERT_TRUE(results.IsArray());
+        ASSERT_EQ(results.Size(), 2u);
+        const JsonView waited = MemberOf(ItemAt(results, 0), "result");
+        ASSERT_TRUE(waited.IsObject());
+        EXPECT_TRUE(BoolOf(waited, "met").value_or(false));
+        EXPECT_EQ(IntOf(waited, "frames").value_or(-1), 2);
+        const JsonView state = MemberOf(MemberOf(ItemAt(results, 1), "result"), "state");
+        ASSERT_TRUE(state.IsObject());
+        EXPECT_EQ(IntOf(state, "counter").value_or(-1), 2);
+        EXPECT_EQ(responses[1].IdText(), "2");
         EXPECT_EQ(CoreManager::GetTime().GetFrameCount(), 2u);
     }
 
     TEST_P(RunUntilTest, AStepAfterARunUntilInsideABatchWaitsForExactlyItsFrames) {
-        Json calls = Json::array();
-        calls.push_back(Json{{"method", "run_until"}, {"params", RunUntilParams(ConditionPointer("/state/counter", 9), 2)}});
-        calls.push_back(Json{{"method", "step"}, {"params", Json{{"frames", 3}}}});
-        Json params = Json::object();
-        params["calls"] = calls;
+        const String params = Format(R"({{"calls":[{{"method":"run_until","params":{}}},{{"method":"step","params":{{"frames":3}}}}]}})", RunUntilParams(ConditionPointer("/state/counter", "9"), 2));
 
         Post(1, "batch", params);
         const Vector<FrameKind> kinds = RunFrames(1);
@@ -606,42 +549,43 @@ namespace BECore::Tests {
     }
 
     TEST_P(RunUntilTest, InvalidConditionsAndLimitsAreInvalidParamsAndNothingRuns) {
-        const Vector<Json> bad = {
-            Json::object(),
-            Json{{"condition", 1}},
-            Json{{"condition", Json::object()}},
-            Json{{"condition", Json{{"pointer", "/a"}}}},
-            Json{{"condition", Json{{"pointer", 1}, {"equals", 1}}}},
-            Json{{"condition", Json{{"pointer", "a"}, {"equals", 1}}}},
-            Json{{"condition", Json{{"pointer", "/a~"}, {"equals", 1}}}},
-            Json{{"condition", Json{{"pointer", "/a~2"}, {"equals", 1}}}},
-            Json{{"condition", Json{{"pointer", "/a"}, {"equals", 1}, {"extra", 1}}}},
-            Json{{"condition", Json{{"pointer", "/a"}, {"equals", 1}, {"versionMoved", true}}}},
-            Json{{"condition", Json{{"versionMoved", false}}}},
-            Json{{"condition", Json{{"versionMoved", true}, {"equals", 1}}}},
-            Json{{"condition", Json{{"event", "x"}}}},
-            Json{{"condition", Json{{"event", Json{{"name", ""}}}}}},
-            Json{{"condition", Json{{"event", Json{{"name", "x"}, {"equal", 1}}}}}},
-            Json{{"condition", Json{{"event", Json{{"name", "x"}, {"other", 1}}}}}},
-            Json{{"condition", ConditionVersionMoved()}, {"maxFrames", 0}},
-            Json{{"condition", ConditionVersionMoved()}, {"maxFrames", 1.5}},
-            Json{{"condition", ConditionVersionMoved()}, {"maxFrames", "3"}},
-            Json{{"condition", ConditionVersionMoved()}, {"maxFrames", static_cast<int64_t>(kMaxStepFrames) + 1}},
-            Json{{"condition", ConditionEvent("x")}, {"maxFrames", 0}},
-            Json{{"condition", ConditionVersionMoved()}, {"dt", -1}},
-            Json{{"condition", ConditionVersionMoved()}, {"dt", 1.0}},
-            Json{{"condition", ConditionVersionMoved()}, {"dt", "x"}},
+        const String moved = ConditionVersionMoved();
+        const Vector<String> bad = {
+            "{}",
+            R"({"condition":1})",
+            R"({"condition":{}})",
+            R"({"condition":{"pointer":"/a"}})",
+            R"({"condition":{"pointer":1,"equals":1}})",
+            R"({"condition":{"pointer":"a","equals":1}})",
+            R"({"condition":{"pointer":"/a~","equals":1}})",
+            R"({"condition":{"pointer":"/a~2","equals":1}})",
+            R"({"condition":{"equals":1,"extra":1,"pointer":"/a"}})",
+            R"({"condition":{"equals":1,"pointer":"/a","versionMoved":true}})",
+            R"({"condition":{"versionMoved":false}})",
+            R"({"condition":{"equals":1,"versionMoved":true}})",
+            R"({"condition":{"event":"x"}})",
+            R"({"condition":{"event":{"name":""}}})",
+            R"({"condition":{"event":{"equal":1,"name":"x"}}})",
+            R"({"condition":{"event":{"name":"x","other":1}}})",
+            Format(R"({{"condition":{},"maxFrames":0}})", moved),
+            Format(R"({{"condition":{},"maxFrames":1.5}})", moved),
+            Format(R"({{"condition":{},"maxFrames":"3"}})", moved),
+            Format(R"({{"condition":{},"maxFrames":{}}})", moved, static_cast<int64_t>(kMaxStepFrames) + 1),
+            Format(R"({{"condition":{},"maxFrames":0}})", ConditionEvent("x")),
+            Format(R"({{"condition":{},"dt":-1}})", moved),
+            Format(R"({{"condition":{},"dt":1.0}})", moved),
+            Format(R"({{"condition":{},"dt":"x"}})", moved),
         };
 
         int64_t id = 0;
-        for (const Json& params : bad) {
+        for (const String& params : bad) {
             Post(++id, "run_until", params);
         }
         service.Drain();
 
         ASSERT_EQ(responses.size(), bad.size());
         for (size_t i = 0; i < bad.size(); ++i) {
-            EXPECT_EQ(ErrorCode(responses[i]), "invalid_params") << DumpJson(bad[i]).c_str();
+            EXPECT_EQ(responses[i].ErrorCode(), "invalid_params") << bad[i].c_str();
         }
         EXPECT_FALSE(service.IsStepDue());
         EXPECT_EQ(service.GetPublishObserverCount(), 0u);

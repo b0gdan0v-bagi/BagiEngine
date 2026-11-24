@@ -1,9 +1,9 @@
 #include <BECore/Control/ControlParams.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/ReplayTestGame.h>
 #include <BECore/Time/Time.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/ControlledCalls.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/JsonDoc.h>
@@ -49,11 +49,6 @@ namespace BECore::Tests {
 
             static ReplayTestGame& Game() {
                 return *GameManager::GetInstance().GetActive()->Cast<ReplayTestGame>();
-            }
-
-            static Json Params(StringView text) {
-                auto parsed = ParseJson(text);
-                return parsed ? std::move(*parsed) : Json();
             }
 
             /// One frame of game time on the recorded game, the way an application loop would pass it
@@ -298,20 +293,20 @@ namespace BECore::Tests {
         const ReplayStep result = Play(player, fresh, false);
         ASSERT_FALSE(result.has_value());
 
-        const auto parsed = ParseJson(ReplayMismatchText(result.error()));
-        ASSERT_TRUE(parsed.has_value());
-        const Json& answer = *parsed;
+        const JsonDoc parsed(ReplayMismatchText(result.error()));
+        ASSERT_TRUE(parsed.IsParsed());
+        const JsonView answer = parsed.Root();
 
-        EXPECT_EQ(GetJsonInt(answer, "index"), 3);
-        EXPECT_EQ(GetJsonInt(answer, "line"), 5);
-        EXPECT_EQ(GetJsonString(answer, "kind"), "refused");
-        const Json* entry = FindJsonMember(answer, "entry");
-        ASSERT_NE(entry, nullptr);
-        EXPECT_EQ(GetJsonString(*entry, "op"), "action");
-        const Json* error = FindJsonMember(answer, "error");
-        ASSERT_NE(error, nullptr);
-        EXPECT_EQ(GetJsonString(*error, "code"), "illegal_action");
-        EXPECT_EQ(FindJsonMember(answer, "expected"), nullptr);
+        EXPECT_EQ(IntOf(answer, "index"), 3);
+        EXPECT_EQ(IntOf(answer, "line"), 5);
+        EXPECT_EQ(StringOf(answer, "kind"), "refused");
+        const JsonView entry = MemberOf(answer, "entry");
+        ASSERT_TRUE(entry.IsObject());
+        EXPECT_EQ(StringOf(entry, "op"), "action");
+        const JsonView error = MemberOf(answer, "error");
+        ASSERT_TRUE(error.IsObject());
+        EXPECT_EQ(StringOf(error, "code"), "illegal_action");
+        EXPECT_FALSE(MemberOf(answer, "expected").IsValid());
     }
 
 }  // namespace BECore::Tests

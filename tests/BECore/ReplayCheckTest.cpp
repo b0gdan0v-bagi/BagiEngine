@@ -1,4 +1,3 @@
-#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Random/Rng.h>
 #include <BECore/ReplayTestGame.h>
@@ -59,11 +58,6 @@ namespace BECore::Tests {
 
             static ReplayTestGame& Game() {
                 return *GameManager::GetInstance().GetActive()->Cast<ReplayTestGame>();
-            }
-
-            static Json Params(StringView text) {
-                auto parsed = ParseJson(text);
-                return parsed ? std::move(*parsed) : Json();
             }
 
             static void Frame() {
