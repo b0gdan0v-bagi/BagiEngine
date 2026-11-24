@@ -10,18 +10,15 @@ namespace BECore::Tests {
         class LayoutStoreTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _directory = TestTempDirectory("LayoutStore");
-                std::error_code ec;
-                std::filesystem::remove_all(_directory, ec);
-                std::filesystem::create_directories(_directory, ec);
+                _directory = Path(TestTempDirectory("LayoutStore"));
+                MakeEmptyDirectory(_directory);
             }
 
             void TearDown() override {
-                std::error_code ec;
-                std::filesystem::remove_all(_directory, ec);
+                RemoveDirectory(_directory);
             }
 
-            std::filesystem::path _directory;
+            Path _directory;
         };
 
         String Joined(const Vector<String>& names) {
@@ -66,7 +63,7 @@ namespace BECore::Tests {
         LayoutStore store(_directory);
         const String text = "[Window][Viewport]\nPos=1,2\nSize=300,200\n\n[Docking][Data]\n";
         ASSERT_TRUE(store.Save("Wide", text).has_value());
-        EXPECT_TRUE(std::filesystem::exists(_directory / "layouts" / "Wide.ini"));
+        EXPECT_TRUE(PathExists(_directory / "layouts" / "Wide.ini"));
         const auto loaded = store.Load("Wide");
         ASSERT_TRUE(loaded.has_value());
         EXPECT_EQ(*loaded, text);
@@ -78,7 +75,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(store.Save("a", "first").has_value());
         ASSERT_TRUE(store.Save("a", "second").has_value());
         EXPECT_EQ(*store.Load("a"), "second");
-        EXPECT_FALSE(std::filesystem::exists(_directory / "layouts" / "a.ini.tmp"));
+        EXPECT_FALSE(PathExists(_directory / "layouts" / "a.ini.tmp"));
         EXPECT_EQ(Joined(store.List()), "a");
     }
 
@@ -93,7 +90,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(empty.error().detail.empty());
         EXPECT_FALSE(store.Exists("a"));
         EXPECT_TRUE(store.List().empty());
-        EXPECT_FALSE(std::filesystem::exists(_directory / "layouts"));
+        EXPECT_FALSE(PathExists(_directory / "layouts"));
     }
 
     TEST_F(LayoutStoreTest, AMissingLayoutIsNotFound) {
@@ -122,7 +119,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(store.Save("zeta", "x").has_value());
         ASSERT_TRUE(store.Save("alpha", "x").has_value());
         ASSERT_TRUE(store.Save("mid dle", "x").has_value());
-        const std::filesystem::path folder = _directory / "layouts";
+        const Path folder = _directory / "layouts";
         WriteFile(folder / "leftover.ini.tmp", "x");
         WriteFile(folder / "readme.txt", "x");
         WriteFile(folder / "bad.name.ini", "x");
@@ -154,7 +151,7 @@ namespace BECore::Tests {
         const auto removed = store.Delete("dir");
         ASSERT_FALSE(removed.has_value());
         EXPECT_EQ(removed.error().kind, LayoutErrorKind::WriteFailed);
-        EXPECT_TRUE(std::filesystem::exists(_directory / "layouts" / "dir.ini"));
+        EXPECT_TRUE(PathExists(_directory / "layouts" / "dir.ini"));
     }
 
     TEST_F(LayoutStoreTest, NameCacheReadsTheFolderOnceUntilInvalidated) {

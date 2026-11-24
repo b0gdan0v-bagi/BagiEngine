@@ -1,5 +1,4 @@
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <BECore/File/TextReader.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -44,11 +43,11 @@ namespace BECore::Tests {
             return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
         }
 
-        bool ReadWholeFile(const std::filesystem::path& path, String& text) {
-            if (path.empty()) {
+        bool ReadWholeFile(const Path& path, String& text) {
+            if (path.Empty()) {
                 return false;
             }
-            auto content = ReadTextFile(PathToUtf8(path));
+            auto content = ReadTextFile(path);
             if (!content) {
                 return false;
             }
@@ -88,22 +87,22 @@ namespace BECore::Tests {
 
         /// Every distinct `ICON_LC_*` token of the widget sources that is not in a `//` comment (the vendored header folder is skipped); false when a file cannot be read
         bool CollectWidgetIconTokens(Set<String>& tokens) {
-            const std::filesystem::path root = CoreManager::GetFileSystem().ResolvePath(kWidgetsPath);
-            if (root.empty()) {
+            const Path root = CoreManager::GetFileSystem().ResolvePath(kWidgetsPath);
+            if (root.Empty()) {
                 return false;
             }
-            std::error_code error;
-            const std::filesystem::recursive_directory_iterator finished;                                                         //-NoStd: a test walks the widget sources once, outside the file layer
-            for (std::filesystem::recursive_directory_iterator it(root, error); !error && it != finished; it.increment(error)) {  //-NoStd: see above
-                const std::filesystem::directory_entry& entry = *it;
-                if (!entry.is_regular_file() || (entry.path().extension() != ".cpp" && entry.path().extension() != ".h")) {
-                    continue;
+            bool readable = true;
+            const auto walked = WalkDirectory(root, WalkMode::Tree, [&](StringView relativePath, FileKind kind) {
+                const Path entry(relativePath);
+                if (kind != FileKind::File || (entry.Extension() != ".cpp" && entry.Extension() != ".h")) {
+                    return true;
                 }
-                if (entry.path().parent_path().filename() == "Icons") {
-                    continue;
+                if (entry.Parent().Filename() == "Icons") {
+                    return true;
                 }
                 String text;
-                if (!ReadWholeFile(entry.path(), text)) {
+                if (!ReadWholeFile(root / entry, text)) {
+                    readable = false;
                     return false;
                 }
                 for (size_t at = text.find(kIconTokenPrefix); at != String::npos; at = text.find(kIconTokenPrefix, at + 1)) {
@@ -121,8 +120,9 @@ namespace BECore::Tests {
                         tokens.insert(text.substr(at, end - at));
                     }
                 }
-            }
-            return !error;
+                return true;
+            });
+            return walked.has_value() && readable;
         }
 
         /// A context with no backend and the UI font as the editor builds it, beside a font of the icon file alone
