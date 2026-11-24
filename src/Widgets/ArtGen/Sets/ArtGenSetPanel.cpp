@@ -515,13 +515,13 @@ namespace BECore {
             }
         }
         auto& resources = CoreManager::GetResourceManager();
+        const Path root{StringView(session.GetGameRoot())};
         for (const ArtGenSetVariant& variant : job.variants) {
             if (FindThumb(row, variant.seed) != nullptr) {
                 continue;
             }
             Thumb thumb;
             thumb.seed = variant.seed;
-            const Path root{StringView(session.GetGameRoot())};
             const Path file = AbsoluteInSet(root, StringView(set.name), StringView(variant.file));
             const auto info = file.Empty() ? Optional<FileInfo>() : GetFileInfo(file);
             if (!info || info->kind != FileKind::File) {

@@ -1,11 +1,11 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
@@ -37,11 +37,6 @@ namespace BECore::Tests {
             Json params = Json::object();
             params["id"] = id;
             return params;
-        }
-
-        String PathText(const std::filesystem::path& path) {
-            const std::string text = path.generic_string();  //-NoStd: the text of a std::filesystem::path
-            return String(text.c_str(), text.size());
         }
 
         /// What the fake acceptors were called with, in order (a function pointer cannot capture, so the test reads it here)
@@ -172,10 +167,9 @@ namespace BECore::Tests {
         ArtGenSetSessionTest() : session([this] { return now; }) {}
 
         void SetUp() override {
-            _root = TestTempDirectory("artgen_set_session");
-            std::filesystem::remove_all(_root);
-            std::filesystem::create_directories(_root);
-            session.SetGameRoot(PathText(_root));
+            _root = Path(TestTempDirectory("artgen_set_session"));
+            MakeEmptyDirectory(_root);
+            session.SetGameRoot(_root.View());
             session.RegisterControl(service);
             session.SetAcceptor(&FakeAcceptor);
             session.SetSoundAcceptor(&FakeSoundAcceptor);
@@ -197,8 +191,7 @@ namespace BECore::Tests {
         }
 
         void TearDown() override {
-            std::error_code error;
-            std::filesystem::remove_all(_root, error);
+            RemoveDirectory(_root);
         }
 
         Json Call(StringView method, const Json& params = Json::object()) {
@@ -257,8 +250,8 @@ namespace BECore::Tests {
                     Json image = Report(id);
                     image["seed"] = seed + i;
                     image["kind"] = ToStdString(kind);
-                    image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.{}", PathText(_root), outDir, name, seed + i, extension));
-                    image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", PathText(_root), outDir, name, seed + i));
+                    image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.{}", _root.View(), outDir, name, seed + i, extension));
+                    image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", _root.View(), outDir, name, seed + i));
                     Call("artgen_image", image);
                 }
             }
@@ -279,8 +272,8 @@ namespace BECore::Tests {
             for (int64_t i = 0; i < images; ++i) {
                 Json image = Report(id);
                 image["seed"] = seed + i;
-                image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.png", PathText(_root), outDir, name, seed + i));
-                image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", PathText(_root), outDir, name, seed + i));
+                image["path"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.png", _root.View(), outDir, name, seed + i));
+                image["provenance"] = ToStdString(Format("{}/artgen/out/{}/{}_{}.artgen.json", _root.View(), outDir, name, seed + i));
                 Call("artgen_image", image);
             }
             Json done = Report(id);
@@ -303,9 +296,9 @@ namespace BECore::Tests {
             for (const ArtGenSetJob& job : Require(session.FindSet(set)).jobs) {
                 for (const ArtGenSetVariant& variant : job.variants) {
                     for (const String& file : {variant.file, variant.provenance}) {
-                        const std::filesystem::path path = AbsoluteInSet(_root, set, file);
-                        std::filesystem::create_directories(path.parent_path());
-                        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(path), "x").has_value());
+                        const Path path = AbsoluteInSet(_root, set, file);
+                        MakeDirectory(path.Parent());
+                        ASSERT_TRUE(WriteFileAtomically(path, "x").has_value());
                     }
                 }
             }
@@ -385,7 +378,7 @@ namespace BECore::Tests {
 
         /// The manifest as it is on disk now
         ArtGenSet OnDisk(StringView set) const {
-            const auto text = ReadTextFile(PathToUtf8(ManifestPath(_root, set)));
+            const auto text = ReadTextFile(ManifestPath(_root, set));
             return Require(ArtGenSetFromJson(Require(ParseJson(Require(text)))));
         }
 
@@ -397,7 +390,7 @@ namespace BECore::Tests {
         double now = 100.0;
         ControlService service;
         ArtGenSession session;
-        std::filesystem::path _root;
+        Path _root;
 
     private:
         int64_t _nextId = 0;
@@ -649,7 +642,7 @@ namespace BECore::Tests {
         ASSERT_NE(RequestOf(Poll()), nullptr);
 
         ArtGenSession restarted([this] { return now; });
-        restarted.SetGameRoot(PathText(_root));
+        restarted.SetGameRoot(_root.View());
         const ArtGenSet* set = restarted.FindSet("crash");
         ASSERT_NE(set, nullptr);
         EXPECT_EQ(set->jobs[0].state, ArtGenSetJobState::Done);
@@ -667,7 +660,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(Enqueue("keep", "a").has_value());
         ASSERT_NE(RequestOf(Poll()), nullptr);
         // The panel calls this at every switch of the run mode; a reload would turn the running job into Cancelled
-        session.SetGameRoot(PathText(_root));
+        session.SetGameRoot(_root.View());
         EXPECT_EQ(StateOf(Require(session.FindSet("keep")), 0), ArtGenSetJobState::Running);
     }
 
@@ -1085,8 +1078,8 @@ namespace BECore::Tests {
         for (size_t row = 0; row < 3; ++row) {
             EXPECT_EQ(gAccepted[row].name, names[row]);
             EXPECT_EQ(gAccepted[row].seed, seeds[row]);
-            EXPECT_EQ(gAccepted[row].path, Format("{}/artgen/out/pieces/{}/{}_{}.png", PathText(_root), names[row], names[row], seeds[row]));
-            EXPECT_EQ(gAccepted[row].provenance, Format("{}/artgen/out/pieces/{}/{}_{}.artgen.json", PathText(_root), names[row], names[row], seeds[row]));
+            EXPECT_EQ(gAccepted[row].path, Format("{}/artgen/out/pieces/{}/{}_{}.png", _root.View(), names[row], names[row], seeds[row]));
+            EXPECT_EQ(gAccepted[row].provenance, Format("{}/artgen/out/pieces/{}/{}_{}.artgen.json", _root.View(), names[row], names[row], seeds[row]));
             EXPECT_TRUE(gAccepted[row].image);
             EXPECT_FALSE(gAccepted[row].withNode);
         }
@@ -1103,11 +1096,11 @@ namespace BECore::Tests {
     }
 
     TEST_F(ArtGenSetSessionTest, ASetOfAGameWhoseRootHasANonAsciiNameKeepsRelativeFilesAndAcceptsAll) {
-        const std::filesystem::path parent = _root;
+        const Path parent = _root;
         _root = parent / "caf\xC3\xA9 game";
-        session.SetGameRoot(PathText(_root));
+        session.SetGameRoot(_root.View());
         ASSERT_TRUE(Enqueue("pieces", "rook: a rook\nknight: a knight").has_value());
-        ASSERT_TRUE(std::filesystem::exists(_root / "artgen" / "out" / "pieces" / "manifest.json"));
+        ASSERT_TRUE(PathExists(_root / "artgen" / "out" / "pieces" / "manifest.json"));
 
         RunAndPickAll("pieces");
         {
@@ -1125,11 +1118,11 @@ namespace BECore::Tests {
         ASSERT_NE(accepted, nullptr) << DumpJson(answer).c_str();
         EXPECT_EQ(accepted->size(), 2u);
         ASSERT_EQ(gAccepted.size(), 2u);
-        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/pieces/rook/rook_41.png", PathText(_root)));
+        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/pieces/rook/rook_41.png", _root.View()));
 
         ReloadFromDisk();
         EXPECT_NE(session.FindSet("pieces"), nullptr);
-        std::filesystem::remove_all(parent);
+        RemoveDirectory(parent);
     }
 
     TEST_F(ArtGenSetSessionTest, AcceptAllRefusesASetThatIsNotReadyAndChangesNothing) {
@@ -1168,7 +1161,7 @@ namespace BECore::Tests {
         params["set"] = "files";
 
         // The picked file of the last row is gone: the first two are not accepted either
-        std::filesystem::remove(AbsoluteInSet(_root, "files", "c/c_41.png"));
+        RemoveFileIfPresent(AbsoluteInSet(_root, "files", "c/c_41.png"));
         Json refused = Call("artgen_accept_set", params);
         EXPECT_EQ(ErrorCode(refused), "artgen_accept_failed");
         const String message = GetJsonString(Require(FindJsonMember(refused, "error")), "message").value_or(String());
@@ -1177,13 +1170,13 @@ namespace BECore::Tests {
         EXPECT_FALSE(OnDisk("files").jobs[0].accepted.has_value());
 
         // The provenance of a row is gone
-        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(AbsoluteInSet(_root, "files", "c/c_41.png")), "x").has_value());
-        std::filesystem::remove(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"));
+        ASSERT_TRUE(WriteFileAtomically(AbsoluteInSet(_root, "files", "c/c_41.png"), "x").has_value());
+        RemoveFileIfPresent(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"));
         EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_accept_failed");
         EXPECT_TRUE(gAccepted.empty());
 
         // No acceptor here
-        ASSERT_TRUE(WriteFileAtomically(PathToUtf8(AbsoluteInSet(_root, "files", "a/a_41.artgen.json")), "x").has_value());
+        ASSERT_TRUE(WriteFileAtomically(AbsoluteInSet(_root, "files", "a/a_41.artgen.json"), "x").has_value());
         session.SetAcceptor(nullptr);
         EXPECT_EQ(ErrorCode(Call("artgen_accept_set", params)), "artgen_accept_failed");
         session.SetAcceptor(&FakeAcceptor);
@@ -1475,7 +1468,7 @@ namespace BECore::Tests {
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_EQ(gAccepted[0].name, "a") << "the same name: the file is replaced";
         EXPECT_EQ(gAccepted[0].seed, kSetSeed);
-        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/live/a/a_{}.png", PathText(_root), kSetSeed));
+        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/live/a/a_{}.png", _root.View(), kSetSeed));
         const ArtGenSet disk = OnDisk("live");
         EXPECT_EQ(disk.jobs[0].pick, Optional<int64_t>(kSetSeed));
         EXPECT_EQ(disk.jobs[0].accepted->as, "a");
@@ -1537,7 +1530,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Require(session.FindSet("fail")).jobs[0].pick, Optional<int64_t>(kSetSeed + 1));
 
         gFailOn.clear();
-        std::filesystem::remove(AbsoluteInSet(_root, "fail", "a/a_40.png"));
+        RemoveFileIfPresent(AbsoluteInSet(_root, "fail", "a/a_40.png"));
         EXPECT_EQ(session.PickVariant("fail", "a", kSetSeed, &write), ArtGenSetEdit::WriteFailed);
         EXPECT_NE(write.error.find("is gone"), String::npos) << write.error.c_str();
         EXPECT_TRUE(gAccepted.empty()) << "the files are checked before the acceptor is asked";
@@ -2473,7 +2466,7 @@ namespace BECore::Tests {
         ASSERT_EQ(gMeasures[0].files.size(), 4u) << "the drafts that were not picked count as much as the picks";
         for (const char* const job : {"a", "b"}) {
             for (const int64_t seed : {kSetSeed, kSetSeed + 1}) {
-                const String file = Format("{}/artgen/out/framed/{}/{}_{}.png", PathText(_root), job, job, seed);
+                const String file = Format("{}/artgen/out/framed/{}/{}_{}.png", _root.View(), job, job, seed);
                 EXPECT_NE(std::find(gMeasures[0].files.begin(), gMeasures[0].files.end(), file), gMeasures[0].files.end()) << file.c_str();
             }
         }
@@ -2742,7 +2735,7 @@ namespace BECore::Tests {
         EXPECT_NE(refused("noframe", "knock").find("only an image set"), String::npos) << "a sound set cannot take a frame";
 
         EXPECT_EQ(session.GetSets().size(), setsBefore) << "a refusal queues nothing";
-        EXPECT_FALSE(std::filesystem::exists(_root / "artgen" / "out" / "fix"));
+        EXPECT_FALSE(PathExists(_root / "artgen" / "out" / "fix"));
     }
 
     TEST_F(ArtGenSetSessionTest, ArtgenEnqueueReadsFrameOfAndRefusesWhatItCannotTake) {
@@ -2869,7 +2862,7 @@ namespace BECore::Tests {
         ASSERT_NE(RequestOf(first), nullptr);
         EXPECT_EQ(FindJsonMember(*RequestOf(first), "reference"), nullptr);
         EXPECT_EQ(FindJsonMember((*FindJsonMember(Result(Call("artgen_state")), "sets"))[0], "reference"), nullptr);
-        const Json manifest = ParseJson(ReadTextFile(PathToUtf8(ManifestPath(_root, "plain"))).value()).value();
+        const Json manifest = ParseJson(ReadTextFile(ManifestPath(_root, "plain")).value()).value();
         EXPECT_TRUE(FindJsonMember(manifest, "reference")->is_null());
     }
 
@@ -3185,7 +3178,7 @@ namespace BECore::Tests {
         const uint32_t id = static_cast<uint32_t>(Require(GetJsonInt(*request, "id")));
         Json image = Report(id);
         image["seed"] = 6000;
-        image["path"] = ToStdString(Format("{}/artgen/out/m/a/a_6000.png", PathText(_root)));
+        image["path"] = ToStdString(Format("{}/artgen/out/m/a/a_6000.png", _root.View()));
         Call("artgen_image", image);
         Json done = Report(id);
         done["status"] = "failed";
@@ -3229,7 +3222,7 @@ namespace BECore::Tests {
         ASSERT_NE(RequestOf(Poll()), nullptr);
 
         ArtGenSession restarted([this] { return now; });
-        restarted.SetGameRoot(PathText(_root));
+        restarted.SetGameRoot(_root.View());
         const ArtGenSet* set = restarted.FindSet("m");
         ASSERT_NE(set, nullptr);
         EXPECT_FALSE(restarted.IsBusy());
@@ -3397,7 +3390,7 @@ namespace BECore::Tests {
         ASSERT_EQ(gAccepted.size(), 1u);
         EXPECT_EQ(gAccepted[0].name, "queen");
         EXPECT_EQ(gAccepted[0].seed, kSetSeed) << "the variant dropped, not the row's pick";
-        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/framed/a/a_{}.png", PathText(_root), kSetSeed));
+        EXPECT_EQ(gAccepted[0].path, Format("{}/artgen/out/framed/a/a_{}.png", _root.View(), kSetSeed));
         EXPECT_FALSE(gAccepted[0].withNode);
         ASSERT_EQ(gPlans.size(), 1u);
         EXPECT_EQ(gPlans[0].frame, Optional<ArtGenImageFrame>(kFakeFrame)) << "a pawn stays smaller than a king";
@@ -3477,7 +3470,7 @@ namespace BECore::Tests {
         EXPECT_EQ(code("bad", "a", kSetSeed, ""), "artgen_accept_failed");
         EXPECT_TRUE(gAccepted.empty());
 
-        std::filesystem::remove(AbsoluteInSet(_root, "bad", "a/a_40.png"));
+        RemoveFileIfPresent(AbsoluteInSet(_root, "bad", "a/a_40.png"));
         const auto gone = session.AcceptSetVariant("bad", "a", kSetSeed, "x");
         ASSERT_FALSE(gone.has_value());
         EXPECT_EQ(gone.error().code, "artgen_accept_failed");

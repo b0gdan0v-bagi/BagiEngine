@@ -1,7 +1,7 @@
 #include <BECore/File/File.h>
-#include <BECore/File/FilePath.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetStore.h>
 #include <gtest/gtest.h>
 
@@ -28,34 +28,27 @@ namespace BECore::Tests {
             return set;
         }
 
-        String GenericOf(const std::filesystem::path& path) {
-            const std::string text = path.generic_string();  //-NoStd: the text of a std::filesystem::path
-            return String(text.c_str(), text.size());
-        }
-
         class ArtGenSetStoreTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _root = TestTempDirectory("artgen_set_store");
-                std::filesystem::remove_all(_root);
-                std::filesystem::create_directories(_root);
+                _root = Path(TestTempDirectory("artgen_set_store"));
+                MakeEmptyDirectory(_root);
             }
 
             void TearDown() override {
-                std::error_code error;
-                std::filesystem::remove_all(_root, error);
+                RemoveDirectory(_root);
             }
 
-            static void Write(const std::filesystem::path& file, StringView text) {
-                ASSERT_TRUE(WriteFileAtomically(PathToUtf8(file), text).has_value());
+            static void Write(const Path& file, StringView text) {
+                ASSERT_TRUE(WriteFileAtomically(file, text).has_value());
             }
 
-            static String Read(const std::filesystem::path& file) {
-                auto text = ReadTextFile(PathToUtf8(file));
+            static String Read(const Path& file) {
+                auto text = ReadTextFile(file);
                 return text ? *text : String("<unreadable>");
             }
 
-            std::filesystem::path _root;
+            Path _root;
         };
 
     }  // namespace
@@ -93,7 +86,7 @@ namespace BECore::Tests {
     TEST_F(ArtGenSetStoreTest, WriteRefusesABadSetName) {
         const ArtGenSet set = MakeSet("../escape", "2026-11-17T10:00:00Z");
         EXPECT_FALSE(WriteManifest(_root, set).has_value());
-        EXPECT_FALSE(std::filesystem::exists(_root / "artgen"));
+        EXPECT_FALSE(PathExists(_root / "artgen"));
     }
 
     TEST_F(ArtGenSetStoreTest, NothingToLoadWithoutTheFolder) {
@@ -139,7 +132,7 @@ namespace BECore::Tests {
         Write(ManifestPath(_root, "garbage"), "{not json");
         Write(ManifestPath(_root, "newer"), R"({"manifest": 2, "set": "newer"})");
         Write(ManifestPath(_root, "wrongtype"), R"({"manifest": 1, "set": "wrongtype", "kind": "image", "count": "four", "seed": 1, "jobs": []})");
-        ASSERT_TRUE(std::filesystem::create_directories(SetFolder(_root, "no_manifest")));
+        MakeDirectory(SetFolder(_root, "no_manifest"));
 
         const Vector<ArtGenSet> loaded = LoadSets(_root);
         ASSERT_EQ(loaded.size(), 1u);
@@ -150,12 +143,12 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetStoreTest, TheFoldersNameIsTheSetsName) {
         ASSERT_TRUE(WriteManifest(_root, MakeSet("original", "2026-11-17T10:00:00Z")).has_value());
-        std::filesystem::rename(SetFolder(_root, "original"), SetFolder(_root, "moved"));
+        ASSERT_TRUE(RenameFile(SetFolder(_root, "original"), SetFolder(_root, "moved")).has_value());
         const Vector<ArtGenSet> loaded = LoadSets(_root);
         ASSERT_EQ(loaded.size(), 1u);
         EXPECT_EQ(loaded[0].name, "moved");
 
-        std::filesystem::rename(SetFolder(_root, "moved"), SetFolder(_root, "not a name"));
+        ASSERT_TRUE(RenameFile(SetFolder(_root, "moved"), SetFolder(_root, "not a name")).has_value());
         EXPECT_TRUE(LoadSets(_root).empty());
     }
 
@@ -172,7 +165,7 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetStoreTest, AFileThatVanishedStaysInTheManifest) {
         ASSERT_TRUE(WriteManifest(_root, MakeSet("knights", "2026-11-17T10:00:00Z")).has_value());
-        ASSERT_FALSE(std::filesystem::exists(AbsoluteInSet(_root, "knights", "knight/knight_100.png")));
+        ASSERT_FALSE(PathExists(AbsoluteInSet(_root, "knights", "knight/knight_100.png")));
 
         const Vector<ArtGenSet> loaded = LoadSets(_root);
         ASSERT_EQ(loaded.size(), 1u);
@@ -188,7 +181,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(WriteManifest(_root, MakeSet("knights", "2026-11-17T10:00:00Z")).has_value());
         EXPECT_FALSE(NewSetFolderFree(_root, "knights"));
         // A folder with no manifest, or a broken one, is taken too: nothing in it is overwritten
-        ASSERT_TRUE(std::filesystem::create_directories(SetFolder(_root, "empty")));
+        MakeDirectory(SetFolder(_root, "empty"));
         EXPECT_FALSE(NewSetFolderFree(_root, "empty"));
     }
 
@@ -209,7 +202,7 @@ namespace BECore::Tests {
 
     TEST_F(ArtGenSetStoreTest, APathOutsideTheFolderIsKeptAsGiven) {
         const Path folder = SetFolder(_root, "knights");
-        const String outside = GenericOf(_root / "elsewhere" / "x.png");
+        const String outside((_root / "elsewhere" / "x.png").View());
         EXPECT_EQ(RelativeToSet(folder, outside), outside);
         EXPECT_EQ(RelativeToSet(folder, "x/y.png"), "x/y.png");
         const String sibling(Path(folder.Parent() / "other" / "x.png").View());
@@ -224,7 +217,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(AbsoluteInSet(_root, "knights", "../other/x.png").Empty());
         EXPECT_TRUE(AbsoluteInSet(_root, "knights", "a/../../x.png").Empty());
 
-        const String absolute = GenericOf(_root / "elsewhere" / "x.png");
+        const String absolute((_root / "elsewhere" / "x.png").View());
         EXPECT_EQ(AbsoluteInSet(_root, "knights", absolute), Path(_root / "elsewhere" / "x.png"));
     }
 
