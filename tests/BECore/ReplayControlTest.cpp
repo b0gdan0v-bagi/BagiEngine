@@ -46,8 +46,7 @@ namespace BECore::Tests {
                 GameManager::GetInstance().Shutdown();
                 CoreManager::GetCommandLine().Set(_arguments);
                 CoreManager::GetTime().Reset();
-                std::error_code ignored;
-                std::filesystem::remove(_path, ignored);
+                RemoveFileIfPresent(_path);
             }
 
             static Json Params(StringView text) {
@@ -56,7 +55,7 @@ namespace BECore::Tests {
             }
 
             [[nodiscard]] String PathText() const {
-                return FromStdString(_path.string());
+                return String(_path.View());
             }
 
             [[nodiscard]] Json PathParams() const {
@@ -101,7 +100,7 @@ namespace BECore::Tests {
                 CoreManager::GetCommandLine().Set(list);
             }
 
-            std::filesystem::path _path;
+            Path _path;
             Vector<String> _arguments;
         };
 
@@ -177,7 +176,7 @@ namespace BECore::Tests {
         Json badTitle = PathParams();
         badTitle["title"] = 5;
         EXPECT_EQ(ErrorCode(Call("record_start", badTitle)), "invalid_params");
-        const String missing = FromStdString((_path / "no" / "such" / "folder.jsonl").string());
+        const String missing = String((_path / "no" / "such" / "folder.jsonl").View());
         Json unwritable = Json::object();
         unwritable["path"] = MakeJsonString(missing);
         EXPECT_EQ(ErrorCode(Call("record_start", unwritable)), "invalid_params");
@@ -196,7 +195,7 @@ namespace BECore::Tests {
         ASSERT_EQ(GameManager::GetInstance().GetActive()->GetName(), "FakePlain"_intern);
         EXPECT_EQ(ErrorCode(Call("record_start", PathParams())), "not_controllable");
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
-        EXPECT_FALSE(std::filesystem::exists(_path));
+        EXPECT_FALSE(PathExists(_path));
     }
 
     TEST_F(ReplayControlTest, RecordStopWithoutARecordingIsInvalidParams) {
@@ -243,7 +242,7 @@ namespace BECore::Tests {
         StartRecordingFromCommandLine();
 
         EXPECT_FALSE(SessionRecorder::GetInstance().IsRecording());
-        EXPECT_FALSE(std::filesystem::exists(_path));
+        EXPECT_FALSE(PathExists(_path));
     }
 
     // The default game of the test binary is the first registered one, which this test does not choose: it holds the flag to what that game can do
@@ -476,7 +475,7 @@ namespace BECore::Tests {
         PostReplay(1, Params(R"({})"));
         PostReplay(2, Params(R"({"path":""})"));
         Json missing = Json::object();
-        missing["path"] = MakeJsonString(FromStdString((_path / "no" / "such.jsonl").string()));
+        missing["path"] = MakeJsonString(String((_path / "no" / "such.jsonl").View()));
         PostReplay(3, missing);
         WriteFile("{\"replay\":1,\"game\":\"ReplayTest\",\"engine\":\"x\"}\n{\"op\":\"jump\",\"params\":{},\"gap\":{\"frames\":0,\"seconds\":0}}\n");
         PostReplay(4, PathParams());
@@ -497,9 +496,7 @@ namespace BECore::Tests {
     TEST_F(ReplayPlayControlTest, AFileOverTheLimitIsRefusedByItsSizeBeforeItIsRead) {
         constexpr uintmax_t kOverTheLimit = uintmax_t{64} * 1024 * 1024 + 1;
         WriteFile("");
-        std::error_code error;
-        std::filesystem::resize_file(_path, kOverTheLimit, error);  // sparse: nothing of it is written
-        ASSERT_FALSE(error) << error.message();
+        ResizeFile(_path, kOverTheLimit);  // sparse: nothing of it is written
         PostReplay(1, PathParams());
         _service.Drain();
 
@@ -512,14 +509,13 @@ namespace BECore::Tests {
 
     TEST_F(ReplayPlayControlTest, AReplayIsRefusedWhileARecordingRunsAndForAGameThatIsNotReplayable) {
         RecordSession();
-        ASSERT_TRUE(SessionRecorder::GetInstance().Start(FromStdString((_path.parent_path() / "replay_other.jsonl").string()), *GameManager::GetInstance().GetActive()).has_value());
+        ASSERT_TRUE(SessionRecorder::GetInstance().Start((_path.Parent() / "replay_other.jsonl").View(), *GameManager::GetInstance().GetActive()).has_value());
         PostReplay(1, PathParams());
         _service.Drain();
         ASSERT_EQ(_responses.size(), 1u);
         EXPECT_EQ(ErrorCode(_responses[0]), "invalid_params");
         SessionRecorder::GetInstance().Stop();
-        std::error_code ignored;
-        std::filesystem::remove(_path.parent_path() / "replay_other.jsonl", ignored);
+        RemoveFileIfPresent(_path.Parent() / "replay_other.jsonl");
 
         GameManager::GetInstance().SwitchTo("FakeControllable"_intern);
         PostReplay(2, PathParams());
