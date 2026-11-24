@@ -1,8 +1,8 @@
 #include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/StrictText.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <cmath>
 
 namespace BECore {
 
@@ -342,110 +342,14 @@ namespace BECore {
         StoreError(_errors, path, message, line);
     }
 
-    namespace {
-
-        constexpr char kPlus = '+';
-        constexpr char kMinus = '-';
-
-        bool IsAsciiSpace(char c) {
-            return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-        }
-
-        StringView TrimAsciiSpaces(StringView text) {
-            while (!text.empty() && IsAsciiSpace(text.front())) {
-                text.remove_prefix(1);
-            }
-            while (!text.empty() && IsAsciiSpace(text.back())) {
-                text.remove_suffix(1);
-            }
-            return text;
-        }
-
-        // A leading '+' is accepted (pugixml takes one); std::from_chars does not take one
-        StringView DropPlusSign(StringView text) {
-            if (!text.empty() && text.front() == kPlus) {
-                text.remove_prefix(1);
-                // "+-1" and "++1" stay malformed
-                if (text.empty() || text.front() == kPlus || text.front() == kMinus) {
-                    return {};
-                }
-            }
-            return text;
-        }
-
-        enum class ParseStatus { Ok, Malformed, OutOfRange };
-
-        ParseStatus ParseBoolText(StringView text, bool& outValue) {
-            text = TrimAsciiSpaces(text);
-            if (text == "true" || text == "1") {
-                outValue = true;
-                return ParseStatus::Ok;
-            }
-            if (text == "false" || text == "0") {
-                outValue = false;
-                return ParseStatus::Ok;
-            }
-            return ParseStatus::Malformed;
-        }
-
-        template <typename T>
-        ParseStatus ParseNumberText(StringView text, T& outValue) {
-            text = DropPlusSign(TrimAsciiSpaces(text));
-            if (text.empty()) {
-                return ParseStatus::Malformed;
-            }
-
-            T parsed{};
-            const char* const end = text.data() + text.size();
-            const auto result = std::from_chars(text.data(), end, parsed);
-            if (result.ec == std::errc::invalid_argument || result.ptr != end) {
-                return ParseStatus::Malformed;
-            }
-            if (result.ec == std::errc::result_out_of_range) {
-                return ParseStatus::OutOfRange;
-            }
-            if constexpr (std::is_floating_point_v<T>) {
-                // "inf" and "nan" are text, not numbers of a config
-                if (!std::isfinite(parsed)) {
-                    return ParseStatus::Malformed;
-                }
-            }
-            outValue = parsed;
-            return ParseStatus::Ok;
-        }
-
-        template <typename T>
-        ParseStatus ParseText(StringView text, T& outValue) {
-            if constexpr (std::is_same_v<T, bool>) {
-                return ParseBoolText(text, outValue);
-            } else {
-                return ParseNumberText(text, outValue);
-            }
-        }
-
-        template <typename T>
-        constexpr const char* KindName() {
-            if constexpr (std::is_same_v<T, bool>) {
-                return "boolean";
-            } else if constexpr (std::is_integral_v<T>) {
-                return "integer";
-            } else {
-                return "number";
-            }
-        }
-
-    }  // namespace
-
     template <typename T>
     bool XmlDeserializer::ApplyStrictText(StringView name, StringView text, T& outValue) {
-        const ParseStatus status = ParseText(text, outValue);
-        if (status == ParseStatus::Ok) {
+        const StrictText::Status status = StrictText::Parse(text, outValue);
+        if (status == StrictText::Status::Ok) {
             return true;
         }
-        const char* const reason = status == ParseStatus::OutOfRange ? " (out of range)" : "";
-        const StringView quoted = CutText(text, ReaderLimits::kMaxQuotedValueBytes);
-        const char* const cut = quoted.size() < text.size() ? "..." : "";
-        ReportError(name, Format("Invalid {} value '{}{}'{}", KindName<T>(), quoted, cut, reason));
+        const StringView shown = CutText(text, ReaderLimits::kMaxQuotedValueBytes);
+        ReportError(name, StrictText::InvalidValueMessage<T>(text, shown, status));
         return false;
     }
 

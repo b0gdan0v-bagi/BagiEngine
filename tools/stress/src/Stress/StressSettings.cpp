@@ -4,7 +4,11 @@ namespace BECore::Stress {
 
     namespace {
 
+#ifdef STRESS_WITH_RMLUI
+        constexpr StringView kSceneNames[] = {"sprites", "entities", "ui", "rmlui"};
+#else
         constexpr StringView kSceneNames[] = {"sprites", "entities", "ui"};
+#endif
         constexpr StringView kLanguageNames[] = {"en", "ru"};
         constexpr StringView kMeasureNames[] = {"work", "cpu"};
 

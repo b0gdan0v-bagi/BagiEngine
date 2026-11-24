@@ -144,10 +144,21 @@ namespace BECore::Tests {
     }
 
     TEST(ControlSettingsTest, PortThatIsNotAPortIsAnError) {
-        for (const char* value : {"abc", "70000", "65536", "-1", "+80", "", "80x", " 80", "8.5"}) {
+        for (const char* value : {"abc", "70000", "65536", "-1", "", "80x", "8.5"}) {
             const String arg = Format("--control-port={}", value);
             SCOPED_TRACE(arg.c_str());
             ExpectInvalid(Resolve({"--control", arg}));
+        }
+    }
+
+    TEST(ControlSettingsTest, ThePortFlagReadsAsTheConfigAttributeDoes) {
+        // One strict grammar for both sources: a leading `+` and surrounding spaces are fine
+        for (const char* value : {"+80", " 80"}) {
+            const String arg = Format("--control-port={}", value);
+            SCOPED_TRACE(arg.c_str());
+            const auto settings = Resolve({"--control", arg});
+            ASSERT_TRUE(settings.has_value());
+            EXPECT_EQ(settings->port, 80);
         }
     }
 
@@ -245,7 +256,7 @@ namespace BECore::Tests {
     }
 
     TEST(ControlSettingsTest, ManualClockFlagLookalikesAreIgnored) {
-        const auto settings = Resolve({"--control", "--manual-clock=1", "--manual-clocks", "manual-clock"});
+        const auto settings = Resolve({"--control", "--manual-clocks", "--manual-clock-x=1", "manual-clock"});
         ASSERT_TRUE(settings.has_value());
         EXPECT_FALSE(settings->manualClock);
     }
@@ -307,7 +318,7 @@ namespace BECore::Tests {
     }
 
     TEST(ControlSettingsTest, HeadlessFlagLookalikesAreIgnored) {
-        const auto settings = Resolve({"--control", "--headless=1", "--headlessly", "headless"});
+        const auto settings = Resolve({"--control", "--headlessly", "--headless-x=1", "headless"});
         ASSERT_TRUE(settings.has_value());
         EXPECT_FALSE(settings->headless);
     }
@@ -365,7 +376,7 @@ namespace BECore::Tests {
     }
 
     TEST(ControlSettingsTest, ReplayFlagLookalikesAreIgnored) {
-        const auto settings = Resolve({"--control", "--manual-clock", "--replays=x", "--replay-exit=1", "--replay-exits", "replay=x"});
+        const auto settings = Resolve({"--control", "--manual-clock", "--replays=x", "--replay-exits", "replay=x"});
         ASSERT_TRUE(settings.has_value());
         EXPECT_TRUE(settings->replayPath.empty());
         EXPECT_FALSE(settings->replayExit);
@@ -440,7 +451,7 @@ namespace BECore::Tests {
     }
 
     TEST(ControlSettingsTest, ADensityThatIsNotANumberIsAnError) {
-        for (const char* value : {"--density=fast", "--density=2x", "--density= 2", "--density=+2", "--density=nan", "--density=inf", "--density=-1", "--density=0"}) {
+        for (const char* value : {"--density=fast", "--density=2x", "--density=nan", "--density=inf", "--density=-1", "--density=0"}) {
             SCOPED_TRACE(value);
             ExpectInvalid(Resolve({"--control", "--headless", value}));
         }
@@ -471,12 +482,12 @@ namespace BECore::Tests {
     TEST(ControlSettingsTest, TheMessageNamesTheFlagAtFault) {
         const auto tooSmall = Resolve({"--control", "--headless", "--window=10x500"});
         ASSERT_FALSE(tooSmall.has_value());
-        EXPECT_NE(tooSmall.error().message.find("--window="), String::npos) << tooSmall.error().message.c_str();
+        EXPECT_NE(tooSmall.error().message.find("--window"), String::npos) << tooSmall.error().message.c_str();
         EXPECT_NE(tooSmall.error().message.find("width"), String::npos) << tooSmall.error().message.c_str();
 
         const auto tooDense = Resolve({"--control", "--headless", "--density=9"});
         ASSERT_FALSE(tooDense.has_value());
-        EXPECT_NE(tooDense.error().message.find("--density="), String::npos) << tooDense.error().message.c_str();
+        EXPECT_NE(tooDense.error().message.find("--density"), String::npos) << tooDense.error().message.c_str();
     }
 
     TEST(ControlSettingsTest, WindowFlagLookalikesAreIgnored) {
@@ -484,6 +495,103 @@ namespace BECore::Tests {
         ASSERT_TRUE(settings.has_value());
         EXPECT_FALSE(settings->windowSize.has_value());
         EXPECT_FALSE(settings->density.has_value());
+    }
+
+    TEST(ControlSettingsTest, TheCommandLineOverridesTheFileFieldByField) {
+        const char* config = R"(<root control="true" controlPort="9000" manualClock="true" headless="true"/>)";
+
+        const auto untouched = Resolve({}, config);
+        ASSERT_TRUE(untouched.has_value());
+        EXPECT_TRUE(untouched->enabled);
+        EXPECT_EQ(untouched->port, 9000);
+        EXPECT_TRUE(untouched->manualClock);
+        EXPECT_TRUE(untouched->headless);
+
+        const auto port = Resolve({"--control-port=9100"}, config);
+        ASSERT_TRUE(port.has_value());
+        EXPECT_EQ(port->port, 9100);
+        EXPECT_TRUE(port->enabled);
+        EXPECT_TRUE(port->manualClock);
+        EXPECT_TRUE(port->headless);
+    }
+
+    TEST(ControlSettingsTest, ABooleanFlagCanSwitchOffWhatTheFileTurnedOn) {
+        const auto off = Resolve({"--control=false"}, R"(<root control="true"/>)");
+        ASSERT_TRUE(off.has_value());
+        EXPECT_FALSE(off->enabled);
+
+        const auto clockOff = Resolve({"--manual-clock=false"}, R"(<root control="true" manualClock="true"/>)");
+        ASSERT_TRUE(clockOff.has_value());
+        EXPECT_TRUE(clockOff->enabled);
+        EXPECT_FALSE(clockOff->manualClock);
+
+        const auto headlessOff = Resolve({"--headless=0"}, R"(<root control="true" headless="true"/>)");
+        ASSERT_TRUE(headlessOff.has_value());
+        EXPECT_FALSE(headlessOff->headless);
+    }
+
+    TEST(ControlSettingsTest, ABooleanFlagThatIsNotABooleanIsAnErrorNamingTheFlag) {
+        for (const char* flag : {"--control=maybe", "--control=", "--headless=yes", "--manual-clock=2"}) {
+            SCOPED_TRACE(flag);
+            const auto result = Resolve({flag});
+            ExpectInvalid(result);
+            EXPECT_NE(result.error().message.find(String(flag).substr(0, String(flag).find('='))), String::npos) << result.error().message.c_str();
+        }
+    }
+
+    TEST(ControlSettingsTest, ABadPortFlagIsAnErrorNamingTheFlag) {
+        for (const char* flag : {"--control-port=70000", "--control-port=abc", "--control-port"}) {
+            SCOPED_TRACE(flag);
+            const auto result = Resolve({"--control", flag});
+            ExpectInvalid(result);
+            EXPECT_NE(result.error().message.find("--control-port"), String::npos) << result.error().message.c_str();
+        }
+    }
+
+    TEST(ControlSettingsTest, ABareControlFlagIsOn) {
+        const auto settings = Resolve({"--control"}, R"(<root control="false"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->enabled);
+    }
+
+    TEST(ControlSettingsTest, AnEmptyReplayFileIsAnErrorNamingTheFlag) {
+        const auto result = Resolve({"--control", "--manual-clock", "--replay="});
+        ExpectInvalid(result);
+        EXPECT_NE(result.error().message.find("--replay"), String::npos) << result.error().message.c_str();
+    }
+
+    TEST(ControlSettingsTest, AFlagThatOnlyLooksLikeAControlFlagIsIgnored) {
+        const auto settings = Resolve({"--control-portal=1"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->enabled);
+        EXPECT_EQ(settings->port, kDefaultControlPort);
+    }
+
+    TEST(ControlSettingsTest, AFlagOfTheGameIsIgnoredAndSilent) {
+        const auto settings = Resolve({"--level=2", "--seed=3", "--editor"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->warnings.empty());
+    }
+
+    TEST(ControlSettingsTest, AFieldOfTheFileThatIsNoFlagStaysTheFiles) {
+        // `--type` and `--path` are names a game may use: they are not flags of the engine's config
+        const auto settings = Resolve({"--type=x", "--path=y", "--mode=Game"}, R"(<root control="false"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->warnings.empty());
+    }
+
+    TEST(ControlSettingsTest, AMistypedFlagIsAWarningWithAHint) {
+        const auto settings = Resolve({"--control", "--contol-port=9001"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_EQ(settings->port, kDefaultControlPort);
+        ASSERT_EQ(settings->warnings.size(), 1u);
+        EXPECT_NE(settings->warnings[0].errorMessage.find("--control-port"), String::npos) << settings->warnings[0].errorMessage.c_str();
+    }
+
+    TEST(ControlSettingsTest, ABadAttributeOfTheFileStopsBeforeTheFlagsAreRead) {
+        const auto result = Resolve({"--control-port=abc"}, R"(<root controlPort="70000"/>)");
+        ExpectInvalid(result);
+        EXPECT_NE(result.error().message.find("ApplicationConfig: controlPort:"), String::npos) << result.error().message.c_str();
     }
 
 }  // namespace BECore::Tests

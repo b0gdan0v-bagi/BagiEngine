@@ -130,6 +130,7 @@ namespace BECore {
 
         // The control fields stopped the start-up above; what is left is every other field (`mode`, `type`, `renderer`, `path`)
         LogDeserializeErrors("ApplicationConfig", load.errors, load.warnings);
+        LogDeserializeErrors("Command line", {}, controlSettings->warnings);
 
         if (load.config._taskFrameBudgetMs >= 0.0) {
             CoreManager::GetTaskManager().SetFrameBudget(std::chrono::duration_cast<TaskManager::Duration>(std::chrono::duration<double, std::milli>(load.config._taskFrameBudgetMs)));

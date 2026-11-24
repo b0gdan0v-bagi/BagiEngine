@@ -8,7 +8,12 @@
 
 namespace BECore::Stress {
 
+    /// `RmlUi` exists only in a build with the RmlUi host (STRESS_WITH_RMLUI, set by tools/stress/CMakeLists.txt); an `#if` cannot sit inside the macro's arguments
+#ifdef STRESS_WITH_RMLUI
+    CORE_ENUM(StressScene, uint8_t, Sprites, Entities, Ui, RmlUi)
+#else
     CORE_ENUM(StressScene, uint8_t, Sprites, Entities, Ui)
+#endif
     /// Which time the ramp holds to its budget: `work` is the frame without the Present stage, `cpu` the whole CPU frame (CLAUDE.md, "Fixed mode")
     CORE_ENUM(StressMeasure, uint8_t, Work, Cpu)
     CORE_ENUM(StressLanguage, uint8_t, En, Ru)
@@ -61,7 +66,7 @@ namespace BECore::Stress {
      *
      * | Flag | Value |
      * |------|-------|
-     * | --stress-scene= | sprites, entities, ui (any case) |
+     * | --stress-scene= | sprites, entities, ui, rmlui only with STRESS_WITH_RMLUI (any case) |
      * | --stress-count= | 1..kMaxCount |
      * | --stress-frames= | 1..kMaxFrames |
      * | --stress-warmup= | 0..kMaxFrames |

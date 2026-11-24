@@ -15,6 +15,17 @@ namespace BECore::Stress::Tests {
 
     namespace {
 
+        /// The scenes `get_state` lists, in the order of the enum; `rmlui` only in a build with the RmlUi host
+#ifdef STRESS_WITH_RMLUI
+        constexpr size_t kSceneCount = 4;
+        const Json kSceneList = Json::array({"sprites", "entities", "ui", "rmlui"});
+        const char* const kSceneListText = R"(["sprites","entities","ui","rmlui"])";
+#else
+        constexpr size_t kSceneCount = 3;
+        const Json kSceneList = Json::array({"sprites", "entities", "ui"});
+        const char* const kSceneListText = R"(["sprites","entities","ui"])";
+#endif
+
         String ErrorCodeOf(const ControlError& error) {
             return error.code;
         }
@@ -100,7 +111,7 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(state["count"], 100);
         EXPECT_EQ(state["language"], "en");
         EXPECT_EQ(state["maxCount"], static_cast<int64_t>(kMaxCount));
-        EXPECT_EQ(state["scenes"], (Json::array({"sprites", "entities", "ui"})));
+        EXPECT_EQ(state["scenes"], kSceneList);
     }
 
     TEST_F(StressGameControlTest, TheStateFollowsTheState) {
@@ -113,12 +124,16 @@ namespace BECore::Stress::Tests {
 
     TEST_F(StressGameControlTest, TheActionsListTheOtherScenesTheHalfTheDoubleAndTheOtherLanguage) {
         const Json actions = Actions();
-        ASSERT_EQ(actions.size(), 5u);
+        const size_t otherScenes = kSceneCount - 1;
+        ASSERT_EQ(actions.size(), otherScenes + 3);
         EXPECT_EQ(actions[0], SetScene("entities"));
         EXPECT_EQ(actions[1], SetScene("ui"));
-        EXPECT_EQ(actions[2], SetCount(50));
-        EXPECT_EQ(actions[3], SetCount(200));
-        EXPECT_EQ(actions[4], SetLanguage("ru"));
+#ifdef STRESS_WITH_RMLUI
+        EXPECT_EQ(actions[2], SetScene("rmlui"));
+#endif
+        EXPECT_EQ(actions[otherScenes], SetCount(50));
+        EXPECT_EQ(actions[otherScenes + 1], SetCount(200));
+        EXPECT_EQ(actions[otherScenes + 2], SetLanguage("ru"));
     }
 
     TEST_F(StressGameControlTest, NoActionNamesTheActiveSceneOrLanguage) {
@@ -133,13 +148,13 @@ namespace BECore::Stress::Tests {
     TEST_F(StressGameControlTest, TheCountActionsStayInsideTheRange) {
         state.SetCount(1);
         Json actions = Actions();
-        ASSERT_EQ(actions.size(), 4u);  // two scenes, the double (the half is 0), the language
-        EXPECT_EQ(actions[2], SetCount(2));
+        ASSERT_EQ(actions.size(), kSceneCount + 1);  // the other scenes, the double (the half is 0), the language
+        EXPECT_EQ(actions[kSceneCount - 1], SetCount(2));
 
         state.SetCount(kMaxCount);
         actions = Actions();
-        ASSERT_EQ(actions.size(), 4u);  // the double is above the maximum
-        EXPECT_EQ(actions[2], SetCount(static_cast<int64_t>(kMaxCount / 2)));
+        ASSERT_EQ(actions.size(), kSceneCount + 1);  // the double is above the maximum
+        EXPECT_EQ(actions[kSceneCount - 1], SetCount(static_cast<int64_t>(kMaxCount / 2)));
 
         state.SetCount(kMaxCount / 2 + 1);
         for (const Json& action : Actions()) {
@@ -331,9 +346,15 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressGameControlTest, TheWritingFormsAreAlphabeticalLikeTheDump) {
-        EXPECT_EQ(WrittenState(control), R"({"count":100,"language":"en","maxCount":1000000,"scene":"sprites","scenes":["sprites","entities","ui"]})");
-        EXPECT_EQ(WrittenActions(control), R"([{"scene":"entities","type":"set_scene"},{"scene":"ui","type":"set_scene"},{"count":50,"type":"set_count"},)"
-                                           R"({"count":200,"type":"set_count"},{"language":"ru","type":"set_language"}])");
+        EXPECT_EQ(WrittenState(control), Format(R"({{"count":100,"language":"en","maxCount":1000000,"scene":"sprites","scenes":{}}})", kSceneListText));
+#ifdef STRESS_WITH_RMLUI
+        constexpr StringView rmlUiAction = R"({"scene":"rmlui","type":"set_scene"},)";
+#else
+        constexpr StringView rmlUiAction = "";
+#endif
+        EXPECT_EQ(WrittenActions(control), Format(R"([{{"scene":"entities","type":"set_scene"}},{{"scene":"ui","type":"set_scene"}},{}{{"count":50,"type":"set_count"}},)"
+                                                  R"({{"count":200,"type":"set_count"}},{{"language":"ru","type":"set_language"}}])",
+                                                  rmlUiAction));
     }
 
     TEST_F(StressGameControlTest, TheSecondWritingIntoAKeptTextAllocatesNothing) {

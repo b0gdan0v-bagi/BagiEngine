@@ -26,6 +26,22 @@ namespace BECore {
         return std::nullopt;
     }
 
+    Optional<CommandLineArgument> CommandLine::Find(StringView name) const {
+        for (const String& argument : _arguments) {
+            const StringView view = AsView(argument);
+            if (!view.starts_with(name)) {
+                continue;
+            }
+            if (view.size() == name.size()) {
+                return CommandLineArgument{};
+            }
+            if (view[name.size()] == kValueSeparator) {
+                return CommandLineArgument{view.substr(name.size() + 1), true};
+            }
+        }
+        return std::nullopt;
+    }
+
     bool CommandLine::HasFlag(StringView name) const {
         for (const String& argument : _arguments) {
             if (AsView(argument) == name) {
