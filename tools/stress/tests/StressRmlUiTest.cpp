@@ -1,9 +1,10 @@
 // The scene `rmlui`: it exists only in a build with the RmlUi host (STRESS_WITH_RMLUI). The settings and the game first, then the scene itself.
 
 #include <BECore/Application/CommandLine.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonDeserializer.h>
-#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonStreamSerializer.h>
+#include <BECore/Control/JsonViewOps.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <BECore/File/Path.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -12,8 +13,10 @@
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/TypedRef.h>
+#include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/LogRecorder.h>
+#include <Games/GameText.h>
 #include <Stress/RmlUi/RmlUiField.h>
 #include <Stress/RmlUi/StressRmlUiComponent.h>
 #include <Stress/StressGame.h>
@@ -82,14 +85,12 @@ namespace BECore::Stress::Tests {
         int sceneChanges = 0;
         StressGameControl control(state, [&] { ++sceneChanges; });
 
-        const auto listed = control.GetState();
+        const auto listed = StateText(control);
         ASSERT_TRUE(listed.has_value());
-        EXPECT_EQ((*listed)["scenes"], (Json::array({"sprites", "entities", "ui", "rmlui"})));
+        const BECore::Tests::JsonDoc listedState(*listed);
+        EXPECT_TRUE(JsonEquals(BECore::Tests::MemberOf(listedState.Root(), "scenes"), BECore::Tests::JsonDoc(R"(["sprites","entities","ui","rmlui"])").Root()));
 
-        Json action = Json::object();
-        action["type"] = "set_scene";
-        action["scene"] = "rmlui";
-        ASSERT_TRUE(control.PerformAction(action).has_value());
+        ASSERT_TRUE(PerformActionText(control, R"({"scene":"rmlui","type":"set_scene"})").has_value());
         EXPECT_EQ(state.GetScene(), StressScene::RmlUi);
         EXPECT_EQ(sceneChanges, 1);
     }
@@ -101,8 +102,11 @@ namespace BECore::Stress::Tests {
         const TypedRef ref = TypedRef::Of(*game);
         ASSERT_TRUE(ref);
         for (uint32_t call = 1; call <= 2; ++call) {
-            JsonDeserializer reader(Json::object());
-            JsonSerializer writer;
+            JsonDeserializer reader;
+            ASSERT_TRUE(reader.Load("{}"));
+            String result;
+            JsonWriter resultWriter(result);
+            JsonStreamSerializer writer(resultWriter);
             ASSERT_TRUE(CallMethod(ref, "ReloadRmlUiDocuments", reader, writer).has_value());
             EXPECT_EQ(game->GetRmlUiReloadRequests(), call);
         }

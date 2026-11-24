@@ -1,5 +1,6 @@
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlParams.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
+#include <Common/JsonDoc.h>
 #include <Events/ApplicationEvents.h>
 #include <Stress/Components/StressRunComponent.h>
 #include <Stress/RampController.h>
@@ -127,11 +128,11 @@ namespace BECore::Stress::Tests {
         Frame(kFastMs);
 
         ASSERT_EQ(_lines.size(), 1u);
-        const auto parsed = ParseJson(_lines[0]);
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_EQ(GetJsonInt(*parsed, "frames").value_or(0), kFrames);
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMsP99").value_or(0.0), kFastMs) << "no slow frame is among the samples";
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMs").value_or(0.0), kFastMs);
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamInt(parsed.Root(), "frames").value_or(0), kFrames);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMsP99").value_or(0.0), kFastMs) << "no slow frame is among the samples";
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMs").value_or(0.0), kFastMs);
     }
 
     TEST_F(StressRunTest, ExactlyTheAskedFramesAreRecordedThenOneLineAndOneQuit) {
@@ -159,14 +160,14 @@ namespace BECore::Stress::Tests {
 
         ASSERT_EQ(_lines.size(), 1u);
         EXPECT_EQ(_lines[0].front(), '{');
-        const auto parsed = ParseJson(_lines[0]);
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "entities");
-        EXPECT_EQ(GetJsonInt(*parsed, "count").value_or(0), kCount);
-        EXPECT_EQ(GetJsonInt(*parsed, "warmup").value_or(0), kWarmup);
-        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), Optional(true));
-        EXPECT_EQ(GetJsonInt(*parsed, "atlases").value_or(0), 2);
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(false));
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamString(parsed.Root(), "scene").value_or(""), "entities");
+        EXPECT_EQ(GetParamInt(parsed.Root(), "count").value_or(0), kCount);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "warmup").value_or(0), kWarmup);
+        EXPECT_EQ(GetParamBool(parsed.Root(), "interleave"), Optional(true));
+        EXPECT_EQ(GetParamInt(parsed.Root(), "atlases").value_or(0), 2);
+        EXPECT_EQ(GetParamBool(parsed.Root(), "manualClock"), Optional(false));
     }
 
     TEST_F(StressRunTest, TheWorkTimeLeavesOutThePresent) {
@@ -177,10 +178,10 @@ namespace BECore::Stress::Tests {
         }
 
         ASSERT_EQ(_lines.size(), 1u);
-        const auto parsed = ParseJson(_lines[0]);
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMs").value_or(0.0), 3.0);
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "cpuMs").value_or(0.0), 10.0);
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMs").value_or(0.0), 3.0);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "cpuMs").value_or(0.0), 10.0);
     }
 
     TEST_F(StressRunTest, ACountChangeRestartsTheWarmUp) {
@@ -202,11 +203,11 @@ namespace BECore::Stress::Tests {
 
         FramesUntilDone(kFastMs);
         ASSERT_EQ(_lines.size(), 1u);
-        const auto parsed = ParseJson(_lines[0]);
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_EQ(GetJsonInt(*parsed, "count").value_or(0), kCount * 2);
-        EXPECT_EQ(GetJsonInt(*parsed, "frames").value_or(0), kFrames);
-        EXPECT_LT(GetJsonNumber(*parsed, "workMsP99").value_or(1e9), kSlowMs) << "no frame of the warm-up is among the samples";
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamInt(parsed.Root(), "count").value_or(0), kCount * 2);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "frames").value_or(0), kFrames);
+        EXPECT_LT(GetParamNumber(parsed.Root(), "workMsP99").value_or(1e9), kSlowMs) << "no frame of the warm-up is among the samples";
     }
 
     TEST_F(StressRunTest, AHeldFrameIsNotASample) {
@@ -221,10 +222,10 @@ namespace BECore::Stress::Tests {
 
         EXPECT_EQ(Run().GetRecordedCount(), 2u) << "the held frame was left out";
         FramesUntilDone(kFastMs);
-        const auto parsed = ParseJson(_lines[0]);
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_EQ(GetJsonInt(*parsed, "frames").value_or(0), kFrames);
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMsP99").value_or(0.0), kFastMs);
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamInt(parsed.Root(), "frames").value_or(0), kFrames);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMsP99").value_or(0.0), kFastMs);
     }
 
     TEST_F(StressRunTest, AnUpdateWithoutANewFrameTakesNoSecondSample) {
@@ -301,14 +302,14 @@ namespace BECore::Stress::Tests {
         EXPECT_LT(frames, 5000u) << "the ramp ended";
         ASSERT_EQ(_lines.size(), 1u);
         EXPECT_EQ(_quit.count, 1);
-        const auto parsed = ParseJson(_lines[0]);
-        ASSERT_TRUE(parsed.has_value()) << _lines[0].c_str();
-        EXPECT_EQ(GetJsonString(*parsed, "mode").value_or(""), "ramp");
-        EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "entities");
-        EXPECT_EQ(GetJsonBool(*parsed, "capped"), Optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "aborted"), Optional(false));
-        EXPECT_EQ(GetJsonBool(*parsed, "verified"), Optional(true));
-        const int64_t found = GetJsonInt(*parsed, "objectsAt60fps").value_or(0);
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed()) << _lines[0].c_str();
+        EXPECT_EQ(GetParamString(parsed.Root(), "mode").value_or(""), "ramp");
+        EXPECT_EQ(GetParamString(parsed.Root(), "scene").value_or(""), "entities");
+        EXPECT_EQ(GetParamBool(parsed.Root(), "capped"), Optional(false));
+        EXPECT_EQ(GetParamBool(parsed.Root(), "aborted"), Optional(false));
+        EXPECT_EQ(GetParamBool(parsed.Root(), "verified"), Optional(true));
+        const int64_t found = GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0);
         EXPECT_LE(found, 301);
         EXPECT_GE(found, 290);
 
@@ -323,20 +324,20 @@ namespace BECore::Stress::Tests {
         StartRamp();
         RampFramesUntilDone(0.001, 50.0);
         ASSERT_EQ(_lines.size(), 1u);
-        auto parsed = ParseJson(_lines[0]);
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_GT(GetJsonInt(*parsed, "objectsAt60fps").value_or(0), int64_t{kRampStart}) << "the present does not count";
-        EXPECT_EQ(GetJsonString(*parsed, "measure").value_or(""), "work");
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_GT(GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0), int64_t{kRampStart}) << "the present does not count";
+        EXPECT_EQ(GetParamString(parsed.Root(), "measure").value_or(""), "work");
     }
 
     TEST_F(StressRunTest, TheCpuMeasureCountsThePresentToo) {
         StartRamp({"--stress-measure=cpu"});
         RampFramesUntilDone(0.001, 50.0);
         ASSERT_EQ(_lines.size(), 1u);
-        const auto parsed = ParseJson(_lines[0]);
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_EQ(GetJsonInt(*parsed, "objectsAt60fps").value_or(-1), 0) << "a present of 50 ms is over the budget at any count";
-        EXPECT_EQ(GetJsonString(*parsed, "measure").value_or(""), "cpu");
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamInt(parsed.Root(), "objectsAt60fps").value_or(-1), 0) << "a present of 50 ms is over the budget at any count";
+        EXPECT_EQ(GetParamString(parsed.Root(), "measure").value_or(""), "cpu");
     }
 
     TEST_F(StressRunTest, TheRampWinsOverTheFramesFlag) {

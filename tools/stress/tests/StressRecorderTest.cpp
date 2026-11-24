@@ -1,4 +1,5 @@
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlParams.h>
+#include <Common/JsonDoc.h>
 #include <Stress/StressRecorder.h>
 #include <gtest/gtest.h>
 #include <regex>
@@ -194,12 +195,12 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(line.find('\n'), String::npos);
         EXPECT_EQ(line.front(), '{');
         EXPECT_EQ(line.back(), '}');
-        const auto parsed = ParseJson(line);
-        ASSERT_TRUE(parsed.has_value()) << line.c_str();
-        ASSERT_TRUE(parsed->is_object());
-        EXPECT_EQ(parsed->size(), std::size(kKeys));
+        const BECore::Tests::JsonDoc parsed(line);
+        ASSERT_TRUE(parsed.IsParsed()) << line.c_str();
+        ASSERT_TRUE(parsed.Root().IsObject());
+        EXPECT_EQ(parsed.Root().Size(), std::size(kKeys));
         for (const char* key : kKeys) {
-            EXPECT_NE(FindJsonMember(*parsed, key), nullptr) << key;
+            EXPECT_TRUE(parsed.Root().Find(key).has_value()) << key;
         }
 
         const Vector<String> written = KeysInOrder(line);
@@ -210,26 +211,26 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(StressRecorderTest, TheLineCarriesTheRunAndTheSummary) {
-        const auto parsed = ParseJson(FormatJsonLine(RecorderOf(100).Summarize(), Context()));
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_EQ(GetJsonString(*parsed, "scene").value_or(""), "ui");
-        EXPECT_EQ(GetJsonInt(*parsed, "count").value_or(0), 300);
-        EXPECT_EQ(GetJsonInt(*parsed, "frames").value_or(0), 100);
-        EXPECT_EQ(GetJsonInt(*parsed, "warmup").value_or(0), 30);
-        EXPECT_EQ(GetJsonInt(*parsed, "atlases").value_or(0), 8);
-        EXPECT_EQ(GetJsonBool(*parsed, "interleave"), Optional(true));
-        EXPECT_EQ(GetJsonBool(*parsed, "manualClock"), Optional(true));
-        EXPECT_EQ(GetJsonBool(*parsed, "allocTracking"), Optional(false));
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMsP50").value_or(0.0), 50.0);
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMsP99").value_or(0.0), 99.0);
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMs").value_or(0.0), 50.5);
+        const BECore::Tests::JsonDoc parsed(FormatJsonLine(RecorderOf(100).Summarize(), Context()));
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamString(parsed.Root(), "scene").value_or(""), "ui");
+        EXPECT_EQ(GetParamInt(parsed.Root(), "count").value_or(0), 300);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "frames").value_or(0), 100);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "warmup").value_or(0), 30);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "atlases").value_or(0), 8);
+        EXPECT_EQ(GetParamBool(parsed.Root(), "interleave"), Optional(true));
+        EXPECT_EQ(GetParamBool(parsed.Root(), "manualClock"), Optional(true));
+        EXPECT_EQ(GetParamBool(parsed.Root(), "allocTracking"), Optional(false));
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMsP50").value_or(0.0), 50.0);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMsP99").value_or(0.0), 99.0);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMs").value_or(0.0), 50.5);
     }
 
     TEST(StressRecorderTest, ARunWithoutSamplesStillGivesAValidLine) {
-        const auto parsed = ParseJson(FormatJsonLine(StressRecorder().Summarize(), StressRunContext{}));
-        ASSERT_TRUE(parsed.has_value());
-        EXPECT_EQ(GetJsonInt(*parsed, "frames").value_or(-1), 0);
-        EXPECT_DOUBLE_EQ(GetJsonNumber(*parsed, "workMs").value_or(-1.0), 0.0);
+        const BECore::Tests::JsonDoc parsed(FormatJsonLine(StressRecorder().Summarize(), StressRunContext{}));
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamInt(parsed.Root(), "frames").value_or(-1), 0);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMs").value_or(-1.0), 0.0);
     }
 
 }  // namespace BECore::Stress::Tests
