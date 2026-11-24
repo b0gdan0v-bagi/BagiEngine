@@ -3,7 +3,6 @@
 #include <BECore/Format/Format.h>
 #include <BECore/Types/Types.h>
 #include <Common/TestFiles.h>
-#include <filesystem>
 #include <gtest/gtest.h>
 #include <random>
 
@@ -15,14 +14,14 @@ namespace BECore::Tests {
      * workers) may run the same tests at the same moment, so a fixed name, or one made of the test name alone, can be
      * cleared or overwritten by another process. The caller removes what it made (a crashed run leaves its folder).
      */
-    inline std::filesystem::path TestTempPath(const String& stem) {
+    inline Path TestTempPath(const String& stem) {
         static const String tag = Format("{:08x}", std::random_device{}());
         const String name = Format("{}_{}", stem, tag);
         return SystemTempDirectory() / name;
     }
 
     /// TestTempPath("<prefix>_<name of the running test>"): one folder per test and per process
-    inline std::filesystem::path TestTempDirectory(const String& prefix) {
+    inline Path TestTempDirectory(const String& prefix) {
         return TestTempPath(Format("{}_{}", prefix, ::testing::UnitTest::GetInstance()->current_test_info()->name()));
     }
 
