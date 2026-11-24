@@ -31,6 +31,14 @@ namespace BECore {
     void WriteJson(JsonWriter& writer, JsonView value);
 
     /**
+     * @brief WriteJson() with the members of every object in byte order of the decoded key: the bytes `Json::dump()` wrote (the DOM sorted its keys).
+     *
+     * For the files an editor writes and the params a person types, where the bytes are a contract. Of two equal keys the first is written. Copies
+     * the keys of each object into a scratch of its own, so it is for files and typed commands, never a hot path.
+     */
+    void WriteJsonSorted(JsonWriter& writer, JsonView value);
+
+    /**
      * @brief The value that the JSON pointer @p pointer (RFC 6901) names in @p document, or nullopt when the path leads nowhere.
      *
      * The same answers and messages as FindJsonPointer(const Json&, ...) of Json.h: a missing key, an index past the end and a step through a scalar

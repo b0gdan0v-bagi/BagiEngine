@@ -1,6 +1,7 @@
 #include "JsonViewOps.h"
 
 #include <BECore/Control/JsonPointerSyntax.h>
+#include <EASTL/sort.h>
 
 namespace BECore {
 
@@ -146,45 +147,89 @@ namespace BECore {
         }
     }
 
-    void WriteJson(JsonWriter& writer, JsonView value) {
-        switch (value.Kind()) {
-            case JsonKind::Bool:
-                writer.Value(value.AsBool().value_or(false));
-                return;
-            case JsonKind::Integer:
-            case JsonKind::Number:
-                WriteNumber(writer, value);
-                return;
-            case JsonKind::String:
-                WithText(value, [&](StringView text) { writer.Value(text); });
-                return;
-            case JsonKind::Array:
-                if (writer.GetDepth() >= JsonWriter::kMaxDepth) {
-                    writer.Null();
+    namespace {
+
+        /// A member of an object whose members are written by key: the decoded key, the value and the place in the document (so equal keys keep their order)
+        struct SortedMember {
+            String key;
+            JsonView value;
+            size_t order = 0;
+        };
+
+        /// Copies @p value into @p writer; with kSorted the members of every object come out in byte order of the decoded key, the first of equal keys alone
+        template <bool kSorted>
+        void WriteValue(JsonWriter& writer, JsonView value) {
+            switch (value.Kind()) {
+                case JsonKind::Bool:
+                    writer.Value(value.AsBool().value_or(false));
                     return;
-                }
-                writer.BeginArray();
-                for (const JsonView item : value.Items()) {
-                    WriteJson(writer, item);
-                }
-                writer.EndArray();
-                return;
-            case JsonKind::Object:
-                if (writer.GetDepth() >= JsonWriter::kMaxDepth) {
-                    writer.Null();
+                case JsonKind::Integer:
+                case JsonKind::Number:
+                    WriteNumber(writer, value);
                     return;
-                }
-                writer.BeginObject();
-                for (const JsonMember member : value.Members()) {
-                    WithText(member.key, [&](StringView name) { writer.Key(name); });
-                    WriteJson(writer, member.value);
-                }
-                writer.EndObject();
-                return;
-            default:
-                writer.Null();  // null, and a view that is not valid
-                return;
+                case JsonKind::String:
+                    WithText(value, [&](StringView text) { writer.Value(text); });
+                    return;
+                case JsonKind::Array:
+                    if (writer.GetDepth() >= JsonWriter::kMaxDepth) {
+                        writer.Null();
+                        return;
+                    }
+                    writer.BeginArray();
+                    for (const JsonView item : value.Items()) {
+                        WriteValue<kSorted>(writer, item);
+                    }
+                    writer.EndArray();
+                    return;
+                case JsonKind::Object:
+                    if (writer.GetDepth() >= JsonWriter::kMaxDepth) {
+                        writer.Null();
+                        return;
+                    }
+                    writer.BeginObject();
+                    if constexpr (kSorted) {
+                        // For files and typed commands, never a hot path: one copy of the keys per object
+                        Vector<SortedMember> members;
+                        members.reserve(value.Size());
+                        for (const JsonMember member : value.Members()) {
+                            SortedMember& entry = members.emplace_back();
+                            member.key.ReadText(entry.key);
+                            entry.value = member.value;
+                            entry.order = members.size();
+                        }
+                        eastl::sort(members.begin(), members.end(), [](const SortedMember& a, const SortedMember& b) {
+                            const int byKey = StringView(a.key.c_str(), a.key.size()).compare(StringView(b.key.c_str(), b.key.size()));
+                            return byKey != 0 ? byKey < 0 : a.order < b.order;
+                        });
+                        for (size_t i = 0; i < members.size(); ++i) {
+                            if (i > 0 && members[i].key == members[i - 1].key) {
+                                continue;
+                            }
+                            writer.Key(StringView(members[i].key.c_str(), members[i].key.size()));
+                            WriteValue<kSorted>(writer, members[i].value);
+                        }
+                    } else {
+                        for (const JsonMember member : value.Members()) {
+                            WithText(member.key, [&](StringView name) { writer.Key(name); });
+                            WriteValue<kSorted>(writer, member.value);
+                        }
+                    }
+                    writer.EndObject();
+                    return;
+                default:
+                    writer.Null();  // null, and a view that is not valid
+                    return;
+            }
         }
+
+    }  // namespace
+
+    void WriteJson(JsonWriter& writer, JsonView value) {
+        WriteValue<false>(writer, value);
+    }
+
+    void WriteJsonSorted(JsonWriter& writer, JsonView value) {
+        WriteValue<true>(writer, value);
     }
 
     std::expected<Optional<JsonView>, ControlError> FindJsonPointer(JsonView document, StringView pointer) {

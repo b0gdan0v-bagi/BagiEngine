@@ -240,6 +240,80 @@ namespace BECore::Tests {
         EXPECT_NE(out.find("null"), String::npos);
     }
 
+    namespace {
+
+        String WrittenSorted(JsonView value, int indent) {
+            String out;
+            JsonWriter writer(out, indent);
+            WriteJsonSorted(writer, value);
+            EXPECT_TRUE(writer.IsComplete());
+            return out;
+        }
+
+    }  // namespace
+
+    TEST(JsonViewOpsTest, WriteJsonSortedWritesTheBytesTheDomDumps) {
+        const Vector<String> corpus = {
+            "null",
+            "[]",
+            "{}",
+            R"([3,{"b":1,"a":[{"z":0,"y":{"d":1,"c":2}}]},"x"])",
+            R"({"b":2,"a":1,"c":{"z":[],"y":{},"x":[{"q":1,"p":2}]}})",
+            R"({"B":1,"a":2,"A":3,"":4,"ab":5,"a ":6})",
+            R"({"é":1,"z":2,"\u00e9x":3,"e":4})",
+            R"({"a\"b":1,"a\nb":2,"a\\b":3,"\u0001":4})",
+            R"({"n":-0.5,"big":18446744073709551615,"f":1e20,"s":"tab\tq\"","t":true,"u":null})",
+            R"({"\u0000":1,"\u0000a":2,"a":3})",
+        };
+
+        for (const String& text : corpus) {
+            const JsonDoc doc(View(text));
+            ASSERT_TRUE(doc.IsParsed()) << text.c_str();
+            const auto dom = ParseJson(View(text));
+            ASSERT_TRUE(dom.has_value()) << text.c_str();
+            EXPECT_EQ(WrittenSorted(doc.Root(), JsonWriter::kCompact), DumpJson(*dom)) << text.c_str();
+            EXPECT_EQ(WrittenSorted(doc.Root(), 2), DumpJson(*dom, 2)) << text.c_str();
+        }
+    }
+
+    TEST(JsonViewOpsTest, WriteJsonSortedWritesTheFirstOfTwoEqualKeys) {
+        const JsonDoc doc(R"({"b":1,"a":1,"b":2,"a\u0000":0,"a":3})");
+
+        EXPECT_EQ(WrittenSorted(doc.Root(), JsonWriter::kCompact), "{\"a\":1,\"a\\u0000\":0,\"b\":1}");
+    }
+
+    TEST(JsonViewOpsTest, WriteJsonSortedOfAViewThatIsNotValidIsNull) {
+        EXPECT_EQ(WrittenSorted(JsonView(), JsonWriter::kCompact), "null");
+    }
+
+    TEST(JsonViewOpsTest, WriteJsonSortedCutsAContainerThatWouldPassTheDepthOfTheWriter) {
+        String text;
+        for (size_t i = 0; i < JsonWriter::kMaxDepth; ++i) {
+            text += "{\"k\":";
+        }
+        text += "1";
+        for (size_t i = 0; i < JsonWriter::kMaxDepth; ++i) {
+            text += '}';
+        }
+        const JsonDoc doc(View(text));
+        ASSERT_TRUE(doc.IsParsed());
+        String out;
+        JsonWriter writer(out);
+
+        writer.BeginArray();
+        WriteJsonSorted(writer, doc.Root());
+        writer.EndArray();
+
+        EXPECT_TRUE(writer.IsComplete());
+        // The array holds one level, so the nest is written one object short and its innermost object is the null
+        size_t opened = 0;
+        for (const char letter : out) {
+            opened += letter == '{' ? 1 : 0;
+        }
+        EXPECT_EQ(opened, JsonWriter::kMaxDepth - 1);
+        EXPECT_NE(out.find("null"), String::npos);
+    }
+
     TEST(JsonViewOpsTest, PointerAnswersAsTheDomOverloadDoes) {
         const JsonDoc document = PointerDocument();
         const auto dom = ParseJson(document.Text());
