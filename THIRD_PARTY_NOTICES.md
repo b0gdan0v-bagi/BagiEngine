@@ -20,6 +20,7 @@ file. A new library adds its row here in the same commit.
 | `src/Modules/fmt` | {fmt} (Victor Zverovich) | 11.0.2 | MIT with the {fmt} binary exception (no notice needed for object code) | `src/Modules/fmt/LICENSE` | ships |
 | `src/Modules/imgui` | Dear ImGui (Omar Cornut) | 1.92.6 WIP | MIT | `src/Modules/imgui/LICENSE.txt` | ships (the editor; a game links it too) |
 | `src/Modules/nlohmann` | JSON for Modern C++ (Niels Lohmann) | 3.11.3 | MIT | `src/Modules/nlohmann/LICENSE.MIT` | ships |
+| `src/Modules/BECore/Control/JsonDoubleText.cpp` | Grisu2 and the number format of JSON for Modern C++ (Niels Lohmann, Florian Loitsch), ported; the UTF-8 decoder of `JsonWriter.cpp` (Björn Hoehrmann) is under the same text | 3.11.3 | MIT | `src/Modules/BECore/Control/JsonDoubleText.cpp` (its header) | ships |
 | `src/Modules/pugixml` | pugixml (Arseny Kapoulkine) | 1.14 | MIT | `src/Modules/pugixml/LICENSE.md` | ships |
 | `src/Modules/RmlUi` | RmlUi (core only) | 6.3 | MIT | `src/Modules/RmlUi/LICENSE.txt` | ships if `ENGINE_UI_RMLUI` |
 | `src/Modules/stb` | stb_truetype (Sean Barrett) | 1.26 | public domain or MIT, the user's choice | `src/Modules/stb/stb_truetype.h` (end of file) | ships |
