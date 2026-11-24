@@ -310,8 +310,8 @@ namespace BECore::Tests {
         ASSERT_TRUE(SessionRecorder::GetInstance().Start(shortName, *GameManager::GetInstance().GetActive(), {}).has_value());
         SessionRecorder::GetInstance().Stop();
 
-        EXPECT_TRUE(std::filesystem::exists(_path));
-        EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(longer.c_str())));
+        EXPECT_TRUE(PathExists(_path));
+        EXPECT_FALSE(PathExists(Path(longer)));
     }
 
     TEST_F(SessionRecorderTest, TheControlMethodsAndTheDirectCallsWriteTheSameFile) {
