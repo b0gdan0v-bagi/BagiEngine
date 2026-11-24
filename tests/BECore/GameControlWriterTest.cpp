@@ -1,9 +1,8 @@
 // get_state, list_actions and the state_changed push write through the writing forms of IControllableGame (WriteState, WriteActions): the bytes are
-// those of the same documents made as a `Json`.
+// those the same documents had as a `Json` (keys in byte order).
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/GameControlTest.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -51,7 +50,7 @@ namespace BECore::Tests {
             /// The text of the answer to @p method
             String Ask(StringView method) {
                 String text;
-                service.Post(MakeRequest(kRequestId, method), [&text](const String& reply) { text = reply; });
+                service.Post(MakeRequestText(kRequestId, method), [&text](const String& reply) { text = reply; });
                 service.Drain();
                 return text;
             }
@@ -61,20 +60,14 @@ namespace BECore::Tests {
                 service.SetEventSink([this](const String& text) { pushes.emplace_back(text.c_str(), text.size()); });
             }
 
-            /// The document as a `Json`, the text a `Reply(Json)` of it makes: the oracle of what the writing forms put on the wire
-            static String ReferenceReply(const char* member, const Json& value) {
-                Json result = Json::object();
-                result["game"] = "FakeControllable";
-                result[member] = value;
-                result["version"] = Fake().version;
-                return MakeOkResponse(ToString(kRequestId), std::move(result));
+            /// The answer to get_state with the counter of the fake and the version it has now
+            static String StateReply(int counter) {
+                return Format(R"({{"id":{},"ok":true,"result":{{"game":"FakeControllable","state":{{"counter":{}}},"version":{}}}}})", kRequestId, counter, Fake().version);
             }
 
-            static String ReferencePush(const Json& data) {
-                Json event = Json::object();
-                event["data"] = data;
-                event["event"] = "state_changed";
-                return DumpJson(event);
+            /// The answer to list_actions
+            static String ActionsReply() {
+                return Format(R"({{"id":{},"ok":true,"result":{{"actions":[{{"type":"inc"}}],"game":"FakeControllable","version":{}}}}})", kRequestId, Fake().version);
             }
 
             ControlService service;
@@ -84,12 +77,12 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST_F(GameControlWriterTest, GetStateAndListActionsAreTheBytesOfTheSameDocumentsAsAJson) {
+    TEST_F(GameControlWriterTest, GetStateAndListActionsAreTheBytesTheDocumentsHadAsAJson) {
         Fake().counter = 9;
         ++Fake().version;
 
-        EXPECT_EQ(Ask("get_state"), ReferenceReply("state", Json{{"counter", 9}}));
-        EXPECT_EQ(Ask("list_actions"), ReferenceReply("actions", Json::array({Json{{"type", "inc"}}})));
+        EXPECT_EQ(Ask("get_state"), StateReply(9));
+        EXPECT_EQ(Ask("list_actions"), ActionsReply());
     }
 
     TEST_F(GameControlWriterTest, EachRequestCallsTheWritingFormOnce) {
@@ -108,22 +101,18 @@ namespace BECore::Tests {
         EXPECT_EQ(Ask("list_actions"), MakeErrorResponse(ToString(kRequestId), MakeControlError("write_failed", "the actions cannot be written")));
 
         Fake().failWrites = false;  // the scratch of the service is intact after the rollbacks
-        EXPECT_EQ(Ask("get_state"), ReferenceReply("state", Json{{"counter", 0}}));
+        EXPECT_EQ(Ask("get_state"), StateReply(0));
     }
 
-    TEST_F(GameControlWriterTest, ThePushIsTheBytesOfTheSameEventAsAJson) {
+    TEST_F(GameControlWriterTest, ThePushIsTheBytesTheEventHadAsAJson) {
         CollectPushes();
         service.EndFrame();  // the first look only records the version
 
         Fake().AddToCounter(3);
         service.EndFrame();
 
-        Json data = Json::object();
-        data["game"] = "FakeControllable";
-        data["state"] = Json{{"counter", 3}};
-        data["version"] = Fake().version;
         ASSERT_EQ(pushes.size(), 1u);
-        EXPECT_EQ(pushes[0], ReferencePush(data));
+        EXPECT_EQ(pushes[0], Format(R"({{"data":{{"game":"FakeControllable","state":{{"counter":3}},"version":{}}},"event":"state_changed"}})", Fake().version));
     }
 
     TEST_F(GameControlWriterTest, AStateThatFailsLeavesStateOutOfThePushAndThePushStillGoes) {
@@ -140,20 +129,7 @@ namespace BECore::Tests {
 
     TEST_F(GameControlWriterTest, AnObserverOfRunUntilSeesStateChangedWithTheState) {
         service.EndFrame();  // records the version
-        service.Post(MakeRequest(1, "run_until",
-                                 [] {
-                                     Json equal = Json::object();
-                                     equal["game"] = "FakeControllable";
-                                     Json event = Json::object();
-                                     event["name"] = "state_changed";
-                                     event["equal"] = std::move(equal);
-                                     Json condition = Json::object();
-                                     condition["event"] = std::move(event);
-                                     Json params = Json::object();
-                                     params["condition"] = std::move(condition);
-                                     params["maxFrames"] = 3;
-                                     return params;
-                                 }()),
+        service.Post(MakeRequestText(1, "run_until", R"({"condition":{"event":{"equal":{"game":"FakeControllable"},"name":"state_changed"}},"maxFrames":3})"),
                      [this](const String& text) { answers.emplace_back(text.c_str(), text.size()); });
         service.Drain();
         ASSERT_TRUE(answers.empty());  // deferred until a frame ends
@@ -162,21 +138,17 @@ namespace BECore::Tests {
         service.EndFrame();
 
         ASSERT_EQ(answers.size(), 1u);
-        const auto answer = ParseJson(answers[0]);
-        ASSERT_TRUE(answer.has_value());
-        const Json* result = FindJsonMember(*answer, "result");
-        ASSERT_NE(result, nullptr);
-        EXPECT_EQ(BoolOf(result, "met"), true);
-        EXPECT_EQ(StringOf(result, "reason"), String("event"));
+        const ControlReply answer(StringView(answers[0].c_str(), answers[0].size()));
+        ASSERT_TRUE(answer.Result().IsObject());
+        EXPECT_EQ(BoolOf(answer.Result(), "met"), true);
+        EXPECT_EQ(StringOf(answer.Result(), "reason"), String("event"));
     }
 
     TEST_F(GameControlWriterTest, AnObserverGetsTheStateAsAView) {
-        Vector<Json> seen;
+        Vector<ControlReply> seen;  // the data of each event, kept as a document of its own: the view is valid for the call only
         const auto id = service.AddPublishObserver([&seen](StringView event, JsonView data) {
             if (event == GameControlEvents::kStateChanged) {
-                auto parsed = ParseJson(data.Raw());
-                ASSERT_TRUE(parsed.has_value());
-                seen.push_back(std::move(*parsed));
+                seen.emplace_back(data.Raw());
             }
         });
         service.EndFrame();
@@ -186,10 +158,10 @@ namespace BECore::Tests {
         service.RemovePublishObserver(id);
 
         ASSERT_EQ(seen.size(), 1u);
-        const Json* state = FindJsonMember(seen[0], "state");
-        ASSERT_NE(state, nullptr);
-        EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 6);
-        EXPECT_EQ(StringOf(&seen[0], "game"), String("FakeControllable"));
+        const JsonView state = MemberOf(seen[0].View(), "state");
+        ASSERT_TRUE(state.IsObject());
+        EXPECT_EQ(IntOf(state, "counter").value_or(-1), 6);
+        EXPECT_EQ(StringOf(seen[0].View(), "game"), String("FakeControllable"));
     }
 
     TEST_F(GameControlWriterTest, AGameThatCannotBeControlledPushesNothing) {
@@ -219,7 +191,7 @@ namespace BECore::Tests {
     TEST_F(GameControlWriterTest, ASecondGetStateIntoTheKeptScratchAllocatesNothing) {
         size_t sent = 0;
         const auto count = [&sent](const String& text) { sent += text.size(); };
-        const String request = MakeRequest(kRequestId, "get_state");
+        const String request = MakeRequestText(kRequestId, "get_state");
         service.Post(request, count);
         service.Drain();  // grows the scratch
         service.Post(request, count);

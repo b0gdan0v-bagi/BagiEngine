@@ -3,11 +3,9 @@
 
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Threading/Thread.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/Wait.h>
-#include <atomic>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -24,14 +22,11 @@ namespace BECore::Tests {
 
             /// A request of each shape: an id, a method, and `params` with a member the handler reads
             static String Ping() {
-                return MakeRequest(1, "ping");
+                return MakeRequestText(1, "ping");
             }
 
             static String LogSince() {
-                Json params = Json::object();
-                params["mark"] = 0;
-                params["level"] = "error";
-                return MakeRequest(2, "log_since", params);
+                return MakeRequestText(2, "log_since", R"({"level":"error","mark":0})");
             }
 
             ControlService service;

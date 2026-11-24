@@ -3,7 +3,6 @@
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlClock.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/ControlClockTypes.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -27,6 +26,9 @@ namespace BECore::Tests {
             return text;
         }
 
+        /// The clock after the two frames of the fixture, as the DOM path dumped it (the float of the fixed step widened to a double)
+        constexpr StringView kClockText = R"({"deltaTime":0.125,"fixedDeltaTime":0.01666666753590107,"frame":2,"totalTime":0.25})";
+
         class ControlClockTest : public ::testing::Test {
         protected:
             void SetUp() override {
@@ -43,18 +45,14 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(ControlClockTest, TheReadClockIsWrittenAsTheDomPathWroteIt) {
-        EXPECT_EQ(Written(ControlClock::Read()), DumpJson(DomClock()));
+        EXPECT_EQ(Written(ControlClock::Read()), kClockText);
     }
 
     TEST_F(ControlClockTest, AnAnswerThatDerivesTheClockMergesItsKeysSorted) {
         ControlClockTestAnswer answer;
         static_cast<ControlClock&>(answer) = ControlClock::Read();
 
-        Json expected = DomClock();
-        expected["a"] = 1;
-        expected["fz"] = 2;
-        expected["zz"] = 3;
-        EXPECT_EQ(Written(answer), DumpJson(expected));
+        EXPECT_EQ(Written(answer), R"({"a":1,"deltaTime":0.125,"fixedDeltaTime":0.01666666753590107,"frame":2,"fz":2,"totalTime":0.25,"zz":3})");
     }
 
     TEST_F(ControlClockTest, ReplyObjectAnswersWithTheWrittenValueAsTheResult) {
@@ -62,10 +60,10 @@ namespace BECore::Tests {
         service.RegisterHandler("clock", [](ControlCall& call) { call.ReplyObject(ControlClock::Read()); });
 
         String text;
-        service.Post(MakeRequest(4, "clock"), [&text](const String& reply) { text = reply; });
+        service.Post(MakeRequestText(4, "clock"), [&text](const String& reply) { text = reply; });
         service.Drain();
 
-        EXPECT_EQ(text, MakeOkResponse("4", DomClock()));
+        EXPECT_EQ(text, Format(R"({{"id":4,"ok":true,"result":{}}})", kClockText));
     }
 
 }  // namespace BECore::Tests

@@ -7,7 +7,6 @@
 #include <BECore/ControlArenaAnswerTypes.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/ScratchArena.h>
-#include <BECore/Threading/Thread.h>
 #include <BECore/Time/Time.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
@@ -104,8 +103,8 @@ namespace BECore::Tests {
         };
 
         TEST_F(ControlArenaAnswerTest, ReplyIsTheTextOfItsHeapTwin) {
-            Post(MakeRequest(1, "arena"));
-            Post(MakeRequest(1, "heap"));
+            Post(MakeRequestText(1, "arena"));
+            Post(MakeRequestText(1, "heap"));
             service.Drain();
 
             ASSERT_EQ(replies.size(), 2u);
@@ -116,7 +115,7 @@ namespace BECore::Tests {
         TEST_F(ControlArenaAnswerTest, HandlerGivesItsArenaBackWithTheReply) {
             const size_t before = ScratchBytes();
 
-            Post(MakeRequest(1, "arena"));
+            Post(MakeRequestText(1, "arena"));
             service.Drain();
 
             EXPECT_EQ(replies.size(), 1u);
@@ -126,26 +125,26 @@ namespace BECore::Tests {
         TEST_F(ControlArenaAnswerTest, FailedHandlerGivesItsArenaBack) {
             const size_t before = ScratchBytes();
 
-            Post(MakeRequest(1, "arena_fail"));
-            Post(MakeRequest(2, "no_such_method"));
+            Post(MakeRequestText(1, "arena_fail"));
+            Post(MakeRequestText(2, "no_such_method"));
             service.Drain();
 
             ASSERT_EQ(replies.size(), 2u);
-            EXPECT_EQ(ErrorCode(*ParseJson(replies[0])), "boom");
+            EXPECT_EQ(ControlReply(StringView(replies[0].c_str(), replies[0].size())).ErrorCode(), "boom");
             EXPECT_EQ(ScratchBytes(), before);
         }
 
         TEST_F(ControlArenaAnswerTest, DeferredDoneGivesItsArenaBack) {
             const size_t before = ScratchBytes();
 
-            Post(MakeRequest(1, "arena_deferred"));
+            Post(MakeRequestText(1, "arena_deferred"));
             service.Drain();
             EXPECT_TRUE(replies.empty());
             service.EndFrame();
 
             ASSERT_EQ(replies.size(), 1u);
             EXPECT_EQ(ScratchBytes(), before);
-            Post(MakeRequest(2, "heap"));
+            Post(MakeRequestText(2, "heap"));
             service.Drain();
             EXPECT_EQ(replies[0].substr(replies[0].find("result")), replies[1].substr(replies[1].find("result")));
         }
@@ -153,33 +152,17 @@ namespace BECore::Tests {
         TEST_F(ControlArenaAnswerTest, CallsOfABatchWithAStepInsideGiveTheirArenaBack) {
             service.SetManualClock(true);
             RegisterControlBuiltins(service);
-            Json step = Json::object();
-            step["method"] = "step";
-            Json steps = Json::object();
-            steps["frames"] = 2;
-            step["params"] = steps;
-            Json arena = Json::object();
-            arena["method"] = "arena";
-            Json deferred = Json::object();
-            deferred["method"] = "arena_deferred";
-            Json calls = Json::array();
-            calls.push_back(arena);
-            calls.push_back(step);
-            calls.push_back(deferred);
-            calls.push_back(arena);
-            Json params = Json::object();
-            params["calls"] = calls;
             const size_t before = ScratchBytes();
 
-            Post(MakeRequest(1, "batch", params));
+            Post(MakeRequestText(1, "batch", R"({"calls":[{"method":"arena"},{"method":"step","params":{"frames":2}},{"method":"arena_deferred"},{"method":"arena"}]})"));
             service.Drain();
             RunDueFrames();
 
             ASSERT_EQ(replies.size(), 1u);
             EXPECT_EQ(ScratchBytes(), before);
-            auto parsed = ParseJson(replies[0]);
-            ASSERT_TRUE(parsed);
-            EXPECT_TRUE(IsOk(*parsed));
+            const ControlReply reply(StringView(replies[0].c_str(), replies[0].size()));
+            ASSERT_TRUE(reply.View().IsValid());
+            EXPECT_TRUE(reply.IsOk());
             EXPECT_NE(replies[0].find(kRowLabel.data()), String::npos);
         }
 
@@ -214,7 +197,7 @@ namespace BECore::Tests {
             });
             poster.join();
 
-            EXPECT_EQ(ErrorCode(*ParseJson(reply)), ControlErrors::kShuttingDown);
+            EXPECT_EQ(ControlReply(StringView(reply.c_str(), reply.size())).ErrorCode(), ControlErrors::kShuttingDown);
             EXPECT_EQ(after, before);
         }
 
@@ -233,7 +216,7 @@ namespace BECore::Tests {
 
             size_t replyBytes = 0;  // the reply function of the measured calls keeps nothing, so only the service is counted
             for (int64_t id = 1; id <= 3; ++id) {
-                service.Post(MakeRequest(id, "measured"), [&replyBytes](const String& text) { replyBytes += text.size(); });
+                service.Post(MakeRequestText(id, "measured"), [&replyBytes](const String& text) { replyBytes += text.size(); });
                 service.Drain();
             }
             EXPECT_GT(replyBytes, 0u);

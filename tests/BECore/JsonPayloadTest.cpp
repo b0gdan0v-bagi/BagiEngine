@@ -1,11 +1,11 @@
 // The reflected leaf JsonPayload (Control/JsonPayload.h): a generated `WriteJson` writes it as one value at the sorted place of its key, byte for byte
-// the text `DumpJson` gives for the same document.
+// the text the DOM serializer gave for the same document (the literals below were printed from it).
 
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
-#include <BECore/Control/Json.h>
 #include <BECore/Control/JsonPayload.h>
-#include <BECore/Control/JsonSerializer.h>
+#include <BECore/Control/JsonStreamSerializer.h>
+#include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriteReflect.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/JsonPayloadTypes.h>
@@ -28,10 +28,9 @@ namespace BECore::Tests {
 
         constexpr Array<int, 2> kIndents = {JsonWriter::kCompact, 2};
 
-        /// A document with nested containers and keys that the DOM sorts
-        Json MakeDocument() {
-            return Json::parse(R"({"b":[1,2.5,"x"],"a":{"z":null,"y":true},"c":"text"})");
-        }
+        /// A document with nested containers and keys out of order, and the same document with its keys in byte order, as the DOM dumped it
+        constexpr StringView kDocumentText = R"({"b":[1,2.5,"x"],"a":{"z":null,"y":true},"c":"text"})";
+        constexpr StringView kSortedDocumentText = R"({"a":{"y":true,"z":null},"b":[1,2.5,"x"],"c":"text"})";
 
         template <typename T>
         String Written(const T& object, int indent = JsonWriter::kCompact) {
@@ -63,30 +62,20 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(JsonPayloadTest, ABorrowedDocumentIsWrittenAtTheSortedPlaceOfItsKey) {
-        const Json document = MakeDocument();
+    TEST(JsonPayloadTest, AStreamedDocumentIsWrittenAtTheSortedPlaceOfItsKey) {
+        const JsonDoc document(kDocumentText);
+        const auto write = [&document](JsonWriter& writer) -> std::expected<void, ControlError> {
+            WriteJsonSorted(writer, document.Root());
+            return {};
+        };
         PayloadBetween answer;
         answer.alpha = "A";
         answer.zulu = "Z";
-        answer.middle = JsonPayload::Borrowed(document);
-        for (const int indent : kIndents) {
-            const Json expected = {{"alpha", "A"}, {"middle", document}, {"zulu", "Z"}};
-            EXPECT_EQ(Written(answer, indent), DumpJson(expected, indent)) << "indent " << indent;
-        }
-    }
+        answer.middle = JsonPayload::Streamed(write);
 
-    TEST(JsonPayloadTest, AnOwnedDocumentIsMovedInAndWrittenTheSame) {
-        Json document = MakeDocument();
-        const String reference = DumpJson(document);
-        PayloadBetween answer;
-        answer.middle = JsonPayload::Owned(std::move(document));
-        EXPECT_TRUE(document.is_null()) << "moved from, so not copied";  // NOLINT(bugprone-use-after-move): a moved-from Json is null
-        EXPECT_EQ(Written(answer), String("{\"alpha\":\"\",\"middle\":") + reference + ",\"zulu\":\"\"}");
-
-        // Moving the payload moves the document with it
-        PayloadBetween other;
-        other.middle = std::move(answer.middle);
-        EXPECT_EQ(Written(other), String("{\"alpha\":\"\",\"middle\":") + reference + ",\"zulu\":\"\"}");
+        EXPECT_EQ(Written(answer, JsonWriter::kCompact), R"({"alpha":"A","middle":{"a":{"y":true,"z":null},"b":[1,2.5,"x"],"c":"text"},"zulu":"Z"})");
+        EXPECT_EQ(Written(answer, 2), "{\n  \"alpha\": \"A\",\n  \"middle\": {\n    \"a\": {\n      \"y\": true,\n      \"z\": null\n    },\n    \"b\": [\n      1,\n      2.5,\n      \"x\"\n    ],\n "
+                                      "   \"c\": \"text\"\n  },\n  \"zulu\": \"Z\"\n}");
     }
 
     TEST(JsonPayloadTest, ReadyTextIsWrittenAsItIsAlsoWhenIndented) {
@@ -106,13 +95,12 @@ namespace BECore::Tests {
 
     TEST(JsonPayloadTest, AnAbsentOptionalWritesNoKey) {
         PayloadOptional answer;
-        const Json document = MakeDocument();
-        answer.always = JsonPayload::Borrowed(document);
-        EXPECT_EQ(Written(answer), String("{\"always\":") + DumpJson(document) + ",\"version\":0}");
+        answer.always = JsonPayload::Text(kSortedDocumentText);
+        EXPECT_EQ(Written(answer), Format(R"({{"always":{},"version":0}})", kSortedDocumentText));
 
         const String text = "[1]";
         answer.maybe = JsonPayload::Text(text);
-        EXPECT_EQ(Written(answer), String("{\"always\":") + DumpJson(document) + ",\"maybe\":[1],\"version\":0}");
+        EXPECT_EQ(Written(answer), Format(R"({{"always":{},"maybe":[1],"version":0}})", kSortedDocumentText));
     }
 
     TEST(JsonPayloadTest, AnEmptyPayloadWritesNullAndIsAnExpect) {
@@ -127,13 +115,12 @@ namespace BECore::Tests {
     }
 
     TEST(JsonPayloadTest, ARowOfAListAndAnOptionalRowHoldTheirPayloads) {
-        const Json first = MakeDocument();
         const String second = "7";
         const auto write = [](JsonWriter& writer) { return WriteSmallObject(writer); };
         PayloadRows answer;
         answer.rows.resize(3);
         answer.rows[0].ok = true;
-        answer.rows[0].result = JsonPayload::Borrowed(first);
+        answer.rows[0].result = JsonPayload::Text(kSortedDocumentText);
         answer.rows[1].result = JsonPayload::Text(second);
         answer.rows[2].ok = true;
         answer.rows[2].result = JsonPayload::Streamed(write);
@@ -141,7 +128,7 @@ namespace BECore::Tests {
         answer.last->result = JsonPayload::Text(second);
 
         const String expected =
-            "{\"last\":{\"ok\":false,\"result\":7},\"rows\":[{\"ok\":true,\"result\":" + DumpJson(first) + "},{\"ok\":false,\"result\":7},{\"ok\":true,\"result\":" + kSmallObjectText + "}]}";
+            Format(R"({{"last":{{"ok":false,"result":7}},"rows":[{{"ok":true,"result":{}}},{{"ok":false,"result":7}},{{"ok":true,"result":{}}}]}})", kSortedDocumentText, kSmallObjectText);
         EXPECT_EQ(Written(answer), expected);
     }
 
@@ -157,15 +144,22 @@ namespace BECore::Tests {
     }
 
     TEST(JsonPayloadTest, ANestedValueIsCutLikeTheDocumentWriterWhenTheWriterIsDeep) {
-        // The payload writes through the document writer, so the depth rule of WriteJson(writer, json) holds inside a struct
-        Json deep = Json::array();
-        Json* cursor = &deep;
-        for (size_t level = 0; level < JsonWriter::kMaxDepth + 4; ++level) {
-            cursor->push_back(Json::array());
-            cursor = &(*cursor)[0];
+        // The payload writes through the document writer, so the depth rule of WriteJson(writer, view) holds inside a struct
+        String deepText;
+        for (size_t level = 0; level < JsonWriter::kMaxDepth; ++level) {
+            deepText += '[';
         }
+        for (size_t level = 0; level < JsonWriter::kMaxDepth; ++level) {
+            deepText += ']';
+        }
+        const JsonDoc deep(StringView(deepText.c_str(), deepText.size()));
+        ASSERT_TRUE(deep.IsParsed());
+        const auto write = [&deep](JsonWriter& writer) -> std::expected<void, ControlError> {
+            WriteJson(writer, deep.Root());
+            return {};
+        };
         PayloadBetween answer;
-        answer.middle = JsonPayload::Borrowed(deep);
+        answer.middle = JsonPayload::Streamed(write);
         String out;
         JsonWriter writer(out);
         answer.WriteJson(writer);
@@ -209,7 +203,7 @@ namespace BECore::Tests {
         Vector<String> AnswerOnce(ControlService& service, const T& answer) {
             Vector<String> replies;
             service.RegisterHandler("ask", [&answer](ControlCall& call) { call.ReplyObject(answer); });
-            service.Post(MakeRequest(4, "ask"), [&replies](const String& text) { replies.push_back(text); });
+            service.Post(MakeRequestText(4, "ask"), [&replies](const String& text) { replies.push_back(text); });
             service.Drain();
             return replies;
         }
@@ -269,9 +263,9 @@ namespace BECore::Tests {
         service.RegisterHandler("inner", [&answer](ControlCall& call) { call.ReplyObject(answer); });
         service.RegisterHandler("outer", [&](ControlCall& call) {
             nested = service.RunNested(call, "inner", EmptyParamsView(), [](ControlCall&, ControlAnswer) {});
-            call.Reply(Json::object());
+            call.ReplyEmpty();
         });
-        service.Post(MakeRequest(1, "outer"), [](const String&) {});
+        service.Post(MakeRequestText(1, "outer"), [](const String&) {});
         service.Drain();
         ASSERT_TRUE(nested.has_value());
         ASSERT_FALSE(nested.value().has_value());
@@ -316,10 +310,11 @@ namespace BECore::Tests {
         static_assert(DescribeType<Optional<JsonPayload>>().element->kind == TypeKind::Opaque);
 
         // The generated pair compiles for a struct with a payload; it saves nothing of the document
-        const Json document = MakeDocument();
         PayloadBetween answer;
-        answer.middle = JsonPayload::Borrowed(document);
-        JsonSerializer serializer;
+        answer.middle = JsonPayload::Text(kSortedDocumentText);
+        String out;
+        JsonWriter writer(out);
+        JsonStreamSerializer serializer(writer);
         answer.Serialize(serializer);
     }
 
@@ -364,14 +359,14 @@ namespace BECore::Tests {
     }
 
     TEST(JsonPayloadTest, ASecondPushIntoTheKeptScratchAllocatesNothingInBothForms) {
-        const Json data = Json::parse(R"({"n":[1,2]})");
+        const JsonDoc data(R"({"n":[1,2]})");
         PayloadBetween answer;
         const String text = R"({"k":1})";
         answer.middle = JsonPayload::Text(text);
         ControlService service;
         String last;
         service.SetEventSink([&last](const String& pushed) { last = pushed; });
-        const auto pushDocument = [&] { service.Publish("state_changed", data); };
+        const auto pushDocument = [&] { service.Publish("state_changed", [&data](JsonWriter& writer) { WriteJson(writer, data.Root()); }); };
         const auto pushWriter = [&] { service.Publish("state_changed", [&answer](JsonWriter& writer) { answer.WriteJson(writer); }); };
         pushDocument();
         pushWriter();
