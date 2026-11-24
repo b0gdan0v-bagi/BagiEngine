@@ -1,4 +1,5 @@
 #include <BECore/Application/ApplicationConfig.h>
+#include <BECore/Application/CommandLineDeserializer.h>
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -156,6 +157,22 @@ namespace BECore::Tests {
         ASSERT_TRUE(load.found);
         EXPECT_EQ(load.config._mode, RunMode::Editor);
         EXPECT_TRUE(CoreManager::GetConfigManager().HasConfig(GetWidgetsConfigName(load.config._mode)));
+    }
+
+    TEST(ApplicationConfigTest, ACommandLineReaderOverTheLoadedConfigOverridesFieldByField) {
+        ApplicationConfig config = Load(R"(<root type="SDL3ApplicationFabric" control="true" controlPort="9000" headless="true"/>)").config;
+        CommandLine line;
+        line.Set(Vector<String>{"--control-port=9100", "--headless=false"});
+        const StringView keys[] = {"controlPort", "headless", "control"};
+        CommandLineDeserializer reader(line, keys);
+        config.Deserialize(reader);
+        reader.FinishLoad();
+
+        EXPECT_FALSE(reader.HasErrors());
+        EXPECT_EQ(config._controlPort, 9100);
+        EXPECT_FALSE(config._headless);
+        EXPECT_TRUE(config._control);
+        EXPECT_EQ(config._type, "SDL3ApplicationFabric");
     }
 
 }  // namespace BECore::Tests
