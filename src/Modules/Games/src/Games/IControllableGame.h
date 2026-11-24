@@ -33,8 +33,7 @@ namespace BECore {
      * the main thread, in frame stage 1b, so a call never races with the game's logic.
      *
      * Everything that comes from the client (the parameters of PerformAction, Reset and SetState) is untrusted: read the `JsonView` with
-     * the checked helpers of BECore/Control/ControlParams.h (a wrong type, an escape the helper cannot honour or an integer past 64 bits reads as
-     * nothing), and answer a bad value with an error, not an assert. A view is valid for the call only.
+     * the checked helpers of BECore/Control/ControlParams.h (a wrong type or an integer past 64 bits reads as nothing), and answer a bad value with an error, not an assert. A view is valid for the call only.
      *
      * Every method that writes (WriteState, WriteActions, PerformAction, WriteReplayStart) writes **exactly one value** into the writer it is given
      * (`Null()` for "nothing to say") and returns success, or returns an error, and whatever it wrote is then dropped. A method that returns success
