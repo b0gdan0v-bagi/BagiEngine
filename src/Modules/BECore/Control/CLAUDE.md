@@ -22,9 +22,10 @@ The core of the external control API: a program or a model sends commands, the e
 | `JsonWriter` | Streaming JSON writer into a caller's `String`: no DOM, no allocation beyond that `String`'s growth; byte-identical to nlohmann's `dump` |
 | `JsonPayload` | The reflected leaf of a foreign JSON value in an answer (`Borrowed`, `Streamed`, `Text`, `Owned`); the schema says `any` |
 | `JsonSerializer` | `ISerializer` into a `Json` (`Take()`), DOM-backed; a reflected value has its generated `WriteJson` (`JsonWriteReflect.h`) |
-| `JsonStreamSerializer` | `ISerializer` that writes into a `JsonWriter` (the result of `call_method`): the shapes of `JsonSerializer`, members in write order, a call that does not fit is ignored |
+| `JsonStreamSerializer` | `ISerializer` that writes into a `JsonWriter` (the result of `call_method`): the shapes of `JsonSerializer`, members in write order |
 | `JsonTape`, `JsonView` | One-pass tokenizer of a JSON text into a reused buffer, and the checked read-only cursor over it; the text is borrowed (`.claude/rules/json-tape.md`) |
-| `JsonDeserializer` | `IDeserializer` that walks a tape: `Load(text)` / `Load(tape)` / `Load(JsonView)` (any value of a tape the caller keeps, e.g. `arguments` of `call_method`) serve many messages, always strict, with findings; `JsonDeserializer(const Json&)` is an interim bridge (`.claude/rules/json-tape.md`) |
+| `JsonDeserializer` | `IDeserializer` that walks a tape: `Load(text)` / `Load(tape)` / `Load(JsonView)` (any value of a tape the caller keeps) serve many messages, always strict, with findings; `JsonDeserializer(const Json&)` is an interim bridge (`.claude/rules/json-tape.md`) |
+| `JsonViewOps` | `JsonEquals`, `WriteJson(writer, view)`, `FindJsonPointer(view, ..)`: what the game layer does with a view |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules"); `DumpJson` / `AppendJson` write a `Json` through `JsonWriter` |
 | `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
 
@@ -61,7 +62,7 @@ Error codes are strings and part of the protocol (`ControlErrors`): `parse_error
 
 The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXCEPTION` and **aborts the whole process** where it would throw. `at()` on a missing key, `get<T>()` on the wrong type, `value()` on a non-object and a const `operator[]` by a missing key all abort.
 
-- **A handler reads `call.Params()`** (a `JsonView` into the request's tape; `.claude/rules/json-tape.md`) with `ControlParams.h`, never `Json`: every read is checked, a number must be finite (`1e999` reads as nothing, so the handler answers `invalid_params`). `ParamsJson()` is a DOM parsed on first use for the readers that still hold one (`GameControl`, `ReplayControl`, `ArtGenSessionControl`); it goes with them.
+- **A handler reads `call.Params()`** (a `JsonView` into the request's tape; `.claude/rules/json-tape.md`) with `ControlParams.h`, never `Json`: every read is checked, a number must be finite (`1e999` reads as nothing, so the handler answers `invalid_params`). `ParamsJson()` is a DOM parsed on first use for the readers that still hold one (`ArtGenSessionControl`); it goes with it.
 - `Json.h` stays where a DOM does: include it in `.cpp` files, `JsonFwd.h` in headers that only mention the type (`CoreManager.h` must not pull in the full header, about 900 KB). Parse with `ParseJson()` only, read with `FindJsonMember()` / `GetJson*()` (`GetJsonInt` rejects `1.5`, `"3"` and what does not fit `int64_t`); building (`Json::object()`) and `DumpJson()` are safe.
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport. A request nested deeper than `kMaxRequestDepth` (128) is `invalid_request` with `id: null` (`IsJsonNestedDeeperThan` runs before the tape, whose own limit is 256 and a `parse_error`); a reader that keeps client JSON as a DOM checks it too, since copying a value recurses once per level.
 - **New JSON is written with `JsonWriter`; `Json` is for reading client input and for the few documents that stay a DOM** (the state document of `run_until`, the file merge of `EditorSettings`). `DumpJson` is for a value that already is a `Json`.
