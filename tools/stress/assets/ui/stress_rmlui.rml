@@ -1,0 +1,15 @@
+<rml>
+<head>
+    <link type="text/rcss" href="stress_rmlui.rcss"/>
+</head>
+<body>
+    <div id="scroller">
+        <div id="content">
+            <div class="corner top-left">TL</div>
+            <div class="corner top-right">TR</div>
+            <div class="corner bottom-left">BL</div>
+            <div class="corner bottom-right">BR</div>
+        </div>
+    </div>
+</body>
+</rml>
