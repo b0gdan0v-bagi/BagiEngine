@@ -11,7 +11,8 @@ namespace BECore {
     inline constexpr uint16_t kDefaultControlPort = 8765;
 
     /// The flags of the command line that ResolveControlSettings() reads, as they are spelled; the reader derives each from the name of its
-    /// field (CommandLineDeserializer), these only name them in the messages of the rules between settings
+    /// field (CommandLineDeserializer); these name them in the messages of the rules between settings and in the lookups of
+    /// CommandLine::Find that ask whether a flag was given
     namespace ControlArguments {
         inline constexpr StringView kControl = "--control";
         inline constexpr StringView kControlPort = "--control-port";

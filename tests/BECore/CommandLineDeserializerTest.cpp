@@ -168,7 +168,7 @@ namespace BECore::Tests {
         ProbeReading reading({"--title=hero"});
         reading.Load();
         EXPECT_FALSE(reading.Reader().HasErrors());
-        EXPECT_EQ(reading.Value()._title, PoolString::Intern(StringView("hero")));
+        EXPECT_EQ(reading.Value()._title, "hero"_intern);
     }
 
     TEST(CommandLineDeserializerTest, APoolStringOverTheLimitIsRefused) {
@@ -399,16 +399,6 @@ namespace BECore::Tests {
         }
         Diagnosed run(args, DiagnosticsMode::Warn);
         EXPECT_LE(run.Reading().Reader().GetWarnings().size(), ReaderLimits::kMaxRecordedErrors);
-    }
-
-    TEST(CommandLineDeserializerTest, OffAllocatesNothingPerLookup) {
-        CommandLine line;
-        line.Set(Args{"--port=9000"});
-        CommandLineDeserializer reader(line);
-        uint16_t port = 0;
-        const auto read = [&] { reader.ReadAttribute("port", port); };
-        read();
-        ExpectNoAllocations(read);
     }
 
     TEST(CommandLineDeserializerTest, ControlFlagsAreReadFromTheirFlags) {

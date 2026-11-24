@@ -1,7 +1,10 @@
 #pragma once
 
+#include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <charconv>
 #include <cmath>
+#include <cstdint>
 
 namespace BECore::StrictText {
 
@@ -10,7 +13,7 @@ namespace BECore::StrictText {
     // so a number or a bool means the same in a config file and on the command line.
     // =========================================================================
 
-    enum class Status { Ok, Malformed, OutOfRange };
+    CORE_ENUM(Status, uint8_t, Ok, Malformed, OutOfRange)
 
     /// Spaces, tabs and line breaks at both ends are not part of the value
     StringView TrimAsciiSpaces(StringView text);
