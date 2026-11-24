@@ -2,6 +2,5 @@
 # The list only shrinks: a fix removes or lowers its lines, and `python3 CI/scripts/check_types.py --root . --baseline CI/types_baseline.txt
 # --update-baseline` rewrites the file after it. A diff that adds a line or raises a count is a finding: fix the new hit with the alias of
 # BECore/Types, or mark a real boundary `//-NoStd: <why>`; never baseline it.
-# Who removes which lines:
-#   directory-iterator                 engine-path-type (the file layer has no directory listing)
+# No rule has a line owned by another entry now.
 # Whoever empties a rule deletes its lines here.
