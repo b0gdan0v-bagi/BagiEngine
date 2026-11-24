@@ -4,7 +4,7 @@
 
 The client of the rooms (the entry `network-rooms` of the todo store, slice 3 of 4): what a game links to host or join a room on a room server (`Rooms/CLAUDE.md`, `RoomServer/CLAUDE.md`) and to play its seat. Two layers: `IRoomTransport`, one polled connection (the desktop and the browser each have one), and `RoomClient`, the protocol client over it. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomClientModule`). Built in **every** configuration, the web build included; with `ENGINE_WITH_REMOTE_CONTROL` it links `RemoteControlModule` for the desktop transport, and on Emscripten the SDK library `websocket.js` for the browser one (a game that links the module inherits both).
 
-**How a game uses it:** a component owns one `RoomClient`, calls `Poll()` once per frame on the main thread, then `DrainEvents(events)` (a member vector, so it keeps its capacity) and redraws from `GetState()`, `GetLobby()`, `GetView()` and `GetActions()` when an event says they changed. Commands (`Host` (`isPublic` lists the room), `Join`, `ListRooms`, `Resume`, `ChooseSeat`, `Start`, `SendAction`, `Leave`, `Disconnect`) are asked of the server; the outcome is an event. A command returns an error itself only when it cannot be sent (`wrong_state`, `transport_unavailable`, `connect_failed`, `unknown_room` for a code that cannot exist, `invalid_session`). The game saves `GetSession()` (room, token, address; **the token is the player's secret**) and calls `Resume()` with it to come back later (see "The session"). The client keeps `view` and `actions` as the server sent them and reads no game.
+**How a game uses it:** a component owns one `RoomClient`, calls `Poll()` once per frame on the main thread, then `DrainEvents(events)` (a member vector, so it keeps its capacity) and redraws from `GetState()`, `GetLobby()`, `GetViewText()` and `GetActionsText()` when an event says they changed. Commands (`Host` (`isPublic` lists the room), `Join`, `ListRooms`, `Resume`, `ChooseSeat`, `Start`, `SendAction`, `Leave`, `Disconnect`) are asked of the server; the outcome is an event. A command returns an error itself only when it cannot be sent (`wrong_state`, `transport_unavailable`, `connect_failed`, `unknown_room` for a code that cannot exist, `invalid_session`). The game saves `GetSession()` (room, token, address; **the token is the player's secret**) and calls `Resume()` with it to come back later (see "The session"). The client keeps `view` and `actions` as the compact JSON text the server sent them (read them with a `JsonTape` of the game's own; the text stays valid until the next `view`) and reads no game. `Host` (`options`) and `SendAction` (`action`) take the document as JSON text; one that is not a single object is `invalid_params` (`ControlErrors`) and nothing is sent, otherwise it is sent compacted.
 
 | File | Purpose |
 |------|---------|
@@ -84,11 +84,11 @@ _client.Poll();
 _events.clear();
 _client.DrainEvents(_events);
 for (const RoomClientEvent& event : _events) {
-    // Joined / Resumed: save _client.GetSession() (secret); LobbyChanged: redraw GetLobby(); ViewChanged: redraw GetView() / GetActions();
+    // Joined / Resumed: save _client.GetSession() (secret); LobbyChanged: redraw GetLobby(); ViewChanged: redraw GetViewText() / GetActionsText();
     // Error: show event.message; ConnectionLost: show "reconnecting" (willRetry); Closed: show it, forget the saved session on room_gone / replaced / gave_up
 }
 // a browse screen: _client.ListRooms(url, game) on a timer >= kListRefill, redraw GetRoomList() on RoomList, a click: _client.Join(url, room.room, name)
-// a click: _client.ChooseSeat(n) / Start() / SendAction(GetActions()[i]); at start-up with a saved session: _client.Resume(session)
+// a click: _client.ChooseSeat(n) / Start() / SendAction(<the i-th action of GetActionsText()>); at start-up with a saved session: _client.Resume(session)
 ```
 
 `probe/main.cpp` is the same in a loop. A frame in which nothing came allocates nothing (above); redraw only on an event.
