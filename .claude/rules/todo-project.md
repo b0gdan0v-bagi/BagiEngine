@@ -14,7 +14,7 @@ Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-db` and by the a
 |------|-----------------------|------------------------|----------|
 | engine | `engine` | `.` | `main` |
 
-`<engine>` is `.`. The CLI is `python3 tools/todo/todo.py` (the loader of the CLI the service hands out: `tools/todo/CLAUDE.md`); `TODO_API_URL` and `TODO_API_TOKEN` come from the git-ignored `.env` (`.env.example`); the token is this checkout's own, limited to its areas.
+`<engine>` is `.`. The CLI is `python3 tools/todo/todo.py` (the loader of the CLI the service hands out: `tools/todo/CLAUDE.md`); `TODO_API_URL` and `TODO_API_TOKEN` come from the git-ignored `.env` (`.env.example`); the token is this checkout's own, limited to its areas. Every area has an **inbox** (`tools/todo/CLAUDE.md`, "Inbox"): an entry for an area this token does not hold is filed into that area's inbox, and the loop and `todo-dispatch` take this area's inbox entries first.
 
 ## Build and test (baseline and reviewer)
 
