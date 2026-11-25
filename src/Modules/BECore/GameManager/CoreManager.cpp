@@ -41,6 +41,8 @@
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIVars.h>
+#include <BECore/Widgets/EditorDocuments.h>
+#include <BECore/Widgets/EditorStateControl.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
 #include <Events/EventsQueueRegistry.h>
@@ -56,8 +58,8 @@ namespace BECore {
     }  // namespace
 
     CoreManager::CoreManager()
-        : _commandLine(MakeUnique<CommandLine>()), _fileSystem(MakeUnique<FileSystem>()), _fileWatcher(MakeUnique<FileWatcher>(*_fileSystem)), _configManager(MakeUnique<ConfigManager>()),
-          _testManager(MakeUnique<TestManager>()), _resourceManager(MakeUnique<ResourceManager>()), _widgetManager(MakeUnique<WidgetManager>()),
+        : _commandLine(MakeUnique<CommandLine>()), _fileSystem(MakeUnique<FileSystem>()), _fileWatcher(MakeUnique<FileWatcher>(*_fileSystem)), _editorDocuments(MakeUnique<EditorDocuments>()),
+          _configManager(MakeUnique<ConfigManager>()), _testManager(MakeUnique<TestManager>()), _resourceManager(MakeUnique<ResourceManager>()), _widgetManager(MakeUnique<WidgetManager>()),
           _eventsProviderManager(MakeUnique<EventsProviderManager>()), _clipboard(MakeUnique<Clipboard>()), _audioManager(MakeUnique<AudioManager>()),
           _mainWindowManager(MakeUnique<MainWindowManager>()), _rendererManager(MakeUnique<RendererManager>()), _uiInput(MakeUnique<UIInput>()), _uiEnvironment(MakeUnique<UIEnvironment>()),
           _uiVars(MakeUnique<UIVars>()), _uiStrings(MakeUnique<UIStrings>()), _uiThemes(MakeUnique<UIThemes>()), _textureLibrary(MakeUnique<TextureLibrary>()),
@@ -156,6 +158,7 @@ namespace BECore {
         RegisterClipboardControl(*_controlService);
         RegisterAudioControl(*_controlService, *_audioManager);
         RegisterFileWatchControl(*_controlService, *_fileWatcher);
+        RegisterEditorStateControl(*_controlService, *_editorDocuments);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
