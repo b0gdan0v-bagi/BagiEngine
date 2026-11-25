@@ -47,6 +47,9 @@ RUN_UNTIL_METHOD = "run_until"
 DEFAULT_RUN_UNTIL_FRAMES = 600  # the game's default for maxFrames, which the timeout of a run_until counts when none is given
 LOG_LEVEL_WARNING = "warning"
 SET_WINDOW_METHOD = "set_window"
+IMGUI_INPUT_METHOD = "imgui_input"
+IMGUI_FIND_METHOD = "imgui_find"
+IMGUI_WAIT_FRAMES = 600  # kMaxImGuiWaitFrames: the frames the game's own wait may run before it answers imgui_timeout
 WINDOW_FLAG = "--window="
 DENSITY_FLAG = "--density="
 EDITOR_FLAG = "--editor"
@@ -273,6 +276,102 @@ class GameSession:
                 raise SessionError("the game does not run in the editor run mode: launch it with editor=True (a build without the editor cannot)") from error
             raise
 
+    def imgui_find(
+        self,
+        label: str | None = None,
+        *,
+        label_contains: str | None = None,
+        id: str | None = None,
+        window: str | None = None,
+        kind: str | None = None,
+        visible_only: bool = False,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Windows and items the editor's ImGui drew, `{frame, display, wantCapture*, matches: [{kind, id, label, window?, x, y, width, height, visible, hovered}], ...}`.
+
+        The rects are output pixels (the pixels of `screenshot` and `click_at`). With no filter only the windows are listed; an item exists only in a frame that
+        drew it, so a menu's items are found while the menu is open (.claude/rules/control-imgui-api.md). `no_imgui` when no editor runs.
+        """
+        params: dict[str, Any] = {}
+        for name, value in (("label", label), ("labelContains", label_contains), ("id", id), ("window", window), ("kind", kind), ("limit", limit)):
+            if value is not None:
+                params[name] = value
+        if visible_only:
+            params["visibleOnly"] = True
+        return self.call(IMGUI_FIND_METHOD, params)
+
+    def imgui_input(self, events: Sequence[dict[str, Any]], space: str | None = None) -> dict[str, Any]:
+        """Sends `events` (`{type: move|click|down|up|wheel|key|text, ...}`) to the editor's ImGui and answers `{events, frames, wantCapture*, wantTextInput}`
+        once ImGui has taken them and a frame has reacted; `space` is "output" (default, screenshot pixels) or "imgui" (ImGui's window units)."""
+        params: dict[str, Any] = {"events": list(events)}
+        if space is not None:
+            params["space"] = space
+        return self.call(IMGUI_INPUT_METHOD, params)
+
+    def imgui_click(
+        self,
+        label: str | None = None,
+        *,
+        x: float | None = None,
+        y: float | None = None,
+        window: str | None = None,
+        button: str = "left",
+        count: int = 1,
+        mods: Sequence[str] = (),
+    ) -> dict[str, Any]:
+        """Clicks the centre of the one visible item called `label` (in `window`, when given), or the point `x`, `y` in output pixels; `count` 2 is a double click.
+
+        Zero matches or several are a SessionError listing what was found (name the `window`, or use `x` and `y`); nothing is clicked then. Answers what
+        `imgui_input` answers.
+        """
+        if label is not None and (x is not None or y is not None):
+            raise SessionError("imgui_click takes a label or a point (x and y), not both")
+        event: dict[str, Any] = {"type": "click"}
+        if label is not None:
+            found = self.imgui_find(label, window=window, kind="item", visible_only=True)
+            matches = found["matches"]
+            where = f" in window '{window}'" if window is not None else ""
+            if not matches:
+                raise SessionError(f"no visible ImGui item '{label}'{where}: an item exists only in a frame that drew it (a menu item while its menu is open)")
+            if len(matches) > 1 or found.get("truncated"):
+                listed = "; ".join(f"'{match['label']}' in '{match.get('window', '')}' at ({match['x']:.0f}, {match['y']:.0f})" for match in matches)
+                raise SessionError(f"{len(matches)} visible ImGui items called '{label}'{where}: {listed}; name the window or click a point")
+            match = matches[0]
+            event["x"] = match["x"] + match["width"] / 2
+            event["y"] = match["y"] + match["height"] / 2
+        elif x is not None and y is not None:
+            event["x"] = x
+            event["y"] = y
+        elif x is not None or y is not None:
+            raise SessionError("imgui_click needs both x and y")
+        else:
+            raise SessionError("imgui_click needs a label or a point (x and y)")
+        if button != "left":
+            event["button"] = button
+        if count != 1:
+            event["count"] = count
+        if mods:
+            event["mods"] = list(mods)
+        return self.imgui_input([event])
+
+    def imgui_type(self, text: str) -> dict[str, Any]:
+        """Types `text` into the focused ImGui text field (UTF-8; ImGui's `wantTextInput` in the answer says whether one had the focus)."""
+        return self.imgui_input([{"type": "text", "text": text}])
+
+    def imgui_key(self, key: str, mods: Sequence[str] = ()) -> dict[str, Any]:
+        """Presses and releases an ImGui key (`Enter`, `Escape`, `A`, `F6`, `LeftArrow`...); `mods` are "ctrl" (Cmd on macOS), "shift", "alt", "super"."""
+        event: dict[str, Any] = {"type": "key", "key": key}
+        if mods:
+            event["mods"] = list(mods)
+        return self.imgui_input([event])
+
+    def imgui_wheel(self, x: float, y: float, dy: float, dx: float = 0.0) -> dict[str, Any]:
+        """Moves the ImGui pointer to the output pixel `x`, `y` and turns the wheel there (`dy` positive scrolls up, as SDL)."""
+        wheel: dict[str, Any] = {"type": "wheel", "dy": dy}
+        if dx:
+            wheel["dx"] = dx
+        return self.imgui_input([{"type": "move", "x": x, "y": y}, wheel])
+
     def log_counts(self) -> dict[str, int]:
         """The warnings and errors the game has logged since its start: `{warnings, errors}` (`log` of `status`)."""
         return self.call("status")["log"]
@@ -457,6 +556,8 @@ class GameSession:
             return max(cls._count(params.get("frames"), 1), 0)
         if method == RUN_UNTIL_METHOD:
             return max(cls._count(params.get("maxFrames"), DEFAULT_RUN_UNTIL_FRAMES), 0)
+        if method in (IMGUI_INPUT_METHOD, IMGUI_FIND_METHOD):
+            return IMGUI_WAIT_FRAMES
         if method == BATCH_METHOD:
             calls = params.get("calls")
             if not isinstance(calls, list):

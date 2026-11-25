@@ -14,14 +14,6 @@
         a="255" />
     </widget>
     <widget
-      type="ClearScreenWidget">
-      <clearColor
-        r="30"
-        g="30"
-        b="30"
-        a="255" />
-    </widget>
-    <widget
       type="ConfigEditorWidget" />
     <widget
       type="SceneEditorWidget" />
@@ -32,7 +24,8 @@
     <widget
       type="ConsoleWidget" />
     <widget
-      type="FileChangesWidget" />
+      type="AssetPanelWidget"
+      asset="FileChangesPanel" />
     <widget
       type="GamePanelWidget" />
     <widget

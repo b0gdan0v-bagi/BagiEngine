@@ -3,4 +3,6 @@
   type="SDL3ApplicationFabric"
   renderer="VulkanRendererBackend"
   path="config/SDLWindowConfig.xml"
-  mode="Game" />
+  mode="Game">
+  <clearColor r="30" g="30" b="30" a="255" />
+</root>

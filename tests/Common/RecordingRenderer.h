@@ -95,8 +95,10 @@ namespace BECore::Tests {
         void Destroy() override {
             DiscardBatch();
         }
-        void BeginFrame() override {
+        void BeginFrame(const Color& clearColor) override {
             Flush();
+            frameClearColor = clearColor;
+            ++beginFrameCalls;
         }
         void EndFrame() override {
             Flush();
@@ -240,6 +242,8 @@ namespace BECore::Tests {
         Vector<DrawCall> calls;
         uint32_t texturesCreated = 0;
         uint32_t waitIdleCalls = 0;
+        Color frameClearColor{0, 0, 0, 0};  ///< the colour of the last BeginFrame()
+        uint32_t beginFrameCalls = 0;
 
     protected:
         void SubmitBatch(const RenderBatch& batch) override {

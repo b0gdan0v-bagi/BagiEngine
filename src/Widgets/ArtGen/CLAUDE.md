@@ -57,7 +57,7 @@ The service **pulls**: a request made before the service connects is not lost, a
 
 ## Lifetime and threads
 
-The control API cannot drop a handler and the panel is re-created at every switch of the run mode, so the session registers the methods (`RegisterControl`, once per `ControlService`, from the panel's `Initialize`) and they capture it, never the widget. Before the panel exists the service gets `unknown_method`. Main thread only.
+The control API cannot drop a handler and the panel is re-created at every switch of the run mode, so the session registers the methods (`RegisterControl`, once per `ControlService`, from the panel's `Initialize`) and they capture it, never the widget. Before the panel exists the service gets `unknown_method`. Main thread only. No method or poll needs a frame: the whole flow (generate, set, accept) runs in `--editor --headless --manual-clock` with no `step` (`tools/artgen/headless_check.py`); only the panel's drawing waits for frames.
 
 ## The panel
 
@@ -66,15 +66,15 @@ The control API cannot drop a handler and the panel is re-created at every switc
 - **Start the service** first turns the control API on when it is off (`ApplicationEvents::StartControlServerRequestEvent`), then, once it listens, runs the bridge of the engine checkout in the background (`ArtGenLaunch`); its log is `artgen-bridge.log` in the editor's user folder.
 - **Set up** (`not_installed`) shows the service's plan; **Download and install** runs it with a progress bar and Cancel; Not now forgets it; beside it a line says a generator on another machine is not there yet (entry `comfyui-remote-via-todo`, `tools/artgen/comfyui/CLAUDE.md`). **Start** (`not_running`) starts the local generator; **Stop ComfyUI** is there only for a generator started from the panel (`startedHere`). **Disconnect** stops the service itself (`RequestServiceStop`).
 - Thumbnails are loaded from the reported paths and **evicted** when the run is replaced or the panel dies.
-- **Sounds.** A run of sound variants (`kind` audio) is a list instead of the grid: Play / Stop of each (a FLAC as an `AudioClip` on the `Ui` bus, evicted with the run), its waveform, seed, length and peak; a click on the waveform picks it. Under the pick: the processing settings, **Listen as accepted**, the target (a name, or **Replace a clip of the game**) and Accept.
-- A thumbnail is drawn over a checkerboard, so a cut-out shows its transparency. **The verdict mark:** every image thumbnail of the grid and of the Set tab's rows has a mark in its top-right corner from `checks` of its provenance file, read once when the thumbnail loads (`ArtGenVerdict`): passed, failed (the tooltip names the checks), unreadable (`passed: null`); a sound or a file without `checks` has none.
+- **Sounds.** A run of sound variants (`kind` audio) is a list instead of the grid: Play / Stop of each (a FLAC as an `AudioClip` on the `Ui` bus, evicted with the run), its waveform, seed, length and peak. Under the pick: the processing settings, **Listen as accepted**, the target (a name, or **Replace a clip of the game**) and Accept.
+- **The verdict mark** (thumbnails sit on a checkerboard): every image thumbnail of the grid and of the Set tab's rows has a mark in its top-right corner from `checks` of its provenance file, read once when the thumbnail loads (`ArtGenVerdict`): passed, failed (the tooltip names the checks), unreadable (`passed: null`); a sound or a file without `checks` has none.
 - **Reference** (`Reference/`, Generate tab, not for a sound preset): the slot's picture, mode, weight and Clear; **Use as reference** on a variant or a sprite, **Use file** and **Use as shape** fill it. The workflow combo leaves out the variants a map reaches.
 - **Drag out.** An image variant of the grid and of a Set row is a drag source (a click still selects). The payload names the variant, never its file. A target plans with `PlanArtGenDrop` and emits `ArtGenVariantDropEvent`; this panel answers with the form's accept settings (a set's variant: `AcceptSetVariant`, the manifest untouched) and the Accept message (`TextureEditor/CLAUDE.md`, "Drop of a generated variant").
 - A click selects a variant; the dice button under it puts its seed into the form for the next Generate.
 
 ## Accept
 
-`ArtGenSession::Accept(seed, sprite, useOnSelected, settings)` (the panel's button, with the form's accept settings, and `artgen_accept`) calls the installed acceptor, `AcceptForControl`; the session needs no file system.
+`ArtGenSession::Accept(seed, sprite, useOnSelected, settings)` calls the installed acceptor, `AcceptForControl`; the session needs no file system.
 
 - **Files.** `ArtGenGameFile` is the one path builder the panel's text uses. The processed PNG (next section) and its `.artgen.json` (the generation's record plus `accepted`) go to `<game assets>/artgen/<sprite>.png` and `.artgen.json`, replacing an earlier accept of the name. After Keep that file also holds `"kept": {seed, date}`; a later write of the name replaces the file whole, so only a kept row has it. A sprite name: `IsValidSpriteName`.
 - **Library.** The entry `{sprite, assets/artgen/<sprite>.png, the written size}` is added or replaced and the game's `TextureLibrary.xml` saved. An Accept changes only the `<sprite>` lines of the file (`Resource/CLAUDE.md`). A sprite in an **atlas group keeps its link** (`AcceptedSpriteEntry`); a **packed** one keeps its place in the atlas and only its `atlas.source` becomes the new PNG, then `AcceptIntoLibrary` repacks the group. A group named by the plan (`atlas`: the preset's, the call's or the set's) makes the sprite a member and packs the group; a packed member of another group is refused (`ArtGenAtlasAccept.h`). A set saves the library once, inside one `ArtGenLibraryBatch` (`Sets/CLAUDE.md`, "Accept all"). Every step saves through `SaveGameLibraryForAccept`: with a batch open nothing writes `TextureLibrary.xml` before `EndAcceptBatch`.
@@ -98,4 +98,4 @@ The control API cannot drop a handler and the panel is re-created at every switc
 
 ## Tests
 
-`tests/BECore/ArtGen*Test.cpp` call the methods as the service does, with a fake acceptor and a temporary game root; the service side is `tools/artgen/tests/test_artgen_bridge.py`.
+`tests/BECore/ArtGen*Test.cpp` call the methods as the service does, with a fake acceptor; the service side is `tools/artgen/tests/test_artgen_bridge.py`.

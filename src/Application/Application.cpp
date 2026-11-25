@@ -171,6 +171,7 @@ namespace BECore {
         }
 
         _headless = controlSettings->headless;
+        _clearColor = config._clearColor;
 
         ApplicationOptions options;
         options.headless = controlSettings->headless;
@@ -269,6 +270,11 @@ namespace BECore {
         frameStats.BeginFrame(frame.kind == FrameKind::Held);
         // Outside every stage of OnGameCycle but inside cpuMs: the Vulkan backend times FrameStage::Wait in here
         RenderEvents::NewFrameEvent::Emit();
+        // Before any widget draws: the frame starts as the clear colour, whatever the run mode and the widgets are
+        if (const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer()) {
+            BE_PROFILE_SCOPE("BeginFrame");
+            renderer->BeginFrame(_clearColor);
+        }
         CoreManager::GetInstance().OnGameCycle({}, frame.kind);
         {
             BE_PROFILE_SCOPE("Present");

@@ -13,7 +13,8 @@ Methods: ping, status (also `log`: the totals of warnings and errors, and `windo
 it by one after N frames instead), step, screenshot (a 2x1 PNG; one frame on the manual
 clock, as the real game), warn (logs a line of the given level, "Warning" by default: {"level": "Error", "text": "..."}),
 log_mark, log_since, log_subscribe (a `log` push behind each `warn` while on), batch (runs `handle` per call), run_until (the frames of a wait tick the frame
-counter), quit (exits the process). Runs until quit, or until WATCHDOG_SECONDS have passed: on Windows the
+counter), imgui_find / imgui_input (only with `--editor`, else `no_imgui`: IMGUI_MATCHES filtered like the engine does; imgui_input keeps the
+events it took, `get_state` shows them as `imguiEvents`), quit (exits the process). Runs until quit, or until WATCHDOG_SECONDS have passed: on Windows the
 tests start it through a .bat, and killing the .bat (GameProcess.stop) would leave this process listening.
 """
 
@@ -40,6 +41,16 @@ MAX_OUTPUT_SIDE = 8192
 MIN_USER_SCALE, MAX_USER_SCALE = 0.5, 3.0  # UISettings::kMinUserScale / kMaxUserScale
 DEFAULT_WINDOW = (1280, 720)
 SAFE_AREA_SIDES = ("top", "right", "bottom", "left")
+# What imgui_find lists (kind, label, window, x, y, width, height, visible): "Close" is in two windows, "Hidden" is scrolled out
+IMGUI_MATCHES = [
+    ("window", "Game Panel", "Game Panel", 100.0, 50.0, 400.0, 300.0, True),
+    ("window", "Other", "Other", 600.0, 50.0, 300.0, 300.0, True),
+    ("item", "Play##play", "Game Panel", 120.0, 80.0, 60.0, 20.0, True),
+    ("item", "Close", "Game Panel", 400.0, 60.0, 40.0, 20.0, True),
+    ("item", "Close", "Other", 800.0, 60.0, 40.0, 20.0, True),
+    ("item", "Hidden", "Game Panel", 120.0, 340.0, 60.0, 20.0, False),
+]
+DEFAULT_IMGUI_LIMIT = 50
 PNG_SIZE_OFFSET = 16  # the signature (8 bytes), the IHDR length and name (8 bytes), then width and height
 
 
@@ -150,6 +161,39 @@ def start_window(args: list[str]) -> dict:
     return {"width": width, "height": height, "density": density, "userScale": 1.0, "safeArea": dict.fromkeys(SAFE_AREA_SIDES, 0.0)}
 
 
+def imgui_find(params: dict) -> dict:
+    """What `imgui_find` answers from IMGUI_MATCHES: the filters of the engine (label whole or before `##`, labelContains, window, kind, visibleOnly, limit)."""
+
+    def visible_part(text: str) -> str:
+        return text.split("##", 1)[0]
+
+    matches = []
+    for kind, label, window, x, y, width, height, visible in IMGUI_MATCHES:
+        if "label" in params and params["label"] not in (label, visible_part(label)):
+            continue
+        if "labelContains" in params and params["labelContains"] not in label:
+            continue
+        if "window" in params and params["window"] != window:
+            continue
+        if "kind" in params and params["kind"] != kind:
+            continue
+        if params.get("visibleOnly") and not visible:
+            continue
+        matches.append({"kind": kind, "id": "0x00000001", "label": label, "window": window, "x": x, "y": y, "width": width, "height": height, "visible": visible, "hovered": False})
+    limit = params.get("limit", DEFAULT_IMGUI_LIMIT)
+    answer = {
+        "frame": 1,
+        "display": {"width": 1280.0, "height": 720.0, "scaleX": 1.0, "scaleY": 1.0},
+        "wantCaptureMouse": False,
+        "wantCaptureKeyboard": False,
+        "wantTextInput": False,
+        "matches": matches[:limit],
+    }
+    if len(matches) > limit:
+        answer["truncated"] = True
+    return answer
+
+
 def read_level(params: dict) -> str:
     level = params.get("level", "warning")
     if level not in ("warning", "error"):
@@ -175,6 +219,7 @@ def main() -> int:
     log = {"lines": [], "warnings": 0, "errors": 0, "subscribed": False, "level": "warning"}  # lines: {sequence, level, time, message}, sequence from 1
     published: list[tuple[str, dict]] = []  # every push, for run_until's `event` condition
     editor_scene = {"dirty": False}  # the one scene document of `editor_state`; the action `edit_scene` makes it dirty
+    imgui_events: list[dict] = []  # what imgui_input took, in order
     later: list[int] = []  # the frame count at which each "later" action raises the version
 
     def publish(event: str, data: dict) -> None:
@@ -326,7 +371,7 @@ def main() -> int:
         if method == "list_games":
             return {"active": "Fake", "games": [{"name": "Fake", "controllable": True}]}
         if method == "get_state":
-            return {"game": "Fake", "version": state["version"], "state": {"flags": flags}}
+            return {"game": "Fake", "version": state["version"], "state": {"flags": flags, "imguiEvents": list(imgui_events)}}
         if method == "list_actions":
             return {"game": "Fake", "version": state["version"], "actions": [{"type": "noop"}]}
         if method == "perform_action":
@@ -366,6 +411,14 @@ def main() -> int:
             if os.environ.get("FAKE_GAME_NO_PICTURE"):
                 return {"width": width, "height": height}
             return {"width": width, "height": height, "png_base64": base64.b64encode(data).decode("ascii")}
+        if method in ("imgui_find", "imgui_input"):
+            if "--editor" not in args:
+                raise FakeError("no_imgui", "there is no ImGui context")
+            if method == "imgui_find":
+                return imgui_find(params or {})
+            imgui_events.extend((params or {})["events"])
+            tick()
+            return {"events": len((params or {})["events"]), "frames": 2, "wantCaptureKeyboard": False, "wantCaptureMouse": True, "wantTextInput": False}
         if method == "quit":
             raise QuitServer({"quitting": True})
         raise FakeError("unknown_method", method)

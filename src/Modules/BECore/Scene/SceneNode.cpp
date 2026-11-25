@@ -147,6 +147,14 @@ namespace BECore {
         return (_editorFlags & flag) != EditorFlags::None;
     }
 
+    bool SceneNode::IsGenerated() const {
+        return _generated;
+    }
+
+    void SceneNode::SetGenerated(bool generated) {
+        _generated = generated;
+    }
+
     const SceneNode::ComponentList& SceneNode::GetComponents() const {
         return _components;
     }

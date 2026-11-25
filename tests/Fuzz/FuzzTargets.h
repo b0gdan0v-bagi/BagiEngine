@@ -85,6 +85,10 @@ namespace BECore::Fuzz {
     /// UIStrings::LoadFromXml and UIThemes::LoadFromXml over an XML text (the root picks the table): the complaints, what the table holds, loading twice
     void FuzzUiTables(const uint8_t* data, size_t size);
 
+    /// A panel asset (`LoadPanelAsset`, BECore/Widgets/PanelAssets) from XML text: bounded, tidy issues, the same twice, no issue exactly when the tree satisfies the format, a valid asset
+    /// writes and reads back
+    void FuzzPanelAsset(const uint8_t* data, size_t size);
+
     /// The numbers of a content file in the pure UI geometry (box mesh, nine-slice, rect and stack layout, canvas scale and layout), as raw float bits: bounded results, no NaN or infinity
     void FuzzUiGeometry(const uint8_t* data, size_t size);
 

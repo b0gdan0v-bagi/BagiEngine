@@ -36,6 +36,15 @@ WHEELS = ((0, -1, False), (0, 1, False), (1, 0, False), (-1, 0, False), (0, -1, 
 
 KNOWN_DEVIATIONS: set[str] = set()
 
+# The editor's Save writes into the content root compiled into the executable, so QaSession puts this file (relative to the folder with
+# .claude/rules/qa-project.md) back after every session that may Save.
+EDITOR_CONTENT_FILES = ["tools/stress/config/SceneConfig.xml"]
+# Save writes the live tree: the nodes these components make at run time (StressSpritesComponent, StressEntitiesComponent, StressRmlUiComponent on `Field`) are in
+# the saved file, so the compare of a saved scene skips the children of `Field`. StressUi makes canvas elements, not nodes, and is not saved by a charter.
+EDITOR_GENERATED = {"StressSprites": ["Field"], "StressEntities": ["Field"], "StressRmlUi": ["Field"]}
+# What the writer adds to a TransformComponent it saves, which the shipped file leaves out because they are its defaults (found by the first real run)
+EDITOR_ADDED_DEFAULTS = {"TransformComponent": {"rotation": "0", "pivotX": "0.5", "pivotY": "0.5"}}
+
 
 def is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)

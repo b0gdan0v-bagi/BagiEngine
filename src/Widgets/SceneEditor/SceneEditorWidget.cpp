@@ -504,7 +504,8 @@ namespace BECore {
                     auto* scene = CoreManager::GetSceneManager().GetActiveScene();
                     if (scene) {
                         SceneNode* target = _contextMenuTargetNode ? _contextMenuTargetNode : &scene->GetRootNode();
-                        target->AddChild(PoolString::Intern(StringView(_nodeNameBuffer)));
+                        // AddChild makes a generated node; this one is authored content, so Save writes it
+                        target->AddChild(PoolString::Intern(StringView(_nodeNameBuffer)))->SetGenerated(false);
                         _hierarchy.revealNode = target;
                         _isDirty = true;
                     }

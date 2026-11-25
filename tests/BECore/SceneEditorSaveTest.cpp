@@ -11,6 +11,7 @@
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodeFiles.h>
+#include <BECore/SceneGeneratedNodesTypes.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UINodeFileSave.h>
 #include <Common/EngineEnvironment.h>
@@ -292,6 +293,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(boardTransform);
         boardTransform->_x = kMovedX;
         auto banner = game.GetRootNode().AddChild("Banner"_intern);
+        banner->SetGenerated(false);  // what the editor's "Add node" makes is authored
         auto bannerQuad = New<QuadRendererComponent>();
         bannerQuad->_color = Color{9, 8, 7, 6};
         banner->AddComponent(bannerQuad);
@@ -526,6 +528,11 @@ namespace BECore::Tests {
 
         _manager->SetActiveScene("Menu"_intern);
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+        // The contract of the defaults: an attribute equal to the one of a default scene is absent, and absent loads as that default
+        const pugi::xml_node savedMenu = FindSceneElement(ConfigRoot(), "Menu");
+        EXPECT_FALSE(savedMenu.attribute("viewWidth"));
+        EXPECT_FALSE(savedMenu.attribute("viewHeight"));
+        EXPECT_TRUE(savedMenu.attribute("name"));
         ASSERT_NO_FATAL_FAILURE(SaveAndReload());
         EXPECT_FLOAT_EQ(Reloaded("Menu").GetViewWidth(), 0.0f);
         EXPECT_FLOAT_EQ(Reloaded("Menu").GetViewHeight(), 0.0f);
@@ -770,7 +777,9 @@ namespace BECore::Tests {
         pugi::xml_node referenceEl = reference.append_child("node");
         referenceEl.append_attribute("ref").set_value("nodes/Box");
         referenceEl.append_attribute("name").set_value("Added");
-        ASSERT_TRUE(main.InstantiateNode(referenceEl, _loader, nullptr, 0));
+        const auto added = main.InstantiateNode(referenceEl, _loader, nullptr, 0);
+        ASSERT_TRUE(added);
+        added->SetGenerated(false);  // stands for an instance the user put there
 
         ASSERT_TRUE(Save(main));
         EXPECT_TRUE(_notes.empty());
@@ -1016,11 +1025,15 @@ namespace BECore::Tests {
 
         // A runtime AddChild (the editor's "Add Child"), a grandchild with a component and a sibling after it
         auto first = board->AddChild("First"_intern);
+        first->SetGenerated(false);
         auto grandchild = first->AddChild("Grand"_intern);
+        grandchild->SetGenerated(false);
         auto quad = New<QuadRendererComponent>();
         quad->_color = Color{4, 5, 6, 255};
         grandchild->AddComponent(quad);
-        board->AddChild("Second"_intern)->SetLayer(kPieceLayer);
+        auto second = board->AddChild("Second"_intern);
+        second->SetGenerated(false);
+        second->SetLayer(kPieceLayer);
 
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), game));
 
@@ -1090,7 +1103,7 @@ namespace BECore::Tests {
     TEST_F(SceneEditorSaveReferencesTest, AnInstanceWithChildrenIsWrittenInlineWithANote) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
         SceneNode& box = Child("Main", 0);
-        box.AddChild("Kid"_intern);
+        box.AddChild("Kid"_intern)->SetGenerated(false);
 
         ASSERT_TRUE(Save(GetScene("Main")));
 
@@ -1115,7 +1128,9 @@ namespace BECore::Tests {
         Scene& main = GetScene("Main");
         pugi::xml_document reference;
         reference.append_child("node").append_attribute("ref").set_value("nodes/Box");
-        ASSERT_TRUE(main.InstantiateNode(reference.document_element(), _loader, &Child("Main", 1)));
+        const auto instance = main.InstantiateNode(reference.document_element(), _loader, &Child("Main", 1));
+        ASSERT_TRUE(instance);
+        instance->SetGenerated(false);  // stands for an instance the user put there
 
         ASSERT_TRUE(Save(main));
 
@@ -1161,6 +1176,134 @@ namespace BECore::Tests {
         EXPECT_EQ(session.Save(GetScene("Main"), fileSystem).filesWritten, 1u);
         EXPECT_EQ(ReadFile(source), String(kPanelFile));
         EXPECT_NE(ReadFile(overlayCopy).find("x=\"44\""), String::npos);
+    }
+
+    namespace {
+
+        // The canonical spelling of Save's output: fields in reflection order, none of them a default, no view size on the scene
+        constexpr const char* kCanonicalScenesXml = R"(<SceneManager><scenes><scene type="Scene" name="Main"><nodes>)"
+                                                    R"(<node name="Hero" layer="2"><components>)"
+                                                    R"(<component type="TransformComponent" x="10" y="20" width="300" height="50" rotation="45"/>)"
+                                                    R"(<component type="QuadRendererComponent"><color r="0" g="255" b="0" a="255"/></component>)"
+                                                    R"(<component type="SpriteRendererComponent" spriteId="Hero" flipX="true"/>)"
+                                                    R"(</components><children><node name="Shadow"><components><component type="TransformComponent" width="5"/></components></node></children></node>)"
+                                                    R"(<node name="Empty"/>)"
+                                                    R"(</nodes></scene></scenes></SceneManager>)";
+
+        constexpr const char* kMakerScenesXml = R"(<SceneManager><scenes><scene type="Scene" name="Main"><nodes>)"
+                                                R"(<node name="Maker"><components><component type="GeneratingTestComponent" count="3"/></components></node>)"
+                                                R"(<node name="Plain"/>)"
+                                                R"(</nodes></scene></scenes></SceneManager>)";
+
+        constexpr size_t kMadeParts = 3;
+
+        size_t CountNodeElements(pugi::xml_node node) {
+            size_t count = 0;
+            for (pugi::xml_node child = node.first_child(); child; child = child.next_sibling()) {
+                count += (StringView{child.name()} == "node" ? 1u : 0u) + CountNodeElements(child);
+            }
+            return count;
+        }
+
+        SceneNode& MakerNode(Scene& scene) {
+            SceneNode* maker = FindTopLevelNode(scene, "Maker"_intern);
+            EXPECT_NE(maker, nullptr);
+            return Require(maker);
+        }
+
+    }  // namespace
+
+    /// What Save leaves out: a node made at run time is made again at the next load, a default field loads as the default
+    TEST_F(SceneEditorSaveTest, GeneratedNodesAreNotWrittenAndDoNotMultiplyAcrossSaves) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kMakerScenesXml));
+        Scene& main = GetScene("Main");
+        ASSERT_EQ(MakerNode(main).GetChildren().size(), kMadeParts);
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+        const String first = XmlTextIndented(ConfigRoot());
+
+        const pugi::xml_node nodes = FindSceneElement(ConfigRoot(), "Main").child("nodes");
+        EXPECT_EQ(CountNodeElements(nodes), 2u);
+        EXPECT_FALSE(nodes.first_child().child("children"));
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+        ASSERT_EQ(MakerNode(Reloaded("Main")).GetChildren().size(), kMadeParts);
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), Reloaded("Main")));
+        EXPECT_EQ(XmlTextIndented(ConfigRoot()), first);
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+        EXPECT_EQ(MakerNode(Reloaded("Main")).GetChildren().size(), kMadeParts);
+    }
+
+    TEST_F(SceneEditorSaveTest, OnlyTheAuthoredChildrenOfANodeAreWritten) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kMakerScenesXml));
+        Scene& main = GetScene("Main");
+        SceneNode& maker = MakerNode(main);
+        maker.AddChild("Mine"_intern)->SetGenerated(false);
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+
+        const pugi::xml_node children = SavedNode(ConfigRoot(), "Main", 0).child("children");
+        ASSERT_TRUE(children);
+        EXPECT_STREQ(children.first_child().attribute("name").as_string(), "Mine");
+        EXPECT_FALSE(children.first_child().next_sibling());
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+        EXPECT_EQ(MakerNode(Reloaded("Main")).GetChildren().size(), kMadeParts + 1);
+    }
+
+    TEST_F(SceneEditorSaveTest, AnAuthoredNodeUnderAGeneratedOneIsNotWrittenAndIsNoted) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kMakerScenesXml));
+        Scene& main = GetScene("Main");
+        SceneNode& part = *MakerNode(main).GetChildren()[0];
+        part.AddChild("Deep"_intern)->SetGenerated(false);
+        Vector<String> notes;
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main, nullptr, &notes));
+
+        ASSERT_EQ(notes.size(), 1u);
+        EXPECT_NE(notes[0].find("node 'Deep'"), String::npos) << notes[0].c_str();
+        EXPECT_NE(notes[0].find("made at run time"), String::npos) << notes[0].c_str();
+        EXPECT_EQ(CountNodeElements(FindSceneElement(ConfigRoot(), "Main").child("nodes")), 2u);
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, AnInstanceWhoseComponentMakesChildrenIsStillAReference) {
+        WriteFile(_dir / "nodes" / "Maker.xml", R"(<node name="Maker"><components><component type="GeneratingTestComponent" count="2"/></components></node>)");
+        ASSERT_TRUE(_document.LoadFromString(R"(<SceneManager><scenes><scene type="Scene" name="Main"><nodes><node ref="nodes/Maker"/></nodes></scene></scenes></SceneManager>)"));
+        _manager = LoadSceneManager(_document.GetRoot(), _loader);
+        _manager->Initialize();
+        Scene& main = GetScene("Main");
+        ASSERT_EQ(Child("Main", 0).GetChildren().size(), 2u);
+
+        ASSERT_TRUE(Save(main));
+
+        EXPECT_EQ(XmlText(SavedNode(ConfigRoot(), "Main", 0)), "<node ref=\"nodes/Maker\"/>");
+        EXPECT_TRUE(_notes.empty());
+    }
+
+    /// The contract: unedited input in its canonical spelling is saved as the same `<scene>` text (the whole file is not promised: pugixml rewrites the spacing between elements)
+    TEST_F(SceneEditorSaveTest, AnUneditedSceneInCanonicalSpellingIsWrittenBackAsItWas) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kCanonicalScenesXml));
+        const String before = XmlText(FindSceneElement(ConfigRoot(), "Main"));
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), GetScene("Main")));
+
+        EXPECT_EQ(XmlText(FindSceneElement(ConfigRoot(), "Main")), before);
+    }
+
+    TEST_F(SceneEditorSaveTest, AnEditOfOneFieldChangesOnlyThatFieldInTheOutput) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kCanonicalScenesXml));
+        String expected = XmlText(FindSceneElement(ConfigRoot(), "Main"));
+        constexpr StringView kOldX = "x=\"10\"";
+        const size_t at = expected.find(kOldX.data());
+        ASSERT_NE(at, String::npos);
+        expected.replace(at, kOldX.size(), "x=\"11\"");
+
+        Scene& main = GetScene("Main");
+        Require(FindTopLevelNode(main, "Hero"_intern)).GetComponent<TransformComponent>()->_x = 11.0f;
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+
+        EXPECT_EQ(XmlText(FindSceneElement(ConfigRoot(), "Main")), expected);
     }
 
     TEST_F(SceneEditorSaveTest, AnInvalidRootIsRejected) {

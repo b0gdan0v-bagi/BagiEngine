@@ -12,6 +12,7 @@ The image generator of the games' art is **ComfyUI**, today on the owner's Windo
 | `comfyui/CLAUDE.md` | The setup commands and platforms, what may enter the manifest (licences, pinned commits, the gated audio models, the style node), the install's consent, pinning and no-overwrite rules, the health check and the panel's setup actions |
 | `comfyui_check.py` | The health check: reachable, version, devices, every manifest model present; `--generate` makes one image; `--json` for the service and the editor panel |
 | `artgen_bridge.py` | The link to the editor's Generate panel: a control API client that pulls requests (`artgen_poll`) and reports progress, images and the end |
+| `headless_check.py` | The flow of the skill `/artgen` run in a headless editor (`--editor --headless --manual-clock --control`, a temp `BAGI_EDITOR_DIR`) with the bridge on `--generator fake`: Generate, a set, a pick, and with `--accept SPRITE` / `--accept-sound NAME` an Accept (undone afterwards, the game's library included); no `step` is made. Exit 0 / 1, 77 (no executable, a build without the editor) |
 | `artgen.py` | The service on the command line: `status`, `presets`, `generate` (`--json` prints one progress event per line, then `done`; `--min-pass` / `--extra`; `--reference-image` with `--reference-mode` / `--reference-weight`, the image alone meaning `init`), `check <png>... [--preset NAME]` (the verdict of files on disk; exit 1 when one fails or cannot be read, 2 for a file or preset that cannot be opened) |
 | `artgen_service.py` | `generate(request, generator, on_progress, cancel)`: N images of one preset and subject, each written with its provenance as soon as it is there |
 | `artgen_preset.py` | Presets and workflows: load and check them (`parse_preset` on a file's content or a draft's), find them in the game and the engine (`find_presets`, `find_workflows`), `Workflow.describe` (the inputs and their defaults for the editor's form), `build_graph` (the graph of one image), `models_of` |
@@ -77,4 +78,7 @@ The contract is the editor's (`src/Widgets/ArtGen/CLAUDE.md`, "The contract"): t
 
 ```bash
 python -m pytest tools/artgen/tests        # .venv/bin/python on macOS
+python tools/artgen/headless_check.py build/macos-debug/bin/BagiStress [--accept NAME] [--accept-sound NAME]
 ```
+
+The `artgen_*` methods answer at once and never wait for a frame (`src/Widgets/ArtGen/CLAUDE.md`, "Lifetime and threads"), so the headless editor on the manual clock needs no `step`; only the panel's drawing waits for frames. `headless_check.py` is the proof and runs in the tests when a Debug `BagiStress` is built. An Accept writes into the game's real `assets/artgen/` and `config/TextureLibrary.xml` (the editor cannot be given another game root), so the flags are off by default; BagiStress has no library, so the command lays an empty one down before the start and removes it after.

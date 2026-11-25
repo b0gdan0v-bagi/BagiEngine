@@ -52,6 +52,13 @@ namespace BECore {
         /// True when @p ancestor is above this node (its parent, the parent's parent, ...); a node is not its own ancestor
         bool IsDescendantOf(const SceneNode& ancestor) const;
         const ChildList& GetChildren() const;
+
+        /**
+         * @brief Makes a child node at run time, appended to the children of this node
+         *
+         * The child is generated (IsGenerated()): the scene editor's Save leaves it out, because the component that made it makes it again at the next
+         * start. A caller that stands for the editor (the "Add node" of the scene editor) clears the flag of what it makes.
+         */
         IntrusivePtr<SceneNode> AddChild(PoolString name);
         void RemoveChild(SceneNode* child);
 
@@ -98,6 +105,16 @@ namespace BECore {
         void SetEditorFlags(EditorFlags flags);
         bool HasEditorFlag(EditorFlags flag) const;
 
+        /**
+         * @brief True for a node made at run time (AddChild, Scene::CreateNode, Scene::InstantiateNode), false for one read from a file or made by Scene::DuplicateNode
+         *
+         * A generated node and its subtree are not saved (Scene::PrepareForSave) and not copied by Scene::DuplicateNode: the code that made it makes it again, so a
+         * saved copy would double it. SetGenerated(false) turns a node into authored content, which is what the editor does with the nodes it adds.
+         * A plain member, not a reflected field: no file, no Serialize and no copy sees it.
+         */
+        bool IsGenerated() const;
+        void SetGenerated(bool generated);
+
         const ComponentList& GetComponents() const;
 
     private:
@@ -112,6 +129,7 @@ namespace BECore {
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;
         EditorFlags _editorFlags = EditorFlags::None;
+        bool _generated = false;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) ComponentList _components;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) ChildList _children;
     };

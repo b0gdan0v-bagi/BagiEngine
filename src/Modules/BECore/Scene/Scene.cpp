@@ -257,7 +257,12 @@ namespace BECore {
 
     void Scene::PrepareForSave() {
         if (_rootNode) {
-            _nodes.assign(_rootNode->_children.begin(), _rootNode->_children.end());
+            _nodes.clear();
+            for (const auto& child : _rootNode->_children) {
+                if (!child->IsGenerated()) {
+                    _nodes.push_back(child);
+                }
+            }
         }
     }
 
@@ -266,6 +271,7 @@ namespace BECore {
         auto node = BECore::New<SceneNode>();
         node->_name = name;
         node->_scene = this;
+        node->_generated = true;
 
         SceneNode* targetParent = parent ? parent : _rootNode.Get();
         if (targetParent) {
@@ -299,6 +305,7 @@ namespace BECore {
 
         auto node = DeserializeNode(expanded.document_element(), Format("{} instance of {}", _name.CStr(), ref));
         InvalidateDrawOrder();
+        node->_generated = true;
         node->WireToScene(this, target);
         const size_t place = eastl::min(index, target->_children.size());
         target->_children.insert(target->_children.begin() + static_cast<ptrdiff_t>(place), node);
@@ -378,7 +385,7 @@ namespace BECore {
         }
 
         pugi::xml_document document;
-        AppendNodeElement(document, node);
+        AppendNodeElement(document, node, NodeWriteOptions{.skipGenerated = true});
         auto copy = DeserializeNode(document.document_element(), Format("{} copy of {}", _name.CStr(), node.GetName().CStr()));
         copy->SetName(FreeSiblingName(*parent, Format("{} (copy", node.GetName().CStr()), ")"));
         copy->SetSourceRef(node.GetSourceRef());

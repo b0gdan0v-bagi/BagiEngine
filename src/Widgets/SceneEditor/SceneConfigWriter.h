@@ -22,13 +22,21 @@ namespace BECore {
      * load back as the live node) the node is written inline: its data is kept, its link to the file is not, and one line
      * goes to @p notes. The node file itself is never edited.
      *
+     * **Generated nodes** (SceneNode::IsGenerated(): made at run time by a component or by code) are left out with their subtrees, because
+     * what made them makes them again at the next load; an instance whose only children are generated is still a `<node ref>`. An authored
+     * node below a generated one cannot be written: one line goes to @p notes. **Defaults** are left out too: a component field equal to that
+     * of a freshly created component, a scene attribute equal to that of a default Scene (`viewWidth="0"`), so a file in the canonical
+     * spelling (fields in reflection order, no defaults) comes back as the same `<scene>` text. What is not kept: the comments inside the
+     * `<scene>` and the spacing of the file, which pugixml rewrites, so the whole file is not promised byte for byte.
+     *
      * Needs no ImGui; the node files are read only through @p loader (no CoreManager), so a test can run it on a document
      * of its own.
      *
      * @param configRoot Document element of SceneConfig (`<SceneManager>`, XmlNode::GetPugiNode() of the config)
      * @param scene Scene to write
      * @param loader Reads the node files of the instances; null writes every instance inline
-     * @param notes Receives a line `node 'X': written inline, <reason>` for every instance written inline; may be null
+     * @param notes Receives a line `node 'X': written inline, <reason>` for every instance written inline and `node 'X': not saved, its parent was made at run time` for every authored node under a
+     * generated one; may be null
      * @return false when @p configRoot is not a valid node (nothing is written); true when the element was written
      */
     bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene, const NodeFileLoader* loader = nullptr, Vector<String>* notes = nullptr);
