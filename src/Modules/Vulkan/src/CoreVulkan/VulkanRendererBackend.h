@@ -222,6 +222,8 @@ namespace BECore {
         VkResult _lastLoggedFailure = VK_SUCCESS;
         // true when inside an offscreen render pass (between SetRenderTarget/UnsetRenderTarget)
         bool _inOffscreenPass = false;
+        // Present() found an offscreen pass open and said so: the caller's mistake repeats every frame, the log line must not
+        bool _loggedOpenPassAtPresent = false;
 
         // Current render extent — offscreen target size or swapchain extent depending on active pass
         VkExtent2D _currentExtent = {};
