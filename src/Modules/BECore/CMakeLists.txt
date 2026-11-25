@@ -98,6 +98,10 @@ target_link_libraries(BECoreModule PUBLIC
     SDL3-shared
 )
 
+# The vendored imgui reports every item and window to the hook functions of Input/ImGuiItemIndex.cpp (a branch per item while no
+# ImGuiItemIndex is armed); the sources of imgui stay untouched, so the define is set here, where the hooks are defined
+target_compile_definitions(imgui PRIVATE IMGUI_ENABLE_TEST_ENGINE)
+
 # DbgHelp for stack trace capture (Windows only)
 if(WIN32)
     target_link_libraries(BECoreModule PUBLIC dbghelp)

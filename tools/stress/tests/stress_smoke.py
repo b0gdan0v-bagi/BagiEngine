@@ -6,7 +6,7 @@ the bad values, screenshots that are not flat, `set_language` rewording the `ui`
 on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `rmlui` scenario probes `get_state.scenes`
 and prints a skip line when the build has no `rmlui` (only `ENGINE_UI_RMLUI` builds list it), so the same script passes in every preset; with it the scene's documents, textures,
 `wheel_at` on both axes, `ReloadRmlUiDocuments` and the scene switch are checked. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
-`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; a build without the editor prints a skip line. The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
+`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; the View menu opens the Game panel, a chord closes it and opens it again, its filter takes typed text, and an action button changes `get_state` and the picture, all through `imgui_find` / `imgui_input` (a build without the editor prints a skip line). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
 path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 failed, 77 skipped (the executable is not built).
@@ -53,6 +53,10 @@ EDITOR_WINDOW = (1280, 720)  # window units: room for the docks of the editor
 EDITOR_FRAMES = 5  # ImGui lays its docks out over more than one frame
 EDITOR_DIR_VARIABLE = "BAGI_EDITOR_DIR"  # where the editor keeps its per-user files (widgets-module.md): a temp folder, never the real one
 NO_EDITOR_WARNING = "this build has no editor"  # the one Warning a build without the editor logs for --editor
+GAME_PANEL_WINDOW = "Game"  # the window of "Game Panel" in the View menu: its title is `Game###GamePanel`
+ACTION_FILTER = "##gameActionFilter"  # the InputText that narrows the action buttons of the Game panel
+FILTER_TEXT = "count"  # keeps `set_count ...` and drops `set_scene ...`
+CLICKED_ACTION_TYPE = "set_count"  # a listed action whose button is labelled `set_count count=N` (the Console's syntax); the listed counts depend on the current one
 RUN_NUMBER_MAX = 1000  # the range of the field `runNumber` of StressGame
 ENGINE_CONFIG_DIR = ENGINE_DIR / "config"
 ENGINE_PANELS_DIR = ENGINE_CONFIG_DIR / "panels"  # panel assets: the root element names the type, so no binding is needed
@@ -417,6 +421,63 @@ def game_picture(exe: Path) -> object:
     return pictures[0]
 
 
+def imgui_matches(client: BagiControlClient, **params: object) -> list[dict]:
+    """The matches of one `imgui_find`; an item that is not drawn in the frame is not in the list."""
+    return client.call("imgui_find", params)["matches"]
+
+
+def imgui_click(client: BagiControlClient, label: str) -> dict:
+    """Clicks the centre of the one visible item called `label` and answers what ImGui made of the click."""
+    found = imgui_matches(client, label=label, kind="item", visibleOnly=True)
+    check(len(found) == 1, f"{len(found)} visible ImGui items are called '{label}', expected one")
+    item = found[0]
+    return client.call("imgui_input", {"events": [{"type": "click", "x": item["x"] + item["width"] / 2, "y": item["y"] + item["height"] / 2}]})
+
+
+def check_game_panel_window(client: BagiControlClient, shown: bool, when: str) -> None:
+    windows = imgui_matches(client, label=GAME_PANEL_WINDOW, kind="window")
+    check(bool(windows) == shown, f"the Game panel is {'missing' if shown else 'still there'} {when}")
+    if shown:
+        check(windows[0]["width"] > 0 and windows[0]["height"] > 0, f"the Game panel has an empty rect {windows[0]}")
+
+
+def drive_editor_panels(client: BagiControlClient) -> None:
+    """The editor as a person uses it, through imgui_find and imgui_input: the View menu opens the Game panel, a chord closes and opens it, its filter takes text,
+    and a click on an action changes the game and the picture (.claude/rules/control-imgui-api.md)."""
+    check(imgui_matches(client, label="No Such Item") == [], "a name that is not there is not an empty list")
+    check_game_panel_window(client, False, "before anyone opened it")
+    check(not imgui_matches(client, label="Game Panel"), "a menu item is listed while its menu is closed")
+
+    menu = imgui_click(client, "View")
+    check(menu["wantCaptureMouse"], "ImGui did not take the click on the View menu")
+    imgui_click(client, "Game Panel")
+    check_game_panel_window(client, True, "after View, Game Panel")
+    check(not imgui_matches(client, label="Game Panel"), "the View menu is still open after its item was clicked")
+
+    chord = [{"type": "key", "key": "G", "mods": ["ctrl", "shift"]}]
+    client.call("imgui_input", {"events": chord})
+    check_game_panel_window(client, False, "after the chord Ctrl+Shift+G")
+    client.call("imgui_input", {"events": chord})
+    check_game_panel_window(client, True, "after the chord Ctrl+Shift+G again")
+    expect_error("invalid_params", lambda: client.call("imgui_input", {"events": [{"type": "key", "key": "NoSuchKey"}]}), "an unknown key")
+
+    check(imgui_click(client, ACTION_FILTER)["wantTextInput"], "the filter field of the Game panel did not take the focus")
+    check(client.call("imgui_input", {"events": [{"type": "text", "text": FILTER_TEXT}]})["wantTextInput"], "ImGui lost the focus of the filter while it took the text")
+    check(not imgui_matches(client, label="set_scene scene=ui"), "the filter left an action that has no '" + FILTER_TEXT + "' in it")
+
+    version = client.call("get_state")["version"]
+    action = next(entry for entry in client.call("list_actions")["actions"] if entry["type"] == CLICKED_ACTION_TYPE)
+    label = f"{CLICKED_ACTION_TYPE} count={action['count']}"
+    before = take_screenshot(client, {"maxSize": max(EDITOR_WINDOW)})
+    imgui_click(client, label)
+    state = client.call("get_state")
+    check(state["state"]["count"] == action["count"], f"the count is {state['state']['count']} after the button '{label}'")
+    check(state["version"] > version, "the state version did not move after the action button")
+    client.call("step", {"frames": SETTLE_FRAMES})
+    after = take_screenshot(client, {"maxSize": max(EDITOR_WINDOW)})
+    check(after.rows != before.rows, f"the picture of the editor did not change after the button '{label}'")
+
+
 def scenario_editor(client: BagiControlClient, exe: Path) -> None:
     """The Editor run mode headless: the picture is the whole window, not the game alone. A build without the editor runs Game and the scenario skips itself."""
     run_mode = client.call("status")["runMode"]
@@ -429,6 +490,7 @@ def scenario_editor(client: BagiControlClient, exe: Path) -> None:
     check((shot.width, shot.height) == EDITOR_WINDOW, f"the screenshot of the editor is {shot.width}x{shot.height}, the window is {EDITOR_WINDOW[0]}x{EDITOR_WINDOW[1]}")
     check(len(shot.colors()) >= MIN_SHOT_COLORS, f"the screenshot of the editor has {len(shot.colors())} colours: it is flat")
     check(shot.rows != game_picture(exe).rows, "the screenshot of the editor is the picture of the Game run mode")
+    drive_editor_panels(client)
 
 
 @contextlib.contextmanager

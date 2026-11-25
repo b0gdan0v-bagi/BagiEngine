@@ -27,8 +27,8 @@ namespace BECore {
     class SceneNode;
 
     // Renders the active scene into an offscreen texture and displays it as a dockable ImGui window ("Viewport"). The
-    // offscreen pass happens BEFORE ClearScreenWidget opens the swapchain render pass, so this widget must appear before
-    // ClearScreenWidget in WidgetsConfig.xml.
+    // offscreen pass must come before anything draws into the back buffer (Vulkan opens its swapchain pass at the first such
+    // draw), so this widget must appear before every widget that draws there.
     //
     // A toolbar picks the shape of the image (panel, preset ratio, device of UIPreview::GetDevices(), custom W x H, rotate)
     // and simulates a safe area, so a UI layout can be looked at in several shapes without resizing the window. The safe

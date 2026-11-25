@@ -59,3 +59,5 @@ node_modules/
 
 # Art generation: the local ComfyUI address (tools/artgen/CLAUDE.md)
 tools/artgen/local.json
+# What a Generate run in BagiStress, the engine's own game, leaves (tools/artgen/headless_check.py)
+tools/stress/artgen/out/

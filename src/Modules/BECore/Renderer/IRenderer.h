@@ -73,12 +73,14 @@ namespace BECore {
 
         BE_FUNCTION virtual bool Initialize(IMainWindow& window) = 0;
         BE_FUNCTION virtual void Destroy() = 0;
-        BE_FUNCTION virtual void BeginFrame() = 0;
+        // Starts the frame and names the colour the back buffer starts it with. The application calls it once per frame, before anything
+        // draws into the back buffer; an offscreen target may be drawn first. SDL fills the back buffer at once, Vulkan keeps the colour for the
+        // swapchain pass that opens at the first draw into the back buffer.
+        BE_FUNCTION virtual void BeginFrame(const Color& clearColor) = 0;
         BE_FUNCTION virtual void EndFrame() = 0;
-        // Names the colour the next pass starts with, so call it before the pass opens. SDL has no passes: it fills the
-        // back buffer at once. Vulkan keeps the colour for the pass that opens next (SetRenderTarget() for an offscreen
-        // target, else the swapchain pass of BeginFrame()) and then goes back to opaque black, so a clear made for an
-        // offscreen target does not tint the back buffer.
+        // Names the colour the next offscreen pass starts with, so call it before SetRenderTarget(). Vulkan takes it for that pass and then goes
+        // back to opaque black, so a clear made for an offscreen target does not tint the back buffer. SDL also fills the back buffer at once,
+        // but only outside a frame (before BeginFrame() or after Present()): inside a frame the back buffer keeps the colour of BeginFrame().
         BE_FUNCTION virtual void Clear(const Color& color) = 0;
         BE_FUNCTION virtual void Present() = 0;
         BE_FUNCTION virtual void DrawFilledRect(float x, float y, float w, float h, const Color& color) = 0;
@@ -113,7 +115,7 @@ namespace BECore {
         [[nodiscard]] virtual IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) = 0;
 
         // Offscreen target shown via ImGui::Image: SetRenderTarget() before drawing the content, UnsetRenderTarget() after.
-        // Only while no other render pass is active (before ClearScreenWidget opens the main pass).
+        // Only while no other render pass is active (before the first draw into the back buffer).
         BE_FUNCTION virtual IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) = 0;
         BE_FUNCTION virtual void SetRenderTarget(IRenderTarget* target) = 0;
         BE_FUNCTION virtual void UnsetRenderTarget() = 0;

@@ -89,9 +89,7 @@ namespace BECore {
         }
 #endif
 
-        Subscribe<RenderEvents::RenderClearEvent, &SDLRendererBackend::OnRenderClear>(this);
         Subscribe<RenderEvents::RenderPresentEvent, &SDLRendererBackend::OnRenderPresent>(this);
-        Subscribe<RenderEvents::SetRenderDrawColorEvent, &SDLRendererBackend::OnSetRenderDrawColor>(this);
         Subscribe<RenderEvents::ImGuiInitEvent, &SDLRendererBackend::OnImGuiInit>(this);
         Subscribe<RenderEvents::ImGuiShutdownEvent, &SDLRendererBackend::OnImGuiShutdown>(this);
         Subscribe<RenderEvents::ImGuiNewFrameEvent, &SDLRendererBackend::OnImGuiNewFrame>(this);
@@ -126,10 +124,16 @@ namespace BECore {
             _renderer = nullptr;
             _software = false;
         }
+        _frameOpen = false;
     }
 
-    void SDLRendererBackend::BeginFrame() {
+    void SDLRendererBackend::BeginFrame(const Color& clearColor) {
         Flush();
+        if (_renderer) {
+            SDL_SetRenderDrawColor(_renderer, clearColor.r, clearColor.g, clearColor.b, clearColor.a);
+            SDL_RenderClear(_renderer);
+        }
+        _frameOpen = true;
     }
 
     void SDLRendererBackend::EndFrame() {
@@ -139,7 +143,7 @@ namespace BECore {
     void SDLRendererBackend::Clear(const Color& color) {
         Flush();  // what was drawn before the clear must not land after it
         _nextTargetClear = color;
-        if (_renderer) {
+        if (_renderer && !_frameOpen) {  // inside a frame the back buffer keeps the colour of BeginFrame()
             SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
             SDL_RenderClear(_renderer);
         }
@@ -470,13 +474,6 @@ namespace BECore {
         return static_cast<float>(height);
     }
 
-    void SDLRendererBackend::OnRenderClear() {
-        Flush();
-        if (_renderer) {
-            SDL_RenderClear(_renderer);
-        }
-    }
-
     void SDLRendererBackend::OnRenderPresent() {
         PresentFrame();
     }
@@ -484,6 +481,7 @@ namespace BECore {
     void SDLRendererBackend::PresentFrame() {
         BE_PROFILE_SCOPE("SDLRenderer::PresentFrame");
         Flush();  // before the capture reads the pixels and before the present
+        _frameOpen = false;
         if (_renderer) {
             // The window is what is presented and what a capture reads: a pass left open on a target ends here
             UnsetRenderTarget();
@@ -530,12 +528,6 @@ namespace BECore {
         }
         SDL_DestroySurface(rgba);
         callback(std::move(image));
-    }
-
-    void SDLRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
-        if (_renderer) {
-            SDL_SetRenderDrawColor(_renderer, event.color.r, event.color.g, event.color.b, event.color.a);
-        }
     }
 
     void SDLRendererBackend::OnImGuiInit() {

@@ -10,17 +10,43 @@ namespace BECore {
 
     namespace {
 
+        constexpr StringView kNameAttribute = "name";
         constexpr const char* kNoLoaderReason = "no node file loader was given";
         constexpr const char* kHasChildrenReason = "it has child nodes";
 
-        /// A line in @p notes for every node below @p node that is an instance of a node file: nested nodes are written inline (a reference has no
+        constexpr NodeWriteOptions kWriteOptions{.skipGenerated = true, .skipDefaults = true};
+
+        bool HasAuthoredChildren(const SceneNode& node) {
+            for (const auto& child : node.GetChildren()) {
+                if (!child->IsGenerated()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// A line in @p notes for every written node below @p node that is an instance of a node file: nested nodes are written inline (a reference has no
         /// place among the children), so their link is lost
         void NoteNestedLinks(const SceneNode& node, Vector<String>& notes) {
             for (const auto& child : node.GetChildren()) {
+                if (child->IsGenerated()) {
+                    continue;
+                }
                 if (!child->GetSourceRef().Empty()) {
                     notes.push_back(Format("node '{}': written inline, it is nested and its link to the node file '{}' is not kept", child->GetName().CStr(), child->GetSourceRef().CStr()));
                 }
                 NoteNestedLinks(*child, notes);
+            }
+        }
+
+        /// A line in @p notes for the topmost authored node of every subtree whose parent was made at run time: the parent is not written, so neither is the node
+        void NoteOrphans(const SceneNode& node, bool underGenerated, Vector<String>& notes) {
+            for (const auto& child : node.GetChildren()) {
+                if (!child->IsGenerated() && underGenerated) {
+                    notes.push_back(Format("node '{}': not saved, its parent was made at run time", child->GetName().CStr()));
+                } else {
+                    NoteOrphans(*child, child->IsGenerated(), notes);
+                }
             }
         }
 
@@ -35,11 +61,11 @@ namespace BECore {
         }
 
         /// One top-level node into @p nodesEl: an instance of a node file as its `<node ref>` with the overrides, any other node (and an instance that
-        /// cannot be written that way, with a line in @p notes) inline. An instance with children is inline too: the override language has none
+        /// cannot be written that way, with a line in @p notes) inline. An instance with authored children is inline too: the override language has none
         void AppendNode(pugi::xml_node nodesEl, const SceneNode& node, const NodeFileLoader* loader, Vector<String>* notes) {
             if (!node.GetSourceRef().Empty()) {
                 String reason;
-                if (!node.GetChildren().empty()) {
+                if (HasAuthoredChildren(node)) {
                     reason = kHasChildrenReason;
                 } else if (loader) {
                     if (BuildNodeReference(node, *loader, nodesEl, reason)) {
@@ -52,7 +78,7 @@ namespace BECore {
                     notes->push_back(Format("node '{}': written inline, {}", node.GetName().CStr(), reason.c_str()));
                 }
             }
-            AppendNodeElement(nodesEl, node);
+            AppendNodeElement(nodesEl, node, kWriteOptions);
             if (notes) {
                 NoteNestedLinks(node, *notes);
             }
@@ -83,7 +109,17 @@ namespace BECore {
         XmlSerializer s;
         scene.Serialize(s);
         const auto& srcRoot = s.GetRootNode();
+        // A default Scene serializes the attributes of an unedited one: an attribute that has the same value there loads as that value, so the file leaves it out
+        const IntrusivePtr<Scene> defaults = New<Scene>();
+        XmlSerializer defaultSerializer;
+        defaults->Serialize(defaultSerializer);
+        const auto& defaultRoot = defaultSerializer.GetRootNode();
         for (auto attr = srcRoot.first_attribute(); attr; attr = attr.next_attribute()) {
+            const bool alwaysWritten = StringView{attr.name()} == kNameAttribute;
+            const pugi::xml_attribute defaultAttr = defaultRoot.attribute(attr.name());
+            if (!alwaysWritten && defaultAttr && StringView{defaultAttr.value()} == StringView{attr.value()}) {
+                continue;
+            }
             sceneEl.append_attribute(attr.name()).set_value(attr.value());
         }
         for (auto child = srcRoot.first_child(); child; child = child.next_sibling()) {
@@ -94,7 +130,12 @@ namespace BECore {
 
         pugi::xml_node nodesEl = sceneEl.append_child("nodes");
         for (const auto& nodePtr : scene.GetRootNode().GetChildren()) {
-            AppendNode(nodesEl, *nodePtr.Get(), loader, notes);
+            if (!nodePtr->IsGenerated()) {
+                AppendNode(nodesEl, *nodePtr.Get(), loader, notes);
+            }
+        }
+        if (notes) {
+            NoteOrphans(scene.GetRootNode(), false, *notes);
         }
 
         if (oldEl) {

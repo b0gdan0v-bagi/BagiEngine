@@ -8,10 +8,6 @@ struct SDL_Texture;
 
 namespace BECore {
 
-    namespace RenderEvents {
-        struct SetRenderDrawColorEvent;
-    }
-
     class SDLRenderTarget;
 
     class SDLRendererBackend : public IRenderer {
@@ -25,9 +21,10 @@ namespace BECore {
             _uncapped = uncapped;
         }
         void Destroy() override;
-        void BeginFrame() override;
+        void BeginFrame(const Color& clearColor) override;
         void EndFrame() override;
-        /// Fills the current target at once and remembers @p color for the next SetRenderTarget(), which clears its target with it and goes back to opaque black (as Vulkan does)
+        /// Outside a frame fills the current target at once; inside one (BeginFrame() to the present) only names the colour. Remembers @p color for the next SetRenderTarget(), which clears its target
+        /// with it and goes back to opaque black (as Vulkan does)
         void Clear(const Color& color) override;
         void Present() override;
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
@@ -86,11 +83,9 @@ namespace BECore {
 
         void OnTargetDestroyed(SDLRenderTarget& target);
         void ReleaseTargets();
-        void OnRenderClear();
         void OnRenderPresent();
         void PresentFrame();
         void ServeCapture();
-        void OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event);
 
         /// Fills the scratch arrays from @p vertices (position moved by the translation and mapped by @p view, the color faded by the opacity
         /// when @p fade) and queues one SDL_RenderGeometryRaw; false when SDL refused it. The indices are checked by the caller.
@@ -123,6 +118,7 @@ namespace BECore {
         Vector<SDLRenderTarget*> _targets;  // the live targets, not owned
         SDLRenderTarget* _currentTarget = nullptr;
         Color _nextTargetClear{0, 0, 0, 255};
+        bool _frameOpen = false;  // between BeginFrame() and the present: Clear() then only names the colour of the next target
         bool _foreignTargetWarned = false;
     };
 

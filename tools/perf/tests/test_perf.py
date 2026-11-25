@@ -103,6 +103,104 @@ def test_the_set_is_checked(tmp_path):
         perf.load_set(tmp_path / "none.md")
 
 
+def test_the_own_build_of_a_benchmark_is_checked(tmp_path):
+    def bench_with(**keys):
+        return {"area": "x", "preset": "p", "benchmarks": [{"name": "a", "command": ["c"], "metrics": {"m": {"source": "wall"}}, **keys}]}
+
+    assert perf.load_set(write_rules(tmp_path / "r.md", bench_with(preset="q", profilePreset="r", targets=["T"])))["area"] == "x"
+    for keys in ({"preset": 3}, {"preset": ""}, {"profilePreset": ["r"]}, {"targets": "T"}, {"targets": [1]}):
+        with pytest.raises(perf.PerfError, match="benchmark 'a': '(preset|profilePreset|targets)' must be"):
+            perf.load_set(write_rules(tmp_path / "r.md", bench_with(**keys)))
+
+
+def test_a_benchmark_with_its_own_preset_runs_its_command_in_that_build():
+    set_ = {"preset": "set"}
+    own = {"name": "own", "preset": "editor", "command": ["{bin}/Exe"]}
+    plain = {"name": "plain", "command": ["{bin}/Exe"]}
+    root = Path("/root")
+    assert perf.preset_of(own, set_) == "editor" and perf.preset_of(plain, set_) == "set"
+    assert perf.expand(own["command"], root, perf.preset_of(own, set_)) == ["/root/build/editor/bin/Exe"]
+    assert perf.expand(plain["command"], root, perf.preset_of(plain, set_)) == ["/root/build/set/bin/Exe"]
+    assert perf.trace_preset_of(own, {"profilePreset": "prof"}) == "prof"
+    assert perf.trace_preset_of({"profilePreset": "own-prof"}, {"profilePreset": "prof"}) == "own-prof"
+    assert perf.trace_preset_of(own, set_) == perf.DEFAULT_PROFILE_PRESET
+
+
+def test_a_whole_run_measures_each_benchmark_in_its_own_folder(tmp_path):
+    bench_set = {
+        "area": "test",
+        "preset": "set",
+        "repetitions": 1,
+        "benchmarks": [
+            {"name": f"b{index}", "warmup": 0, "command": ["{python}", "-c", "import sys; print('{\"n\": %d}' % len(sys.argv[1]))", "{bin}"], "metrics": {"n": {"source": "json", "key": "n"}}, **keys}
+            for index, keys in enumerate(({}, {"preset": "editor-build"}))
+        ],
+    }
+    rules = write_rules(tmp_path / "perf-project.md", bench_set)
+    done = subprocess.run([sys.executable, str(PERF_DIR / "perf.py"), "--rules", str(rules), "--no-build", "--baseline-file", str(tmp_path / "b.md"), "--json", str(tmp_path / "r.json")],
+                          cwd=tmp_path, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    report = json.loads((tmp_path / "r.json").read_text(encoding="utf-8"))
+    lengths = {name: result["metrics"]["n"]["mean"] for name, result in report["results"].items()}
+    assert lengths["b1"] - lengths["b0"] == len("editor-build") - len("set")  # `{bin}` is build/<preset>/bin
+    assert report["preset"] == "set" and "preset" not in report["results"]["b0"] and report["results"]["b1"]["preset"] == "editor-build"
+    listed = subprocess.run([sys.executable, str(PERF_DIR / "perf.py"), "--rules", str(rules), "--list"], cwd=tmp_path, capture_output=True, text=True).stdout.splitlines()
+    assert "[editor-build]" in listed[1] and "[" not in listed[0]
+
+
+def built_by(tmp_path, monkeypatch, set_extra: dict, benches: list[dict], *args: str) -> list[tuple[str, list[str]]]:
+    """The calls of `build` of a whole run, which measures nothing real (`build` is a recording stub)."""
+    calls = []
+    monkeypatch.setattr(perf, "build", lambda root, preset, targets: calls.append((preset, list(targets))))
+    monkeypatch.setattr(perf, "commit_of", lambda root: "c1")
+    done = [{"name": f"b{index}", "warmup": 0, "command": ["{python}", "-c", "print('{\"ms\": 5}')"], "metrics": {"ms": {"source": "json", "key": "ms"}}, **keys} for index, keys in enumerate(benches)]
+    rules = write_rules(tmp_path / "perf-project.md", {"area": "test", "preset": "set", "repetitions": 1, **set_extra, "benchmarks": done})
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["perf.py", "--rules", str(rules), "--baseline-file", str(tmp_path / "base.md"), *args])
+    assert perf.main() == 0
+    return calls
+
+
+def test_the_set_preset_is_not_built_when_every_selected_benchmark_has_its_own(tmp_path, monkeypatch):
+    benches = [{}, {"preset": "editor", "targets": ["Stress"]}]
+    assert built_by(tmp_path, monkeypatch, {"targets": ["SetTarget"]}, benches, "--only", "b1") == [("editor", ["Stress"])]
+
+
+def test_two_benchmarks_of_one_own_preset_build_it_once_with_both_targets(tmp_path, monkeypatch):
+    benches = [{"preset": "editor", "targets": ["A", "B"]}, {"preset": "editor", "targets": ["B", "C"]}, {"preset": "editor"}]
+    calls = built_by(tmp_path, monkeypatch, {"targets": ["SetTarget"]}, benches[:2])
+    assert calls == [("editor", ["A", "B", "C"])]
+    assert built_by(tmp_path, monkeypatch, {"targets": ["SetTarget"]}, benches[:1] + benches[2:]) == [("editor", ["A", "B", "SetTarget"])]
+
+
+def test_a_set_without_own_presets_builds_as_before(tmp_path, monkeypatch):
+    assert built_by(tmp_path, monkeypatch, {"targets": ["T1", "T2"]}, [{}, {}]) == [("set", ["T1", "T2"])]
+    assert built_by(tmp_path, monkeypatch, {}, [{}]) == [("set", [])]
+
+
+def test_the_trace_builds_the_profile_preset_of_the_benchmark(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(perf, "build", lambda root, preset, targets: calls.append((preset, list(targets))))
+
+    def stop(*_):
+        raise perf.PerfError("stop here")
+
+    monkeypatch.setattr(perf, "record_trace", stop)
+    bench = {"command": ["c"], "metrics": {"m": {"source": "wall"}}}
+    benches = [{"name": "own", "profilePreset": "editor-prof", "targets": ["Stress"], **bench}, {"name": "plain", **bench}]
+    rules = write_rules(tmp_path / "perf-project.md", {"area": "test", "preset": "set", "profilePreset": "set-prof", "targets": ["SetTarget"], "benchmarks": benches})
+    monkeypatch.chdir(tmp_path)
+    for name in ("own", "plain"):
+        monkeypatch.setattr(sys, "argv", ["perf.py", "--rules", str(rules), "--trace", name])
+        assert perf.main() == 1
+    assert calls == [("editor-prof", ["Stress"]), ("set-prof", ["SetTarget"])]
+
+
+def test_a_mixed_set_builds_the_set_preset_and_each_own_preset(tmp_path, monkeypatch):
+    benches = [{"preset": "editor", "targets": ["Stress"]}, {}]
+    assert built_by(tmp_path, monkeypatch, {"targets": ["SetTarget"]}, benches) == [("editor", ["Stress"]), ("set", ["SetTarget"])]
+
+
 def test_metrics_are_read_from_a_pattern_the_last_json_line_and_the_wall_time():
     bench = {
         "name": "b",
