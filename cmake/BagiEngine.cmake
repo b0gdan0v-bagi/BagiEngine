@@ -29,6 +29,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
 # Vulkan, the control socket server, static SDL, threads (the web build forces the first three off / on and takes -pthread)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
+# THIRD_PARTY_NOTICES.txt next to every game executable (be_add_third_party_notices)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiNotices.cmake)
 # ccache in front of the compiler when it is installed (before the first target, so every target gets the launcher)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiCompilerCache.cmake)
 # clang -ftime-trace on every compile when ENGINE_TIME_TRACE is ON (the preset macos-time-trace; before the first target)
@@ -770,13 +772,14 @@ ${ROOTS_DECLARATIONS}${ROOTS_DEFINITIONS}}  // namespace BagiContentRoots
     target_link_libraries(${TARGET_NAME} PRIVATE ${ROOTS_TARGET})
 endfunction()
 
-# be_add_game_executable(<Name> [GAME_ROOT <dir>] [SOURCES <files>...] [MODULES <targets>...])
+# be_add_game_executable(<Name> [GAME_ROOT <dir>] [NOTICES <file>] [SOURCES <files>...] [MODULES <targets>...])
 # Executable for one game: the engine's main.cpp, the engine runtime (WHOLE_ARCHIVE) and the game's modules
 # (WHOLE_ARCHIVE too, otherwise their IGame/IComponent registrations are dropped by the linker).
 # GAME_ROOT (default: current dir) is the game's content root with config/ and assets/ on top of the engine's. On the desktop the
 # roots reach main.cpp through be_link_content_roots; on the web they are virtual paths (-D defines, cmake/BagiWeb.cmake).
+# NOTICES (default <GAME_ROOT>/THIRD_PARTY_NOTICES.md when it exists): the game's own table for the third-party notices file (cmake/BagiNotices.cmake).
 function(be_add_game_executable NAME)
-    cmake_parse_arguments(ARG "" "GAME_ROOT" "SOURCES;MODULES" ${ARGN})
+    cmake_parse_arguments(ARG "" "GAME_ROOT;NOTICES" "SOURCES;MODULES" ${ARGN})
     if(NOT ARG_GAME_ROOT)
         set(ARG_GAME_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
     endif()
@@ -823,6 +826,36 @@ function(be_add_game_executable NAME)
     endif()
 
     be_deploy_runtime_libs(${NAME})
+
+    # The licence notices of the release: the engine's table plus the game's own (default <GAME_ROOT>/THIRD_PARTY_NOTICES.md; the
+    # engine's own file is never taken as a game's)
+    if(NOT ARG_NOTICES AND EXISTS "${ARG_GAME_ROOT}/THIRD_PARTY_NOTICES.md")
+        set(ARG_NOTICES "${ARG_GAME_ROOT}/THIRD_PARTY_NOTICES.md")
+    endif()
+    # The ctest verify runs in the binary dir, so a relative NOTICES path must not reach it raw
+    if(ARG_NOTICES)
+        get_filename_component(ARG_NOTICES "${ARG_NOTICES}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
+    set(_NOTICES_ARGS "")
+    if(ARG_NOTICES)
+        get_filename_component(_GAME_NOTICES_REAL "${ARG_NOTICES}" REALPATH)
+        get_filename_component(_ENGINE_NOTICES_REAL "${BAGI_ENGINE_DIR}/THIRD_PARTY_NOTICES.md" REALPATH)
+        if(NOT _GAME_NOTICES_REAL STREQUAL _ENGINE_NOTICES_REAL)
+            set(_NOTICES_ARGS GAME_NOTICES "${ARG_NOTICES}")
+        endif()
+    endif()
+    be_add_third_party_notices(${NAME} ${_NOTICES_ARGS})
+    if(ENGINE_BUILD_TESTS AND Python3_FOUND)
+        # Skips (77) while the executable has not been built, like the control smoke test
+        be_third_party_notices_file(_NOTICES_FILE ${NAME})
+        set(_NOTICES_VERIFY ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/third_party_notices_bundle.py verify
+            --root ${BAGI_ENGINE_DIR} --bundle "${_NOTICES_FILE}" --skip-missing)
+        if(_NOTICES_ARGS)
+            list(APPEND _NOTICES_VERIFY --game-notices "${ARG_NOTICES}")
+        endif()
+        add_test(NAME ${NAME}ThirdPartyNotices COMMAND ${_NOTICES_VERIFY})
+        set_tests_properties(${NAME}ThirdPartyNotices PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60 LABELS smoke)
+    endif()
 
     # Vulkan Loader (vulkan-1.dll / libvulkan.1.dylib) next to the executable: VULKAN_SDK/Bin first, else the vendored folder
     if(WIN32 AND ENGINE_WITH_VULKAN)

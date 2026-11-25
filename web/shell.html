@@ -15,6 +15,8 @@
     - Module.setStatus and Module.monitorRunDependencies feed the loading bar (the .data package and the wasm download);
       Module.onAbort, Module.onExit, the page's error event and an unhandled promise rejection (a .data package that did not
       download) show a message when the game stops.
+    - The loading panel links third-party-notices.txt (relative, no script): the licence texts tools/web/package.py publishes from the
+      build's <game>.notices.txt (cmake/BagiNotices.cmake).
     - Fullscreen: a small toggle button (top right) where document.fullscreenEnabled is true and the page is not already an installed
       app, and, on a touch screen, one request for fullscreen on the first tap (not with ?fullscreen=0). After it the page asks
       screen.orientation.lock for the orientation of manifest.webmanifest (written by tools/web/package.py from the game's web/app.json).
@@ -182,6 +184,12 @@
             color: #98a0b0;
         }
 
+        a#notices-link {
+            margin-top: 24px;
+            font-size: 0.8rem;
+            color: #98a0b0;
+        }
+
         div#message {
             max-width: 36rem;
             line-height: 1.5;
@@ -202,6 +210,7 @@
         <h1>Loading</h1>
         <progress id="loading-bar" max="1"></progress>
         <div id="loading-status">Starting...</div>
+        <a id="notices-link" href="third-party-notices.txt">Third-party notices</a>
     </div>
 
     <div id="error" class="panel" role="alert" hidden>

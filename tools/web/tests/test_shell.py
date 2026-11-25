@@ -76,11 +76,16 @@ class ShellMarkupTest(unittest.TestCase):
         self.assertRegex(self.markup, r'<html lang="[a-z-]+">')
 
     def test_nothing_is_loaded_from_outside(self):
-        # the two relative links of the home-screen app are the only references: the manifest and its icon, no URL of another origin
+        # the relative links of the home-screen app and of the notices are the only references, no URL of another origin
         urls = re.findall(r"""(?:src|href)=["']([^"']+)["']|url\(([^)]+)\)|@import""", self.markup)
-        self.assertEqual(sorted(urls), [("icons/apple-touch-icon.png", ""), ("manifest.webmanifest", "")])
+        self.assertEqual(sorted(urls), [("icons/apple-touch-icon.png", ""), ("manifest.webmanifest", ""), ("third-party-notices.txt", "")])
         self.assertNotRegex(self.markup, r"https?://")
         self.assertNotRegex(self.markup, r"""(?:src|href)=["'](?:/|[a-z]+:)""")
+
+    def test_the_loading_panel_links_the_third_party_notices_by_a_relative_path(self):
+        panel = re.search(r'(?s)<div id="loading"[^>]*>(.*?)</div>\s*<div id="error"', self.markup)
+        self.assertIsNotNone(panel)
+        self.assertRegex(panel.group(1), r'<a [^>]*href="third-party-notices\.txt"')
 
     def test_the_manifest_is_linked_with_credentials_and_the_apple_icon_by_a_relative_path(self):
         # a closed service uses Basic auth: a manifest request without credentials would get 401

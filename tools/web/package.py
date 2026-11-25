@@ -13,7 +13,9 @@ a gzip copy and, when the `brotli` module can be imported, a brotli copy of ever
 (name.gz, name.br; serve.py picks them by Accept-Encoding) and manifest.json with `threads` (true for a threaded build, the default; false
 with --single-thread: serve.py sends the cross-origin isolation headers only to a threaded page) and the size and the SHA-256 of every
 file. `--commit NAME=SHA` (repeatable) adds `commits` ({name: sha}) to it, the commits the build was made from, so a reader can
-tell an outdated page; without the option the key is absent. A file of
+tell an outdated page; without the option the key is absent. The build's <game>.notices.txt (cmake/BagiNotices.cmake), when there is
+one, is published as third-party-notices.txt (the page links it; no .gz / .br copy) and a copy of an earlier run is deleted when the
+build has none. A file of
 an earlier run that this run does not make (another game's, a .data the game no longer has) is deleted from the output folder, so the
 folder holds what the manifest lists and nothing else of the kinds named here; other files in it are left alone.
 
@@ -46,6 +48,9 @@ COMMIT_SHA_PATTERN = re.compile(r"[0-9a-f]{7,64}")
 # The files of a build next to the page: the script and the module are always there, the package only when the game has content
 REQUIRED_SUFFIXES = (".js", ".wasm")
 OPTIONAL_SUFFIXES = (".data",)
+# The licence notices of the engine and the game (cmake/BagiNotices.cmake writes <game>.notices.txt); the page links the published name
+NOTICES_BUILD_SUFFIX = ".notices.txt"
+NOTICES_NAME = "third-party-notices.txt"
 # What is worth compressing: the text of the page and the script, and the two large binaries (the wasm and the content package)
 COMPRESSED_SUFFIXES = (".html", ".js", ".wasm", ".data")
 GZIP_LEVEL = 9
@@ -126,6 +131,8 @@ def remove_stale_files(out_dir: Path, kept: set) -> None:
     """Deletes the files of `out_dir` that an earlier run could have made and this one does not: a page, script, module or package
     (and their .gz / .br copies) whose name is not in `kept`. Anything else in the folder is not ours and stays."""
     owned = {PAGE_SUFFIX, *REQUIRED_SUFFIXES, *OPTIONAL_SUFFIXES}
+    if NOTICES_NAME not in kept:
+        (out_dir / NOTICES_NAME).unlink(missing_ok=True)
     for path in out_dir.iterdir():
         original = path.name.removesuffix(".gz").removesuffix(".br")
         if path.is_file() and original not in kept and Path(original).suffix in owned:
@@ -328,6 +335,10 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
             # emcc writes the name of the package into the script that loads it: a script that names a package which is not
             # there is a build that lost it, and the page would stop at the first request
             raise PackageError(f"{source} not found, but {stem}.js loads it: the build output is incomplete")
+
+    notices = build_dir / f"{stem}{NOTICES_BUILD_SUFFIX}"
+    if notices.is_file():
+        sources.append((notices, NOTICES_NAME))
 
     # The output folder is cleaned of the files of earlier runs, so it must not be the build folder (it would delete the page) or hold it
     build_resolved, out_resolved = build_dir.resolve(), out_dir.resolve()
