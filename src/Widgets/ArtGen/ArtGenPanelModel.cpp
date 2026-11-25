@@ -64,7 +64,9 @@ namespace BECore {
 
     }  // namespace
 
-    ArtGenPanelModel::ArtGenPanelModel() = default;
+    ArtGenPanelModel::ArtGenPanelModel() {
+        InitPresetRows();
+    }
 
     ArtGenPanelModel::~ArtGenPanelModel() = default;
 
@@ -73,7 +75,7 @@ namespace BECore {
         _stale = true;
     }
 
-    ArtGenSession& ArtGenPanelModel::Session() const {
+    ArtGenSession& ArtGenPanelModel::GetSession() const {
         return _services.session != nullptr ? *_services.session : ArtGenSession::GetInstance();
     }
 
@@ -87,7 +89,7 @@ namespace BECore {
 
     void ArtGenPanelModel::Initialize() {
         Subscribe<SceneSelectionChangedEvent, &ArtGenPanelModel::OnSelectionChanged>(this);
-        ArtGenSession& session = Session();
+        ArtGenSession& session = GetSession();
         session.SetGameRoot(CoreManager::GetFileSystem().GetRootPath().View());
         session.SetAcceptor(&AcceptForControl);
         session.SetSoundAcceptor(&AcceptSoundForControl);
@@ -96,6 +98,7 @@ namespace BECore {
         session.SetFrameMeasurer(&MeasureFrameForControl);
         session.SetAcceptBatch(&BeginAcceptBatch, &EndAcceptBatch);
         session.RegisterControl(_services.control != nullptr ? *_services.control : CoreManager::GetControlService());
+        _slots.Register();
     }
 
     TypedRef ArtGenPanelModel::GetObject() {
@@ -104,11 +107,21 @@ namespace BECore {
 
     void ArtGenPanelModel::OnSelectionChanged(const SceneSelectionChangedEvent& event) {
         // The pointers are valid for this event only: the session holds the node and checks it alive before use
-        Session().SetSelectedNode(event.nodes.empty() ? IntrusivePtr<SceneNode>() : IntrusivePtr<SceneNode>(event.nodes.back()));
+        GetSession().SetSelectedNode(event.nodes.empty() ? IntrusivePtr<SceneNode>() : IntrusivePtr<SceneNode>(event.nodes.back()));
     }
 
     void ArtGenPanelModel::Update() {
-        ArtGenSession& session = Session();
+        ArtGenSession& session = GetSession();
+        ApplyPresetEdits();
+        LoadFirstPreset();
+        if (_presetStale || _presetVersion != session.Version() || _formRevision != _form.GetRevision()) {
+            _presetStale = false;
+            _presetVersion = session.Version();
+            _formRevision = _form.GetRevision();
+            RefreshPreset();
+        }
+        _view.preset.saveAsValid = IsValidSpriteName(StringView(_view.preset.saveAsName));
+
         const ControlServerStatus control = ControlStatus();
         if (control.listening && _bridgeWaitsForControl) {
             _bridgeWaitsForControl = false;
@@ -150,7 +163,7 @@ namespace BECore {
     }
 
     void ArtGenPanelModel::RefreshService(const ControlServerStatus& control, bool starting) {
-        ArtGenSession& session = Session();
+        ArtGenSession& session = GetSession();
         ArtGenServiceView& view = _view.service;
         const ArtGenServiceStatus& status = session.GetServiceStatus();
         view.controlListening = control.listening;
@@ -197,7 +210,7 @@ namespace BECore {
     }
 
     void ArtGenPanelModel::RefreshSetup() {
-        ArtGenSession& session = Session();
+        ArtGenSession& session = GetSession();
         ArtGenSetupView& view = _view.setup;
         view = ArtGenSetupView{};
         view.canAct = !session.IsBusy();
@@ -267,12 +280,20 @@ namespace BECore {
             RunSetup(argument);
             return true;
         }
+        if (is(EditorCommandIds::kArtGenPreset)) {
+            RunPreset(argument);
+            return true;
+        }
+        if (is(EditorCommandIds::kArtGenSaveAsOpened)) {
+            OpenSaveAs();
+            return true;
+        }
         return false;
     }
 
     void ArtGenPanelModel::RunService(StringView argument) {
         if (argument == ArtGenPanelArgs::kDisconnect) {
-            Session().RequestServiceStop();
+            GetSession().RequestServiceStop();
             return;
         }
         if (argument != ArtGenPanelArgs::kStart) {
@@ -294,7 +315,7 @@ namespace BECore {
     }
 
     void ArtGenPanelModel::RunSetup(StringView argument) {
-        ArtGenSession& session = Session();
+        ArtGenSession& session = GetSession();
         _stale = true;
         const auto request = [&](ArtGenSetupAction action) {
             auto requested = session.RequestSetup(action);

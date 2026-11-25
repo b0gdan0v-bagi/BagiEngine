@@ -45,7 +45,6 @@ namespace BECore {
         constexpr double kBytesPerMegabyte = 1e6;
         constexpr float kPromptLines = 4.5f;
         constexpr float kNegativeLines = 2.5f;
-        constexpr int32_t kMaxImageSide = 8192;
         constexpr size_t kInputTextSize = 512;
         constexpr float kWaveformWidth = 220.0f;
         constexpr float kWaveformHeight = 40.0f;
@@ -58,7 +57,6 @@ namespace BECore {
         constexpr float kMaxFadeMs = 1000.0f;
         constexpr float kMaxSeconds = 60.0f;
         constexpr Array<uint32_t, 5> kRates{0, 22050, 32000, 44100, 48000};
-        constexpr Array<int32_t, 7> kMaxSizes{0, 64, 128, 256, 512, 1024, 2048};  // 0: no downscale
 
         DecodedAudio DecodedOf(const AudioClip& clip) {
             DecodedAudio audio;
@@ -677,7 +675,7 @@ namespace BECore {
         FormatMaxSize(settings.maxSize, current, sizeof(current));
         ImGui::SetNextItemWidth(kFieldWidth);
         if (ImGui::BeginCombo("Max size", current)) {
-            for (const int32_t option : kMaxSizes) {
+            for (const int32_t option : ArtGenImageSettings::kMaxSizeOptions) {
                 char label[32];
                 FormatMaxSize(option, label, sizeof(label));
                 if (ImGui::Selectable(label, option == settings.maxSize)) {
@@ -748,8 +746,8 @@ namespace BECore {
             changed = ImGui::InputInt2("Size", size);
         }
         if (changed) {
-            _form.width = std::clamp(size[0], 1, kMaxImageSide);
-            _form.height = std::clamp(size[1], 1, kMaxImageSide);
+            _form.width = std::clamp(size[0], 1, ArtGenPresetForm::kMaxImageSide);
+            _form.height = std::clamp(size[1], 1, ArtGenPresetForm::kMaxImageSide);
             _form.Touch();
         }
         DrawResetButton(_form.width > 0, "##ResetSize", [this] {
