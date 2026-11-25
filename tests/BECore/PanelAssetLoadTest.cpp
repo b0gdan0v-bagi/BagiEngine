@@ -175,6 +175,26 @@ namespace BECore::Tests {
         ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" argument="a["/>)", "b", "argument: bad path");
     }
 
+    TEST(PanelAssetLoadTest, ConditionExpressionsAreChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelText" id="a" text="x" visible="files.running and files.count &gt;= 2 or files.mode == Busy"/>
+               <element type="PanelButton" id="b" command="c.d" enableWhen="!files.a or files.b != 3"/>
+               <element type="PanelPopup" id="p" open="files.n == 1 or files.n == 2"/>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files.a and"/>)", "t", "visible: a term is missing after 'and'");
+        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files.a==1"/>)", "t", "visible: bad path");
+        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files.mode &lt; Busy"/>)", "t", "visible: an order compare takes a number");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" enableWhen="!files.a == 1"/>)", "b", "enableWhen: '!' cannot be combined with a compare");
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="files.a or"/>)", "p", "open: a term is missing after 'or'");
+
+        String terms = "files.a";
+        for (size_t i = 0; i < PanelAssetLimits::kMaxConditionTerms; ++i) {
+            terms += " and files.a";
+        }
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelText" id="t" text="x" visible="{}"/>)", terms)), "t", "more than 8 terms");
+    }
+
     TEST(PanelAssetLoadTest, UnknownCommandAndModelNeedTheContext) {
         const String xml = R"(<PanelAsset id="T"><sources><source name="s" model="NoSuchModel"/></sources>
                                 <elements><element type="PanelButton" id="b" command="no.such"/></elements></PanelAsset>)";

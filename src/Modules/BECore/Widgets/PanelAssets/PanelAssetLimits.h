@@ -33,6 +33,9 @@ namespace BECore::PanelAssetLimits {
     /// Bytes of one text field (a title, a text, a binding, a command)
     inline constexpr size_t kMaxTextBytes = 512;
 
+    /// Terms of one condition (`visible`, `enableWhen`, `open`): a few options joined by `and` / `or`
+    inline constexpr size_t kMaxConditionTerms = 8;
+
     /// Bytes of an `id`: 1 to this many of `[A-Za-z0-9_.-]`
     inline constexpr size_t kMinIdBytes = 1;
     inline constexpr size_t kMaxIdBytes = 64;

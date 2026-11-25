@@ -7,6 +7,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelBinding.h>
+#include <BECore/Widgets/PanelAssets/PanelCondition.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <cmath>
 
@@ -307,7 +308,7 @@ namespace BECore {
                 if (text.empty()) {
                     return;
                 }
-                if (const auto parsed = ParseCondition(text); !parsed) {
+                if (const auto parsed = ParsePanelCondition(text); !parsed) {
                     _issues.Add(where, Format("{}: {}", field, parsed.error()));
                 }
             }

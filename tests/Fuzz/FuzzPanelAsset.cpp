@@ -4,6 +4,7 @@
 #include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelAssetLoader.h>
 #include <BECore/Widgets/PanelAssets/PanelBinding.h>
+#include <BECore/Widgets/PanelAssets/PanelCondition.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
@@ -113,7 +114,7 @@ namespace BECore::Fuzz {
             }
 
             void Condition(const String& text) {
-                if (!text.empty() && !ParseCondition(text)) {
+                if (!text.empty() && !ParsePanelCondition(text)) {
                     Fail();
                 }
             }
@@ -216,7 +217,7 @@ namespace BECore::Fuzz {
                 } else if (const auto* popup = element.Cast<PanelPopup>()) {
                     Text(popup->title);
                     Text(popup->open);
-                    if (popup->open.empty() || !ParseCondition(popup->open) || _popupDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
+                    if (popup->open.empty() || !ParsePanelCondition(popup->open) || _popupDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
                         Fail();
                     }
                 } else if (!element.Is<PanelRow>()) {
