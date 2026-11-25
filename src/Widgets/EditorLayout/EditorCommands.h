@@ -32,6 +32,9 @@ namespace BECore {
     /// The command with @p id, or nullptr
     [[nodiscard]] const EditorCommand* FindEditorCommand(PoolString id);
 
+    /// The command whose id reads @p id. Never interns: a panel asset names its commands in a file, and the validator asks with a name that may not exist
+    [[nodiscard]] const EditorCommand* FindEditorCommand(StringView id);
+
     /// Ids of the commands (a panel compares the id of an event with the ones it owns)
     namespace EditorCommandIds {
         inline constexpr auto kFileQuit = "file.quit"_intern;
@@ -74,6 +77,11 @@ namespace BECore {
         inline constexpr auto kViewFileChanges = "view.fileChanges"_intern;
         inline constexpr auto kViewSpriteLibrary = "view.spriteLibrary"_intern;
         inline constexpr auto kViewViewport = "view.viewport"_intern;
+        /// The File changes panel's buttons (config/panels/FileChangesPanel.xml names them). FileChangesPanelModel owns them and runs them only while its panel is open;
+        /// fileChanges.apply takes the virtual path of a pending row as the argument and does nothing without one
+        inline constexpr auto kFileChangesRescan = "fileChanges.rescan"_intern;
+        inline constexpr auto kFileChangesApplyAll = "fileChanges.applyAll"_intern;
+        inline constexpr auto kFileChangesApply = "fileChanges.apply"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.
