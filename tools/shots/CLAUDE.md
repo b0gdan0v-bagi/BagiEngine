@@ -58,6 +58,8 @@ What the game's `command` must do:
 - Be deterministic: the same seed and the manual clock, so the same build renders the same pixels (the diff's default tolerance is 0). Remove any temporary file it makes.
 - Exit 77 when the executable is missing; any other non-zero exit is a failure. Never write inside the repository, and never commit a picture.
 
+The engine's own set (`tools/stress/qa/editor_shots.py`) is the worked example of a `command` that reuses `QaSession` (the guard of the content file, the editor's temporary folder) and cuts each scene out of a full-resolution screenshot by the rects `imgui_find` gives. A crop of a panel stays near its native size, so its text is readable and a diff region points at the panel that changed.
+
 ## The diff text
 
 One line per pair in file-name order, then at most 5 regions of a changed pair by changed pixels (a constant of `png_diff.py`), then a summary. Corners are inclusive pixel coordinates.
