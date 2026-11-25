@@ -364,13 +364,16 @@ namespace BECore {
         }
         const ScopedTextStyle style(text.style);
         const auto draw = [&] {
-            if (text.wrap) {
-                ImGui::PushTextWrapPos(0.0f);
+            if (text.maxLines == 0) {
+                DrawLines(text.wrap, shown);
+                return;
             }
-            TextOf(shown);
-            if (text.wrap) {
-                ImGui::PopTextWrapPos();
+            // The region is as high as its lines in the font drawn in, so it is sized inside the mono scope
+            const float height = static_cast<float>(text.maxLines) * ImGui::GetTextLineHeightWithSpacing();
+            if (ImGui::BeginChild("##lines", ImVec2(0.0f, height), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar)) {
+                DrawLines(text.wrap, shown);
             }
+            ImGui::EndChild();
         };
         if (text.mono) {
             const ScopedMonoFont mono;
@@ -379,6 +382,16 @@ namespace BECore {
             draw();
         }
         ItemTooltip(OrNull(prepared.element->tooltip));
+    }
+
+    void PanelInterpreter::DrawLines(bool wrap, StringView shown) {
+        if (wrap) {
+            ImGui::PushTextWrapPos(0.0f);
+        }
+        TextOf(shown);
+        if (wrap) {
+            ImGui::PopTextWrapPos();
+        }
     }
 
     void PanelInterpreter::DrawButton(const PreparedElement& prepared) {
@@ -477,21 +490,43 @@ namespace BECore {
             DrawUnreadable();
             return;
         }
+        const size_t rows = table.maxRows > 0 ? eastl::min(count, static_cast<size_t>(table.maxRows)) : count;
         ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
         if (table.borders) {
             flags |= ImGuiTableFlags_Borders;
         }
-        if (!ImGui::BeginTable("table", static_cast<int>(prepared.columns.size()), flags)) {
+        // A list that fits in `scrollRows` is an ordinary table: no scrollbar, no room left empty
+        const bool scrolls = table.scrollRows > 0 && rows > static_cast<size_t>(table.scrollRows);
+        ImVec2 outerSize(0.0f, 0.0f);
+        if (scrolls) {
+            flags |= ImGuiTableFlags_ScrollY;
+            // A row is as high as its tallest cell: a button or an input is a frame, a text a line
+            bool hasFrame = false;
+            for (const PreparedColumn& column : prepared.columns) {
+                hasFrame = hasFrame || column.column->type == PanelColumnType::Button || column.column->type == PanelColumnType::Input;
+            }
+            const float rowHeight = (hasFrame ? ImGui::GetFrameHeight() : ImGui::GetTextLineHeight()) + ImGui::GetStyle().CellPadding.y * 2.0f;
+            const float headerRows = table.header ? 1.0f : 0.0f;
+            outerSize.y = (static_cast<float>(table.scrollRows) + headerRows) * rowHeight;
+        }
+        if (!ImGui::BeginTable("table", static_cast<int>(prepared.columns.size()), flags, outerSize)) {
             return;
         }
         if (table.header) {
             for (const PreparedColumn& column : prepared.columns) {
                 ImGui::TableSetupColumn(column.column->title.c_str());
             }
+            if (scrolls) {
+                ImGui::TableSetupScrollFreeze(0, 1);
+            }
             ImGui::TableHeadersRow();
         }
-        const size_t rows = table.maxRows > 0 ? eastl::min(count, static_cast<size_t>(table.maxRows)) : count;
-        for (size_t row = 0; row < rows; ++row) {
+        DrawRows(prepared, rows, scrolls);
+        ImGui::EndTable();
+    }
+
+    void PanelInterpreter::DrawRows(const PreparedElement& prepared, size_t rows, bool clipped) {
+        const auto drawRow = [&](size_t row) {
             ImGui::TableNextRow();
             const ScopedId rowId(static_cast<int>(row));
             for (size_t column = 0; column < prepared.columns.size(); ++column) {
@@ -499,8 +534,21 @@ namespace BECore {
                 const ScopedId columnId(prepared.columns[column].column->id.c_str());
                 DrawCell(prepared.columns[column], prepared.bind.binding, row);
             }
+        };
+        if (!clipped) {
+            for (size_t row = 0; row < rows; ++row) {
+                drawRow(row);
+            }
+            return;
         }
-        ImGui::EndTable();
+        // A row outside the window is not submitted, so the control API does not see it either
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(rows));
+        while (clipper.Step()) {
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+                drawRow(static_cast<size_t>(row));
+            }
+        }
     }
 
     void PanelInterpreter::DrawCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row) {
@@ -547,9 +595,29 @@ namespace BECore {
         StringView argument;
         const bool readable = ReadArgument(list, row, column.argument, argument);
         // A button whose argument cannot be read would run its command on nothing
-        ImGui::BeginDisabled(!readable);
-        const char* glyph = prepared.glyph != nullptr ? prepared.glyph : (column.title.empty() ? kUnreadable : column.title.c_str());
-        const bool clicked = IconButton(glyph, OrNull(column.tooltip), column.id.c_str());
+        ImGui::BeginDisabled(!readable || !ReadRowCondition(list, row, column.enableField));
+        bool clicked = false;
+        if (column.field.empty()) {
+            const char* glyph = prepared.glyph != nullptr ? prepared.glyph : (column.title.empty() ? kUnreadable : column.title.c_str());
+            clicked = IconButton(glyph, OrNull(column.tooltip), column.id.c_str());
+        } else {
+            // Its own scratch: `argument` may still view `_scratch`
+            StringView text;
+            if (_reader.ReadRowText(*_sources, list, row, column.field, _cellScratch, text) != PanelReadStatus::Ok) {
+                text = kUnreadable;
+            }
+            // The id part of the label is the column's, so the row's own text may repeat or change without moving the id
+            _label.clear();
+            if (prepared.glyph != nullptr) {
+                _label.append(prepared.glyph);
+                _label.append(kGlyphGap);
+            }
+            _label.append(text.data(), text.size());
+            _label.append(kIdSuffix);
+            _label.append(column.id);
+            clicked = ImGui::Button(_label.c_str());
+            ItemTooltip(OrNull(column.tooltip));
+        }
         ImGui::EndDisabled();
         if (clicked && readable && !column.command.empty()) {
             NoteClick(column.command, argument);

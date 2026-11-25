@@ -155,17 +155,34 @@ namespace BECore::Tests {
   <elements><element type="PanelFields" id="all" bind="probe"/></elements>
 </PanelAsset>)";
 
-        constexpr const char* kInputAndInputColumn = R"(
-<PanelAsset id="Mixed" title="Mixed">
+        constexpr const char* kScrolling = R"(
+<PanelAsset id="Scrolling" title="Scrolling">
   <elements>
-    <element type="PanelInput" id="filter" bind="probe.filter" hint="Filter" icon="check"/>
-    <element type="PanelTable" id="rows" source="probe.rows">
+    <element type="PanelTable" id="rows" source="probe.rows" scrollRows="{}">
       <columns>
-        <column type="Text" id="name" field="name"/>
-        <column type="Input" id="note" field="note" enableField="enabled" hint="note"/>
+        <column type="Button" id="act" icon="check" field="name" enableField="enabled" command="probe.act" argument="name"/>
+        <column type="Input" id="note" field="note" hint="note"/>
       </columns>
     </element>
   </elements>
+</PanelAsset>)";
+
+        constexpr const char* kScrollingAndInput = R"(
+<PanelAsset id="Mixed" title="Mixed">
+  <elements>
+    <element type="PanelInput" id="filter" bind="probe.filter" hint="Filter" icon="check"/>
+    <element type="PanelTable" id="rows" source="probe.rows" scrollRows="{}">
+      <columns>
+        <column type="Button" id="act" icon="check" field="name" enableField="enabled" command="probe.act" argument="name"/>
+        <column type="Input" id="note" field="note" hint="note"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kLines = R"(
+<PanelAsset id="Lines" title="Lines">
+  <elements><element type="PanelText" id="state" bind="probe.filter" mono="true" maxLines="{}"/></elements>
 </PanelAsset>)";
 
     }  // namespace
@@ -529,14 +546,59 @@ namespace BECore::Tests {
         EXPECT_TRUE(probe.flag);
     }
 
-    TEST_F(PanelInterpreterTest, ASteadyFrameOfAnInputAndAnInputColumnAllocatesNothing) {
+    TEST_F(PanelInterpreterTest, AScrollingTableDrawsOnlyTheRowsInView) {
+        probe.rows.clear();
+        for (size_t i = 0; i < kManyRows; ++i) {
+            probe.rows.push_back(MakeRow(Format("row {}", i), PanelTextStyle::Normal));
+        }
+        Load(Format(kScrolling, 5));
+
+        EXPECT_TRUE(TryLocate(Chain(TableCellChain("rows", 0, "act"), {ICON_LC_CHECK " row 0##act"})).has_value());
+        EXPECT_FALSE(TryLocate(Chain(TableCellChain("rows", 50, "act"), {ICON_LC_CHECK " row 50##act"})).has_value());
+        EXPECT_FALSE(TryLocate(Chain(TableCellChain("rows", kManyRows - 1, "act"), {ICON_LC_CHECK " row 99##act"})).has_value());
+    }
+
+    TEST_F(PanelInterpreterTest, AScrollRowsTableThatFitsLeavesNoRoomEmptyBelowItsRows) {
+        Load(Format(kScrolling, 50));
+        const float fits = ContentHeight();
+        Load(Format(kScrolling, 0));
+        EXPECT_FLOAT_EQ(fits, ContentHeight());
+    }
+
+    TEST_F(PanelInterpreterTest, ALabelledButtonCellClicksWithItsRowsArgumentAndANotEnabledRowDoesNot) {
+        probe.rows[1].enabled = false;
+        Load(Format(kScrolling, 5));
+
+        ClickAt(Locate(Chain(TableCellChain("rows", 2, "act"), {ICON_LC_CHECK " gamma##act"})));
+        EXPECT_EQ(lastCommand, "probe.act");
+        EXPECT_EQ(lastArgument, "gamma");
+
+        clicks = 0;
+        ClickAt(Locate(Chain(TableCellChain("rows", 1, "act"), {ICON_LC_CHECK " beta##act"})));
+        EXPECT_EQ(clicks, 0);
+    }
+
+    TEST_F(PanelInterpreterTest, ATextWithMaxLinesIsAScrollRegionOfThatHeight) {
+        probe.filter.clear();
+        for (int i = 0; i < 40; ++i) {
+            probe.filter.append("a line of the state\n");
+        }
+        Load(Format(kLines, 0));
+        const float all = ContentHeight();
+        Load(Format(kLines, 3));
+        const float limited = ContentHeight();
+        EXPECT_GT(limited, 0.0f);
+        EXPECT_LT(limited, all);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfAScrollingTableWithAButtonAndAnInputColumnAndAnInputAllocatesNothing) {
         probe.rows.clear();
         for (size_t i = 0; i < kManyRows; ++i) {
             probe.rows.push_back(MakeRow(Format("row {}", i), PanelTextStyle::Normal));
             probe.rows.back().note = "a note";
         }
         probe.filter = "a filter long enough to want its own text scratch";
-        Load(kInputAndInputColumn);
+        Load(Format(kScrollingAndInput, 10));
         for (int i = 0; i < kWarmUpFrames; ++i) {
             Frame();
         }

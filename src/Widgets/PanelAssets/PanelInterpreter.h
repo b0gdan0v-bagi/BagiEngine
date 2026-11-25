@@ -49,6 +49,10 @@ namespace BECore {
      * change, as the inspector does; a text longer than the buffer is cut at a character boundary, and an edit keeps only what the buffer holds.
      * Its label is `##<id>` (the element's, or the column's in a table), so the control API finds it by that.
      *
+     * **A table with `scrollRows`** scrolls inside a region of that many rows once it has more, and submits only the rows in view (an
+     * `ImGuiListClipper`): a row outside the window is not a control, so the control API does not find it. The ids of a cell are the same
+     * as in a table that does not scroll.
+     *
      * Main thread only; needs an ImGui frame in progress.
      */
     class PanelInterpreter {
@@ -81,11 +85,13 @@ namespace BECore {
         void DrawElement(const PreparedElement& prepared);
         void DrawRow(const PreparedElement& prepared);
         void DrawTextLine(const PreparedElement& prepared);
+        static void DrawLines(bool wrap, StringView shown);
         void DrawButton(const PreparedElement& prepared);
         void DrawInput(const PreparedElement& prepared);
         void DrawField(const PreparedElement& prepared, bool openCompound);
         void DrawTable(const PreparedElement& prepared);
         void DrawCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
+        void DrawRows(const PreparedElement& prepared, size_t rows, bool clipped);
         void DrawButtonCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
         void DrawInputCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
         void DrawSlot(const PreparedElement& prepared);
@@ -104,9 +110,10 @@ namespace BECore {
         Vector<PreparedElement> _elements;
         PanelBindingReader _reader;
         PanelBindingWriter _writer{_reader};
-        /// Capacity survives frames: the text of a bound value, of a cell's style and of a selectable's label
+        /// Capacity survives frames: the text of a bound value, of a cell's style and of a button cell, and of a label
         String _scratch;
         String _styleScratch;
+        String _cellScratch;
         String _label;
         /// What the text field being drawn edits; one field is drawn at a time
         char _inputBuffer[kInputBufferSize] = {};
