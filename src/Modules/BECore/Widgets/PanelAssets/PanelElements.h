@@ -35,6 +35,18 @@ namespace BECore {
         BE_REFLECT_FIELD bool border = false;
     };
 
+    /// A tab bar: its `elements` are `PanelTab`s and nothing else, and the loader reports any other child, an empty bar and a tab outside a bar
+    class PanelTabs : public PanelElement {
+        BE_CLASS(PanelTabs)
+    };
+
+    /// One tab of a `PanelTabs` bar; its `elements` are drawn only while it is the selected one. A tab with no `title` has no label
+    class PanelTab : public PanelElement {
+        BE_CLASS(PanelTab)
+    public:
+        BE_REFLECT_FIELD String title;
+    };
+
     /// A modal window over its `elements`, shown while the condition `open` reads true (required: with none it could never open)
     class PanelPopup : public PanelElement {
         BE_CLASS(PanelPopup)

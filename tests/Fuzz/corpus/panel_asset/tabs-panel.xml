@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<PanelAsset id="Tabbed" title="Tabbed" command="view.tabbed" open="false" window="Floating" width="560" height="460">
+  <sources>
+    <item name="prefs" model="PreferencesPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelTabs" id="tabs">
+      <elements>
+        <element type="PanelTab" id="general" title="General">
+          <elements>
+            <element type="PanelNumber" id="scale" bind="prefs.fontScale" min="0.5" max="2" slider="true" text="Font scale"/>
+            <element type="PanelCheckbox" id="grid" bind="prefs.viewportGrid" text="Viewport grid"/>
+          </elements>
+        </element>
+        <element type="PanelTab" id="hotkeys" title="Hotkeys">
+          <elements>
+            <element type="PanelTable" id="rows" source="prefs.rows">
+              <columns>
+                <column type="Text" id="name" field="name"/>
+                <column type="Button" id="rebind" title="Rebind" command="preferences.rebind" argument="id"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="rebind" title="Rebind" open="prefs.rebinding">
+      <elements>
+        <element type="PanelTabs" id="nested">
+          <elements>
+            <element type="PanelTab" id="only" title="Only"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

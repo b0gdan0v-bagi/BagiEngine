@@ -261,7 +261,7 @@ namespace BECore::Tests {
 
     TEST(PanelAssetLoadTest, OnlyContainersHoldElements) {
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x"><elements><element type="PanelRow" id="r"/></elements></element>)", "t",
-                          "only a section, a row, a child or a popup holds elements");
+                          "only a section, a row, a child, a popup, a tab bar or a tab holds elements");
     }
 
     TEST(PanelAssetLoadTest, ChildAndPopupHoldElements) {
@@ -383,6 +383,68 @@ namespace BECore::Tests {
         const PanelLoadResult over = LoadPanelAsset(StringView(Wrap(popups)));
         EXPECT_EQ(over.issues.size(), 1u) << Joined(over.issues);
         EXPECT_TRUE(HasIssue(over.issues, "extra", "more than 8 popups")) << Joined(over.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ATabBarHoldsTabsAndATabLivesInABar) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelTabs" id="bar"><elements>
+                 <element type="PanelTab" id="one" title="One"><elements><element type="PanelText" id="a" text="x"/></elements></element>
+                 <element type="PanelTab" id="two" title="Two"><elements><element type="PanelPopup" id="p" open="a.b"/></elements></element>
+               </elements></element>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelTabs" id="bar"><elements><element type="PanelTab" id="one" title="One"/><element type="PanelText" id="t" text="x"/></elements></element>)", "bar",
+                          "a tab bar holds only tabs");
+        ExpectSingleIssue(R"(<element type="PanelTab" id="lost" title="Lost"/>)", "lost", "a tab belongs in a tab bar");
+        ExpectSingleIssue(R"(<element type="PanelRow" id="r"><elements><element type="PanelTab" id="lost" title="Lost"/></elements></element>)", "lost", "a tab belongs in a tab bar");
+        ExpectSingleIssue(R"(<element type="PanelTabs" id="bar"/>)", "bar", "a tab bar needs tabs");
+        ExpectSingleIssue(R"(<element type="PanelTabs" id="bar"><elements><element type="PanelTab" id="one"/></elements></element>)", "one", "title is required");
+    }
+
+    TEST(PanelAssetLoadTest, TabsAreCounted) {
+        const auto bar = [](size_t first, size_t count) {
+            String tabs;
+            for (size_t i = 0; i < count; ++i) {
+                tabs += Format(R"(<element type="PanelTab" id="t{}" title="T"/>)", first + i);
+            }
+            return Format(R"(<element type="PanelTabs" id="bar{}"><elements>{}</elements></element>)", first, tabs);
+        };
+
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(bar(0, PanelAssetLimits::kMaxTabsPerBar))));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        const PanelLoadResult overBar = LoadPanelAsset(StringView(Wrap(bar(0, PanelAssetLimits::kMaxTabsPerBar + 1))));
+        EXPECT_EQ(overBar.issues.size(), 1u) << Joined(overBar.issues);
+        EXPECT_TRUE(HasIssue(overBar.issues, "bar0", "more than 16 tabs in a bar")) << Joined(overBar.issues);
+
+        // Two full bars are the limit of the asset, a third bar's first tab is over it
+        const size_t perBar = PanelAssetLimits::kMaxTabsPerBar;
+        const PanelLoadResult twoBars = LoadPanelAsset(StringView(Wrap(bar(0, perBar) + bar(perBar, perBar))));
+        EXPECT_TRUE(twoBars.issues.empty()) << Joined(twoBars.issues);
+        const PanelLoadResult overAll = LoadPanelAsset(StringView(Wrap(bar(0, perBar) + bar(perBar, perBar) + bar(2 * perBar, 2))));
+        EXPECT_EQ(overAll.issues.size(), 1u) << Joined(overAll.issues);
+        EXPECT_TRUE(HasIssue(overAll.issues, Format("t{}", 2 * perBar), "more than 32 tabs in all")) << Joined(overAll.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ADialogsWindowIsOpenAndNeedsNoCommand) {
+        const auto load = [](StringView attributes) {
+            return LoadPanelAsset(StringView(Format(R"(<PanelAsset id="Host" title="Host" {}><elements><element type="PanelPopup" id="p" open="a.b"/></elements></PanelAsset>)", attributes)));
+        };
+
+        const PanelLoadResult open = load(R"(window="Dialogs" open="true")");
+        EXPECT_TRUE(open.issues.empty()) << Joined(open.issues);
+        ASSERT_NE(open.asset, nullptr);
+        EXPECT_EQ(open.asset->window, PanelWindowKind::Dialogs);
+        EXPECT_TRUE(open.asset->command.empty());
+
+        const PanelLoadResult closed = load(R"(window="Dialogs" open="false")");
+        EXPECT_EQ(closed.issues.size(), 1u) << Joined(closed.issues);
+        EXPECT_TRUE(HasIssue(closed.issues, "Host", "always open")) << Joined(closed.issues);
+
+        const PanelLoadResult floating = load(R"(window="Floating")");
+        EXPECT_TRUE(floating.issues.empty()) << Joined(floating.issues);
+        const PanelLoadResult unknown = load(R"(window="Tabbed")");
+        EXPECT_FALSE(unknown.issues.empty());
     }
 
     TEST(PanelAssetLoadTest, SelectedFieldIsARelativePathOfASelectableColumn) {

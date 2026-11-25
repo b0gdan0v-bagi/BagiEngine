@@ -88,7 +88,7 @@ namespace BECore {
 
             void Run(const PanelAsset& asset) {
                 CheckAsset(asset);
-                WalkElements(asset.elements, "elements", 1);
+                WalkElements(asset.elements, "elements", 1, nullptr);
             }
 
         private:
@@ -102,6 +102,9 @@ namespace BECore {
                     _issues.Add(where, "width and height must not be negative");
                 }
                 Binding(where, "titleBind", asset.titleBind, false);
+                if (asset.window == PanelWindowKind::Dialogs && !asset.open) {
+                    _issues.Add(where, "a Dialogs window is always open: it needs open=\"true\"");
+                }
                 if (asset.sources.size() > PanelAssetLimits::kMaxSources) {
                     _issues.Add(where, Format("more than {} sources", PanelAssetLimits::kMaxSources));
                 }
@@ -120,7 +123,7 @@ namespace BECore {
                 }
             }
 
-            void WalkElements(const Vector<IntrusivePtr<PanelElement>>& list, StringView parentPath, size_t depth) {
+            void WalkElements(const Vector<IntrusivePtr<PanelElement>>& list, StringView parentPath, size_t depth, const PanelElement* parent) {
                 if (list.empty()) {
                     return;
                 }
@@ -140,15 +143,15 @@ namespace BECore {
                     }
                     const String path = Format("{}[{}]", parentPath, i);
                     const String where = IsValidId(element->id) ? element->id : path;
-                    CheckElement(*element, where);
+                    CheckElement(*element, where, parent);
                     const bool isPopup = element->Is<PanelPopup>();
                     _popupDepth += isPopup ? 1 : 0;
-                    WalkElements(element->elements, Format("{}.elements", path), depth + 1);
+                    WalkElements(element->elements, Format("{}.elements", path), depth + 1, element);
                     _popupDepth -= isPopup ? 1 : 0;
                 }
             }
 
-            void CheckElement(const PanelElement& element, StringView where) {
+            void CheckElement(const PanelElement& element, StringView where, const PanelElement* parent) {
                 CheckTexts(element, where);
                 if (!IsValidId(element.id)) {
                     _issues.Add(where, Format("id must be {} to {} characters of A-Z a-z 0-9 _ . -", PanelAssetLimits::kMinIdBytes, PanelAssetLimits::kMaxIdBytes));
@@ -162,9 +165,10 @@ namespace BECore {
                     _issues.Add(where, "type is required");
                 }
 
-                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>();
+                const bool isContainer =
+                    element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>() || element.Is<PanelTabs>() || element.Is<PanelTab>();
                 if (!isContainer && !element.elements.empty()) {
-                    _issues.Add(where, "only a section, a row, a child or a popup holds elements");
+                    _issues.Add(where, "only a section, a row, a child, a popup, a tab bar or a tab holds elements");
                 }
 
                 if (const auto* text = element.Cast<PanelText>()) {
@@ -210,6 +214,37 @@ namespace BECore {
                     Extent(where, "height", child->height);
                 } else if (const auto* popup = element.Cast<PanelPopup>()) {
                     CheckPopup(*popup, where);
+                } else if (const auto* tabs = element.Cast<PanelTabs>()) {
+                    CheckTabs(*tabs, where);
+                } else if (const auto* tab = element.Cast<PanelTab>()) {
+                    CheckTab(*tab, where, parent);
+                }
+            }
+
+            void CheckTabs(const PanelTabs& tabs, StringView where) {
+                if (tabs.elements.empty()) {
+                    _issues.Add(where, "a tab bar needs tabs");
+                }
+                if (tabs.elements.size() > PanelAssetLimits::kMaxTabsPerBar) {
+                    _issues.Add(where, Format("more than {} tabs in a bar", PanelAssetLimits::kMaxTabsPerBar));
+                }
+                for (const IntrusivePtr<PanelElement>& child : tabs.elements) {
+                    if (child != nullptr && !child->Is<PanelTab>()) {
+                        _issues.Add(where, "a tab bar holds only tabs");
+                        return;
+                    }
+                }
+            }
+
+            void CheckTab(const PanelTab& tab, StringView where, const PanelElement* parent) {
+                if (parent == nullptr || !parent->Is<PanelTabs>()) {
+                    _issues.Add(where, "a tab belongs in a tab bar");
+                }
+                if (tab.title.empty()) {
+                    _issues.Add(where, "title is required");
+                }
+                if (++_tabCount == PanelAssetLimits::kMaxTabs + 1) {
+                    _issues.Add(where, Format("more than {} tabs in all", PanelAssetLimits::kMaxTabs));
                 }
             }
 
@@ -392,6 +427,7 @@ namespace BECore {
             size_t _columnCount = 0;
             size_t _popupCount = 0;
             size_t _popupDepth = 0;
+            size_t _tabCount = 0;
             bool _columnsReported = false;
             bool _stopped = false;
         };

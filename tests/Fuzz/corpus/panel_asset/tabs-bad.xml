@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<PanelAsset id="TabsBad" title="Bad" window="Dialogs" open="false">
+  <elements>
+    <element type="PanelTabs" id="empty"/>
+    <element type="PanelTabs" id="mixed">
+      <elements>
+        <element type="PanelTab" id="untitled"/>
+        <element type="PanelText" id="stray" text="not a tab"/>
+      </elements>
+    </element>
+    <element type="PanelTab" id="outside" title="Outside"/>
+  </elements>
+</PanelAsset>

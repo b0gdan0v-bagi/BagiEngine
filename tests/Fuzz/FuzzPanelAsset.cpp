@@ -70,7 +70,10 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                 }
-                Elements(asset.elements, 1);
+                if (asset.window == PanelWindowKind::Dialogs && !asset.open) {
+                    Fail();
+                }
+                Elements(asset.elements, 1, nullptr);
             }
 
             [[nodiscard]] bool Violated() const {
@@ -152,7 +155,7 @@ namespace BECore::Fuzz {
                 }
             }
 
-            void Elements(const Vector<IntrusivePtr<PanelElement>>& list, size_t depth) {
+            void Elements(const Vector<IntrusivePtr<PanelElement>>& list, size_t depth, const PanelElement* parent) {
                 if (list.empty()) {
                     return;
                 }
@@ -167,15 +170,15 @@ namespace BECore::Fuzz {
                     if (++_elementCount > PanelAssetLimits::kMaxElements) {
                         Fail();
                     }
-                    Element(*element);
+                    Element(*element, parent);
                     const bool isPopup = element->Is<PanelPopup>();
                     _popupDepth += isPopup ? 1 : 0;
-                    Elements(element->elements, depth + 1);
+                    Elements(element->elements, depth + 1, element.Get());
                     _popupDepth -= isPopup ? 1 : 0;
                 }
             }
 
-            void Element(const PanelElement& element) {
+            void Element(const PanelElement& element, const PanelElement* parent) {
                 Text(element.id);
                 Text(element.visible);
                 Text(element.tooltip);
@@ -183,7 +186,8 @@ namespace BECore::Fuzz {
                     Fail();
                 }
                 Condition(element.visible);
-                if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>() && !element.Is<PanelChild>() && !element.Is<PanelPopup>()) {
+                if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>() && !element.Is<PanelChild>() && !element.Is<PanelPopup>() && !element.Is<PanelTabs>() &&
+                    !element.Is<PanelTab>()) {
                     Fail();
                 }
 
@@ -274,8 +278,26 @@ namespace BECore::Fuzz {
                     if (popup->open.empty() || !ParsePanelCondition(popup->open) || _popupDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
                         Fail();
                     }
+                } else if (const auto* tabs = element.Cast<PanelTabs>()) {
+                    Tabs(*tabs);
+                } else if (const auto* tab = element.Cast<PanelTab>()) {
+                    Text(tab->title);
+                    if (parent == nullptr || !parent->Is<PanelTabs>() || tab->title.empty() || ++_tabCount > PanelAssetLimits::kMaxTabs) {
+                        Fail();
+                    }
                 } else if (!element.Is<PanelRow>()) {
                     Fail();  // the base class: no `type`, or one that is no kind
+                }
+            }
+
+            void Tabs(const PanelTabs& tabs) {
+                if (tabs.elements.empty() || tabs.elements.size() > PanelAssetLimits::kMaxTabsPerBar) {
+                    Fail();
+                }
+                for (const IntrusivePtr<PanelElement>& child : tabs.elements) {
+                    if (child != nullptr && !child->Is<PanelTab>()) {
+                        Fail();
+                    }
                 }
             }
 
@@ -318,6 +340,7 @@ namespace BECore::Fuzz {
             size_t _columnCount = 0;
             size_t _popupCount = 0;
             size_t _popupDepth = 0;
+            size_t _tabCount = 0;
             bool _violated = false;
         };
 

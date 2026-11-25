@@ -4,9 +4,14 @@
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <BECore/Widgets/PanelAssets/PanelElement.h>
 
 namespace BECore {
+
+    /// How the editor opens the window of an asset: `Docked` in the dock space, `Floating` never docked, `Dialogs` a host with no visible window that draws the popups of a
+    /// tool whose own window is hand-written. A `Dialogs` asset is always open, so it must say `open="true"` and its `command` may be empty
+    CORE_ENUM(PanelWindowKind, uint8_t, Docked, Floating, Dialogs)
 
     /// A named source of a panel: `model` is the text the editor resolves to a model object (here it is only a text)
     struct PanelSource {
@@ -30,6 +35,7 @@ namespace BECore {
         BE_REFLECT_FIELD String titleBind;  ///< a text field whose value replaces `title` in the window title; the window keeps its id
         BE_REFLECT_FIELD String command;
         BE_REFLECT_FIELD bool open = false;
+        BE_REFLECT_FIELD PanelWindowKind window = PanelWindowKind::Docked;
         BE_REFLECT_FIELD float width = 0.0f;
         BE_REFLECT_FIELD float height = 0.0f;
         BE_REFLECT_FIELD Vector<PanelSource> sources;

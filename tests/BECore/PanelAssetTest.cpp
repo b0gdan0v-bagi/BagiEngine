@@ -12,7 +12,7 @@ namespace BECore::Tests {
 
         /// Every kind of element once, a table with each column type, and a nested container of each kind
         constexpr const char* kSampleXml = R"(
-<PanelAsset id="Sample" title="Sample" titleBind="files.title" command="view.sample" open="true" width="640" height="320">
+<PanelAsset id="Sample" title="Sample" titleBind="files.title" command="view.sample" open="true" window="Floating" width="640" height="320">
   <sources>
     <source name="files" model="FileChangesPanelModel"/>
   </sources>
@@ -40,6 +40,16 @@ namespace BECore::Tests {
             <element type="PanelText" id="inPane" text="In a pane"/>
           </elements>
         </element>
+      </elements>
+    </element>
+    <element type="PanelTabs" id="tabs">
+      <elements>
+        <element type="PanelTab" id="first" title="First">
+          <elements>
+            <element type="PanelText" id="inTab" text="In a tab"/>
+          </elements>
+        </element>
+        <element type="PanelTab" id="second" title="Second"/>
       </elements>
     </element>
     <element type="PanelPopup" id="confirm" title="Confirm" open="!files.running">
@@ -93,12 +103,13 @@ namespace BECore::Tests {
         EXPECT_EQ(Write(*again), written);
         EXPECT_EQ(again->id, "Sample");
         EXPECT_TRUE(again->open);
+        EXPECT_EQ(again->window, PanelWindowKind::Floating);
         EXPECT_EQ(again->titleBind, "files.title");
         EXPECT_FLOAT_EQ(again->width, 640.0f);
         ASSERT_EQ(again->sources.size(), 1u);
         EXPECT_EQ(again->sources[0].model, "FileChangesPanelModel");
 
-        ASSERT_EQ(again->elements.size(), 4u);
+        ASSERT_EQ(again->elements.size(), 5u);
         const auto* section = ElementAs<PanelSection>(again->elements[1]);
         ASSERT_NE(section, nullptr);
         EXPECT_FALSE(section->defaultOpen);
@@ -148,13 +159,20 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(pane->height, 8.0f);
         EXPECT_TRUE(pane->border);
         ASSERT_EQ(pane->elements.size(), 1u);
-        const auto* popup = ElementAs<PanelPopup>(again->elements[2]);
+        const auto* tabs = ElementAs<PanelTabs>(again->elements[2]);
+        ASSERT_NE(tabs, nullptr);
+        ASSERT_EQ(tabs->elements.size(), 2u);
+        const auto* firstTab = ElementAs<PanelTab>(tabs->elements[0]);
+        ASSERT_NE(firstTab, nullptr);
+        EXPECT_EQ(firstTab->title, "First");
+        EXPECT_EQ(firstTab->elements.size(), 1u);
+        const auto* popup = ElementAs<PanelPopup>(again->elements[3]);
         ASSERT_NE(popup, nullptr);
         EXPECT_EQ(popup->title, "Confirm");
         EXPECT_EQ(popup->open, "!files.running");
         ASSERT_EQ(popup->elements.size(), 1u);
 
-        const auto* table = ElementAs<PanelTable>(again->elements[3]);
+        const auto* table = ElementAs<PanelTable>(again->elements[4]);
         ASSERT_NE(table, nullptr);
         EXPECT_FALSE(table->header);
         EXPECT_EQ(table->maxRows, 20u);
@@ -172,10 +190,23 @@ namespace BECore::Tests {
 
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {
         for (const char* name : {"PanelSection", "PanelRow", "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelCheckbox", "PanelCombo", "PanelNumber", "PanelButton", "PanelTable",
-                                 "PanelSeparator", "PanelEmptyState", "PanelSlot", "PanelChild", "PanelPopup"}) {
+                                 "PanelSeparator", "PanelEmptyState", "PanelSlot", "PanelChild", "PanelPopup", "PanelTabs", "PanelTab"}) {
             const IntrusivePtr<PanelElement> element = AbstractFactory<PanelElement>::GetInstance().Create(StringView{name});
             ASSERT_NE(element, nullptr) << name;
             EXPECT_EQ(element->GetTypeMeta().typeName, StringView{name});
+        }
+    }
+
+    TEST(PanelAssetTest, TheWindowKindDefaultsToDockedAndNamesItsValues) {
+        XmlDeserializer deserializer;
+        const auto asset = Read(R"(<PanelAsset id="A"/>)", deserializer);
+        EXPECT_EQ(asset->window, PanelWindowKind::Docked);
+
+        for (const char* name : {"Docked", "Floating", "Dialogs"}) {
+            XmlDeserializer reader;
+            const auto named = Read(Format(R"(<PanelAsset id="A" window="{}"/>)", name), reader);
+            EXPECT_FALSE(reader.HasErrors()) << name;
+            EXPECT_EQ(EnumUtils<PanelWindowKind>::ToString(named->window), StringView(name));
         }
     }
 

@@ -33,6 +33,10 @@ namespace BECore::PanelAssetLimits {
     /// Popups of one asset; a popup is modal and none holds another
     inline constexpr size_t kMaxPopups = 8;
 
+    /// Tabs of one tab bar and of the whole asset
+    inline constexpr size_t kMaxTabsPerBar = 16;
+    inline constexpr size_t kMaxTabs = 32;
+
     /// Bytes of one text field (a title, a text, a binding, a command)
     inline constexpr size_t kMaxTextBytes = 512;
 
