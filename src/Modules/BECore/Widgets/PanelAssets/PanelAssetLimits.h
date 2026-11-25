@@ -27,7 +27,11 @@ namespace BECore::PanelAssetLimits {
     inline constexpr size_t kMinIdBytes = 1;
     inline constexpr size_t kMaxIdBytes = 64;
 
-    /// Bytes of one issue's text: issues reach the panel and the log
-    inline constexpr size_t kMaxIssueBytes = 256;
+    /// Bytes of one issue (where it is and what is wrong together): issues reach the panel and the log
+    inline constexpr size_t kMaxIssueWhereBytes = 96;
+    inline constexpr size_t kMaxIssueMessageBytes = 160;
+
+    /// Issues of one load; the last place says that the rest were dropped, as the reader's list of errors does
+    inline constexpr size_t kMaxIssues = 64;
 
 }  // namespace BECore::PanelAssetLimits
