@@ -150,6 +150,12 @@ namespace BECore {
             if (element.Is<PanelPopup>()) {
                 return PreparedKind::Popup;
             }
+            if (element.Is<PanelTabs>()) {
+                return PreparedKind::Tabs;
+            }
+            if (element.Is<PanelTab>()) {
+                return PreparedKind::Tab;
+            }
             return PreparedKind::Unknown;
         }
 
@@ -184,6 +190,8 @@ namespace BECore {
                 case PreparedKind::Section:
                 case PreparedKind::Row:
                 case PreparedKind::Child:
+                case PreparedKind::Tabs:
+                case PreparedKind::Tab:
                     PrepareElements(element->elements, prepared.children);
                     break;
                 case PreparedKind::Popup:
@@ -354,6 +362,13 @@ namespace BECore {
             case PreparedKind::Popup:
                 DrawPopup(prepared);
                 break;
+            case PreparedKind::Tabs:
+                DrawTabs(prepared);
+                break;
+            case PreparedKind::Tab:
+                // ImGui draws a tab only inside a bar; the bar draws its own tabs, so this one is outside any
+                DrawUnreadable();
+                break;
             default:
                 // A plain `PanelElement` of an unknown type: shown, so a file that names one is seen
                 DrawUnreadable();
@@ -394,19 +409,54 @@ namespace BECore {
         _label.assign(popup.title.c_str(), popup.title.size());
         _label.append(kIdSuffix);
         _label.append(popup.id);
-        if (wanted && !ImGui::IsPopupOpen(_label.c_str())) {
+        const bool rising = wanted && !prepared.popupWasWanted;
+        prepared.popupWasWanted = wanted;
+        if (rising && !ImGui::IsPopupOpen(_label.c_str())) {
             ImGui::OpenPopup(_label.c_str());
         }
         if (!ImGui::BeginPopupModal(_label.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             return;
         }
-        if (!wanted) {
+        bool open = wanted;
+        // ImGui never closes a modal on Esc. With a `closeCommand` the dialog is cancelled by it; the bool stays true until the model clears it, and the popup does not
+        // reopen meanwhile because it opens on the rising edge only. With none, Esc does nothing, as in ImGui
+        if (open && !popup.closeCommand.empty() && ImGui::IsKeyPressed(ImGuiKey_Escape, false) && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+            NoteClick(popup.closeCommand, StringView{});
+            open = false;
+        }
+        if (!open) {
             ImGui::CloseCurrentPopup();
         }
-        ImGui::BeginDisabled(!wanted);
+        ImGui::BeginDisabled(!open);
         DrawElements(prepared.children);
         ImGui::EndDisabled();
         ImGui::EndPopup();
+    }
+
+    void PanelInterpreter::DrawTabs(const PreparedElement& prepared) {
+        _label.assign(kIdSuffix);
+        _label.append(prepared.element->id);
+        if (!ImGui::BeginTabBar(_label.c_str())) {
+            return;
+        }
+        for (const PreparedElement& tab : prepared.children) {
+            if (tab.kind == PreparedKind::Tab && IsVisible(tab)) {
+                const ScopedId id(tab.element->id.c_str());
+                DrawTab(tab);
+            }
+        }
+        ImGui::EndTabBar();
+    }
+
+    void PanelInterpreter::DrawTab(const PreparedElement& prepared) {
+        const PanelTab& tab = *prepared.element->Cast<PanelTab>();
+        _label.assign(tab.title.c_str(), tab.title.size());
+        _label.append(kStableIdSuffix);
+        _label.append(tab.id);
+        if (ImGui::BeginTabItem(_label.c_str())) {
+            DrawElements(prepared.children);
+            ImGui::EndTabItem();
+        }
     }
 
     void PanelInterpreter::DrawTextLine(const PreparedElement& prepared) {
@@ -465,15 +515,16 @@ namespace BECore {
         }
     }
 
-    bool PanelInterpreter::DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm) {
+    bool PanelInterpreter::DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly) {
+        const ImGuiInputTextFlags flags = enterOnly ? ImGuiInputTextFlags_EnterReturnsTrue : ImGuiInputTextFlags_None;
         const size_t size = FittingBytes(current, kInputBufferSize - 1);
         std::memcpy(_inputBuffer, current.data(), size);
         _inputBuffer[size] = '\0';
         ImGui::SetNextItemWidth(widthInEm > 0.0f ? widthInEm * ImGui::GetFontSize() : kFillWidth);
         if (hint != nullptr) {
-            return ImGui::InputTextWithHint(label, hint, _inputBuffer, sizeof(_inputBuffer));
+            return ImGui::InputTextWithHint(label, hint, _inputBuffer, sizeof(_inputBuffer), flags);
         }
-        return ImGui::InputText(label, _inputBuffer, sizeof(_inputBuffer));
+        return ImGui::InputText(label, _inputBuffer, sizeof(_inputBuffer), flags);
     }
 
     void PanelInterpreter::DrawInput(const PreparedElement& prepared) {
@@ -485,9 +536,21 @@ namespace BECore {
         }
         _label.assign(kIdSuffix);
         _label.append(input.id);
-        if (DrawTextBox(_label.c_str(), shown, OrNull(prepared.hint), input.width)) {
+        if (input.focus && ImGui::IsWindowAppearing()) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        // `EnterReturnsTrue` turns the result into "Enter was pressed", so a change is asked of the item
+        const bool submits = !input.submitCommand.empty();
+        const bool result = DrawTextBox(_label.c_str(), shown, OrNull(prepared.hint), input.width, submits);
+        if (submits ? ImGui::IsItemEdited() : result) {
             // A field that is not a `String` reads fine but refuses the write: the text then comes back as it was next frame
             static_cast<void>(_writer.WriteText(*_sources, prepared.bind.binding, StringView(_inputBuffer)));
+        }
+        if (!input.commitCommand.empty() && ImGui::IsItemDeactivatedAfterEdit()) {
+            NoteClick(input.commitCommand, StringView{});
+        }
+        if (submits && result) {
+            NoteClick(input.submitCommand, StringView{});
         }
         ItemTooltip(OrNull(input.tooltip));
     }

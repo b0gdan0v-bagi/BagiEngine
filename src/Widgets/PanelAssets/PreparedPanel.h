@@ -10,7 +10,7 @@
 namespace BECore {
 
     /// What `PanelInterpreter::Prepare` makes of an element's class: the walk switches on this and never asks the type again
-    CORE_ENUM(PreparedKind, uint8_t, Unknown, Section, Row, Text, Field, Fields, Input, Checkbox, Combo, Number, Button, Table, Separator, EmptyState, Slot, Child, Popup)
+    CORE_ENUM(PreparedKind, uint8_t, Unknown, Section, Row, Text, Field, Fields, Input, Checkbox, Combo, Number, Button, Table, Separator, EmptyState, Slot, Child, Popup, Tabs, Tab)
 
     /// Whether a binding text was empty (no condition, no bound text), did not parse, or parsed
     CORE_ENUM(PreparedBindingState, uint8_t, Empty, Bad, Ok)
@@ -57,6 +57,9 @@ namespace BECore {
         String hint;
         Vector<PreparedElement> children;
         Vector<PreparedColumn> columns;
+        /// A popup's `open` as the last frame read it: the walk is const over the tree and this is the one thing it remembers, so the modal opens on the rising edge
+        /// of `open` and a modal closed by Esc while `open` still reads true does not reopen. A new `Prepare` forgets it
+        mutable bool popupWasWanted = false;
     };
 
 }  // namespace BECore

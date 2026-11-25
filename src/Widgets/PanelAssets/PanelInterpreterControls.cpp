@@ -200,6 +200,7 @@ namespace BECore {
                 written = static_cast<double>(held);
             }
         }
+        const bool released = !number.commitCommand.empty() && ImGui::IsItemDeactivatedAfterEdit();
         ItemTooltip(OrNull(number.tooltip));
         if (!number.text.empty()) {
             ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
@@ -207,6 +208,9 @@ namespace BECore {
         }
         if (changed) {
             static_cast<void>(_writer.WriteNumber(*_sources, prepared.bind.binding, written));
+        }
+        if (released) {
+            NoteClick(number.commitCommand, StringView{});
         }
     }
 

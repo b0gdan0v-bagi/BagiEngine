@@ -28,6 +28,8 @@ namespace BECore::Tests {
         constexpr float kSearchStep = 6.0f;
         constexpr int kWarmUpFrames = 3;
         constexpr int kSteadyFrames = 10;
+        /// A popup that opens with a focused text field grows ImGui's own buffers over its first frames
+        constexpr int kInputWarmUpFrames = 10;
         constexpr size_t kManyRows = 100;
 
         InterpreterRow MakeRow(StringView name, PanelTextStyle style) {
@@ -226,6 +228,57 @@ namespace BECore::Tests {
         <element type="PanelButton" id="yes" text="Yes" command="probe.yes"/>
       </elements>
     </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kTabs = R"(
+<PanelAsset id="Tabbed" title="Tabbed">
+  <elements>
+    <element type="PanelTabs" id="bar">
+      <elements>
+        <element type="PanelTab" id="first" title="First">
+          <elements>
+            <element type="PanelText" id="note" text="In the first"/>
+            <element type="PanelButton" id="goA" text="GoA" command="probe.a"/>
+          </elements>
+        </element>
+        <element type="PanelTab" id="second" title="Second">
+          <elements><element type="PanelButton" id="goB" text="GoB" command="probe.b"/></elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kTabOutsideABar = R"(
+<PanelAsset id="Loose" title="Loose">
+  <elements>
+    <element type="PanelTab" id="loose" title="Loose"><elements/></element>
+    <element type="PanelTabs" id="bar">
+      <elements>
+        <element type="PanelButton" id="stray" text="Stray" command="probe.stray"/>
+        <element type="PanelTab" id="only" title="Only"><elements/></element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kClosingDialog = R"(
+<PanelAsset id="Closing" title="Closing">
+  <elements>
+    <element type="PanelPopup" id="dialog" title="Name" open="probe.dialog" closeCommand="probe.close">
+      <elements>
+        <element type="PanelInput" id="name" bind="probe.filter" focus="true" submitCommand="probe.submit" commitCommand="probe.commitName"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kCommits = R"(
+<PanelAsset id="Commits" title="Commits">
+  <elements>
+    <element type="PanelNumber" id="gain" bind="probe.gain" min="0" max="1" step="0.01" slider="true" width="10" commitCommand="probe.commitGain"/>
+    <element type="PanelInput" id="text" bind="probe.filter" commitCommand="probe.commitText"/>
   </elements>
 </PanelAsset>)";
 
@@ -436,6 +489,14 @@ namespace BECore::Tests {
             }
             io.AddMouseButtonEvent(0, false);
             Settle();
+        }
+
+        void PressEscape() {
+            ImGuiIO& io = ImGui::GetIO();
+            io.AddKeyEvent(ImGuiKey_Escape, true);
+            Frame();
+            io.AddKeyEvent(ImGuiKey_Escape, false);
+            Frame();
         }
 
         /// The popup of the combo that is open: ImGui names it `##Combo_<depth>`
@@ -700,7 +761,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(PanelInterpreterTest, AnInputOverATextLongerThanItsBufferShowsACutAtACharacterAndKeepsTheTextValid) {
-        // 'é' is two bytes: the buffer holds 255 bytes, so the cut falls inside the 128th character
+        // 'é' is two bytes and the buffer holds an odd number of them, so the cut falls inside a character
         probe.filter.clear();
         for (size_t i = 0; i < PanelInterpreter::kInputBufferSize; ++i) {
             probe.filter.append("\xC3\xA9");
@@ -1120,6 +1181,155 @@ namespace BECore::Tests {
 
         probe.dialog = true;
         steady();
+        EXPECT_TRUE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, ATabBarDrawsOnlyTheSelectedTabAndClickingAnotherTabSwitchesToIt) {
+        Load(kTabs);
+        const ImGuiTabBar* bar = ImGui::GetCurrentContext()->TabBars.GetByKey(Chain(HostId(), {"bar", "##bar"}));
+        ASSERT_NE(bar, nullptr);
+        ASSERT_EQ(bar->Tabs.Size, 2);
+        const ImGuiID first = bar->Tabs[0].ID;
+        const ImGuiID second = bar->Tabs[1].ID;
+
+        EXPECT_TRUE(TryLocate(Chain(first, {"goA", "GoA"})).has_value());
+        EXPECT_FALSE(TryLocate(Chain(second, {"goB", "GoB"})).has_value()) << "a tab that is not selected draws nothing";
+
+        ClickAt(Locate(second));
+        Settle();
+        EXPECT_FALSE(TryLocate(Chain(first, {"goA", "GoA"})).has_value());
+        ClickAt(Locate(Chain(second, {"goB", "GoB"})));
+        EXPECT_EQ(lastCommand, "probe.b");
+    }
+
+    TEST_F(PanelInterpreterTest, ATabOutsideABarAndAStrayChildOfABarDrawNoImGuiTabAndCrashNothing) {
+        LoadWithIssues(kTabOutsideABar);
+        EXPECT_FALSE(TryLocate(Chain(HostId(), {"bar", "stray", "Stray"})).has_value());
+        const ImGuiTabBar* bar = ImGui::GetCurrentContext()->TabBars.GetByKey(Chain(HostId(), {"bar", "##bar"}));
+        ASSERT_NE(bar, nullptr);
+        EXPECT_EQ(bar->Tabs.Size, 1);
+    }
+
+    TEST_F(PanelInterpreterTest, EscOnAPopupNotesItsCloseCommandOnceAndTheModelClearingTheBoolLetsItOpenAgain) {
+        Load(kClosingDialog);
+        probe.dialog = true;
+        Settle();
+        ASSERT_TRUE(AnyPopupOpen());
+
+        PressEscape();
+        EXPECT_FALSE(AnyPopupOpen());
+        EXPECT_EQ(lastCommand, "probe.close");
+        EXPECT_EQ(clicks, 1);
+
+        // The model has not cleared the bool yet: the popup neither reopens nor repeats the command
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            Frame();
+        }
+        EXPECT_FALSE(AnyPopupOpen());
+        EXPECT_EQ(clicks, 1);
+
+        probe.dialog = false;
+        Settle();
+        probe.dialog = true;
+        Settle();
+        EXPECT_TRUE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, APopupWithNoCloseCommandIgnoresEsc) {
+        Load(Format(kDialog, "probe.dialog"));
+        probe.dialog = true;
+        Settle();
+        ASSERT_TRUE(AnyPopupOpen());
+
+        PressEscape();
+        Settle();
+        EXPECT_TRUE(AnyPopupOpen());
+        EXPECT_FALSE(result.clicked);
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputWithFocusInAPopupTakesTheKeyboardOnAppearingAndEnterNotesItsSubmitCommand) {
+        Load(kClosingDialog);
+        probe.dialog = true;
+        Settle();
+        ASSERT_TRUE(AnyPopupOpen());
+
+        // No click on the field: the focus is the popup's doing
+        Type("ab");
+        EXPECT_EQ(probe.filter, "ab");
+
+        ImGuiIO& io = ImGui::GetIO();
+        clicks = 0;
+        io.AddKeyEvent(ImGuiKey_Enter, true);
+        Frame();
+        io.AddKeyEvent(ImGuiKey_Enter, false);
+        Frame();
+        EXPECT_EQ(lastCommand, "probe.submit") << "the commit of the same frame must not hide the submit";
+        EXPECT_EQ(probe.filter, "ab");
+    }
+
+    TEST_F(PanelInterpreterTest, ASliderNotesItsCommitCommandOnceOnRelease) {
+        Load(kCommits);
+        const ImVec2 gain = Locate(Chain(HostId(), {"gain", "##gain"}));
+        clicks = 0;
+        DragBy(gain, 100.0f);
+        EXPECT_NE(probe.gain, 0.5f);
+        EXPECT_EQ(lastCommand, "probe.commitGain");
+        EXPECT_EQ(clicks, 1);
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputNotesItsCommitCommandWhenLeftAfterAnEditAndNotWhenLeftUntouched) {
+        Load(kCommits);
+        const ImVec2 field = Locate(Chain(HostId(), {"text", "##text"}));
+        const ImVec2 elsewhere(kHostSize.x - 2.0f, kHostSize.y - 2.0f);
+        ClickAt(field);
+        ClickAt(elsewhere);
+        EXPECT_TRUE(lastCommand.empty());
+
+        ClickAt(field);
+        Type("x");
+        EXPECT_TRUE(lastCommand.empty()) << "typing alone saves nothing";
+        ClickAt(elsewhere);
+        Settle();
+        EXPECT_EQ(lastCommand, "probe.commitText");
+        EXPECT_EQ(probe.filter, "x");
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputHoldsATextOfFiveHundredBytesWithoutCuttingIt) {
+        probe.filter.assign(500, 'a');
+        Load(kInput);
+        const String before = probe.filter;
+        Settle();
+        EXPECT_EQ(probe.filter, before);
+
+        ClickAt(Locate(Chain(HostId(), {"filter", "##filter"})));
+        Type("b");
+        ASSERT_EQ(probe.filter.size(), before.size() + 1);
+        EXPECT_NE(probe.filter.find('b'), String::npos);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfATabBarAllocatesNothing) {
+        Load(kTabs);
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfAnOpenPopupWithAFocusedInputAllocatesNothing) {
+        Load(kClosingDialog);
+        probe.dialog = true;
+        for (int i = 0; i < kInputWarmUpFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
         EXPECT_TRUE(AnyPopupOpen());
     }
 

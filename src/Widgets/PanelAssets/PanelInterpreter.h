@@ -57,17 +57,27 @@ namespace BECore {
      * **A child region** (`PanelChild`) is an ImGui child window labelled `##<element id>` under the element's `PushID`. A child is a window of its own, so the ids of the controls in it start from
      * the child's window id, not from the chain of the window around it.
      *
-     * **A popup** (`PanelPopup`) is a modal window the model opens with a bool: the walk calls `OpenPopup` once when `open` reads true and the popup is
-     * not open in ImGui, and `CloseCurrentPopup` as soon as it reads false (its children are drawn disabled that frame, so nothing can be clicked while it
+     * **A popup** (`PanelPopup`) is a modal window the model opens with a bool: the walk calls `OpenPopup` when `open` turns true (and the popup is
+     * not open in ImGui), and `CloseCurrentPopup` as soon as it reads false (its children are drawn disabled that frame, so nothing can be clicked while it
      * goes). Unlike every other condition, one that cannot be read counts as closed: a modal opened by a broken file would block the editor. A click inside
-     * is noted like any other, so the command that clears the bool takes effect on the next frame.
+     * is noted like any other, so the command that clears the bool takes effect on the next frame. The modal opens on the rising edge of `open` only. ImGui never closes a modal on Esc, so
+     * a popup with a `closeCommand` does it: Esc in the focused popup closes it and notes the command, so the model clears the bool; the popup does not reopen while the bool still
+     * reads true. A popup with no `closeCommand` ignores Esc.
+     *
+     * **A tab bar** (`PanelTabs`) is `BeginTabBar` labelled `##<id>`; each `PanelTab` is a `BeginTabItem` labelled `<title>###<id>` whose children are drawn only while it is the
+     * selected one. ImGui pushes the tab's own id inside it, so a control in a tab has the bar's, the tab's and then its own ids in its chain. A tab outside a bar draws `?`, and a
+     * child of a bar that is no tab is not drawn (the loader reports both).
+     *
+     * **A text input's commands.** `focus` takes the keyboard focus on the frame the window it is in appears. With `submitCommand` the field returns on Enter
+     * (`EnterReturnsTrue`) and the command is noted; `commitCommand` is noted when the user lets go of the field or of a number after an edit. Both are clicks: one command per frame,
+     * the last, and the submit comes after the commit so it wins.
      *
      * Main thread only; needs an ImGui frame in progress.
      */
     class PanelInterpreter {
     public:
-        /// The bytes a text field holds, the terminator included (the inspector's size for a `String`)
-        static constexpr size_t kInputBufferSize = 256;
+        /// The bytes a text field holds, the terminator included: room for the longest text a panel edits (the external-editor command is up to 512 bytes)
+        static constexpr size_t kInputBufferSize = 1024;
 
         PanelInterpreter();
 
@@ -113,6 +123,8 @@ namespace BECore {
         void DrawSlot(const PreparedElement& prepared);
         void DrawChild(const PreparedElement& prepared);
         void DrawPopup(const PreparedElement& prepared);
+        void DrawTabs(const PreparedElement& prepared);
+        void DrawTab(const PreparedElement& prepared);
 
         [[nodiscard]] bool IsVisible(const PreparedElement& prepared);
         /// @p whenUnreadable is what a condition that is bad or has a term that cannot be read counts as; an empty one is true
@@ -123,8 +135,8 @@ namespace BECore {
         [[nodiscard]] bool ReadRowCondition(const PanelBinding& list, size_t row, StringView path);
         /// Whether the `Selectable` column's `selectedField` of a row reads true; false when it is empty or cannot be read
         [[nodiscard]] bool ReadRowSelected(const PanelBinding& list, size_t row, StringView path);
-        /// Shows @p current in a text field under @p label; true when the user changed it, the new text being in `_inputBuffer`
-        [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm);
+        /// Shows @p current in a text field under @p label; true when the user changed it (with @p enterOnly: pressed Enter), the new text being in `_inputBuffer`
+        [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly = false);
         void NoteClick(StringView command, StringView argument);
 
         IntrusivePtr<PanelAsset> _asset;
