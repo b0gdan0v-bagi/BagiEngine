@@ -102,7 +102,26 @@ How `/qa` and `/qa-loop` use the editor (`tools/qa/CLAUDE.md`, "The session"; th
 
 A session's own pictures are `<out>/shots/<NN>-<label>.png` (`QaSession.shot(label)`: two frames after the last change, the manual clock, the long side 640). The skill looks at every one with the `Read` tool and says what it saw in the report; the pictures stay outside the repositories.
 
-The optional set below is what `todo-loop` takes before / after pictures from (`tools/shots/CLAUDE.md`, "The screenshot set of a game"): the first fenced `json` block under this heading, with the keys `preset`, `targets`, `exe`, `command`, `scenes`, `sizes`, `defaultSize`. The engine has none: `python3 tools/shots/shots.py scenes` exits 77 here, and a slice of the engine takes no pictures. A game that has a set writes it as the block in the form (the game's command writes `{out}/{label}/<scene>.png`):
+The optional set below is what `todo-loop` takes before / after pictures from (`tools/shots/CLAUDE.md`, "The screenshot set of a game"): the first fenced `json` block under this heading, with the keys `preset`, `targets`, `exe`, `command`, `scenes`, `sizes`, `defaultSize`. The engine's set is the editor's panels, taken by `tools/stress/qa/editor_shots.py` (each scene is the crop of one panel at the default layout, in the state of the edit charter; `editor-frame` is the whole window); a slice that changes how the editor looks writes `**Shots:**` with them, a slice of a game's own look has none and takes no pictures:
+
+```json
+{
+  "preset": "macos-debug",
+  "targets": ["BagiStress"],
+  "exe": "BagiStress",
+  "command": ["{python}", "{root}/tools/stress/qa/editor_shots.py", "--exe", "{exe}", "--label", "{label}", "--out", "{out}", "--scenes", "{scenes}", "--window", "{window}"],
+  "scenes": {
+    "editor-frame": "the editor window at the default layout: Scene Editor with the node Run selected, TransformComponent open",
+    "editor-hierarchy": "the Scene Editor's hierarchy of StressEntities",
+    "editor-inspector": "the Scene Editor's inspector of the node Run: TransformComponent open",
+    "editor-viewport": "the Viewport panel showing the sprites scene at a small count"
+  },
+  "sizes": ["1920x1080"],
+  "defaultSize": "1920x1080"
+}
+```
+
+A game that has a set writes it as the block in the form (the game's command writes `{out}/{label}/<scene>.png`):
 
 ```jsonc
 {
