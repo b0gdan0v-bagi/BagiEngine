@@ -10,6 +10,11 @@ every module of `src/Modules/` without a `CLAUDE.md` of its own (the engine's ow
 every source file that calls itself vendored in its first lines must have a row, each row's path must exist, and so must its licence
 file. A new library adds its row here in the same commit.
 
+`CI/scripts/third_party_notices_bundle.py` writes the file a release build carries (`THIRD_PARTY_NOTICES.txt`) from these tables: every
+row except `build only` goes in with its condition, each licence text once; a licence kept in a source file goes in as an excerpt. A
+game's own `THIRD_PARTY_NOTICES.md` uses the same tables (paths relative to the game root, `In a game` read the same way) and adds its
+rows to the file.
+
 ## Libraries
 
 | Path | Component | Version | Licence | Licence file | In a game |

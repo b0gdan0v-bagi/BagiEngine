@@ -78,6 +78,7 @@ Copy them from BagiEngine-Chess and replace the names:
 | `CLAUDE.md` | the game's guide for agents (the model is Chess's) |
 | `README.md` | get it (clone with submodules, `CI/setup_venv.*`, **the identity commands of step 2**), build and test, the layout, how the engine is updated |
 | `TODO.md` | a short note: the entries are in the todo store, not in git (step 5) |
+| `THIRD_PARTY_NOTICES.md` | optional: the game's own libraries, fonts and assets, in the tables of the engine's file of the same name (paths relative to the game root); the release build adds its rows to the engine's in `THIRD_PARTY_NOTICES.txt` next to the executable. `python3 engine/CI/scripts/check_third_party_notices.py --root .` checks it when the game has the engine's tree layout (`external/`, `src/Modules/`), otherwise `engine/CI/scripts/third_party_notices_bundle.py verify` on the built file does |
 
 ## 4. `.claude/`: the shared skills and the game's rules
 
