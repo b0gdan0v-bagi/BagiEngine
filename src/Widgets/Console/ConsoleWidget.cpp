@@ -167,6 +167,7 @@ namespace BECore {
             _titleErrors = errors;
             _titleWarnings = warnings;
             FormatConsoleTitle(history, _title);
+            _title += "###Console";
         }
     }
 

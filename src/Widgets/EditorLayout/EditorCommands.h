@@ -67,6 +67,10 @@ namespace BECore {
         inline constexpr auto kViewProfiler = "view.profiler"_intern;
         /// Shows and hides the Console panel (the log). ConsoleWidget owns the action
         inline constexpr auto kViewConsole = "view.console"_intern;
+        /// The Console panel's buttons (config/panels/ConsolePanel.xml names them). ConsolePanelModel owns them and runs them only while its panel is open; none takes an argument
+        inline constexpr auto kConsolePause = "console.pause"_intern;
+        inline constexpr auto kConsoleClear = "console.clear"_intern;
+        inline constexpr auto kConsoleClearOutput = "console.clearOutput"_intern;
         /// Shows and hides the Game panel (the active game's state, actions, fields and methods): the `command` of config/panels/GamePanel.xml
         inline constexpr auto kViewGame = "view.game"_intern;
         /// Shows and hides the Generate panel (art generation). ArtGenWidget owns the action

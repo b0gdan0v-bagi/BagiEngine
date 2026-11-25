@@ -5,7 +5,6 @@ namespace BECore {
     namespace {
 
         constexpr StringView kTitleBase = "Console";
-        constexpr StringView kTitleId = "###Console";
 
         char ToLowerAscii(char c) {
             return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
@@ -86,7 +85,6 @@ namespace BECore {
         if (!first) {
             out += ")";
         }
-        out.append(kTitleId.data(), kTitleId.size());
     }
 
 }  // namespace BECore

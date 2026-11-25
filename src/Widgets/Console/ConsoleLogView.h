@@ -63,8 +63,8 @@ namespace BECore {
         uint32_t _rebuildCount = 0;
     };
 
-    /// Writes the window title of the Console into @p out: "Console (3 errors, 5 warnings)###Console" (a level with no lines is left
-    /// out, Fatal counts as an error). `###Console` keeps the window's id when the counts change.
+    /// Writes the window title text of the Console into @p out: "Console (3 errors, 5 warnings)" (a level with no lines is left out,
+    /// Fatal counts as an error). The id after `###` is added by whoever opens the window, so it holds when the counts change.
     void FormatConsoleTitle(const LogHistory& history, String& out);
 
 }  // namespace BECore
