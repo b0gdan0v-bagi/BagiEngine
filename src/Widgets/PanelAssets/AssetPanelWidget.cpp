@@ -97,6 +97,7 @@ namespace BECore {
                     continue;
                 }
                 IPanelModel* model = entry.model.Get();
+                model->Initialize();
                 entry.handle = _sources.Register(source.name, [model] { return model->GetObject(); });
             }
             next.push_back(std::move(entry));

@@ -88,6 +88,14 @@ namespace BECore {
         inline constexpr auto kGamePanelPerform = "gamePanel.perform"_intern;
         inline constexpr auto kGamePanelCall = "gamePanel.call"_intern;
         inline constexpr auto kGamePanelCopyState = "gamePanel.copyState"_intern;
+        /// The Config Editor's buttons and popups (config/panels/ConfigEditorPanel.xml names them). ConfigEditorPanelModel owns them and runs them only while its
+        /// panel is open; select takes the name of a loaded config as the argument and does nothing for any other text, the rest take none
+        inline constexpr auto kConfigEditorSelect = "configEditor.select"_intern;
+        inline constexpr auto kConfigEditorReload = "configEditor.reload"_intern;
+        inline constexpr auto kConfigEditorReloadDiscard = "configEditor.reloadDiscard"_intern;
+        inline constexpr auto kConfigEditorReloadCancel = "configEditor.reloadCancel"_intern;
+        inline constexpr auto kConfigEditorSwitchDiscard = "configEditor.switchDiscard"_intern;
+        inline constexpr auto kConfigEditorSwitchCancel = "configEditor.switchCancel"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

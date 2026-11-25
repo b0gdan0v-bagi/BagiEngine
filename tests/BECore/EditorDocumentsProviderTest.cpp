@@ -1,7 +1,6 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Config/ContentVersion.h>
 #include <BECore/FileSystem/FileSystem.h>
-#include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
@@ -11,7 +10,7 @@
 #include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
-#include <Widgets/ConfigEditor/ConfigEditorWidget.h>
+#include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
 #include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/EditorLayout/EditorDocumentRows.h>
 #include <Widgets/SceneEditor/SceneEditorDocuments.h>
@@ -211,18 +210,17 @@ namespace BECore::Tests {
 
     TEST_F(EditorDocumentsProviderTest, TheConfigEditorReportsTheSelectedConfigDirtyWhileEditsAreStaged) {
         ASSERT_NO_FATAL_FAILURE(Start(kSceneText));
-        XmlDeserializer deserializer;
-        const IntrusivePtr<ConfigEditorWidget> widget = New<ConfigEditorWidget>();
-        ASSERT_TRUE(widget->Initialize(deserializer));
-        widget->UseConfigManager(&_manager);
+        const IntrusivePtr<ConfigEditorPanelModel> model = New<ConfigEditorPanelModel>();
+        model->Initialize();
+        model->UseConfigManager(&_manager);
         Vector<EditorDocumentState> rows;
-        widget->AppendDocuments(rows);
+        model->AppendDocuments(rows);
         EXPECT_TRUE(rows.empty()) << "nothing is selected";
 
-        widget->SelectConfig(kPanelConfig);
+        model->SelectConfig(kPanelConfig);
         const XmlNode root = _manager.GetConfig(kPanelConfig);
-        widget->GetStagedChanges().Set(String(kPanelValueKey), root.GetPugiNode().attribute("value"), "two");
-        widget->AppendDocuments(rows);
+        model->GetStagedChanges().Set(String(kPanelValueKey), root.GetPugiNode().attribute("value"), "two");
+        model->AppendDocuments(rows);
 
         ASSERT_EQ(rows.size(), 1u);
         EXPECT_EQ(rows[0].id, "config:PanelConfig");
@@ -231,9 +229,9 @@ namespace BECore::Tests {
         EXPECT_EQ(rows[0].path, "config/PanelConfig.xml");
         EXPECT_EQ(Path(rows[0].file), _overlay / "config" / "PanelConfig.xml");
 
-        widget->SaveSelectedConfig();
+        model->SaveSelectedConfig();
         rows.clear();
-        widget->AppendDocuments(rows);
+        model->AppendDocuments(rows);
 
         ASSERT_EQ(rows.size(), 1u);
         EXPECT_FALSE(rows[0].dirty);

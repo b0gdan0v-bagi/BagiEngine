@@ -12,7 +12,7 @@
 #include <Common/TestFiles.h>
 #include <Events/ConfigEvents.h>
 #include <Events/SubscriptionHolder.h>
-#include <Widgets/ConfigEditor/ConfigEditorWidget.h>
+#include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
 #include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/ConfigEditor/StagedChanges.h>
 
@@ -408,40 +408,39 @@ namespace BECore::Tests {
             ASSERT_TRUE(_fileSystem.Mount(MountPoints::config, _dir));
             _manager.Initialize();
 
-            XmlDeserializer deserializer;
-            _widget = New<ConfigEditorWidget>();
-            ASSERT_TRUE(_widget->Initialize(deserializer));
-            _widget->UseConfigManager(&_manager);
-            _widget->SelectConfig(kPanelConfig);
+            _model = New<ConfigEditorPanelModel>();
+            _model->Initialize();
+            _model->UseConfigManager(&_manager);
+            _model->SelectConfig(kPanelConfig);
         }
 
         void TearDown() override {
-            _widget.Reset();
+            _model.Reset();
             ConfigFieldSchema::DestroyInstance();
             RemoveDirectory(_dir);
         }
 
         void StageNewValue(StringView value) {
             const XmlNode root = _manager.GetConfig(kPanelConfig);
-            _widget->GetStagedChanges().Set(String{kValueKey.data(), kValueKey.size()}, root.GetPugiNode().attribute("value"), value);
+            _model->GetStagedChanges().Set(String{kValueKey.data(), kValueKey.size()}, root.GetPugiNode().attribute("value"), value);
         }
 
         Path _dir;
         FileSystem _fileSystem;
         ConfigManager _manager{_fileSystem};
-        IntrusivePtr<ConfigEditorWidget> _widget;
+        IntrusivePtr<ConfigEditorPanelModel> _model;
     };
 
     TEST_F(ConfigEditorChangeTest, SavingThroughTheEditorPublishesTheChangeOnceAndTheEditorStaysQuiet) {
         const ChangeCounter changes;
         StageNewValue("two");
 
-        _widget->SaveSelectedConfig();
+        _model->SaveSelectedConfig();
 
         EXPECT_EQ(changes.Count(kPanelConfig), 1u);
         EXPECT_NE(ReadFile(_dir / "PanelConfig.xml").find("two"), String::npos);
-        EXPECT_TRUE(_widget->GetStagedChanges().IsEmpty());
-        EXPECT_FALSE(_widget->ShowsChangedOnDiskNotice()) << "the event of its own save is not news to the panel";
+        EXPECT_TRUE(_model->GetStagedChanges().IsEmpty());
+        EXPECT_FALSE(_model->ShowsChangedOnDiskNotice()) << "the event of its own save is not news to the panel";
     }
 
     TEST_F(ConfigEditorChangeTest, AChangeOfTheSelectedConfigDropsTheStagedEditsAndSaysSo) {
@@ -449,23 +448,23 @@ namespace BECore::Tests {
 
         _manager.ReloadConfig(kPanelConfig);  // what a file change on disk does, not the panel's own call
 
-        EXPECT_TRUE(_widget->GetStagedChanges().IsEmpty());
-        EXPECT_TRUE(_widget->ShowsChangedOnDiskNotice());
+        EXPECT_TRUE(_model->GetStagedChanges().IsEmpty());
+        EXPECT_TRUE(_model->ShowsChangedOnDiskNotice());
     }
 
     TEST_F(ConfigEditorChangeTest, AChangeOfAnotherConfigKeepsTheStagedEdits) {
         StageNewValue("two");
 
-        EXPECT_FALSE(_widget->DropStagedForChange(kOtherPanelConfig));
+        EXPECT_FALSE(_model->DropStagedForChange(kOtherPanelConfig));
         _manager.ReloadConfig(kOtherPanelConfig);
 
-        EXPECT_FALSE(_widget->GetStagedChanges().IsEmpty());
-        EXPECT_FALSE(_widget->ShowsChangedOnDiskNotice());
+        EXPECT_FALSE(_model->GetStagedChanges().IsEmpty());
+        EXPECT_FALSE(_model->ShowsChangedOnDiskNotice());
     }
 
     TEST_F(ConfigEditorChangeTest, AChangeWithNothingStagedSaysNothing) {
-        EXPECT_FALSE(_widget->DropStagedForChange(kPanelConfig));
-        EXPECT_FALSE(_widget->ShowsChangedOnDiskNotice());
+        EXPECT_FALSE(_model->DropStagedForChange(kPanelConfig));
+        EXPECT_FALSE(_model->ShowsChangedOnDiskNotice());
     }
 
 }  // namespace BECore::Tests

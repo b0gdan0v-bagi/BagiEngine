@@ -2,12 +2,11 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Reflection/AbstractFactory.h>
-#include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <CoreSDL/SDLUtils.h>
-#include <Widgets/ConfigEditor/ConfigEditorWidget.h>
+#include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
 #include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/ConfigEditor/FlagValue.h>
 
@@ -104,10 +103,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigFieldSchemaTest, ConfigEditorRegistersTheLoggerFields) {
-        // The widget's own registration, not a copy of it: Initialize() fills the singleton
-        XmlDeserializer deserializer;
-        auto widget = New<ConfigEditorWidget>();
-        ASSERT_TRUE(widget->Initialize(deserializer));
+        // The model's own registration, not a copy of it: Initialize() fills the singleton
+        auto model = New<ConfigEditorPanelModel>();
+        model->Initialize();
 
         const ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
         const FieldHint types = schema.Resolve(kLoggerConfig, kSinkTypePath, "ConsoleSink");
@@ -205,9 +203,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigFieldSchemaTest, WindowFlagsFieldOffersEveryLoaderFlag) {
-        XmlDeserializer deserializer;
-        auto widget = New<ConfigEditorWidget>();
-        ASSERT_TRUE(widget->Initialize(deserializer));
+        auto model = New<ConfigEditorPanelModel>();
+        model->Initialize();
 
         const FieldHint hint = ConfigFieldSchema::GetInstance().Resolve(kWindowConfig, kWindowFlagsPath, "SDL_WINDOW_RESIZABLE");
         EXPECT_EQ(hint.type, FieldType::Flags);
