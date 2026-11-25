@@ -61,6 +61,8 @@ namespace BECore {
         inline constexpr auto kViewportGizmoSpace = "viewport.gizmoSpace"_intern;
         inline constexpr auto kViewportSnap = "viewport.snap"_intern;
         inline constexpr auto kViewportFrameSelected = "viewport.frameSelected"_intern;
+        /// The Reset button of the viewport's toolbar: the editor camera back to the whole image. ViewportWidget owns the camera, so it runs the command
+        inline constexpr auto kViewportCameraReset = "viewport.cameraReset"_intern;
         /// Switches Game and Editor. Application reads Ctrl+Shift+E from the raw SDL event (RunMode.h), before ImGui, so
         /// this command is fixed: the map lists it, the palette runs it through WidgetManager::RequestToggle().
         inline constexpr auto kModeToggle = "mode.toggle"_intern;

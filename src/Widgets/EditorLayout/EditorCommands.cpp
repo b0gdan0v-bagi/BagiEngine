@@ -39,6 +39,7 @@ namespace BECore {
                 {kViewportGizmoSpace, "Viewport Gizmo: World / Local", std::nullopt, true},
                 {kViewportSnap, "Viewport Snap: On / Off", std::nullopt, true},
                 {kViewportFrameSelected, "Viewport: Frame Selection", std::nullopt, true},
+                {kViewportCameraReset, "Viewport: Reset Camera", std::nullopt, true},
                 {kModeToggle, "Switch Game and Editor", kCtrlShiftE, false},
                 {kViewProfiler, "Profiler", kCtrlShiftP, false},
                 {kProfilerTrace, "Profiler: Chrome Trace (record, restart, write)", std::nullopt, true},

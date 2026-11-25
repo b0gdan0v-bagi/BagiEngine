@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Scene/SceneView.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
 #include <Events/SubscriptionHolder.h>
@@ -52,6 +54,19 @@ namespace BECore {
         BE_REFLECT_FIELD bool overlayDesignRect = false;
         BE_REFLECT_FIELD bool overlayFindings = false;
         BE_REFLECT_FIELD ViewportInputMode inputMode = ViewportInputMode::Play;
+        /// There is an active scene (the "View: ..." text)
+        BE_REFLECT_FIELD bool hasScene = false;
+        /// The active scene has view variants (the view combo)
+        BE_REFLECT_FIELD bool hasViews = false;
+        /// The row of `viewItems`: Auto, Default, then each variant of the active scene
+        BE_REFLECT_FIELD int32_t viewRow = 0;
+        BE_REFLECT_FIELD Vector<String> viewItems;
+        /// The view the scene drew with last: its name and size
+        BE_REFLECT_FIELD String viewText;
+        /// The size of the image on the screen, as `PublishCamera` gave it
+        BE_REFLECT_FIELD String zoomText;
+        /// The editor camera left its fit (Reset is enabled)
+        BE_REFLECT_FIELD bool cameraMoved = false;
     };
 
     /**
@@ -61,7 +76,9 @@ namespace BECore {
      * Registered in `ViewportToolbarRegistry` from `Initialize` for its lifetime. The stored choice comes with `EditorPreferencesChangedEvent` and is applied
      * without being told back; a change the user made is told once with `ViewportPreviewChangedEvent` or `ViewportInputModeChangedEvent` from the `Update`
      * that reads it. The size rules: a device brings the Device safe area, any other size drops it, Custom keeps the shape's other fields, and a stored
-     * device this build lacks shows the row of its aspect. Command: `viewport.inputMode` flips the mode.
+     * device this build lacks shows the row of its aspect. The forced view is session state, kept with the name of the scene it was chosen in and dropped
+     * (Auto) when another scene is active or the variant is gone. Command: `viewport.inputMode` flips the mode. The rows, the view text and the zoom text are
+     * made again only when what they show changed, so a steady `Update` allocates nothing.
      */
     class ViewportToolbarModel : public IPanelModel, public SubscriptionHolder, public IViewportToolbar {
         BE_CLASS(ViewportToolbarModel)
@@ -77,6 +94,8 @@ namespace BECore {
         [[nodiscard]] ViewportInputMode GetInputMode() const override {
             return _inputMode;
         }
+        [[nodiscard]] Optional<int32_t> GetForcedView(const Scene* scene) const override;
+        void PublishCamera(float zoomPercent, bool moved) override;
 
         [[nodiscard]] const ViewportToolbarView& GetView() const {
             return _view;
@@ -85,10 +104,15 @@ namespace BECore {
     private:
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
 
-        /// Takes what the controls wrote into the view: a combo row that moved applies its rules, the other fields are read as they stand
-        void ReadView();
+        /// Takes what the controls wrote into the view: a combo row that moved applies its rules, the other fields are read as they stand. @p scene is the
+        /// active scene, whose variants the view combo lists
+        void ReadView(const Scene* scene);
         /// Applies the choice of the size combo's row @p row; a separator or a row past the end changes nothing
         void ChooseSizeRow(int32_t row);
+        /// Applies the choice of the view combo's row @p row in @p scene; a row past its variants changes nothing
+        void ChooseViewRow(const Scene* scene, int32_t row);
+        /// The rows of the view combo and the view text of @p scene, made again when the scene, a variant's name or the active view moved
+        void SyncScene(const Scene* scene);
         /// Writes the state into the view and notes the rows written
         void WriteView();
         /// Tells the editor what differs from what it last stored or was told
@@ -103,6 +127,15 @@ namespace BECore {
         ViewportInputMode _storedInputMode = ViewportInputMode::Play;
         int32_t _writtenSizeRow = 0;
         int32_t _writtenSafeAreaRow = 0;
+        Optional<int32_t> _forcedView;  // the forced variant, -1 the default view, nullopt Auto
+        PoolString _forcedViewScene;    // the scene the choice was made in
+        int32_t _writtenViewRow = 0;
+        // What the view's scene part was made for: the scene, the names of its variants, the view it drew with
+        const Scene* _itemsScene = nullptr;  // compared, never dereferenced
+        Vector<PoolString> _itemsNames;
+        bool _hasTextView = false;
+        ActiveSceneView _textView;
+        Optional<int32_t> _zoomShown;  // the rounded percent zoomText shows
         ViewportToolbarHandle _registration;
     };
 

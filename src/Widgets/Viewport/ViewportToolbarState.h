@@ -8,8 +8,11 @@
 
 namespace BECore {
 
+    class Scene;
+
     /**
-     * @brief The choices of the Viewport's toolbar as `ViewportWidget` reads them: the shape, the safe area, the overlays and the input mode
+     * @brief The choices of the Viewport's toolbar as `ViewportWidget` reads them (the shape, the safe area, the overlays, the input mode, the forced view),
+     * and what only the viewport knows, which it publishes back (the camera)
      *
      * The toolbar is a panel asset whose model owns the choices and lives inside its `AssetPanelWidget`, so the viewport reaches it through
      * `ViewportToolbarRegistry` instead of a pointer to another widget. Main thread only.
@@ -23,6 +26,13 @@ namespace BECore {
 
         /// Where a press on the image goes
         [[nodiscard]] virtual ViewportInputMode GetInputMode() const = 0;
+
+        /// The view variant of @p scene the viewport's pass forces (`Scene::SetViewOverride`): -1 the default view, `i` the variant `i`. None (Auto) for a
+        /// choice made in another scene or an index @p scene lacks
+        [[nodiscard]] virtual Optional<int32_t> GetForcedView(const Scene* scene) const = 0;
+
+        /// The image's size on the screen in percent of the target and whether the editor camera left its fit, for the zoom text and Reset. Called every frame
+        virtual void PublishCamera(float zoomPercent, bool moved) = 0;
     };
 
     /// The choices of a viewport whose editor has no toolbar model (a game's own `WidgetsConfig.xml` without the asset line): every default
@@ -35,6 +45,12 @@ namespace BECore {
         [[nodiscard]] ViewportInputMode GetInputMode() const override {
             return ViewportInputMode::Play;
         }
+
+        [[nodiscard]] Optional<int32_t> GetForcedView(const Scene* /*scene*/) const override {
+            return std::nullopt;
+        }
+
+        void PublishCamera(float /*zoomPercent*/, bool /*moved*/) override {}
     };
 
     class ViewportToolbarRegistry;

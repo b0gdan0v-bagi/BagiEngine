@@ -1,5 +1,13 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
+#include <Common/Printers.h>
+#include <Common/RecordingRenderer.h>
+#include <Common/Require.h>
 #include <Events/SubscriptionHolder.h>
 #include <Widgets/Viewport/ViewportToolbarModel.h>
 #include <gtest/gtest.h>
@@ -43,6 +51,42 @@ namespace BECore::Tests {
             return kFirstDeviceRow + DeviceCount() + 1;
         }
 
+        // A scene with a named and an unnamed view variant over a default of 1280 x 720, and one with none
+        constexpr const char* kScenesXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Responsive" viewWidth="1280" viewHeight="720">
+    <viewVariants>
+      <view name="Portrait" when="orientation:portrait" width="720" height="1280"/>
+      <view when="minAspect:2" width="1600" height="600"/>
+    </viewVariants>
+  </scene>
+  <scene type="Scene" name="Plain"/>
+</scenes></SceneManager>)";
+
+        // The same scene with its second variant removed
+        constexpr const char* kFewerVariantsXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Responsive" viewWidth="1280" viewHeight="720">
+    <viewVariants>
+      <view name="Portrait" when="orientation:portrait" width="720" height="1280"/>
+    </viewVariants>
+  </scene>
+</scenes></SceneManager>)";
+
+        constexpr int32_t kAutoRow = 0;
+        constexpr int32_t kDefaultRow = 1;
+        constexpr int32_t kFirstVariantRow = 2;
+
+        IntrusivePtr<SceneManager> LoadScenes(const char* xml) {
+            XmlDeserializer deserializer;
+            EXPECT_TRUE(deserializer.LoadFromString(xml));
+            IntrusivePtr<SceneManager> manager = New<SceneManager>();
+            manager->Deserialize(deserializer);
+            EXPECT_FALSE(deserializer.HasErrors());
+            manager->Initialize();
+            return manager;
+        }
+
         EditorPreferencesChangedEvent PreferencesWith(const PreviewSettings& preview, ViewportInputMode mode) {
             return EditorPreferencesChangedEvent(false, 0, preview, mode, {}, {});
         }
@@ -58,12 +102,26 @@ namespace BECore::Tests {
 
         void SetUp() override {
             ASSERT_GT(DeviceCount(), 0);
+            UseScenes(LoadScenes(kScenesXml));
             _model = New<ViewportToolbarModel>();
             _model->Initialize();
         }
 
         void TearDown() override {
             _model.Reset();
+            EngineEnvironment::UseSceneManager({});
+            _scenes.Reset();
+        }
+
+        /// Makes @p manager the engine's, with its first scene active
+        void UseScenes(IntrusivePtr<SceneManager> manager) {
+            _scenes = std::move(manager);
+            EngineEnvironment::UseSceneManager(_scenes);
+            _scenes->SetActiveScene("Responsive"_intern);
+        }
+
+        Scene& Active() const {
+            return Require(_scenes->GetActiveScene());
         }
 
         /// The object the asset's controls write
@@ -80,6 +138,7 @@ namespace BECore::Tests {
             return _model->GetPreview().shape;
         }
 
+        IntrusivePtr<SceneManager> _scenes;
         IntrusivePtr<ViewportToolbarModel> _model;
     };
 
@@ -259,8 +318,84 @@ namespace BECore::Tests {
         EXPECT_EQ(fallback.GetInputMode(), ViewportInputMode::Play);
     }
 
+    TEST_F(ViewportToolbarModelTest, TheViewRowsAreAutoDefaultAndEachVariantByItsNameOrNumber) {
+        const ViewportToolbarView& view = Updated();
+        EXPECT_TRUE(view.hasScene);
+        EXPECT_TRUE(view.hasViews);
+        ASSERT_EQ(view.viewItems.size(), 4u);
+        EXPECT_NE(view.viewItems[0].find("Auto"), String::npos);
+        EXPECT_NE(view.viewItems[1].find("Default"), String::npos);
+        EXPECT_NE(view.viewItems[2].find("Portrait"), String::npos);
+        EXPECT_NE(view.viewItems[3].find("#1"), String::npos);
+
+        _scenes->SetActiveScene("Plain"_intern);
+        EXPECT_TRUE(Updated().hasScene);
+        EXPECT_FALSE(view.hasViews);
+        EXPECT_EQ(view.viewItems.size(), 2u);
+
+        EngineEnvironment::UseSceneManager({});
+        EXPECT_FALSE(Updated().hasScene);
+        EXPECT_FALSE(view.hasViews);
+        EXPECT_TRUE(view.viewText.empty());
+    }
+
+    TEST_F(ViewportToolbarModelTest, AChosenViewIsForcedOnlyInTheSceneItWasChosenIn) {
+        EXPECT_EQ(_model->GetForcedView(&Active()), std::nullopt);
+        Controls().viewRow = kFirstVariantRow + 1;
+        EXPECT_EQ(Updated().viewRow, kFirstVariantRow + 1);
+        EXPECT_EQ(_model->GetForcedView(&Active()), Optional<int32_t>(1));
+        Controls().viewRow = kDefaultRow;
+        _model->Update();
+        EXPECT_EQ(_model->GetForcedView(&Active()), Optional<int32_t>(-1));
+        EXPECT_EQ(_model->GetForcedView(_scenes->GetSceneByName("Plain"_intern)), std::nullopt);
+        EXPECT_EQ(_model->GetForcedView(nullptr), std::nullopt);
+
+        // Another scene drops the choice, so coming back is Auto
+        _scenes->SetActiveScene("Plain"_intern);
+        EXPECT_EQ(Updated().viewRow, kAutoRow);
+        _scenes->SetActiveScene("Responsive"_intern);
+        EXPECT_EQ(Updated().viewRow, kAutoRow);
+        EXPECT_EQ(_model->GetForcedView(&Active()), std::nullopt);
+    }
+
+    TEST_F(ViewportToolbarModelTest, AForcedVariantTheSceneNoLongerHasFallsBackToAuto) {
+        Controls().viewRow = kFirstVariantRow + 1;
+        _model->Update();
+        ASSERT_EQ(_model->GetForcedView(&Active()), Optional<int32_t>(1));
+
+        UseScenes(LoadScenes(kFewerVariantsXml));
+        EXPECT_EQ(_model->GetForcedView(&Active()), std::nullopt);
+        const ViewportToolbarView& view = Updated();
+        EXPECT_EQ(view.viewRow, kAutoRow);
+        EXPECT_EQ(view.viewItems.size(), 3u);
+    }
+
+    TEST_F(ViewportToolbarModelTest, TheViewTextIsTheViewTheSceneDrewWithLast) {
+        EXPECT_EQ(Updated().viewText, "View: default 1280 x 720");
+
+        const IntrusivePtr<RecordingRenderer> renderer = New<RecordingRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(renderer);
+        Active().SetViewOverride(0);
+        _scenes->DrawAll();
+        Active().SetViewOverride(std::nullopt);
+        CoreManager::GetRendererManager().SetRenderer({});
+
+        EXPECT_EQ(Updated().viewText, "View: Portrait 720 x 1280");
+    }
+
+    TEST_F(ViewportToolbarModelTest, ThePublishedCameraGivesTheZoomTextAndEnablesReset) {
+        _model->PublishCamera(49.6f, false);
+        EXPECT_EQ(_model->GetView().zoomText, " 50%");
+        EXPECT_FALSE(_model->GetView().cameraMoved);
+        _model->PublishCamera(150.0f, true);
+        EXPECT_EQ(_model->GetView().zoomText, "150%");
+        EXPECT_TRUE(_model->GetView().cameraMoved);
+        ExpectNoAllocations([this] { _model->PublishCamera(150.2f, true); });
+    }
+
     TEST_F(ViewportToolbarModelTest, ASteadyUpdateAllocatesNothing) {
         Controls().sizeRow = kFirstDeviceRow;
+        Controls().viewRow = kFirstVariantRow;
         _model->Update();
         ExpectNoAllocations([this] {
             for (int i = 0; i < 4; ++i) {

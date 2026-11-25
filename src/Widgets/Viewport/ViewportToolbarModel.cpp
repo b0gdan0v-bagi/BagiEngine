@@ -1,7 +1,11 @@
 #include "ViewportToolbarModel.h"
 
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
 #include <Generated/ViewportToolbarModel.gen.hpp>
 #include <Widgets/Icons/IconsLucide.h>
+#include <cmath>
 
 namespace BECore {
 
@@ -14,6 +18,12 @@ namespace BECore {
         static_assert(std::size(kAspectLabels) == EnumUtils<ViewportAspect>::Count());
         static_assert(std::size(kSafeAreaLabels) == EnumUtils<SafeAreaSimulation>::Count());
         constexpr const char* kCustomLabel = ICON_LC_RULER " Custom...";
+        constexpr const char* kViewAutoLabel = ICON_LC_EYE " Auto";
+        constexpr const char* kViewDefaultLabel = ICON_LC_EYE " Default";
+        // The rows of the view combo before the variants: Auto, then the default view
+        constexpr int32_t kViewRowAuto = 0;
+        constexpr int32_t kViewRowDefault = 1;
+        constexpr int32_t kViewRowFirstVariant = 2;
         // A device at least this wide (logical points, portrait) is shown with the tablet icon
         constexpr uint32_t kTabletMinWidth = 600;
 
@@ -53,6 +63,24 @@ namespace BECore {
             return !shape.custom && !HasDevice(shape) && shape.aspect == ViewportAspect::Free;
         }
 
+        // The text of a variant in the view combo: its name, or its number when it has none
+        String VariantLabel(const SceneViewVariant& variant, size_t index) {
+            return variant.name.Empty() ? Format("{} #{}", ICON_LC_EYE, index) : Format("{} {}", ICON_LC_EYE, variant.name.ToStringView());
+        }
+
+        // The variant names of @p variants equal @p names
+        bool SameNames(Span<const SceneViewVariant> variants, const Vector<PoolString>& names) {
+            if (variants.size() != names.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < variants.size(); ++i) {
+                if (variants[i].name != names[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
     }  // namespace
 
     ViewportToolbarModel::ViewportToolbarModel() {
@@ -75,6 +103,9 @@ namespace BECore {
         for (const char* label : kSafeAreaLabels) {
             _view.safeAreaItems.push_back(label);
         }
+        _view.viewItems.push_back(kViewAutoLabel);
+        _view.viewItems.push_back(kViewDefaultLabel);
+        PublishCamera(0.0f, false);
         WriteView();
     }
 
@@ -88,7 +119,13 @@ namespace BECore {
     }
 
     void ViewportToolbarModel::Update() {
-        ReadView();
+        const SceneManager* scenes = CoreManager::FindSceneManager();
+        const Scene* scene = scenes != nullptr ? scenes->GetActiveScene() : nullptr;
+        ReadView(scene);
+        if (_forcedView && !GetForcedView(scene)) {
+            _forcedView = std::nullopt;
+        }
+        SyncScene(scene);
         WriteView();
         EmitChanges();
     }
@@ -106,6 +143,23 @@ namespace BECore {
         return {_shape, _safeArea, _overlays};
     }
 
+    Optional<int32_t> ViewportToolbarModel::GetForcedView(const Scene* scene) const {
+        if (!_forcedView || scene == nullptr || scene->GetName() != _forcedViewScene) {
+            return std::nullopt;
+        }
+        const int32_t variants = static_cast<int32_t>(scene->GetViewVariants().size());
+        return *_forcedView >= -1 && *_forcedView < variants ? _forcedView : std::nullopt;
+    }
+
+    void ViewportToolbarModel::PublishCamera(float zoomPercent, bool moved) {
+        _view.cameraMoved = moved;
+        const int32_t shown = static_cast<int32_t>(std::lround(zoomPercent));
+        if (_zoomShown != shown) {
+            _zoomShown = shown;
+            _view.zoomText = Format("{:3}%", shown);
+        }
+    }
+
     void ViewportToolbarModel::OnPreferencesChanged(const EditorPreferencesChangedEvent& event) {
         // The stored choice is also what the editor was last told, so applying it tells nothing back
         _storedPreview = event.GetPreview();
@@ -118,9 +172,12 @@ namespace BECore {
         WriteView();
     }
 
-    void ViewportToolbarModel::ReadView() {
+    void ViewportToolbarModel::ReadView(const Scene* scene) {
         if (_view.sizeRow != _writtenSizeRow) {
             ChooseSizeRow(_view.sizeRow);
+        }
+        if (_view.viewRow != _writtenViewRow) {
+            ChooseViewRow(scene, _view.viewRow);
         }
         if (_view.safeAreaRow != _writtenSafeAreaRow && _view.safeAreaRow >= 0 && static_cast<size_t>(_view.safeAreaRow) < EnumUtils<SafeAreaSimulation>::Count()) {
             _safeArea = static_cast<SafeAreaSimulation>(_view.safeAreaRow);
@@ -162,6 +219,47 @@ namespace BECore {
         }
     }
 
+    void ViewportToolbarModel::ChooseViewRow(const Scene* scene, int32_t row) {
+        if (row == kViewRowAuto) {
+            _forcedView = std::nullopt;
+            return;
+        }
+        if (scene == nullptr || row < kViewRowDefault || row >= kViewRowFirstVariant + static_cast<int32_t>(scene->GetViewVariants().size())) {
+            return;
+        }
+        _forcedView = row - kViewRowFirstVariant;
+        _forcedViewScene = scene->GetName();
+    }
+
+    void ViewportToolbarModel::SyncScene(const Scene* scene) {
+        _view.hasScene = scene != nullptr;
+        const Span<const SceneViewVariant> variants = scene != nullptr ? scene->GetViewVariants() : Span<const SceneViewVariant>{};
+        _view.hasViews = !variants.empty();
+        if (scene != _itemsScene || !SameNames(variants, _itemsNames)) {
+            _itemsScene = scene;
+            _itemsNames.clear();
+            _view.viewItems.resize(static_cast<size_t>(kViewRowFirstVariant));
+            for (size_t i = 0; i < variants.size(); ++i) {
+                _itemsNames.push_back(variants[i].name);
+                _view.viewItems.push_back(VariantLabel(variants[i], i));
+            }
+        }
+
+        if (scene == nullptr) {
+            _hasTextView = false;
+            _view.viewText.clear();
+            return;
+        }
+        // The view the scene drew with last, picked by the size of the image or forced by the combo
+        const ActiveSceneView active = scene->GetActiveView();
+        if (!_hasTextView || !(active == _textView)) {
+            _hasTextView = true;
+            _textView = active;
+            const StringView name = active.index < 0 ? StringView("default") : active.name.ToStringView();
+            _view.viewText = Format("View: {} {:.0f} x {:.0f}", name, active.width, active.height);
+        }
+    }
+
     void ViewportToolbarModel::WriteView() {
         _writtenSizeRow = SizeRowOf(_shape);
         _writtenSafeAreaRow = static_cast<int32_t>(_safeArea);
@@ -182,6 +280,8 @@ namespace BECore {
         _view.overlayDesignRect = _overlays.designRect;
         _view.overlayFindings = _overlays.findings;
         _view.inputMode = _inputMode;
+        _writtenViewRow = _forcedView ? kViewRowFirstVariant + *_forcedView : kViewRowAuto;
+        _view.viewRow = _writtenViewRow;
     }
 
     void ViewportToolbarModel::EmitChanges() {
