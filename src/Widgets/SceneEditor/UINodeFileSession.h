@@ -7,6 +7,7 @@
 
 namespace BECore {
 
+    class FileSystem;
     class Scene;
     class SceneNode;
     class UIElement;
@@ -38,6 +39,9 @@ namespace BECore {
             return _elements.size();
         }
 
+        /// The node files a Save would write (`NodeFilesToPatch`): the unsaved files of this session
+        [[nodiscard]] Vector<PoolString> PendingFiles(Scene& scene) const;
+
         /// What a Save would do with the pending elements of @p node
         [[nodiscard]] Status StatusFor(Scene& scene, const SceneNode& node) const;
 
@@ -48,6 +52,9 @@ namespace BECore {
          * Never stops the caller: a file that fails is a warning, and the scene is still saved by the caller.
          */
         UINodeFileReport Save(Scene& scene);
+
+        /// Save() over @p fileSystem: reads the file where it resolves, writes it to `FileSystem::WriteTarget` (the content overlay, when one is set)
+        UINodeFileReport Save(Scene& scene, const FileSystem& fileSystem);
 
         void Clear();
 

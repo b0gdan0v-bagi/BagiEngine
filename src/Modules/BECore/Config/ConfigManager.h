@@ -95,6 +95,9 @@ namespace BECore {
         /// Sorted by name
         Vector<PoolString> GetAllConfigNames() const;
 
+        /// The file system the manager reads from: CoreManager's, or the one a test gave it
+        const FileSystem& GetFileSystem() const;
+
         /// The file the config was loaded from (the layer that won), or an empty path when the name is unknown
         Path GetConfigFilePath(PoolString name) const;
 
@@ -130,8 +133,6 @@ namespace BECore {
 
         /// An XML or a binary deserializer over @p entry, or nullptr when the entry is null or cannot be read
         static UniquePtr<IDeserializer> MakeDeserializerOf(const ConfigEntry* entry);
-
-        const FileSystem& GetFileSystem() const;
 
         /// The config whose file is @p virtualPath (`config/<relative>`) in the layer that won, or an empty name
         PoolString FindConfigByVirtualPath(StringView virtualPath);

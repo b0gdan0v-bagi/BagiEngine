@@ -1,6 +1,7 @@
 #include "SceneEditorWidget.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
@@ -19,6 +20,7 @@
 #include <Widgets/SceneEditor/ComponentInspectors.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
+#include <Widgets/SceneEditor/SceneEditorDocuments.h>
 #include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/SceneEditor/UIEditEvents.h>
 #include <Widgets/SceneEditor/UIRectInspector.h>
@@ -27,10 +29,6 @@
 namespace BECore {
 
     namespace {
-        struct Ids {
-            static constexpr auto sceneConfig = "SceneConfig"_intern;
-        };
-
         constexpr float kUITreeHeight = 160.0f;
         constexpr size_t kComponentLabelSize = 96;
         constexpr float kPopupButtonWidth = 120.0f;
@@ -51,7 +49,16 @@ namespace BECore {
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
         Subscribe<SceneEditedEvent, &SceneEditorWidget::OnSceneEdited>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
+        _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         return true;
+    }
+
+    void SceneEditorWidget::AppendDocuments(Vector<EditorDocumentState>& out) {
+        if (SceneManager* const sceneManager = CoreManager::FindSceneManager()) {
+            if (Scene* const scene = sceneManager->GetActiveScene()) {
+                AppendSceneDocuments(out, CoreManager::GetConfigManager(), *scene, _isDirty, _uiFileSession);
+            }
+        }
     }
 
     void SceneEditorWidget::OnCommand(const EditorCommandEvent& event) {
@@ -566,7 +573,7 @@ namespace BECore {
         _uiFileSession.Save(*scene);
 
         auto& configManager = CoreManager::GetConfigManager();
-        auto xmlRoot = configManager.GetConfig(Ids::sceneConfig);
+        auto xmlRoot = configManager.GetConfig(ConfigNames::scene);
         if (!xmlRoot) {
             return;
         }
@@ -581,7 +588,7 @@ namespace BECore {
             LOG_WARNING("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note);
         }
 
-        if (configManager.SaveConfig(Ids::sceneConfig)) {
+        if (configManager.SaveConfig(ConfigNames::scene)) {
             _isDirty = false;
         }
     }

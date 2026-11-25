@@ -17,6 +17,7 @@ namespace BECore {
     class ControlService;
     class EventsProviderManager;
     class FileSystem;
+    class EditorDocuments;
     class FileWatcher;
     class FontAtlasLibrary;
     class FrameStatsCollector;
@@ -156,6 +157,11 @@ namespace BECore {
             return *GetInstance()._fileWatcher;
         }
 
+        /// The documents the editor panels report to `editor_state` (`.claude/rules/control-editor-api.md`); empty in the Game run mode. Main thread only
+        static EditorDocuments& GetEditorDocuments() {
+            return *GetInstance()._editorDocuments;
+        }
+
         /// The sound: clips on the voices of the backend the application fabric sets (`Audio/CLAUDE.md`); no backend in the gtest executable
         static AudioManager& GetAudio() {
             return *GetInstance()._audioManager;
@@ -232,7 +238,8 @@ namespace BECore {
         // services in this order and the order comments below still hold
         UniquePtr<CommandLine> _commandLine;
         UniquePtr<FileSystem> _fileSystem;
-        UniquePtr<FileWatcher> _fileWatcher;  // after _fileSystem, which it resolves paths with; the handles of the services below must not outlive it
+        UniquePtr<FileWatcher> _fileWatcher;          // after _fileSystem, which it resolves paths with; the handles of the services below must not outlive it
+        UniquePtr<EditorDocuments> _editorDocuments;  // before every widget: their handles must not outlive it
         UniquePtr<ConfigManager> _configManager;
         IntrusivePtr<LoggerManager> _loggerManager;
         IntrusivePtr<AssertHandlerManager> _assertHandlerManager;

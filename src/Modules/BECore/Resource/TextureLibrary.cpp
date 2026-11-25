@@ -1,6 +1,7 @@
 #include "TextureLibrary.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Memory/MemTag.h>
 #include <BECore/Reflection/IDeserializer.h>
@@ -14,7 +15,6 @@ namespace BECore {
     namespace {
 
         struct Ids {
-            static constexpr auto config = "TextureLibrary"_intern;
             static constexpr const char* sprites = "sprites";
         };
 
@@ -63,7 +63,7 @@ namespace BECore {
         BE_MEM_TAG(Resource);
         Clear();
 
-        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(Ids::config);
+        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(ConfigNames::textureLibrary);
         if (!deserializer) {
             return;
         }
@@ -147,7 +147,7 @@ namespace BECore {
 
     bool TextureLibrary::Save() {
         auto& configManager = CoreManager::GetConfigManager();
-        auto xmlRoot = configManager.GetConfig(Ids::config);
+        auto xmlRoot = configManager.GetConfig(ConfigNames::textureLibrary);
         if (!xmlRoot) {
             LOG_ERROR("TextureLibrary::Save: config not loaded");
             return false;
@@ -157,7 +157,7 @@ namespace BECore {
             return false;
         }
 
-        return configManager.SaveConfig(Ids::config);
+        return configManager.SaveConfig(ConfigNames::textureLibrary);
     }
 
     void TextureLibrary::Clear() {

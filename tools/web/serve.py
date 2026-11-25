@@ -40,7 +40,7 @@ MATCH_LOG_VERSIONS and MATCH_FORWARDED_FOR; without MATCH_STORE the server is as
 Sign-in instead of the password (tools/web/ACCESS.md): with PUBLIC_URL, SESSION_SECRET and the client of at least one provider of
 PROVIDERS (Google: GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) a visitor signs in on /signin with an account of any provider configured
 (the OpenID Connect authorization-code flow), or goes on as a guest (unless SIGNIN_GUESTS=0), and gets a session cookie signed by the
-server; every other path but /healthz needs it (a page is redirected to /signin, the rest is 401). A match posted by a signed-in visitor
+server. SIGNIN_ALLOW (emails) closes the door: only those accounts get a session, guests are off, and the list is checked on every request; every other path but /healthz needs it (a page is redirected to /signin, the rest is 401). A match posted by a signed-in visitor
 is stamped with the provider and the email (<id>/tester.json, listed as `tester`), and only the same account may add to it; a guest's
 match has no stamp. Listing, reading and deleting matches then needs MATCH_COLLECT_TOKEN as `Authorization: Bearer`, never a session.
 SIGNIN_FAKE_EMAIL adds a provider `fake` that signs in as that address at once, for local tests only: refused unless --host is a loopback
@@ -124,6 +124,8 @@ PUBLIC_URL_VARIABLE = "PUBLIC_URL"
 SESSION_SECRET_VARIABLE = "SESSION_SECRET"
 SESSION_DAYS_VARIABLE = "SESSION_DAYS"
 SIGNIN_GUESTS_VARIABLE = "SIGNIN_GUESTS"
+SIGNIN_ALLOW_VARIABLE = "SIGNIN_ALLOW"
+SIGNIN_ALLOW_SEPARATORS = re.compile(r"[,;\s]+")
 SIGNIN_FAKE_EMAIL_VARIABLE = "SIGNIN_FAKE_EMAIL"
 # Any of them in the environment means the process runs on Railway, where the fake sign-in must never be on
 RAILWAY_MARKERS = ("RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE_ID")
@@ -660,15 +662,19 @@ class FakeProvider(Provider):
 
 class SignIn:
     """The sessions of a server with sign-in: the providers, guests or not, and the cookies signed with the secret (HMAC-SHA256). A
-    session is {"p": provider id or "guest", "e": email (not for a guest), "x": expiry}; a new secret ends every session."""
+    session is {"p": provider id or "guest", "e": email (not for a guest), "x": expiry}; a new secret ends every session.
+    `allow` (lower-case emails, None for any account) closes the door: guests are off whatever `guests` says, and session() checks the
+    email on every request, so an email taken off the list loses access at its next request, not when its cookie expires."""
 
-    def __init__(self, providers: list[Provider], public_url: str, secret: bytes, session_seconds: int, guests: bool, clock=time.time):
+    def __init__(self, providers: list[Provider], public_url: str, secret: bytes, session_seconds: int, guests: bool, clock=time.time,
+                 allow: frozenset[str] | None = None):
         self.providers = {provider.id: provider for provider in providers}
         self.public_url = public_url.rstrip("/")
         self.secure = self.public_url.startswith("https://")
         self.secret = secret
         self.session_seconds = session_seconds
-        self.guests = guests
+        self.allow = allow
+        self.guests = guests and allow is None
         self.clock = clock
 
     def redirect_uri(self, provider: Provider) -> str:
@@ -693,11 +699,16 @@ class SignIn:
             return None
         return value
 
+    def allows(self, email: str) -> bool:
+        return self.allow is None or email.lower() in self.allow
+
     def session(self, cookies: dict) -> dict | None:
         value = self.unsign(cookies.get(SESSION_COOKIE))
         if value is None or (value.get("p") == GUEST and not self.guests):
             return None
         if value.get("p") != GUEST and (value.get("p") not in self.providers or not isinstance(value.get("e"), str)):
+            return None
+        if value.get("p") != GUEST and not self.allows(value["e"]):
             return None
         return value
 
@@ -775,6 +786,10 @@ def privacy_page(contact: str | None, session_days: int) -> bytes:
     who = html.escape(contact) if contact else "the operator of this service / владельцу сервиса"
     return SIGNIN_PAGE.format(body=PRIVACY_TEXT.format(days=session_days, contact=who)).replace(
         "<title>Sign in</title>", "<title>Privacy</title>").encode("utf-8")
+
+
+REFUSAL_BODY = """<p class="error">This account has no access to this service.<br>У этой учётной записи нет доступа к сервису.</p>
+<a class="button quiet" href="/signin">Back / Назад</a>"""
 
 
 def signin_page(sign_in: SignIn, session: dict | None, failed: bool) -> bytes:
@@ -1129,6 +1144,13 @@ class StaticHandler(BaseHTTPRequestHandler):
         if email is None:
             self.send_redirect(f"{SIGNIN_PATH}?failed=1", send_body, cookies=(clear_state,))
             return
+        if not sign_in.allows(email):
+            # The page names no email: it answers whoever holds a verified account of a provider
+            self.send_bytes(SIGNIN_PAGE.format(body=REFUSAL_BODY).encode("utf-8"), "text/html; charset=utf-8", send_body,
+                            status=HTTPStatus.FORBIDDEN,
+                            headers=(("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"),
+                                     ("Set-Cookie", clear_state)))
+            return
         self.send_redirect("/", send_body, cookies=(clear_state, sign_in.session_cookie(provider.id, email)))
 
     def send_redirect(self, location: str, send_body: bool, cookies: tuple = (), close: bool = False):
@@ -1263,9 +1285,23 @@ def basic_auth_from(environ, error) -> tuple[str, str] | None:
     return user, password
 
 
+def allow_from(text: str, error) -> tuple[str, ...] | None:
+    """The lower-case emails of SIGNIN_ALLOW (separated by commas, semicolons or white space), None when it is empty. An entry that is
+    no email is `error`, which does not return: a typo must not turn into a list that locks everybody out unseen, or into none."""
+    emails = []
+    for entry in SIGNIN_ALLOW_SEPARATORS.split(text.strip()):
+        email = entry.lower()
+        if email and email not in emails:
+            if email.count("@") != 1 or email.startswith("@") or email.endswith("@") or len(email) > EMAIL_MAX_CHARS:
+                error(f"{SIGNIN_ALLOW_VARIABLE} holds an entry that is not an email address")
+            emails.append(email)
+    return tuple(emails) or None
+
+
 def sign_in_from(environ, host: str, port: int, basic_auth, error) -> dict | None:
     """The settings of the sign-in from the environment, None when no provider and no fake is set: {"providers": [(id, title, client
-    id, secret)], "fake_email", "public_url", "secret", "session_seconds", "guests"}. `error(message)` is called (and does not return)
+    id, secret)], "fake_email", "public_url", "secret", "session_seconds", "guests", "allow"} (`allow`: a tuple of lower-case emails, None
+    when SIGNIN_ALLOW is not set; guests are then off). `error(message)` is called (and does not return)
     for a provider with half a client, sign-in together with Basic auth, a missing or short secret, a PUBLIC_URL that is not https (or
     http on a loopback host), and the fake outside a loopback host or on Railway."""
     providers = []
@@ -1303,8 +1339,9 @@ def sign_in_from(environ, host: str, port: int, basic_auth, error) -> dict | Non
     if not re.fullmatch(r"[0-9]{1,3}", days) or not 1 <= int(days) <= SESSION_DAYS_MAX:
         error(f"{SESSION_DAYS_VARIABLE} must be a whole number of days, 1 to {SESSION_DAYS_MAX}, not {days!r}")
     guests = env_flag(environ, SIGNIN_GUESTS_VARIABLE)
+    allow = allow_from(environ.get(SIGNIN_ALLOW_VARIABLE, ""), error)
     return {"providers": providers, "fake_email": fake_email or None, "public_url": public_url, "secret": secret.encode("utf-8"),
-            "session_seconds": int(days) * 24 * 3600, "guests": guests is not False}
+            "session_seconds": int(days) * 24 * 3600, "guests": guests is not False and allow is None, "allow": allow}
 
 
 def make_sign_in(settings: dict, clock=time.time) -> SignIn:
@@ -1313,7 +1350,8 @@ def make_sign_in(settings: dict, clock=time.time) -> SignIn:
     providers = [makers[id_](client_id, secret) for id_, client_id, secret in settings["providers"]]
     if settings["fake_email"]:
         providers.append(FakeProvider(settings["fake_email"]))
-    return SignIn(providers, settings["public_url"], settings["secret"], settings["session_seconds"], settings["guests"], clock)
+    return SignIn(providers, settings["public_url"], settings["secret"], settings["session_seconds"], settings["guests"], clock,
+                  frozenset(settings["allow"]) if settings["allow"] else None)
 
 
 def collect_token_from(environ, error) -> str | None:
@@ -1413,7 +1451,8 @@ def main(argv: list[str] | None = None) -> int:
     access = "password required" if args.basic_auth else "open"
     if args.sign_in:
         names = [id_ for id_, _, _ in args.sign_in["providers"]] + ([FAKE_PROVIDER] if args.sign_in["fake_email"] else [])
-        access = f"sign-in with {', '.join(names)}{' or as a guest' if args.sign_in['guests'] else ''} ({args.sign_in['public_url']})"
+        door = " or as a guest" if args.sign_in["guests"] else " (allowlist on)" if args.sign_in["allow"] else ""
+        access = f"sign-in with {', '.join(names)}{door} ({args.sign_in['public_url']})"
     store = "off"
     if args.match_store is not None:
         store = str(args.match_store)

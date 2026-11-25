@@ -75,6 +75,7 @@ def launch_game(
     window: str = "",
     density: float | None = None,
     editor: bool = False,
+    content_overlay: str = "",
 ) -> dict[str, Any]:
     """Starts a game executable with the control API and connects to it (a game started earlier by this server is stopped).
 
@@ -86,9 +87,11 @@ def launch_game(
     window: "WxH" in window units (64 to 4096 each), the start size of the headless window instead of the one in the game's config, e.g. "390x844".
     density: the start pixel density (0.5 to 4, default 1): the pictures are round(size * density) pixels. Both need headless; set_window changes them later.
     editor: start in the editor run mode (--editor), headless too: a screenshot is the whole editor window; status.runMode says which mode runs (Game in a build without the editor).
+    content_overlay: a folder (made when missing, outside every git repository) that every write through the config save, the node-file save and the mounted paths goes into instead of the content
+    files, in either mode; the Generate panel's presets and sets and imgui.ini are not redirected. editor_state names the copy in `file` (needs editor).
     Answers the port, the clock status and the games the executable has.
     """
-    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None, window=window or None, density=density, editor=editor)
+    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None, window=window or None, density=density, editor=editor, content_overlay=content_overlay or None)
 
 
 @server.tool()
@@ -184,6 +187,18 @@ def set_window(
     displayScale, safeArea, outputWidth, outputHeight, userScale and headless.
     """
     return session.set_window(width, height, density, user_scale, safe_area)
+
+
+@server.tool()
+@reports_errors
+def editor_state() -> dict[str, Any]:
+    """The unsaved changes of the editor panels (a game launched with editor=True): {anyDirty, documents} sorted by `id`.
+
+    A document is {id, kind, name, dirty, path, file}: kind is scene, nodeFile, config or library; `dirty` is what the panel's Save button would write; `path` is the virtual
+    path (config/SceneConfig.xml) and `file` the real file a save writes (the copy in the content_overlay of launch_game, when one was given). A game in the Game run
+    mode is an error that says to launch with editor=True.
+    """
+    return session.editor_state()
 
 
 @server.tool()

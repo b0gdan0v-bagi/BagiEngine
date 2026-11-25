@@ -6,9 +6,9 @@
 |------|-----------|---------------------|
 | Open | none | the game |
 | Basic | `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD` | the browser's password box (`CLAUDE.md`, "The headers of `serve.py`") |
-| Sign-in | `PUBLIC_URL`, `SESSION_SECRET`, the client of one provider or more, optional `SIGNIN_GUESTS`, `SESSION_DAYS` | `/signin`: a button per provider, and "Play without signing in" unless `SIGNIN_GUESTS=0` |
+| Sign-in | `PUBLIC_URL`, `SESSION_SECRET`, the client of one provider or more, optional `SIGNIN_ALLOW`, `SIGNIN_GUESTS`, `SESSION_DAYS` | `/signin`: a button per provider, and "Play without signing in" unless `SIGNIN_GUESTS=0` or `SIGNIN_ALLOW` is set |
 
-Basic and sign-in exclude each other (the server does not start with both). Sign-in is for **identity, not a closed door**: any account of a configured provider comes in, and so does a guest. Its purpose is that a match a signed-in visitor sends carries who sent it.
+Basic and sign-in exclude each other (the server does not start with both). Without `SIGNIN_ALLOW` sign-in is **identity, not a closed door**: any account of a configured provider comes in, and so does a guest; its purpose is that a match a signed-in visitor sends carries who sent it. With `SIGNIN_ALLOW` it is a closed door (below).
 
 ## Sign-in
 
@@ -17,6 +17,14 @@ Basic and sign-in exclude each other (the server does not start with both). Sign
 - **The session** is a cookie `bagi_session` signed with `SESSION_SECRET` (HMAC-SHA256): `{"p": provider or "guest", "e": email, "x": expiry}`, `HttpOnly`, `SameSite=Lax`, `Secure` when `PUBLIC_URL` is https, `SESSION_DAYS` long (default 30). Nothing is stored on the server, so a new `SESSION_SECRET` ends every session at once (the way to throw everybody out). `/auth/signout` clears it; `/signin` with a session shows the account and the sign-out.
 - **Without a session** a page (`/`, `*.html`) answers 303 to `/signin` and anything else 401 (no Basic challenge); `/healthz` stays open. The isolation headers are on every answer, the sign-in page included (it has no script and no resource of another origin; its `Content-Security-Policy` says so).
 - **Limits:** 30 sign-in requests (start, callback, guest) an hour per client address (the address rule of the match store, `MATCH_FORWARDED_FOR`). The access log skips every `/auth/` line (code, state) and every `/matches/` line.
+
+## The allowlist (`SIGNIN_ALLOW`)
+
+For a page that only chosen people may open (a studio editor build): `SIGNIN_ALLOW=a@example.com,b@example.com` (commas, semicolons or white space; case does not matter; an entry that is no email stops the start).
+
+- **After the provider's token.** The callback checks the verified email of the ID token against the list; another account gets a plain 403 page and **no session** (the page does not name the email). Guests are off whenever the list is set (`SIGNIN_GUESTS` is ignored, `/auth/guest` is 404, a guest cookie opens nothing).
+- **On every request.** The list is checked each time a session is read, not only at sign-in, so an email taken off the list (variable changed, service redeployed) loses the page, the files and the match posts at its next request, not when its cookie expires. The start line says `allowlist on`, never the emails.
+- **Every service keeps its own access.** The session cookie is host-only (no `Domain` attribute) and signed with that service's own `SESSION_SECRET`. A studio service never shares its secret, and no cookie goes on the parent domain: one secret or one domain cookie for several services would make the access of one the access of all. A cookie of another service fails the signature. One sign-in over several pages is the later entry `web-signin-hub-tickets`.
 
 ## The privacy page
 

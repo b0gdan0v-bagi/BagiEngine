@@ -35,6 +35,31 @@ namespace BECore {
         void AddContentRoot(const Path& root);
 
         /**
+         * @brief Redirect the writes of the editor into @p folder: a copy-on-write layer on top of every content root
+         *
+         * Call before Initialize(). The folder is made when it is missing, and Initialize() mounts its `config/` and `assets/` as the top layers, so a
+         * file written there (through WriteTarget()) is the one a lookup finds from then on. The engine knows no QA rule: a folder inside a git work tree
+         * is accepted.
+         *
+         * @return an error line when @p folder is empty or cannot be made; the overlay stays unset then
+         */
+        [[nodiscard]] std::expected<void, String> SetContentOverlay(const Path& folder);
+
+        /// The folder of SetContentOverlay(), in the absolute normal form; empty when none is set
+        const Path& GetContentOverlay() const {
+            return _overlay;
+        }
+
+        /**
+         * @brief Where a write of the file @p realFile (a resolved real path) must go
+         *
+         * `<overlay>/<mount>/<path below the layer>` when an overlay is set and the file lies in a layer of a mount point; @p realFile unchanged when
+         * no overlay is set, the file is already under it, or it is in no layer. Makes no folder and reads nothing: the writers make their own
+         * (`WriteFileAtomically`, `XmlDocument::SaveToFile`). A writer that keeps the old layout of the file copies the source over first.
+         */
+        [[nodiscard]] Path WriteTarget(const Path& realFile) const;
+
+        /**
          * @brief Add a directory as the highest priority layer of a mount point
          *
          * @return false if the directory does not exist. A directory that is already a layer is kept as is.
@@ -75,6 +100,7 @@ namespace BECore {
     private:
         Vector<Path> _roots;                          // lowest priority first
         Path _rootPath;                               // _roots.back()
+        Path _overlay;                                // empty: writes go where the file was found
         UnorderedPoolMap<Vector<Path>> _mountPoints;  // layers, lowest priority first
 
         Path FindRootDirectory() const;

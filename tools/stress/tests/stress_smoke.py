@@ -6,7 +6,7 @@ the bad values, screenshots that are not flat, `set_language` rewording the `ui`
 on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `rmlui` scenario probes `get_state.scenes`
 and prints a skip line when the build has no `rmlui` (only `ENGINE_UI_RMLUI` builds list it), so the same script passes in every preset; with it the scene's documents, textures,
 `wheel_at` on both axes, `ReloadRmlUiDocuments` and the scene switch are checked. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
-`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; the View menu opens the Game panel, a chord closes it and opens it again, its filter takes typed text, and an action button changes `get_state` and the picture, all through `imgui_find` / `imgui_input` (a build without the editor prints a skip line). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
+`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; the View menu opens the Game panel, a chord closes it and opens it again, its filter takes typed text, and an action button changes `get_state` and the picture, all through `imgui_find` / `imgui_input`; it also runs with `--content-overlay=<temp folder>`, and `editor_state` must say nothing is dirty, name a `scene:` document whose `file` is inside that folder, and the checkout's `SceneConfig.xml` is unchanged with nothing written into the folder (a build without the editor prints a skip line). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
 path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 failed, 77 skipped (the executable is not built).
@@ -15,6 +15,7 @@ path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 fa
 import argparse
 import contextlib
 import functools
+import hashlib
 import os
 import sys
 import tempfile
@@ -51,6 +52,9 @@ RMLUI_PANEL_X = 1700
 RMLUI_PANEL_Y = 920
 EDITOR_WINDOW = (1280, 720)  # window units: room for the docks of the editor
 EDITOR_FRAMES = 5  # ImGui lays its docks out over more than one frame
+STRESS_SCENE_FILE = ENGINE_DIR / "tools" / "stress" / "config" / "SceneConfig.xml"  # the tracked file the editor's scene document stands for
+EDITOR_SCENE_PATH = "config/SceneConfig.xml"
+CONTENT_OVERLAY_FLAG = "--content-overlay="
 EDITOR_DIR_VARIABLE = "BAGI_EDITOR_DIR"  # where the editor keeps its per-user files (widgets-module.md): a temp folder, never the real one
 NO_EDITOR_WARNING = "this build has no editor"  # the one Warning a build without the editor logs for --editor
 GAME_PANEL_WINDOW = "Game"  # the window of "Game Panel" in the View menu: its title is `Game###GamePanel`
@@ -421,6 +425,33 @@ def game_picture(exe: Path) -> object:
     return pictures[0]
 
 
+def file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def check_editor_state(client: BagiControlClient, overlay: Path) -> None:
+    """`editor_state` of a fresh editor run into an overlay: nothing is dirty, the scene document points into the overlay (not yet written), and nothing is written.
+
+    BagiStress has no TextureLibrary, so the Sprite Library row is clean with no path, and no config is selected in the Config Editor, so there is no `config` row.
+    Making a document dirty and saving it needs `imgui_input`; the gtests of the save path (ContentOverlay, EditorDocumentsProvider) cover that.
+    """
+    state = client.call("editor_state")
+    check(state["anyDirty"] is False, f"editor_state: anyDirty is {state['anyDirty']} in a fresh editor")
+    documents = {document["id"]: document for document in state["documents"]}
+    check(list(documents) == sorted(documents), f"editor_state: the documents are not sorted by id: {list(documents)}")
+    scenes = [document for document in documents.values() if document["kind"] == "scene"]
+    check(len(scenes) == 1 and scenes[0]["id"].startswith("scene:"), f"editor_state: expected one scene document, got {list(documents)}")
+    scene = scenes[0]
+    check(scene["path"] == EDITOR_SCENE_PATH, f"editor_state: the scene path is '{scene['path']}'")
+    expected_file = overlay.resolve() / EDITOR_SCENE_PATH
+    check(Path(scene["file"]).resolve() == expected_file, f"editor_state: the scene file is '{scene['file']}', expected {expected_file} inside the overlay")
+    check(scene["dirty"] is False, "editor_state: a fresh scene is dirty")
+    library = documents.get("library:sprites")
+    check(library is not None and library["kind"] == "library" and library["dirty"] is False, f"editor_state: the Sprite Library row is {library}")
+    check(not any(document["kind"] == "config" for document in documents.values()), f"editor_state: a config row with no config selected: {list(documents)}")
+    print(f"editor: editor_state ok, {len(documents)} documents, scene file {scene['file']}", flush=True)
+
+
 def imgui_matches(client: BagiControlClient, **params: object) -> list[dict]:
     """The matches of one `imgui_find`; an item that is not drawn in the frame is not in the list."""
     return client.call("imgui_find", params)["matches"]
@@ -478,8 +509,8 @@ def drive_editor_panels(client: BagiControlClient) -> None:
     check(after.rows != before.rows, f"the picture of the editor did not change after the button '{label}'")
 
 
-def scenario_editor(client: BagiControlClient, exe: Path) -> None:
-    """The Editor run mode headless: the picture is the whole window, not the game alone. A build without the editor runs Game and the scenario skips itself."""
+def scenario_editor(client: BagiControlClient, exe: Path, overlay: Path) -> None:
+    """The Editor run mode headless: the picture is the whole window, not the game alone, and `editor_state` names the overlay's file. A build without the editor runs Game and the scenario skips itself."""
     run_mode = client.call("status")["runMode"]
     if run_mode == "Game":
         print("editor: SKIPPED, status.runMode is Game (the build has no editor)", flush=True)
@@ -490,7 +521,18 @@ def scenario_editor(client: BagiControlClient, exe: Path) -> None:
     check((shot.width, shot.height) == EDITOR_WINDOW, f"the screenshot of the editor is {shot.width}x{shot.height}, the window is {EDITOR_WINDOW[0]}x{EDITOR_WINDOW[1]}")
     check(len(shot.colors()) >= MIN_SHOT_COLORS, f"the screenshot of the editor has {len(shot.colors())} colours: it is flat")
     check(shot.rows != game_picture(exe).rows, "the screenshot of the editor is the picture of the Game run mode")
+    scene_hash = file_hash(STRESS_SCENE_FILE)
+    check_editor_state(client, overlay)
+    check(file_hash(STRESS_SCENE_FILE) == scene_hash, f"the run changed {STRESS_SCENE_FILE}")
+    check(not (overlay / EDITOR_SCENE_PATH).exists(), "a run that saved nothing wrote the overlay's scene file")
+    print("editor: the checkout's SceneConfig.xml is unchanged and the overlay holds no scene file", flush=True)
     drive_editor_panels(client)
+
+
+@contextlib.contextmanager
+def temporary_folder() -> Iterator[Path]:
+    with tempfile.TemporaryDirectory() as folder:
+        yield Path(folder)
 
 
 @contextlib.contextmanager
@@ -523,7 +565,7 @@ class BackendUnavailable(Exception):
     """The game said it cannot start the backend asked for (no display, no loader, not in this build)."""
 
 
-SCENARIOS: list[tuple[str, list[str], Callable[..., None]]] = [  # `editor` takes the executable too: main binds it
+SCENARIOS: list[tuple[str, list[str], Callable[..., None]]] = [  # `editor` takes the executable and its overlay folder too: main binds them
     ("sprites", ["--stress-scene=sprites", f"--stress-count={SPRITES_COUNT}"], scenario_sprites),
     ("entities", ["--stress-scene=entities", f"--stress-count={ENTITIES_COUNT}"], scenario_entities),
     ("ui", ["--stress-scene=ui", f"--stress-count={UI_COUNT}"], scenario_ui),
@@ -592,8 +634,13 @@ def main() -> int:
         print(f"{name}: running", flush=True)
         is_editor = scenario is scenario_editor
         try:
-            with temporary_editor_directory() if is_editor else contextlib.nullcontext():
-                play_with_retry(exe, flags, functools.partial(scenario, exe=exe) if is_editor else scenario, args.port, name, (NO_EDITOR_WARNING,) if is_editor else ())
+            with contextlib.ExitStack() as stack:
+                if is_editor:
+                    stack.enter_context(temporary_editor_directory())
+                    overlay = stack.enter_context(temporary_folder())
+                    flags = [*flags, f"{CONTENT_OVERLAY_FLAG}{overlay}"]
+                    scenario = functools.partial(scenario, exe=exe, overlay=overlay)
+                play_with_retry(exe, flags, scenario, args.port, name, (NO_EDITOR_WARNING,) if is_editor else ())
         except SmokeFailure as error:
             print(f"FAILED ({name}): {error}")
             return EXIT_FAILED

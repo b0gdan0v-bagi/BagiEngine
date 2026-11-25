@@ -3,6 +3,7 @@
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Widgets/EditorDocuments.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Events/ConfigEvents.h>
 #include <Widgets/ConfigEditor/StagedChanges.h>
@@ -47,6 +48,9 @@ namespace BECore {
         [[nodiscard]] bool ShowsChangedOnDiskNotice() const {
             return _showChangedOnDisk;
         }
+
+        /// The selected config with its unsaved flag (staged edits), for `editor_state` (`.claude/rules/control-editor-api.md`); nothing with no selection. A closed panel reports too
+        void AppendDocuments(Vector<EditorDocumentState>& out);
 
         /// What a click on the list does: selects @p name and starts without staged edits
         void SelectConfig(PoolString name);
@@ -105,6 +109,7 @@ namespace BECore {
         bool _showChangedOnDisk = false;
         bool _showReloadConfirm = false;
         bool _showSwitchConfirm = false;
+        EditorDocumentsHandle _documents;  // the source of `editor_state`, ends with the widget
     };
 
 }  // namespace BECore

@@ -5,7 +5,9 @@ import base64
 import contextlib
 import io
 import json
+import os
 import unittest
+from unittest import mock
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -69,6 +71,7 @@ def cookie_of(response, name: str) -> str | None:
 
 class SignInTestCase(ServerTestCase):
     guests = True
+    allow = None
     public_url = "https://mahjong.example"
     store = True
 
@@ -78,7 +81,7 @@ class SignInTestCase(ServerTestCase):
         self.google.clock = self.clock
         provider = serve.OidcProvider("google", "Google", "https://accounts.google.com/o/oauth2/v2/auth", "https://token.invalid",
                                       ("https://accounts.google.com",), CLIENT_ID, "client-secret", exchange=self.google.exchange)
-        self.sign_in = serve.SignIn([provider], self.public_url, SECRET, 30 * 24 * 3600, self.guests, self.clock)
+        self.sign_in = serve.SignIn([provider], self.public_url, SECRET, 30 * 24 * 3600, self.guests, self.clock, self.allow)
         self.store_folder = root / "store"
         options = dict(clock=self.clock, sign_in=self.sign_in, collect_token=COLLECT)
         if self.store:
@@ -101,8 +104,8 @@ class SignInTestCase(ServerTestCase):
         finally:
             connection.close()
 
-    def sign_in_as(self, email: str | None = None) -> str:
-        """Runs the whole flow with the fake Google; returns the Cookie header of the session."""
+    def callback_as(self, email: str | None = None):
+        """Runs the flow with the fake Google up to the answer of the callback."""
         if email is not None:
             self.google.email = email
         start = self.request("/auth/google/start")
@@ -110,8 +113,12 @@ class SignInTestCase(ServerTestCase):
         query = {key: values[0] for key, values in parse_qs(location.query).items()}
         self.google.nonce = query["nonce"]
         state_cookie = cookie_of(start, serve.STATE_COOKIE)
-        callback = self.request(f"/auth/google/callback?state={query['state']}&code=the-code",
-                                headers={"Cookie": f"{serve.STATE_COOKIE}={state_cookie}"})
+        return self.request(f"/auth/google/callback?state={query['state']}&code=the-code",
+                            headers={"Cookie": f"{serve.STATE_COOKIE}={state_cookie}"})
+
+    def sign_in_as(self, email: str | None = None) -> str:
+        """Runs the whole flow with the fake Google; returns the Cookie header of the session."""
+        callback = self.callback_as(email)
         self.assertEqual((callback.status, callback.headers["location"]), (303, "/"))
         return f"{serve.SESSION_COOKIE}={cookie_of(callback, serve.SESSION_COOKIE)}"
 
@@ -271,6 +278,41 @@ class NoGuestsTest(SignInTestCase):
         self.assertEqual(self.request(f"/{GAME}.js", headers={"Cookie": f"{serve.SESSION_COOKIE}={guest}"}).status, 401)
 
 
+class AllowlistTest(SignInTestCase):
+    allow = frozenset({"tester@example.com"})
+
+    def test_an_allowed_email_gets_a_session_in_any_case(self):
+        cookie = self.sign_in_as("TESTER@Example.com")
+        self.assertEqual(self.request("/", headers={"Cookie": cookie}).status, 200)
+
+    def test_another_account_is_refused_and_gets_no_session(self):
+        response = self.callback_as("other@example.com")
+        self.assertEqual(response.status, 403)
+        self.assertIsNone(cookie_of(response, serve.SESSION_COOKIE))
+        self.assertNotIn(b"other@example.com", response.body)
+        self.assertEqual(self.request("/").status, 303)
+
+    def test_guests_are_off_whatever_the_option_says(self):
+        self.assertFalse(self.sign_in.guests)
+        self.assertEqual(self.request("/auth/guest").status, 404)
+        self.assertNotIn("/auth/guest", self.request("/signin").body.decode())
+        guest = serve.SignIn([], self.public_url, SECRET, 3600, True, self.clock).sign({"p": "guest", "x": NOW + 99})
+        self.assertEqual(self.request(f"/{GAME}.js", headers={"Cookie": f"{serve.SESSION_COOKIE}={guest}"}).status, 401)
+
+    def test_a_cookie_signed_with_another_secret_is_refused(self):
+        other = serve.SignIn(list(self.sign_in.providers.values()), self.public_url, b"o" * 40, 3600, False, self.clock)
+        value = other.sign({"p": "google", "e": "tester@example.com", "x": NOW + 99})
+        self.assertEqual(self.request(f"/{GAME}.js", headers={"Cookie": f"{serve.SESSION_COOKIE}={value}"}).status, 401)
+
+    def test_an_email_taken_off_the_list_loses_access_at_its_next_request(self):
+        cookie = self.sign_in_as()
+        self.assertEqual(self.request(f"/{GAME}.js", headers={"Cookie": cookie}).status, 200)
+        self.sign_in.allow = frozenset({"someone-else@example.com"})
+        self.assertEqual(self.request(f"/{GAME}.js", headers={"Cookie": cookie}).status, 401)
+        self.assertEqual(self.request("/", headers={"Cookie": cookie}).status, 303)
+        self.assertEqual(self.post_piece(cookie).status, 401)
+
+
 class MatchStampTest(SignInTestCase):
     def test_a_signed_in_match_is_stamped_and_listed_with_the_account(self):
         cookie = self.sign_in_as()
@@ -362,6 +404,22 @@ class SettingsTest(unittest.TestCase):
         sign_in = serve.make_sign_in(settings)
         self.assertEqual(list(sign_in.providers), ["google"])
 
+    def test_the_allowlist_is_lower_case_turns_guests_off_and_is_not_printed(self):
+        settings = self.parse({**self.GOOD, "SIGNIN_ALLOW": " A@Example.com, b@example.com;a@example.com\n"}).sign_in
+        self.assertEqual(settings["allow"], ("a@example.com", "b@example.com"))
+        self.assertFalse(settings["guests"])
+        self.assertFalse(self.parse({**self.GOOD, "SIGNIN_ALLOW": "a@example.com", "SIGNIN_GUESTS": "1"}).sign_in["guests"])
+        self.assertEqual(serve.make_sign_in(settings).allow, frozenset({"a@example.com", "b@example.com"}))
+        self.assertIsNone(self.parse({**self.GOOD, "SIGNIN_ALLOW": "  "}).sign_in["allow"])
+
+    def test_the_start_line_says_the_allowlist_is_on_without_the_emails(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout), mock.patch.object(serve.ThreadingHTTPServer, "serve_forever", side_effect=KeyboardInterrupt), \
+                mock.patch.dict(os.environ, {**self.GOOD, "SIGNIN_ALLOW": "secret.person@example.com", "PORT": "0"}, clear=True):
+            self.assertEqual(serve.main(["--root", str(Path(__file__).parent), "--host", "127.0.0.1"]), 0)
+        self.assertIn("allowlist on", stdout.getvalue())
+        self.assertNotIn("secret.person", stdout.getvalue())
+
     def test_the_refusals(self):
         cases = [
             ({"GOOGLE_CLIENT_ID": CLIENT_ID}, "set together"),
@@ -372,6 +430,7 @@ class SettingsTest(unittest.TestCase):
             ({**self.GOOD, "SESSION_DAYS": "0"}, "SESSION_DAYS"),
             ({**self.GOOD, "MATCH_COLLECT_TOKEN": "short"}, "MATCH_COLLECT_TOKEN"),
             ({"SIGNIN_FAKE_EMAIL": "a@b"}, "local tests only"),
+            ({**self.GOOD, "SIGNIN_ALLOW": "a@example.com, not-an-email"}, "SIGNIN_ALLOW"),
         ]
         for environ, words in cases:
             with self.subTest(words=words):

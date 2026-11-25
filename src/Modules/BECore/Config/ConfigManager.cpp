@@ -294,13 +294,24 @@ namespace BECore {
                 LOG_ERROR("[ConfigManager] SaveConfig: no file path for config '{}'", name.ToStringView());
                 return false;
             }
-            ok = entry.doc->SaveToFile(entry.filePath);
+            // With a content overlay the file is written into the overlay and the entry follows it: a reload and the watcher read the copy
+            const Path target = GetFileSystem().WriteTarget(entry.filePath);
+            if (target != entry.filePath && !GetFileInfo(target.View()).has_value()) {
+                // The first save into the overlay: SaveToFile lays the text out like the file that is there, so the original is copied first
+                if (const auto original = ReadFileBytes(entry.filePath.View())) {
+                    if (const auto copied = WriteFileAtomically(target.View(), Span<const uint8_t>(original->data(), original->size())); !copied) {
+                        LOG_WARNING("[ConfigManager] Cannot copy {} into the overlay, its layout is not kept: {}", entry.filePath.View(), copied.error());
+                    }
+                }
+            }
+            ok = entry.doc->SaveToFile(target);
             if (ok) {
+                entry.filePath = target;
                 // The file keeps the layout of what was there, so its text is read back: the hash must be the one the watcher will see
                 entry.fileHash = HashFileOnDisk(entry.filePath);
                 LOG_INFO("[ConfigManager] Saved config '{}' to {}", name.ToStringView(), entry.filePath.View());
             } else {
-                LOG_ERROR("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), entry.filePath.View());
+                LOG_ERROR("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), target.View());
             }
         }
         if (ok) {
