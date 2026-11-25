@@ -47,6 +47,15 @@ namespace BECore {
         }
     }
 
+    void UIDrawList::ForEachOpenPopupOwner(FunctionRef<void(UIElement&)> visit) const {
+        for (const PopupSection& section : _sections) {
+            UIElement& owner = *_entries[section.owner].element;
+            if (owner.IsPopupOpen()) {
+                visit(owner);
+            }
+        }
+    }
+
     void UIDrawList::CloseScopes(IRenderer& renderer, uint32_t reached) {
         while (!_scopes.empty() && _scopes.back().end <= reached) {
             const Scope& scope = _scopes.back();

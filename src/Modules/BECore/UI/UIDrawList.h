@@ -5,6 +5,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UITransitionComponent.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <cstdint>
 
 namespace BECore {
@@ -51,6 +52,10 @@ namespace BECore {
         /// Draws the main section, then the sections of the popups that are open now (`IsPopupOpen()` of the owner, asked here), each with the renderer's own opacity and view transform:
         /// a popup is not drawn inside the scopes of its ancestors. @p now is the game time of the transitions; @p themes is read for its version once
         void Draw(IRenderer& renderer, double now, UIThemes& themes);
+
+        /// Calls @p visit for each popup element that is open now (asked here), in tree order: the elements `UICanvasLayout::ForEachOpenPopup` finds in the tree this list was made of, with no
+        /// walk of the tree. Only those that were visible at the Rebuild(). Allocates nothing; @p visit may call `ClosePopup()` on the element it is given
+        void ForEachOpenPopupOwner(FunctionRef<void(UIElement&)> visit) const;
 
         [[nodiscard]] const Vector<Entry>& Entries() const {
             return _entries;

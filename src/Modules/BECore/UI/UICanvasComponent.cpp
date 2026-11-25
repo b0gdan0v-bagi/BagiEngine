@@ -258,12 +258,22 @@ namespace BECore {
     }
 
     bool UICanvasComponent::SyncPopups() {
+        // The list knows the popup owners of the tree it was made of, so while no edit is pending (no Invalidate() since the last layout run, the list is of that run) a frame asks
+        // the owners and walks nothing; with an edit pending the walk finds a popup the list does not know
+        const bool fromList = _layout.IsValid() && !NeedsDrawListRebuild();
+        const auto forEachOpen = [&](FunctionRef<void(UIElement&)> visit) {
+            if (fromList) {
+                _drawList.ForEachOpenPopupOwner(visit);
+            } else {
+                _layout.ForEachOpenPopup(visit);
+            }
+        };
         // Pass 1: which popup stays (the one opened since the last look, the last in tree order; else the one we know) and whether the known one is still open
         UIElement* const known = _popup.Get();
         UIElement* keep = nullptr;
         bool knownIsOpen = false;
         bool anyOpen = false;
-        _layout.ForEachOpenPopup([&](UIElement& popup) {
+        forEachOpen([&](UIElement& popup) {
             anyOpen = true;
             if (&popup == known) {
                 knownIsOpen = true;
@@ -278,7 +288,7 @@ namespace BECore {
         if (known && known->IsPopupOpen() && !knownIsOpen) {
             known->ClosePopup();  // it left the list of open popups without being closed: it (or an ancestor) was hidden
         }
-        _layout.ForEachOpenPopup([&](UIElement& popup) {
+        forEachOpen([&](UIElement& popup) {
             if (&popup != keep) {
                 popup.ClosePopup();
                 changed = true;
