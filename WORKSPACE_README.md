@@ -150,7 +150,6 @@ BagiEngine/
 │       ├── TaskSystem/  # Task/job system
 │       ├── SDL/         # SDL3 integration
 │       ├── EABase/      # EASTL (vendored)
-│       ├── EnTT/        # ECS framework (vendored)
 │       ├── pugixml/     # XML parser (vendored)
 │       ├── imgui/       # ImGui (vendored)
 │       ├── RmlUi/       # RmlUi core (vendored, built with ENGINE_UI_RMLUI=ON)

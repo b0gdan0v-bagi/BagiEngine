@@ -2,13 +2,13 @@
 
 ## Overview
 
-Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `IComponent`. Everything is reflected and loaded from `config/SceneConfig.xml`, so the scene editor and the file stay in sync (`.claude/rules/widgets-module.md`).
+Scene graph: `SceneManager` → `Scene` → `SceneNode` → `IComponent`. Everything is reflected and loaded from `config/SceneConfig.xml`, so the scene editor and the file stay in sync (`.claude/rules/widgets-module.md`).
 
 | Class | Role |
 |-------|------|
 | `SceneManager` | Built by `LoadSceneManagerFromConfig()` (`SceneLoader.h`: `SceneConfig` with its node references expanded, see "Node files") in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`. `SetActiveScene(name)`, `GetActiveScene()`, `GetSceneByName()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
-| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()` runs the fixed update list once per step due, then the frame list ("Gotchas"), and emits both events for plain subscribers; `Draw()` runs `SceneDrawSystem` ("Draw order"). `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes` (`SceneConfigWriter.h`) |
-| `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children, an `entt::entity`. `_components` / `_children` are `SmallVector`s (`ComponentList` / `ChildList`, the same saved text). `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. `_children` is reflected, so a node holds nested `<children>` in the file |
+| `Scene` | `FACTORY_BASE`. Owns a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()` runs the fixed update list once per step due, then the frame list ("Gotchas"), and emits both events for plain subscribers; `Draw()` runs `SceneDrawSystem` ("Draw order"). `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes` (`SceneConfigWriter.h`) |
+| `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children. `_components` / `_children` are `SmallVector`s (`ComponentList` / `ChildList`, the same saved text). `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. `_children` is reflected, so a node holds nested `<children>` in the file |
 | `IComponent` | `FACTORY_BASE` and `SubscriptionHolder` (128 bytes, `Events/CLAUDE.md`); gets its `Scene&` / `SceneNode&` through `GetScene()` / `GetNode()` |
 | `SceneNodeFiles` / `SceneLoader` | `SceneNodeFiles`: the expansion of `<node ref>` (`ExpandNodeReference(s)`, `ApplyNodeOverrides`, the node loaders, `LoadSceneDocument`). `SceneLoader`: `LoadSceneManager(configRoot, loader)` / `LoadSceneManagerFromConfig()` build the `SceneManager` from the expanded copy. `SceneNodeInstance`: `DeserializeNode`, `BuildNodeReference`. See "Node files" |
 
@@ -85,11 +85,11 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a 
 
 **Rotation, flip and blend** (renderer side: `.claude/rules/rendering-module.md`): `TransformComponent::_rotation` (degrees, clockwise) about `_pivotX` / `_pivotY`, **normalized in the node's rect** (0.5 = center), also for a `Contain` sprite; `_flipX` / `_flipY` mirror the UVs. `_blend` (`Alpha`, `Add`, `Multiply`) is scoped to that one draw. Not rotated: the hit rect of a pointer target, `TextComponent`, UI canvases.
 
-## Why EnTT
+## Object model
 
-The object model stays `SceneNode` + `IComponent` (reflection, the XML and the inspector build on it). The `entt::registry` of a `Scene` holds one entity per node; the components stay the truth.
+The components are the truth: reflection, the XML and the inspector build on `SceneNode` + `IComponent`. Each subsystem keeps a dense list derived from them and rebuilt only when its key moved (`SceneUpdateList`, `SceneDrawList`, the particle pools).
 
-- It is **not** a pure ECS: the components are not stored in EnTT pools. Component fields have no setter hooks, so a pool copy would be refreshed every frame, which costs the read it was meant to save.
+- It is **not** a pure ECS: component fields have no setter hooks, so a stored copy would be refreshed every frame, which costs the read it was meant to save.
 - One `IRenderer` call per quad or sprite, nothing batched (`.claude/rules/rendering-module.md`).
 
 ## View size
