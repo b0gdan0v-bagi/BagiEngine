@@ -12,7 +12,7 @@ namespace BECore {
 
     /// What `PanelInterpreter::Prepare` makes of an element's class: the walk switches on this and never asks the type again
     CORE_ENUM(PreparedKind, uint8_t, Unknown, Section, Row, Text, Field, Fields, Input, Checkbox, Combo, Number, Button, Table, Separator, EmptyState, Slot, Child, Popup, Tabs, Tab, Menu, MenuItem,
-              MenuItems)
+              MenuItems, Dropdown)
 
     /// Whether a binding text was empty (no condition, no bound text), did not parse, or parsed
     CORE_ENUM(PreparedBindingState, uint8_t, Empty, Bad, Ok)
@@ -43,7 +43,7 @@ namespace BECore {
         const PanelElement* element = nullptr;
         PreparedKind kind = PreparedKind::Unknown;
         PreparedCondition visible;
-        /// The `enableWhen` of a button, a menu, a menu item, a checkbox, a combo or a number
+        /// The `enableWhen` of a button, a dropdown, a menu, a menu item, a checkbox, a combo or a number
         PreparedCondition enableWhen;
         /// A button's `fillWhen`
         PreparedCondition fillWhen;
@@ -55,7 +55,7 @@ namespace BECore {
         PreparedBinding label;
         /// A combo's `items`
         PreparedBinding items;
-        /// The glyph of a button's, an input's, a checkbox's, a menu item's or an empty state's `icon`, null when it names none
+        /// The glyph of a button's, a dropdown's, an input's, a checkbox's, a menu item's or an empty state's `icon`, null when it names none
         const char* glyph = nullptr;
         /// The hint of an input with the glyph of its icon in front of it
         String hint;

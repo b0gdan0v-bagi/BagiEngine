@@ -16,6 +16,8 @@ namespace BECore {
     namespace {
 
         constexpr const char* kSelectableSuffix = "##select";
+        /// The popup of a dropdown, under the element's own id
+        constexpr const char* kDropdownPopup = "##dropdown";
 
         /// How the text of a binding is parsed: the forms differ in what they accept
         enum class BindingForm : uint8_t { Field, Object };
@@ -170,6 +172,9 @@ namespace BECore {
             if (element.Is<PanelMenuItems>()) {
                 return PreparedKind::MenuItems;
             }
+            if (element.Is<PanelDropdown>()) {
+                return PreparedKind::Dropdown;
+            }
             return PreparedKind::Unknown;
         }
 
@@ -226,6 +231,13 @@ namespace BECore {
                     prepared.open = PrepareCondition(element->Cast<PanelPopup>()->open);
                     PrepareElements(element->elements, prepared.children);
                     break;
+                case PreparedKind::Dropdown: {
+                    const PanelDropdown& dropdown = *element->Cast<PanelDropdown>();
+                    prepared.enableWhen = PrepareCondition(dropdown.enableWhen);
+                    prepared.glyph = GlyphOf(dropdown.icon);
+                    PrepareElements(element->elements, prepared.children);
+                    break;
+                }
                 case PreparedKind::Text:
                     prepared.bind = PrepareBinding(element->Cast<PanelText>()->bind, BindingForm::Field);
                     break;
@@ -397,6 +409,9 @@ namespace BECore {
             case PreparedKind::Popup:
                 DrawPopup(prepared);
                 break;
+            case PreparedKind::Dropdown:
+                DrawDropdown(prepared);
+                break;
             case PreparedKind::Tabs:
                 DrawTabs(prepared);
                 break;
@@ -482,6 +497,43 @@ namespace BECore {
             ImGui::CloseCurrentPopup();
         }
         ImGui::BeginDisabled(!open);
+        DrawElements(prepared.children);
+        ImGui::EndDisabled();
+        ImGui::EndPopup();
+    }
+
+    void PanelInterpreter::DrawDropdown(const PreparedElement& prepared) {
+        const PanelDropdown& dropdown = *prepared.element->Cast<PanelDropdown>();
+        const char* tooltip = OrNull(dropdown.tooltip);
+        const bool enabled = ReadCondition(prepared.enableWhen);
+        ImGui::BeginDisabled(!enabled);
+        bool clicked = false;
+        if (prepared.glyph != nullptr && dropdown.text.empty()) {
+            clicked = IconButton(prepared.glyph, tooltip, dropdown.id.c_str());
+        } else {
+            _label.clear();
+            if (prepared.glyph != nullptr) {
+                _label.append(prepared.glyph);
+                _label.append(kGlyphGap);
+            }
+            _label.append(dropdown.text);
+            _label.append(kIdSuffix);
+            _label.append(dropdown.id);
+            clicked = ImGui::Button(_label.c_str());
+            ItemTooltip(tooltip);
+        }
+        ImGui::EndDisabled();
+        const ImVec2 below(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y);
+        if (clicked) {
+            ImGui::OpenPopup(kDropdownPopup);
+        }
+        // Used only on the frame the popup appears (ImGui clears it while the popup is closed), so it opens under its button
+        ImGui::SetNextWindowPos(below, ImGuiCond_Appearing);
+        if (!ImGui::BeginPopup(kDropdownPopup)) {
+            return;
+        }
+        // A condition that turns false while the popup is open disables what it holds, so nothing in it writes
+        ImGui::BeginDisabled(!enabled);
         DrawElements(prepared.children);
         ImGui::EndDisabled();
         ImGui::EndPopup();
@@ -765,10 +817,11 @@ namespace BECore {
         ImVec2 outerSize(0.0f, 0.0f);
         if (scrolls) {
             flags |= ImGuiTableFlags_ScrollY;
-            // A row is as high as its tallest cell: a button or an input is a frame, a text a line
+            // A row is as high as its tallest cell: a button, an input or a checkbox is a frame, a text a line
             bool hasFrame = false;
             for (const PreparedColumn& column : prepared.columns) {
-                hasFrame = hasFrame || column.column->type == PanelColumnType::Button || column.column->type == PanelColumnType::Input;
+                const PanelColumnType type = column.column->type;
+                hasFrame = hasFrame || type == PanelColumnType::Button || type == PanelColumnType::Input || type == PanelColumnType::Checkbox;
             }
             const float rowHeight = (hasFrame ? ImGui::GetFrameHeight() : ImGui::GetTextLineHeight()) + ImGui::GetStyle().CellPadding.y * 2.0f;
             const float headerRows = table.header ? 1.0f : 0.0f;
@@ -824,6 +877,10 @@ namespace BECore {
         }
         if (column.type == PanelColumnType::Input) {
             DrawInputCell(prepared, list, row);
+            return;
+        }
+        if (column.type == PanelColumnType::Checkbox) {
+            DrawCheckboxCell(prepared, list, row);
             return;
         }
 
@@ -901,6 +958,32 @@ namespace BECore {
         ImGui::BeginDisabled(!ReadRowCondition(list, row, column.enableField));
         if (DrawTextBox(_label.c_str(), text, OrNull(prepared.hint), 0.0f)) {
             static_cast<void>(_writer.WriteRowText(*_sources, list, row, column.field, StringView(_inputBuffer)));
+        }
+        ImGui::EndDisabled();
+        ItemTooltip(OrNull(column.tooltip));
+    }
+
+    void PanelInterpreter::DrawCheckboxCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row) {
+        const PanelColumn& column = *prepared.column;
+        bool value = false;
+        if (_reader.ReadRowBool(*_sources, list, row, column.field, value) != PanelReadStatus::Ok) {
+            DrawUnreadable();
+            return;
+        }
+        // A copy: a row's text is no C string. `##<column id>` only keeps the column id out of sight; the row's ScopedId separates equal texts
+        _label.clear();
+        if (!column.labelField.empty()) {
+            StringView text;
+            if (_reader.ReadRowText(*_sources, list, row, column.labelField, _cellScratch, text) != PanelReadStatus::Ok) {
+                text = kUnreadable;
+            }
+            _label.append(text.data(), text.size());
+        }
+        _label.append(kIdSuffix);
+        _label.append(column.id);
+        ImGui::BeginDisabled(!ReadRowCondition(list, row, column.enableField));
+        if (ImGui::Checkbox(_label.c_str(), &value)) {
+            static_cast<void>(_writer.WriteRowBool(*_sources, list, row, column.field, value));
         }
         ImGui::EndDisabled();
         ItemTooltip(OrNull(column.tooltip));

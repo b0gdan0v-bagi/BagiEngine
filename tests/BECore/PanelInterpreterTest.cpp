@@ -419,6 +419,38 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        /// A dropdown holding a checkbox, a button and a table of `Checkbox` cells, and an icon-only one turned off by `probe.hidden`
+        constexpr const char* kDropdowns = R"(
+<PanelAsset id="Dropdowns" title="Dropdowns">
+  <elements>
+    <element type="PanelRow" id="bar">
+      <elements>
+        <element type="PanelDropdown" id="overlays" text="Overlays" icon="check" tooltip="Overlays">
+          <elements>
+            <element type="PanelCheckbox" id="grid" bind="probe.flag" text="Grid"/>
+            <element type="PanelButton" id="reset" text="Reset" command="probe.reset"/>
+            <element type="PanelTable" id="canvases" source="probe.rows" header="false">
+              <columns><column type="Checkbox" id="on" field="selected" labelField="name" enableField="enabled"/></columns>
+            </element>
+          </elements>
+        </element>
+        <element type="PanelDropdown" id="snap" icon="check" enableWhen="!probe.hidden">
+          <elements><element type="PanelButton" id="snapAll" text="All" command="probe.snap"/></elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kCheckboxColumn = R"(
+<PanelAsset id="Switches" title="Switches">
+  <elements>
+    <element type="PanelTable" id="rows" source="probe.rows" header="false">
+      <columns><column type="Checkbox" id="on" field="selected" labelField="name" enableField="enabled"/></columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
         /// A provider with one chord, as the editor's hotkey map would be
         class FakeChords : public PanelChordText {
         public:
@@ -718,6 +750,24 @@ namespace BECore::Tests {
         void OpenMenu(const char* elementId, const char* title) {
             ClickAt(Locate(MenuId(elementId, title)));
             Settle();
+        }
+
+        /// The id of the dropdown @p elementId of the row @p rowId: its button's label is the last link
+        static ImGuiID DropdownButtonId(const char* rowId, const char* elementId, const char* label) {
+            return Chain(HostId(), {rowId, elementId, label});
+        }
+
+        /// The popup of the dropdown @p elementId of the row @p rowId, null when it is closed: ImGui names a popup `##Popup_<id>`, the id being `##dropdown` under the element's id
+        static const ImGuiWindow* DropdownPopup(const char* rowId, const char* elementId) {
+            const ImGuiID id = Chain(HostId(), {rowId, elementId, "##dropdown"});
+            const ImGuiWindow* popup = ImGui::FindWindowByName(Format("##Popup_{:08x}", id).c_str());
+            return popup != nullptr && popup->Active ? popup : nullptr;
+        }
+
+        /// The id of the `Checkbox` cell of @p row in the table @p tableElement, which starts its chain at @p seed (the window it is in), labelled @p label
+        static ImGuiID CheckboxCellId(ImGuiID seed, const char* tableElement, int row, const char* label) {
+            const ImGuiID table = Chain(seed, {tableElement, "table"});
+            return Chain(ImHashData(&row, sizeof(row), table), {"on", label});
         }
 
         bool menuBar = false;
@@ -1874,6 +1924,98 @@ namespace BECore::Tests {
         Type("3");
         steady(kInputWarmUpFrames);
         EXPECT_EQ(probe.level, 0);
+    }
+
+    TEST_F(PanelInterpreterTest, ADropdownOpensItsPopupOnlyWhenItsButtonIsClickedAndItsChildrenWorkInIt) {
+        const PanelLoadResult loaded = LoadPanelAsset(kDropdowns);
+        const PanelElement& row = Require(At(Require(loaded.asset).elements, 0));
+        EXPECT_TRUE(PanelInterpreter::CanDraw(Require(At(row.elements, 0))));
+        Load(kDropdowns);
+        EXPECT_EQ(DropdownPopup("bar", "overlays"), nullptr);
+
+        ClickAt(Locate(DropdownButtonId("bar", "overlays", ICON_LC_CHECK " Overlays##overlays")));
+        Settle();
+        const ImGuiWindow* popup = DropdownPopup("bar", "overlays");
+        ASSERT_NE(popup, nullptr);
+        const ImGuiWindow* host = ImGui::FindWindowByName(kHostName);
+        ASSERT_NE(host, nullptr);
+        EXPECT_GT(popup->Pos.y, host->Pos.y + host->WindowPadding.y) << "the popup opens under its button, not at its top";
+
+        ClickAt(LocateInWindow(Chain(popup->ID, {"reset", "Reset"}), *popup));
+        EXPECT_EQ(lastCommand, "probe.reset");
+        ASSERT_EQ(DropdownPopup("bar", "overlays"), popup) << "a click inside keeps the popup open";
+        ClickAt(LocateInWindow(Chain(popup->ID, {"grid", "Grid###grid"}), *popup));
+        EXPECT_TRUE(probe.flag);
+        ClickAt(LocateInWindow(CheckboxCellId(popup->ID, "canvases", 2, "gamma##on"), *popup));
+        EXPECT_TRUE(probe.rows[2].selected);
+
+        // ImGui closes it itself, on Esc with keyboard navigation (which the editor turns on) and on a click outside
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        PressEscape();
+        EXPECT_EQ(DropdownPopup("bar", "overlays"), nullptr);
+        ClickAt(Locate(DropdownButtonId("bar", "overlays", ICON_LC_CHECK " Overlays##overlays")));
+        ASSERT_NE(DropdownPopup("bar", "overlays"), nullptr);
+        ClickAt(ImVec2(kHostSize.x - 2.0f, kHostSize.y - 2.0f));
+        Settle();
+        EXPECT_EQ(DropdownPopup("bar", "overlays"), nullptr);
+    }
+
+    TEST_F(PanelInterpreterTest, ADropdownWhoseEnableWhenIsFalseDoesNotOpen) {
+        Load(kDropdowns);
+        const ImVec2 snap = Locate(DropdownButtonId("bar", "snap", ICON_LC_CHECK "##snap"));
+        probe.hidden = true;
+        Settle();
+        ClickAt(snap);
+        Settle();
+        EXPECT_EQ(DropdownPopup("bar", "snap"), nullptr);
+
+        probe.hidden = false;
+        Settle();
+        ClickAt(snap);
+        Settle();
+        EXPECT_NE(DropdownPopup("bar", "snap"), nullptr);
+    }
+
+    TEST_F(PanelInterpreterTest, ACheckboxColumnWritesTheBoolOfTheClickedRowLabelledByItsLabelFieldAndNotOfADisabledRow) {
+        probe.rows[2].enabled = false;
+        Load(kCheckboxColumn);
+        ImGuiItemIndex index;
+        index.Arm(*ImGui::GetCurrentContext());
+        Frame();
+        const ImGuiItemRecord* beta = index.FindById(CheckboxCellId(HostId(), "rows", 1, "beta##on"));
+        ASSERT_NE(beta, nullptr);
+        EXPECT_EQ(beta->label, "beta##on");
+        index.Disarm();
+
+        ClickAt(Locate(CheckboxCellId(HostId(), "rows", 1, "beta##on")));
+        EXPECT_FALSE(probe.rows[0].selected);
+        EXPECT_TRUE(probe.rows[1].selected);
+        EXPECT_FALSE(probe.rows[2].selected);
+        EXPECT_EQ(clicks, 0) << "a cell writes its row and runs no command";
+
+        const ImGuiID gamma = CheckboxCellId(HostId(), "rows", 2, "gamma##on");
+        probe.rows[2].enabled = true;
+        Settle();
+        const ImVec2 gammaPoint = Locate(gamma);
+        probe.rows[2].enabled = false;
+        Settle();
+        ClickAt(gammaPoint);
+        EXPECT_FALSE(probe.rows[2].selected);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameWithAnOpenDropdownAndItsCheckboxColumnAllocatesNothing) {
+        Load(kDropdowns);
+        ClickAt(Locate(DropdownButtonId("bar", "overlays", ICON_LC_CHECK " Overlays##overlays")));
+        ASSERT_NE(DropdownPopup("bar", "overlays"), nullptr);
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+        EXPECT_NE(DropdownPopup("bar", "overlays"), nullptr);
     }
 
 }  // namespace BECore::Tests

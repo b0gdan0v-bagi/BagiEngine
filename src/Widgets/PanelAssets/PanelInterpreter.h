@@ -65,6 +65,9 @@ namespace BECore {
      * a popup with a `closeCommand` does it: Esc in the focused popup closes it and notes the command, so the model clears the bool; the popup does not reopen while the bool still
      * reads true. A popup with no `closeCommand` ignores Esc.
      *
+     * **A dropdown** (`PanelDropdown`) is a button that opens a non-modal popup (`##dropdown` under the element's id) under it; ImGui closes it on a click outside or Esc, so
+     * no model state says it is open. The popup is a window of its own, so the ids of its controls start from that window's id.
+     *
      * **A tab bar** (`PanelTabs`) is `BeginTabBar` labelled `##<id>`; each `PanelTab` is a `BeginTabItem` labelled `<title>###<id>` whose children are drawn only while it is the
      * selected one. ImGui pushes the tab's own id inside it, so a control in a tab has the bar's, the tab's and then its own ids in its chain. A tab outside a bar draws `?`, and a
      * child of a bar that is no tab is not drawn (the loader reports both).
@@ -139,9 +142,11 @@ namespace BECore {
         void DrawRows(const PreparedElement& prepared, size_t rows, bool clipped);
         void DrawButtonCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
         void DrawInputCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
+        void DrawCheckboxCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
         void DrawSlot(const PreparedElement& prepared);
         void DrawChild(const PreparedElement& prepared);
         void DrawPopup(const PreparedElement& prepared);
+        void DrawDropdown(const PreparedElement& prepared);
         void DrawTabs(const PreparedElement& prepared);
         void DrawTab(const PreparedElement& prepared);
         void DrawMenu(const PreparedElement& prepared);
