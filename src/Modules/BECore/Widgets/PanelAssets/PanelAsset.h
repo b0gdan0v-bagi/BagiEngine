@@ -27,6 +27,7 @@ namespace BECore {
     public:
         BE_REFLECT_FIELD String id;
         BE_REFLECT_FIELD String title;
+        BE_REFLECT_FIELD String titleBind;  ///< a text field whose value replaces `title` in the window title; the window keeps its id
         BE_REFLECT_FIELD String command;
         BE_REFLECT_FIELD bool open = false;
         BE_REFLECT_FIELD float width = 0.0f;

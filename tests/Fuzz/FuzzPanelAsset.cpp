@@ -55,6 +55,8 @@ namespace BECore::Fuzz {
                 Text(asset.id);
                 Text(asset.title);
                 Text(asset.command);
+                Text(asset.titleBind);
+                Binding(asset.titleBind, false);
                 if (!IsWellFormedId(asset.id) || asset.width < 0.0f || asset.height < 0.0f || asset.sources.size() > PanelAssetLimits::kMaxSources) {
                     Fail();
                 }
@@ -109,6 +111,20 @@ namespace BECore::Fuzz {
             /// Written as a comparison so a NaN fails it
             void Extent(float value) {
                 if (!(value >= 0.0f && value <= PanelAssetLimits::kMaxChildExtent)) {
+                    Fail();
+                }
+            }
+
+            /// Written as comparisons so a NaN fails them
+            void Number(const PanelNumber& number) {
+                constexpr float kLimit = PanelAssetLimits::kMaxNumberExtent;
+                if (!(number.min >= -kLimit && number.min <= kLimit && number.max >= -kLimit && number.max <= kLimit && number.min <= number.max)) {
+                    Fail();
+                }
+                if (number.slider && !(number.min < number.max)) {
+                    Fail();
+                }
+                if (!(number.step >= 0.0f && number.step <= kLimit)) {
                     Fail();
                 }
             }
@@ -185,6 +201,32 @@ namespace BECore::Fuzz {
                     if (input->width < 0.0f) {
                         Fail();
                     }
+                } else if (const auto* checkbox = element.Cast<PanelCheckbox>()) {
+                    Text(checkbox->bind);
+                    Text(checkbox->text);
+                    Text(checkbox->labelBind);
+                    Binding(checkbox->bind, true);
+                    Binding(checkbox->labelBind, false);
+                    if (checkbox->text.empty() && checkbox->labelBind.empty()) {
+                        Fail();
+                    }
+                } else if (const auto* combo = element.Cast<PanelCombo>()) {
+                    Text(combo->bind);
+                    Text(combo->items);
+                    Text(combo->itemField);
+                    Binding(combo->bind, true);
+                    Binding(combo->items, false);
+                    if (combo->items.empty() && !combo->itemField.empty()) {
+                        Fail();
+                    }
+                    RelativePath(combo->itemField);
+                    Extent(combo->width);
+                } else if (const auto* number = element.Cast<PanelNumber>()) {
+                    Text(number->bind);
+                    Text(number->text);
+                    Binding(number->bind, true);
+                    Extent(number->width);
+                    Number(*number);
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Text(button->text);
                     Text(button->icon);

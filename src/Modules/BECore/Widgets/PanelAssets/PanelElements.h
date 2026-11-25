@@ -11,6 +11,8 @@ namespace BECore {
 
     CORE_ENUM(PanelTextStyle, uint8_t, Normal, Disabled, Success, Warning, Error)
 
+    CORE_ENUM(PanelCheckLook, uint8_t, Check, Toggle)
+
     /// A collapsing header over its `elements`
     class PanelSection : public PanelElement {
         BE_CLASS(PanelSection)
@@ -75,6 +77,43 @@ namespace BECore {
         BE_REFLECT_FIELD String bind;
         BE_REFLECT_FIELD String hint;
         BE_REFLECT_FIELD String icon;
+        BE_REFLECT_FIELD float width = 0.0f;
+    };
+
+    /// A bool field `bind` as a check box or, as `Toggle`, a button filled with the accent while on; the label is `text`, or the text of `labelBind` when that is set; `style` colours it.
+    /// It writes the field itself and runs no command
+    class PanelCheckbox : public PanelElement {
+        BE_CLASS(PanelCheckbox)
+    public:
+        BE_REFLECT_FIELD String bind;
+        BE_REFLECT_FIELD String text;
+        BE_REFLECT_FIELD String labelBind;
+        BE_REFLECT_FIELD PanelCheckLook look = PanelCheckLook::Check;
+        BE_REFLECT_FIELD PanelTextStyle style = PanelTextStyle::Normal;
+    };
+
+    /// A combo over the enum, the index or the `String` field `bind`; the items are the texts of the list `items` (`itemField`, a path relative to a row, empty for a list of scalars)
+    /// or, with no `items`, the names of an enum. It writes the field itself and runs no command; `width` is in em, 0 fits the longest item
+    class PanelCombo : public PanelElement {
+        BE_CLASS(PanelCombo)
+    public:
+        BE_REFLECT_FIELD String bind;
+        BE_REFLECT_FIELD String items;
+        BE_REFLECT_FIELD String itemField;
+        BE_REFLECT_FIELD float width = 0.0f;
+    };
+
+    /// A number field `bind` as a drag, or as a slider when `slider` is set (it needs `min` < `max`); `min` equal to `max` (the default) leaves a drag unbounded; `step` is the drag speed,
+    /// 0 picks one; `text` is the label after the control. It writes the field itself and runs no command; `width` is in em, 0 fills the line
+    class PanelNumber : public PanelElement {
+        BE_CLASS(PanelNumber)
+    public:
+        BE_REFLECT_FIELD String bind;
+        BE_REFLECT_FIELD String text;
+        BE_REFLECT_FIELD float min = 0.0f;
+        BE_REFLECT_FIELD float max = 0.0f;
+        BE_REFLECT_FIELD float step = 0.0f;
+        BE_REFLECT_FIELD bool slider = false;
         BE_REFLECT_FIELD float width = 0.0f;
     };
 

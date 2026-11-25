@@ -12,7 +12,7 @@ namespace BECore::Tests {
 
         /// Every kind of element once, a table with each column type, and a nested container of each kind
         constexpr const char* kSampleXml = R"(
-<PanelAsset id="Sample" title="Sample" command="view.sample" open="true" width="640" height="320">
+<PanelAsset id="Sample" title="Sample" titleBind="files.title" command="view.sample" open="true" width="640" height="320">
   <sources>
     <source name="files" model="FileChangesPanelModel"/>
   </sources>
@@ -24,6 +24,9 @@ namespace BECore::Tests {
           <elements>
             <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" enableWhen="files.hasPending"/>
             <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
+            <element type="PanelCheckbox" id="errors" bind="files.showErrors" text="Errors" labelBind="files.errorsText" look="Toggle" style="Error"/>
+            <element type="PanelCombo" id="category" bind="files.category" items="files.categories" itemField="name" width="11"/>
+            <element type="PanelNumber" id="budget" bind="files.budget" text="ms" min="-1.5" max="100" step="0.25" slider="true" width="8"/>
           </elements>
         </element>
         <element type="PanelText" id="status" bind="files.status" style="Warning" wrap="true" mono="true" maxLines="12"/>
@@ -90,6 +93,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Write(*again), written);
         EXPECT_EQ(again->id, "Sample");
         EXPECT_TRUE(again->open);
+        EXPECT_EQ(again->titleBind, "files.title");
         EXPECT_FLOAT_EQ(again->width, 640.0f);
         ASSERT_EQ(again->sources.size(), 1u);
         EXPECT_EQ(again->sources[0].model, "FileChangesPanelModel");
@@ -101,10 +105,30 @@ namespace BECore::Tests {
         ASSERT_EQ(section->elements.size(), 8u);
         const auto* row = ElementAs<PanelRow>(section->elements[0]);
         ASSERT_NE(row, nullptr);
-        ASSERT_EQ(row->elements.size(), 2u);
+        ASSERT_EQ(row->elements.size(), 5u);
         const auto* input = ElementAs<PanelInput>(row->elements[1]);
         ASSERT_NE(input, nullptr);
         EXPECT_FLOAT_EQ(input->width, 12.5f);
+        const auto* checkbox = ElementAs<PanelCheckbox>(row->elements[2]);
+        ASSERT_NE(checkbox, nullptr);
+        EXPECT_EQ(checkbox->bind, "files.showErrors");
+        EXPECT_EQ(checkbox->text, "Errors");
+        EXPECT_EQ(checkbox->labelBind, "files.errorsText");
+        EXPECT_EQ(checkbox->look, PanelCheckLook::Toggle);
+        EXPECT_EQ(checkbox->style, PanelTextStyle::Error);
+        const auto* combo = ElementAs<PanelCombo>(row->elements[3]);
+        ASSERT_NE(combo, nullptr);
+        EXPECT_EQ(combo->items, "files.categories");
+        EXPECT_EQ(combo->itemField, "name");
+        EXPECT_FLOAT_EQ(combo->width, 11.0f);
+        const auto* number = ElementAs<PanelNumber>(row->elements[4]);
+        ASSERT_NE(number, nullptr);
+        EXPECT_EQ(number->text, "ms");
+        EXPECT_FLOAT_EQ(number->min, -1.5f);
+        EXPECT_FLOAT_EQ(number->max, 100.0f);
+        EXPECT_FLOAT_EQ(number->step, 0.25f);
+        EXPECT_TRUE(number->slider);
+        EXPECT_FLOAT_EQ(number->width, 8.0f);
         const auto* status = ElementAs<PanelText>(section->elements[1]);
         ASSERT_NE(status, nullptr);
         EXPECT_EQ(status->style, PanelTextStyle::Warning);
@@ -143,8 +167,8 @@ namespace BECore::Tests {
     }
 
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {
-        for (const char* name : {"PanelSection", "PanelRow", "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelButton", "PanelTable", "PanelSeparator", "PanelEmptyState", "PanelSlot",
-                                 "PanelChild", "PanelPopup"}) {
+        for (const char* name : {"PanelSection", "PanelRow", "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelCheckbox", "PanelCombo", "PanelNumber", "PanelButton", "PanelTable",
+                                 "PanelSeparator", "PanelEmptyState", "PanelSlot", "PanelChild", "PanelPopup"}) {
             const IntrusivePtr<PanelElement> element = AbstractFactory<PanelElement>::GetInstance().Create(StringView{name});
             ASSERT_NE(element, nullptr) << name;
             EXPECT_EQ(element->GetTypeMeta().typeName, StringView{name});

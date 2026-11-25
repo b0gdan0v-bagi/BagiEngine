@@ -286,6 +286,70 @@ namespace BECore::Tests {
         EXPECT_TRUE(HasIssue(issues, "c", "height must be from 0")) << Joined(issues);
     }
 
+    TEST(PanelAssetLoadTest, ControlsAreChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelCheckbox" id="a" bind="s.on" text="On"/>
+               <element type="PanelCheckbox" id="b" bind="s.on" labelBind="s.label" look="Toggle" style="Warning"/>
+               <element type="PanelCombo" id="c" bind="s.mode" width="11"/>
+               <element type="PanelCombo" id="d" bind="s.index" items="s.rows" itemField="name.text"/>
+               <element type="PanelNumber" id="e" bind="s.n"/>
+               <element type="PanelNumber" id="f" bind="s.n" text="ms" min="-5" max="5" step="0.5" slider="true" width="8"/>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelCheckbox" id="k" text="x"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelCheckbox" id="k" bind="s.on"/>)", "k", "needs 'text' or 'labelBind'");
+        ExpectSingleIssue(R"(<element type="PanelCheckbox" id="k" bind="s.on" labelBind="!s.l"/>)", "k", "'!' is allowed in a condition only");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" items="s.rows"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="rows"/>)", "k", "items: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" itemField="x"/>)", "k", "itemField needs items");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="s.rows" itemField="x["/>)", "k", "itemField: bad path");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" width="-1"/>)", "k", "width must be from 0");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" width="257"/>)", "k", "width must be from 0");
+    }
+
+    TEST(PanelAssetLoadTest, ANumberRangeIsOrderedFiniteAndBounded) {
+        const String limit = Format("{}", PanelAssetLimits::kMaxNumberExtent);
+        const auto number = [](StringView attributes) { return Format(R"(<element type="PanelNumber" id="k" bind="s.n" {}/>)", attributes); };
+
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(number(Format(R"(min="-{0}" max="{0}" step="{0}")", limit)))));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+        const PanelLoadResult unbounded = LoadPanelAsset(StringView(Wrap(number(R"(min="3" max="3")"))));
+        EXPECT_TRUE(unbounded.issues.empty()) << "min equal to max leaves a drag unbounded: " << Joined(unbounded.issues).c_str();
+
+        ExpectSingleIssue(number(R"(min="5" max="1")"), "k", "min must not be above max");
+        ExpectSingleIssue(number(R"(slider="true")"), "k", "a slider needs min below max");
+        ExpectSingleIssue(number(R"(slider="true" min="2" max="2")"), "k", "a slider needs min below max");
+        ExpectSingleIssue(number(R"(min="-2000000000" max="0")"), "k", "min and max must be from");
+        ExpectSingleIssue(number(R"(max="2000000000")"), "k", "min and max must be from");
+        ExpectSingleIssue(number(R"(step="-1")"), "k", "step must be from 0");
+        ExpectSingleIssue(number(R"(step="2000000000")"), "k", "step must be from 0");
+
+        // The reader refuses a text such as "nan", but an asset made in code goes through the validator alone
+        auto asset = New<PanelAsset>();
+        asset->id = "Test";
+        const auto made = New<PanelNumber>();
+        made->id = "k";
+        made->bind = "s.n";
+        made->min = std::numeric_limits<float>::quiet_NaN();
+        made->step = std::numeric_limits<float>::infinity();
+        asset->elements.push_back(made);
+        Vector<PanelIssue> issues;
+        ValidatePanelAsset(*asset, {}, issues);
+        EXPECT_TRUE(HasIssue(issues, "k", "min and max must be from")) << Joined(issues);
+        EXPECT_TRUE(HasIssue(issues, "k", "step must be from 0")) << Joined(issues);
+    }
+
+    TEST(PanelAssetLoadTest, TheTitleBindingIsChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(R"(<PanelAsset id="T" titleBind="console.title"><elements/></PanelAsset>)"));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        const PanelLoadResult bad = LoadPanelAsset(StringView(R"(<PanelAsset id="T" titleBind="console"><elements/></PanelAsset>)"));
+        EXPECT_TRUE(HasIssue(bad.issues, "T", "titleBind: expected 'source.path'")) << Joined(bad.issues);
+        const PanelLoadResult negated = LoadPanelAsset(StringView(R"(<PanelAsset id="T" titleBind="!console.title"><elements/></PanelAsset>)"));
+        EXPECT_TRUE(HasIssue(negated.issues, "T", "'!' is allowed in a condition only")) << Joined(negated.issues);
+    }
+
     TEST(PanelAssetLoadTest, APopupNeedsAConditionAndNeverNests) {
         ExpectSingleIssue(R"(<element type="PanelPopup" id="p"/>)", "p", "open is required");
         ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="a"/>)", "p", "open: expected 'source.path'");

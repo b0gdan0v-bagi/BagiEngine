@@ -27,6 +27,9 @@ namespace BECore::PanelAssetLimits {
     /// em of a child region's `width` and `height`: what a file may ask for
     inline constexpr float kMaxChildExtent = 256.0f;
 
+    /// What a number control may be asked for: `min`, `max` and `step` of a `PanelNumber` lie within plus and minus this
+    inline constexpr float kMaxNumberExtent = 1.0e9f;
+
     /// Popups of one asset; a popup is modal and none holds another
     inline constexpr size_t kMaxPopups = 8;
 

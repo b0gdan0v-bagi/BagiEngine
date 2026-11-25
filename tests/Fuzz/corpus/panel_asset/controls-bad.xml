@@ -1,0 +1,16 @@
+<PanelAsset id="ControlsBad" titleBind="files" command="view.controlsBad">
+  <elements>
+    <element type="PanelCheckbox" id="noBind" text="x"/>
+    <element type="PanelCheckbox" id="noLabel" bind="a.b"/>
+    <element type="PanelCheckbox" id="badLabel" bind="a.b" labelBind="!a.c"/>
+    <element type="PanelCombo" id="noBindCombo" items="a.b"/>
+    <element type="PanelCombo" id="fieldWithoutItems" bind="a.b" itemField="x"/>
+    <element type="PanelCombo" id="badField" bind="a.b" items="a.c" itemField="x["/>
+    <element type="PanelCombo" id="wide" bind="a.b" width="257"/>
+    <element type="PanelNumber" id="noBindNumber"/>
+    <element type="PanelNumber" id="inverted" bind="a.b" min="5" max="1"/>
+    <element type="PanelNumber" id="slider" bind="a.b" slider="true"/>
+    <element type="PanelNumber" id="huge" bind="a.b" min="-2e9" max="2e9" step="2e9"/>
+    <element type="PanelNumber" id="negativeStep" bind="a.b" step="-1" width="-1"/>
+  </elements>
+</PanelAsset>

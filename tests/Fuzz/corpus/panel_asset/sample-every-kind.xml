@@ -1,4 +1,4 @@
-<PanelAsset id="Sample" title="Sample" command="view.sample" open="true" width="640" height="320">
+<PanelAsset id="Sample" title="Sample" titleBind="files.title" command="view.sample" open="true" width="640" height="320">
   <sources>
     <source name="files" model="FileChangesPanelModel"/>
   </sources>
@@ -10,6 +10,9 @@
           <elements>
             <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" enableWhen="files.hasPending"/>
             <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
+            <element type="PanelCheckbox" id="errors" bind="files.showErrors" text="Errors" labelBind="files.errorsText" look="Toggle" style="Error"/>
+            <element type="PanelCombo" id="category" bind="files.category" items="files.categories" itemField="name" width="11"/>
+            <element type="PanelNumber" id="budget" bind="files.budget" text="ms" min="-1.5" max="100" step="0.25" slider="true" width="8"/>
           </elements>
         </element>
         <element type="PanelText" id="status" bind="files.status" style="Warning" wrap="true" mono="true"/>

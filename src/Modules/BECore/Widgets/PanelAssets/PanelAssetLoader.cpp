@@ -101,6 +101,7 @@ namespace BECore {
                 if (asset.width < 0.0f || asset.height < 0.0f) {
                     _issues.Add(where, "width and height must not be negative");
                 }
+                Binding(where, "titleBind", asset.titleBind, false);
                 if (asset.sources.size() > PanelAssetLimits::kMaxSources) {
                     _issues.Add(where, Format("more than {} sources", PanelAssetLimits::kMaxSources));
                 }
@@ -181,6 +182,16 @@ namespace BECore {
                     if (input->width < 0.0f) {
                         _issues.Add(where, "width must not be negative");
                     }
+                } else if (const auto* checkbox = element.Cast<PanelCheckbox>()) {
+                    Binding(where, "bind", checkbox->bind, true);
+                    Binding(where, "labelBind", checkbox->labelBind, false);
+                    if (checkbox->text.empty() && checkbox->labelBind.empty()) {
+                        _issues.Add(where, "a checkbox needs 'text' or 'labelBind'");
+                    }
+                } else if (const auto* combo = element.Cast<PanelCombo>()) {
+                    CheckCombo(*combo, where);
+                } else if (const auto* number = element.Cast<PanelNumber>()) {
+                    CheckNumber(*number, where);
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Command(where, "command", button->command);
                     Condition(where, "enableWhen", button->enableWhen);
@@ -198,6 +209,35 @@ namespace BECore {
                     Extent(where, "height", child->height);
                 } else if (const auto* popup = element.Cast<PanelPopup>()) {
                     CheckPopup(*popup, where);
+                }
+            }
+
+            void CheckCombo(const PanelCombo& combo, StringView where) {
+                Binding(where, "bind", combo.bind, true);
+                Binding(where, "items", combo.items, false);
+                if (combo.items.empty() && !combo.itemField.empty()) {
+                    _issues.Add(where, "itemField needs items");
+                }
+                RelativePath(where, "itemField", combo.itemField);
+                Extent(where, "width", combo.width);
+            }
+
+            void CheckNumber(const PanelNumber& number, StringView where) {
+                Binding(where, "bind", number.bind, true);
+                Extent(where, "width", number.width);
+                // Every limit is written as a comparison that a NaN fails
+                const auto inRange = [](float value, float lowest) { return value >= lowest && value <= PanelAssetLimits::kMaxNumberExtent; };
+                const bool minOk = inRange(number.min, -PanelAssetLimits::kMaxNumberExtent);
+                const bool maxOk = inRange(number.max, -PanelAssetLimits::kMaxNumberExtent);
+                if (!minOk || !maxOk) {
+                    _issues.Add(where, Format("min and max must be from -{} to {}", PanelAssetLimits::kMaxNumberExtent, PanelAssetLimits::kMaxNumberExtent));
+                } else if (number.min > number.max) {
+                    _issues.Add(where, "min must not be above max");
+                } else if (number.slider && !(number.min < number.max)) {
+                    _issues.Add(where, "a slider needs min below max");
+                }
+                if (!inRange(number.step, 0.0f)) {
+                    _issues.Add(where, Format("step must be from 0 to {}", PanelAssetLimits::kMaxNumberExtent));
                 }
             }
 
