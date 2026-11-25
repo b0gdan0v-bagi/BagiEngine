@@ -5,7 +5,9 @@ import contextlib
 import functools
 import io
 import json
+import os
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -287,6 +289,67 @@ class TargetTest(DeployTestCase):
         self.assertIn("--preset web-release", out)
         self.assertIn("--service bagi-web", out)
         self.assertFalse([line for line in out.splitlines() if line.startswith("target ")])
+
+
+class CommitsInPackageTest(DeployTestCase):
+    """package.py gets `--commit engine=<sha> --commit game=<sha>` when git answers for the project and its engine."""
+
+    def setUp(self):
+        super().setUp()
+        empty = Path(self._temp.name) / "empty.gitconfig"
+        empty.write_text("", encoding="utf-8")
+        environment = {"GIT_CONFIG_GLOBAL": str(empty), "GIT_CONFIG_SYSTEM": str(empty), "GIT_AUTHOR_NAME": "Tester",
+                       "GIT_AUTHOR_EMAIL": "tester@example.com", "GIT_COMMITTER_NAME": "Tester", "GIT_COMMITTER_EMAIL": "tester@example.com"}
+        patcher = unittest.mock.patch.dict(os.environ, environment)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def make_repository(folder: Path, name: str) -> str:
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_text(name, encoding="utf-8")
+        for command in (["init", "-q", "-b", "main"], ["add", name], ["commit", "-q", "-m", name]):
+            subprocess.run(["git", "-C", str(folder), *command], check=True, capture_output=True)
+        return subprocess.run(["git", "-C", str(folder), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+
+    def package_line(self) -> str:
+        code, out, err, _ = self.run_script("--dry-run")
+        self.assertEqual(code, 0, err)
+        return next(line for line in out.splitlines() if "package.py" in line)
+
+    def test_a_project_that_is_a_repository_names_its_commit_as_engine_and_as_game(self):
+        commit = self.make_repository(self.source, "a.txt")
+        line = self.package_line()
+        self.assertIn(f"--commit engine={commit} --commit game={commit}", line)
+
+    def test_the_commits_come_after_the_app_file_and_before_the_single_thread_switch(self):
+        self.make_repository(self.source, "a.txt")
+        (self.source / "web").mkdir()
+        (self.source / "web" / "app.json").write_text("{}", encoding="utf-8")
+        code, out, err, _ = self.run_script("--dry-run", "--single-thread")
+        self.assertEqual(code, 0, err)
+        line = next(line for line in out.splitlines() if "package.py" in line)
+        self.assertRegex(line, r"--app .* --commit engine=\w+ --commit game=\w+ --single-thread")
+
+    def test_a_game_with_the_engine_as_a_second_repository_names_two_different_commits(self):
+        game = self.make_repository(self.source, "game.txt")
+        engine = self.make_repository(self.source / "engine", "tools/web/package.py")
+        self.assertNotEqual(game, engine)
+        line = self.package_line()
+        self.assertIn(f"--commit engine={engine} --commit game={game}", line)
+
+    def test_a_folder_that_is_not_a_repository_adds_nothing(self):
+        self.assertNotIn("--commit", self.package_line())
+
+    def test_a_folder_inside_another_repository_is_not_named_by_that_repository(self):
+        self.make_repository(self.source, "a.txt")
+        inner = self.source / "inner"
+        inner.mkdir()
+        self.assertIsNone(build_and_deploy.head_commit(inner))
+
+    def test_a_repository_without_a_commit_adds_nothing(self):
+        subprocess.run(["git", "-C", str(self.source), "init", "-q", "-b", "main"], check=True, capture_output=True)
+        self.assertNotIn("--commit", self.package_line())
 
 
 class StatusFileTest(DeployTestCase):

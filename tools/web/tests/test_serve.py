@@ -429,6 +429,13 @@ class IsolationDecisionTest(unittest.TestCase):
                 self.write_manifest(text)
                 self.assertTrue(self.decide()[0])
 
+    def test_the_commits_of_package_py_do_not_change_the_decision(self):
+        for threads in ("true", "false"):
+            self.write_manifest(f'{{"game": "G", "threads": {threads}, "files": {{}}}}')
+            without = self.decide()
+            self.write_manifest(f'{{"game": "G", "threads": {threads}, "commits": {{"engine": "abc1234", "game": "def5678"}}, "files": {{}}}}')
+            self.assertEqual(self.decide(), without)
+
     def test_the_switches_win_over_the_manifest(self):
         self.write_manifest('{"threads": false}')
         on, reason = self.decide(["--cross-origin-isolation"])

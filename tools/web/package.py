@@ -4,6 +4,7 @@
     python tools/web/package.py build/web-release/bin dist --game BagiStress
     python tools/web/package.py build/web-release-single-thread/bin dist-single --single-thread
     python tools/web/package.py build/web-release/bin dist --app web/app.json
+    python tools/web/package.py build/web-release/bin dist --commit engine=0123abc --commit game=4567def
 
 The build folder holds <game>.html, <game>.js, <game>.wasm and, when the game has content, <game>.data (cmake/BagiWeb.cmake). A threaded
 build has no more files: emcc 4.0.23 starts its Web Workers from <game>.js itself (no <game>.worker.js). The
@@ -11,7 +12,8 @@ output folder gets the page as index.html, the other files under their own names
 a gzip copy and, when the `brotli` module can be imported, a brotli copy of every .html, .js, .wasm and .data next to the original
 (name.gz, name.br; serve.py picks them by Accept-Encoding) and manifest.json with `threads` (true for a threaded build, the default; false
 with --single-thread: serve.py sends the cross-origin isolation headers only to a threaded page) and the size and the SHA-256 of every
-file. A file of
+file. `--commit NAME=SHA` (repeatable) adds `commits` ({name: sha}) to it, the commits the build was made from, so a reader can
+tell an outdated page; without the option the key is absent. A file of
 an earlier run that this run does not make (another game's, a .data the game no longer has) is deleted from the output folder, so the
 folder holds what the manifest lists and nothing else of the kinds named here; other files in it are left alone.
 
@@ -39,6 +41,8 @@ from pathlib import Path
 INDEX_NAME = "index.html"
 MANIFEST_NAME = "manifest.json"
 PAGE_SUFFIX = ".html"
+COMMIT_NAME_PATTERN = re.compile(r"[a-z][a-z0-9-]*")
+COMMIT_SHA_PATTERN = re.compile(r"[0-9a-f]{7,64}")
 # The files of a build next to the page: the script and the module are always there, the package only when the game has content
 REQUIRED_SUFFIXES = (".js", ".wasm")
 OPTIONAL_SUFFIXES = (".data",)
@@ -266,13 +270,40 @@ def write_web_app(out_dir: Path, settings: dict) -> list[str]:
     return [WEB_MANIFEST_NAME, *written]
 
 
+def check_commits(commits: dict[str, str] | None) -> dict[str, str]:
+    """The `commits` of the manifest, checked before anything is written: names like `engine`, hex digests of 7 to 64 characters."""
+    checked = {}
+    for name, sha in (commits or {}).items():
+        if not COMMIT_NAME_PATTERN.fullmatch(name):
+            raise PackageError(f"--commit {name}={sha}: the name must be lower case letters, digits and '-', starting with a letter")
+        if not COMMIT_SHA_PATTERN.fullmatch(sha):
+            raise PackageError(f"--commit {name}={sha}: the commit must be 7 to 64 lower case hex digits")
+        checked[name] = sha
+    return checked
+
+
+def parse_commit_arguments(values: list[str]) -> dict[str, str]:
+    """`NAME=SHA` strings of the command line as a dict; a name given twice is an error."""
+    commits = {}
+    for value in values:
+        name, separator, sha = value.partition("=")
+        if not separator:
+            raise PackageError(f"--commit {value}: expected NAME=SHA")
+        if name in commits:
+            raise PackageError(f"--commit {name} is given twice")
+        commits[name] = sha
+    return commits
+
+
 def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_module="auto", threads: bool = True,
-            app_file: Path | None = None) -> dict:
+            app_file: Path | None = None, commits: dict[str, str] | None = None) -> dict:
     """Copies the build output into `out_dir` and returns the manifest (also written as manifest.json).
 
     `brotli_module` is the module used for the .br copies: "auto" imports `brotli` when it is installed, None leaves them out.
     `threads` says whether the build is threaded (the manifest's `threads`, which serve.py reads to decide on the isolation headers).
-    `app_file` is the game's web/app.json for the web app manifest and the icons (None: the defaults, generated icons)."""
+    `app_file` is the game's web/app.json for the web app manifest and the icons (None: the defaults, generated icons).
+    `commits` ({name: sha}) is written as the manifest's `commits`; None or empty leaves the key out, so an old manifest is unchanged."""
+    commits = check_commits(commits)
     if not build_dir.is_dir():
         raise PackageError(f"{build_dir} is not a folder")
     if brotli_module == "auto":
@@ -317,6 +348,8 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
         files[name] = {"size": target.stat().st_size, "sha256": sha256_of(target)}
 
     manifest = {"game": stem, "threads": threads, "files": files}
+    if commits:
+        manifest["commits"] = commits
     (out_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest
 
@@ -330,9 +363,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="the build is the single-thread page (web-*-single-thread): the manifest says threads: false and serve.py sends no COOP / COEP for it")
     parser.add_argument("--app", type=Path, metavar="FILE",
                         help="the game's web/app.json: name, short_name, orientation, colors and icons of the web app manifest (optional)")
+    parser.add_argument("--commit", action="append", default=[], metavar="NAME=SHA",
+                        help="a commit the build was made from (repeatable, e.g. engine=<sha>): written as `commits` into manifest.json")
     args = parser.parse_args(argv)
     try:
-        manifest = package(args.build_dir, args.out_dir, args.game, threads=not args.single_thread, app_file=args.app)
+        manifest = package(args.build_dir, args.out_dir, args.game, threads=not args.single_thread, app_file=args.app,
+                           commits=parse_commit_arguments(args.commit))
     except PackageError as error:
         print(f"package.py: {error}", file=sys.stderr)
         return 1

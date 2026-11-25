@@ -125,6 +125,28 @@ def output_folder(preset: str) -> Path:
     return Path("build") / preset / BIN_FOLDER
 
 
+def head_commit(folder: Path) -> str | None:
+    """HEAD of the repository whose top folder is `folder`; None when git does not answer, there is no commit yet, or `folder` only sits
+    inside another repository (a build folder in a temp folder of someone else's checkout must not name that checkout's commit)."""
+    try:
+        if alltests_results.git(folder, "rev-parse", "--show-cdup"):
+            return None
+        return alltests_results.git(folder, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+    except (alltests_results.GitError, OSError):
+        return None
+
+
+def commit_arguments(project: Path) -> list[str]:
+    """`--commit engine=<sha> --commit game=<sha>` for package.py: the engine is `<project>/engine` of a game, else the project itself."""
+    engine_dir = project / "engine" if (project / "engine" / "tools" / "web" / PACKAGE_SCRIPT).is_file() else project
+    arguments = []
+    for name, folder in (("engine", engine_dir), ("game", project)):
+        commit = head_commit(folder)
+        if commit:
+            arguments += ["--commit", f"{name}={commit}"]
+    return arguments
+
+
 def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_dir: Path, tools_dir: Path = TOOLS_DIR,
                   setup_sdk: Path | None = None) -> list[Step]:
     """The steps to run, in order. The staging between step 3 and the deploy is done by stage(). `tools_dir` holds package.py (the
@@ -135,6 +157,7 @@ def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_
     app_file = args.app or (source_dir / APP_FILE if (source_dir / APP_FILE).is_file() else None)
     if app_file:
         package_command += ["--app", str(app_file)]
+    package_command += commit_arguments(source_dir)
     if preset.endswith(SINGLE_THREAD_SUFFIX):
         # The manifest says threads: false, so serve.py (and the image) send no COOP / COEP for this page
         package_command.append("--single-thread")
