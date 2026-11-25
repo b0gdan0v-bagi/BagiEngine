@@ -22,13 +22,20 @@ namespace BECore {
     /// The same from any deserializer positioned at the root scope of a node (a cooked node file): the one place that builds a SceneNode from a reader
     IntrusivePtr<SceneNode> DeserializeNode(IDeserializer& deserializer, StringView what);
 
+    /// What AppendNodeElement leaves out; the default writes everything the tree holds
+    struct NodeWriteOptions {
+        /// Leaves out every generated descendant (SceneNode::IsGenerated()) with its subtree: the code that made it makes it again at the next load. The node given is always written
+        bool skipGenerated = false;
+    };
+
     /**
      * @brief Appends to @p parent the `<node>` element of @p node and, in `<children>`, of every node below it: the inline form of a scene file
      *
      * `name`, `layer`, `<components>` (each with its serialized fields) and `<children>`, the last two only when there are any; the order is
      * the tree's. `sourceRef` is not written (a node file link is the writer's business, BuildNodeReference). DeserializeNode reads it back.
+     * @p options says what is left out; `<children>` is written only when a child is written.
      */
-    void AppendNodeElement(pugi::xml_node parent, const SceneNode& node);
+    void AppendNodeElement(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options = {});
 
     /**
      * @brief Appends to @p nodesEl the `<node ref="..">` that stands for @p live: its node file and the smallest overrides

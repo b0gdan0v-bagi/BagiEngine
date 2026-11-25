@@ -145,7 +145,7 @@ namespace BECore {
         return DeserializeNode(deserializer, what);
     }
 
-    void AppendNodeElement(pugi::xml_node parent, const SceneNode& node) {
+    void AppendNodeElement(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options) {
         pugi::xml_node nodeEl = parent.append_child(kNodeElementName.data());
         nodeEl.append_attribute("name").set_value(node.GetName().CStr());
         if (node.GetLayer() != 0) {
@@ -170,11 +170,15 @@ namespace BECore {
             }
         }
 
-        if (!node.GetChildren().empty()) {
-            pugi::xml_node childrenEl = nodeEl.append_child("children");
-            for (const auto& child : node.GetChildren()) {
-                AppendNodeElement(childrenEl, *child);
+        pugi::xml_node childrenEl;
+        for (const auto& child : node.GetChildren()) {
+            if (options.skipGenerated && child->IsGenerated()) {
+                continue;
             }
+            if (!childrenEl) {
+                childrenEl = nodeEl.append_child("children");
+            }
+            AppendNodeElement(childrenEl, *child, options);
         }
     }
 
