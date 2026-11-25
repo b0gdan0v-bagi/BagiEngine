@@ -32,6 +32,12 @@
       type="AssetPanelWidget"
       asset="ConfigEditorPanel" />
     <widget
+      type="AssetPanelWidget"
+      asset="SceneEditorToolbarPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="SceneInspectorPanel" />
+    <widget
       type="SceneEditorWidget" />
     <widget
       type="AssetPanelWidget"

@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<PanelAsset id="SceneEditorToolbar" title="Scene Editor toolbar" open="true" window="Bar">
+  <sources>
+    <item name="scene" model="SceneEditorPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="saveRow">
+      <elements>
+        <element type="PanelButton" id="save" icon="save" text="Save" command="scene.save" enableWhen="scene.dirty" tooltip="Write the active scene back to its config file"/>
+        <element type="PanelText" id="unsaved" text="(unsaved changes)" style="Warning" visible="scene.dirty"/>
+      </elements>
+    </element>
+    <element type="PanelSeparator" id="saveLine"/>
+  </elements>
+</PanelAsset>

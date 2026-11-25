@@ -148,7 +148,8 @@ namespace BECore {
     /// A text field bound to a `String` field; `width` is in em, 0 fills the line. The field is written at every change. `focus` takes the keyboard focus on the frame the surrounding
     /// popup appears (so it is only for an input inside a popup); `submitCommand` runs when Enter is pressed in it, `commitCommand` when the user lets go of it after an edit; empty: none.
     /// `lines` > 0 makes it a multiline field that many lines high; Enter is a new line there, so it takes no `submitCommand`. `text` is the label after the field; with a `text`, or
-    /// with `fill` false, the field takes ImGui's default item width instead of filling the line (`width` still wins when set)
+    /// with `fill` false, the field takes ImGui's default item width instead of filling the line (`width` still wins when set). While `enableWhen` reads false it is drawn
+    /// disabled and writes nothing
     class PanelInput : public PanelElement {
         BE_CLASS(PanelInput)
     public:
@@ -162,6 +163,7 @@ namespace BECore {
         BE_REFLECT_FIELD uint32_t lines = 0;
         BE_REFLECT_FIELD String text;
         BE_REFLECT_FIELD bool fill = true;
+        BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
     };
 
     /// A bool field `bind` as a check box or, as `Toggle`, a button filled with the accent while on; the label is `text`, or the text of `labelBind` when that is set, after the glyph

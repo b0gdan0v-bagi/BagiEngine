@@ -8,6 +8,7 @@
 #include <BECore/Widgets/EditorDocuments.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/PanelAssets/PanelSlots.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/ISceneEditorHost.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
@@ -65,7 +66,8 @@ namespace BECore {
         void ResetUISelection();
 
         /**
-         * @brief Runs `scene.save` like the Save button (only with unsaved changes)
+         * @brief Runs `scene.save` (only with unsaved changes, so the Save button's command does nothing while it is disabled) and `sceneEditor.addComponent`
+         * (asks for the Add Component dialog of the selected node, when it is alive and not locked)
          */
         void OnCommand(const EditorCommandEvent& event);
 
@@ -112,10 +114,9 @@ namespace BECore {
         /// `SceneDialogsModel` by SceneAddNodeRequestEvent)
         void ApplyHierarchyAnswers(Scene& scene);
 
-        /**
-         * @brief Render the inspector panel for the selected node
-         */
-        void RenderInspector();
+        /// The slot `sceneComponents` of the inspector bar: the components of the selected node with their remove buttons, the "UI elements" section and the
+        /// inspectors, disabled for a locked node. Drawn directly when no inspector bar is registered, so a game without its asset line keeps the component list
+        void DrawComponents();
 
         /**
          * @brief Replace the `<scene>` of the active scene in SceneConfig.xml (WriteSceneToConfig) and save the file
@@ -149,6 +150,7 @@ namespace BECore {
 
         EditorDocumentsHandle _documents;   // the source of `editor_state`, ends with the widget
         SceneEditorHostHandle _hostHandle;  // ends with the widget, so a model never reaches a dead one
+        PanelSlotHandle _componentsSlot;    // the same for the inspector bar's slot
     };
 
 }  // namespace BECore

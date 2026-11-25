@@ -338,6 +338,7 @@ namespace BECore {
                     prepared.bind = PrepareBinding(input.bind, BindingForm::Field);
                     prepared.glyph = GlyphOf(input.icon);
                     prepared.hint = HintOf(prepared.glyph, input.hint);
+                    prepared.enableWhen = PrepareCondition(input.enableWhen);
                     break;
                 }
                 case PreparedKind::Checkbox: {
@@ -936,6 +937,7 @@ namespace BECore {
         // A label after the field needs room on the line, so a field with one takes ImGui's default width (0) as one with `fill` false does
         const bool fills = input.fill && input.text.empty();
         const float width = input.width > 0.0f ? input.width * ImGui::GetFontSize() : (fills ? kFillWidth : 0.0f);
+        ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
         bool result = false;
         if (input.lines > 0) {
             FillInputBuffer(shown);
@@ -958,6 +960,7 @@ namespace BECore {
         }
         ElementTooltip(prepared);
         DrawTrailingText(input.text);
+        ImGui::EndDisabled();
     }
 
     void PanelInterpreter::DrawField(const PreparedElement& prepared, bool openCompound) {

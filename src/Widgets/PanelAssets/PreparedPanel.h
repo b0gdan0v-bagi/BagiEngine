@@ -43,7 +43,7 @@ namespace BECore {
         const PanelElement* element = nullptr;
         PreparedKind kind = PreparedKind::Unknown;
         PreparedCondition visible;
-        /// The `enableWhen` of a button, a dropdown, a menu, a menu item, a checkbox, a combo, a number or a radio
+        /// The `enableWhen` of a button, a dropdown, a menu, a menu item, an input, a checkbox, a combo, a number or a radio
         PreparedCondition enableWhen;
         /// A button's `fillWhen`
         PreparedCondition fillWhen;

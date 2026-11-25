@@ -27,6 +27,7 @@ namespace BECore {
                 {kViewResetLayout, "Reset Layout", std::nullopt, true},
                 {kViewSaveLayout, "Save Layout As", std::nullopt, true},
                 {kSceneSave, "Save Scene", kCtrlS, true},
+                {kSceneEditorAddComponent, "Add Component", std::nullopt, false},
                 {kConfigSave, "Save Config", kCtrlShiftS, true},
                 {kTextureSave, "Save Texture", std::nullopt, true},
                 {kGamePlay, "Play / Stop Game", std::nullopt, true},

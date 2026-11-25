@@ -243,7 +243,9 @@ namespace BECore::Fuzz {
                     Text(input->submitCommand);
                     Text(input->commitCommand);
                     Text(input->text);
+                    Text(input->enableWhen);
                     Binding(input->bind, true);
+                    Condition(input->enableWhen);
                     if (input->focus && _popupDepth == 0) {
                         Fail();
                     }

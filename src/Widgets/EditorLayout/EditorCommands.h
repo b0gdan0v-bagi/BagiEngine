@@ -43,6 +43,8 @@ namespace BECore {
         inline constexpr auto kViewResetLayout = "view.resetLayout"_intern;
         inline constexpr auto kViewSaveLayout = "view.saveLayout"_intern;
         inline constexpr auto kSceneSave = "scene.save"_intern;
+        /// The inspector's Add Component button: `SceneEditorWidget` asks for the Add Component dialog of the selected node (a locked one gets none)
+        inline constexpr auto kSceneEditorAddComponent = "sceneEditor.addComponent"_intern;
         inline constexpr auto kConfigSave = "config.save"_intern;
         inline constexpr auto kTextureSave = "texture.save"_intern;
         /// Play / Stop of the main toolbar: `EditorPlayModel::PressPlay`, then the pause of the model is written to the engine (state only until `editor-play-in-editor`)

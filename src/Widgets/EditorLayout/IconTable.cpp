@@ -45,6 +45,7 @@ namespace BECore {
             {"layout-dashboard", ICON_LC_LAYOUT_DASHBOARD},
             {"layout-grid", ICON_LC_LAYOUT_GRID},
             {"list", ICON_LC_LIST},
+            {"lock", ICON_LC_LOCK},
             {"magnet", ICON_LC_MAGNET},
             {"maximize", ICON_LC_MAXIMIZE},
             {"monitor", ICON_LC_MONITOR},

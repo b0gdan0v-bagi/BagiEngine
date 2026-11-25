@@ -198,6 +198,7 @@ namespace BECore {
                     }
                     OptionalCommand(where, "submitCommand", input->submitCommand);
                     OptionalCommand(where, "commitCommand", input->commitCommand);
+                    Condition(where, "enableWhen", input->enableWhen);
                     if (input->focus && _popupDepth == 0) {
                         _issues.Add(where, "focus is for an input inside a popup");
                     }

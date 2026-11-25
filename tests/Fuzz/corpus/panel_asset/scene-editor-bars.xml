@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<PanelAsset id="SceneEditorBars" title="Scene Editor bars" open="true" window="Bar">
+  <sources>
+    <item name="scene" model="SceneEditorPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="saveRow">
+      <elements>
+        <element type="PanelButton" id="save" icon="save" text="Save" command="scene.save" enableWhen="scene.dirty" tooltip="Write the active scene back to its config file"/>
+        <element type="PanelText" id="unsaved" text="(unsaved changes)" style="Warning" visible="scene.dirty"/>
+      </elements>
+    </element>
+    <element type="PanelSeparator" id="saveLine"/>
+    <element type="PanelText" id="title" text="Inspector"/>
+    <element type="PanelSeparator" id="titleLine"/>
+    <element type="PanelEmptyState" id="noSelection" icon="mouse-pointer-click" text="Select a node to inspect" visible="!scene.hasSelection"/>
+    <element type="PanelText" id="multiSelection" bind="scene.multiText" style="Disabled" visible="scene.multiSelection"/>
+    <element type="PanelText" id="locked" icon="lock" text="Locked in the editor" style="Disabled" visible="scene.locked"/>
+    <element type="PanelRow" id="nameRow" visible="scene.hasSelection">
+      <elements>
+        <element type="PanelText" id="nameLabel" text="Name:"/>
+        <element type="PanelInput" id="node_name" bind="scene.name" fill="false" enableWhen="!scene.locked"/>
+      </elements>
+    </element>
+    <element type="PanelRow" id="layerRow" visible="scene.hasSelection">
+      <elements>
+        <element type="PanelText" id="layerLabel" text="Layer:"/>
+        <element type="PanelNumber" id="node_layer" bind="scene.layer" stepper="true" step="1" stepFast="100" enableWhen="!scene.locked"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="instance" bind="scene.instanceText" style="Disabled" visible="scene.isInstance"/>
+    <element type="PanelSeparator" id="componentsLine" visible="scene.hasSelection"/>
+    <element type="PanelText" id="componentsTitle" text="Components" visible="scene.hasSelection"/>
+    <element type="PanelSlot" id="components" name="sceneComponents" visible="scene.hasSelection"/>
+    <element type="PanelSeparator" id="addLine" visible="scene.hasSelection"/>
+    <element type="PanelButton" id="addComponent" icon="circle-plus" text="Add Component" width="-1" command="sceneEditor.addComponent" enableWhen="!scene.locked" visible="scene.hasSelection" tooltip="Add a component to the selected node"/>
+  </elements>
+</PanelAsset>
