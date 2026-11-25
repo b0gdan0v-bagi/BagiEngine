@@ -321,19 +321,38 @@ namespace BECore {
             return;
         }
 
+        _currentExtent = _swapchain.GetExtent();  // what GetOutputWidth() answers before the first pass of the frame opens
         _frameAcquired = true;
     }
 
-    void VulkanRendererBackend::BeginFrame() {
-        Flush();  // quads of an earlier pass never land in this one
+    void VulkanRendererBackend::BeginFrame(const Color& clearColor) {
+        Flush();  // quads of the frame before never land in this one
+        _frameClearColor = ToClearValue(clearColor);
+        _frameClearColorSet = true;
+    }
+
+    bool VulkanRendererBackend::EnsureDrawPass() {
+        if (_inSwapchainPass || _inOffscreenPass) {
+            return true;
+        }
+        if (!_frameAcquired) {
+            return false;
+        }
+        OpenSwapchainPass();
+        return _inSwapchainPass;
+    }
+
+    void VulkanRendererBackend::OpenSwapchainPass() {
         if (!_frameAcquired || _inSwapchainPass) {
             return;
         }
 
         VkCommandBuffer cmd = _commandBuffers[_currentFrame];
 
+        // The slot is taken either way: a Clear() made for the swapchain pass must not tint a later offscreen one
+        const VkClearColorValue slotColor = _clearColor.Take();
         VkClearValue clearValue{};
-        clearValue.color = _clearColor.Take();
+        clearValue.color = _frameClearColorSet ? _frameClearColor : slotColor;
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType       = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -450,22 +469,28 @@ namespace BECore {
         return true;
     }
 
-    void VulkanRendererBackend::Clear(const Color& color) {
+    VkClearColorValue VulkanRendererBackend::ToClearValue(const Color& color) const {
         constexpr float kChannelScale = 1.0f / 255.0f;
         const auto channel = [this](uint8_t value) {
             const float srgb = static_cast<float>(value) * kChannelScale;
             return _linearColors ? SrgbToLinear(srgb) : srgb;
         };
-        _clearColor.Set({{channel(color.r), channel(color.g), channel(color.b), static_cast<float>(color.a) * kChannelScale}});
+        return {{channel(color.r), channel(color.g), channel(color.b), static_cast<float>(color.a) * kChannelScale}};
+    }
+
+    void VulkanRendererBackend::Clear(const Color& color) {
+        _clearColor.Set(ToClearValue(color));
     }
 
     void VulkanRendererBackend::Present() {
         BE_PROFILE_SCOPE("Vulkan::Present");
         Flush();
-        // A frame that was acquired but never begun still owns a signaled semaphore: it is submitted with an empty pass
+        // A frame that was acquired but nothing drew into the back buffer still owns a signaled semaphore: it is submitted with an empty pass,
+        // which also clears it to the colour of BeginFrame()
         if (_frameAcquired && !_inSwapchainPass && !_inOffscreenPass) {
-            BeginFrame();
+            OpenSwapchainPass();
         }
+        _frameClearColorSet = false;
         EndFrame();
 
         // A skipped frame (minimized, swapchain out of date) acquired no image and submitted nothing: there is
@@ -554,7 +579,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
-        if (!_inSwapchainPass && !_inOffscreenPass) {
+        if (!EnsureDrawPass()) {
             return;
         }
         WarnIfBlendModeIgnored(GetBlendMode());
@@ -572,7 +597,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) {
-        if (!_inSwapchainPass && !_inOffscreenPass) {
+        if (!EnsureDrawPass()) {
             return;
         }
         WarnIfBlendModeIgnored(GetBlendMode());
@@ -643,7 +668,7 @@ namespace BECore {
 
     void VulkanRendererBackend::SubmitBatch(const RenderBatch& batch) {
         // A skipped frame has no pass: the batch is dropped like every other draw of it
-        if (!_inSwapchainPass && !_inOffscreenPass) {
+        if (!EnsureDrawPass()) {
             return;
         }
         WarnIfBlendModeIgnored(batch.blend);
@@ -663,7 +688,7 @@ namespace BECore {
 
     void VulkanRendererBackend::DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) {
         Flush();  // not batched, so the quads before it are drawn first
-        if (!_inSwapchainPass && !_inOffscreenPass) {
+        if (!EnsureDrawPass()) {
             return;
         }
         WarnIfBlendModeIgnored(GetBlendMode());
@@ -828,6 +853,7 @@ namespace BECore {
 
         _inOffscreenPass   = false;
         _lastOffscreenImage = VK_NULL_HANDLE;
+        _currentExtent     = _swapchain.GetExtent();  // the output size is the back buffer's again, also before its pass opens
     }
 
     void VulkanRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
@@ -839,7 +865,8 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::OnRenderClear() {
-        BeginFrame();
+        Flush();
+        OpenSwapchainPass();
     }
 
     void VulkanRendererBackend::OnRenderPresent() {
@@ -907,7 +934,11 @@ namespace BECore {
     void VulkanRendererBackend::OnImGuiRender() {
         BE_PROFILE_SCOPE("Vulkan::ImGuiRender");
         Flush();  // ImGui's commands follow what the scene drew
-        // Only into an open swapchain pass: a skipped frame has no command buffer to record into
+        // The ImGui draw is the first thing into the back buffer in a frame with nothing else drawn. A skipped frame has no command buffer
+        // to record into, and an open offscreen pass is not the back buffer.
+        if (_frameAcquired && !_inSwapchainPass && !_inOffscreenPass) {
+            OpenSwapchainPass();
+        }
         if (!_inSwapchainPass) {
             return;
         }

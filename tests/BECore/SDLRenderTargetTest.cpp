@@ -142,6 +142,39 @@ namespace BECore::Tests {
         EXPECT_EQ(PixelAt(image, kInside, kInside), AsPixel(kBackground)) << "the back buffer keeps the colour of its own Clear()";
     }
 
+    TEST_F(SDLRenderTargetTest, BeginFrameFillsTheWholeBackBuffer) {
+        renderer->BeginFrame(kGreen);
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, kInside, kInside), AsPixel(kGreen));
+        EXPECT_EQ(PixelAt(image, static_cast<float>(image.width - 1), static_cast<float>(image.height - 1)), AsPixel(kGreen));
+    }
+
+    TEST_F(SDLRenderTargetTest, InsideAFrameClearOnlyNamesTheColourOfTheNextTarget) {
+        const auto target = renderer->CreateRenderTarget(kTargetSize, kTargetSize);
+        ASSERT_TRUE(target);
+
+        renderer->BeginFrame(kGreen);
+        renderer->Clear(kBackground);
+        renderer->SetRenderTarget(target.Get());
+        renderer->UnsetRenderTarget();
+        Show(target, kShownAtX, kShownAtY);
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, kInside, kInside), AsPixel(kGreen)) << "the Clear() of the target covered the frame colour";
+        EXPECT_EQ(PixelAt(image, kShownAtX + kInside, kShownAtY + kInside), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLRenderTargetTest, ClearFillsTheBackBufferAgainOnceTheFrameIsPresented) {
+        renderer->BeginFrame(kGreen);
+        renderer->Present();
+
+        renderer->Clear(kRed);
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, kInside, kInside), AsPixel(kRed));
+    }
+
     TEST_F(SDLRenderTargetTest, OutputSizeIsTheTargetsBetweenSetAndUnset) {
         const auto target = renderer->CreateRenderTarget(64, 32);
         ASSERT_TRUE(target);
