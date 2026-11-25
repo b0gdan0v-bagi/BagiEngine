@@ -141,7 +141,7 @@ def test_json_has_the_documented_shape(repo, capsys):
     point = merge_entry(repo, "first", BREAKING)
     data = report(capsys, repo, "--since", point)
     assert set(data) == {"since", "kind", "commit", "log_starts", "before_the_log", "breaking", "entries"}
-    assert set(data["entries"][0]) == {"version", "title", "entry", "date", "bump", "content_version", "added", "changed", "breaking", "migration"}
+    assert set(data["entries"][0]) == {"version", "title", "entry", "merge", "date", "bump", "content_version", "added", "changed", "breaking", "migration"}
 
 
 def test_a_bad_point_is_an_error(repo, capsys):

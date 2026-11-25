@@ -308,3 +308,47 @@ def test_check_still_refuses_a_repeated_number_and_a_header_below_the_highest(tr
     problems = tree.check()
     assert any("is also the version of" in problem for problem in problems)
     assert any("the highest fragment is 0.1.5" in problem for problem in problems)
+
+
+def test_a_later_merge_of_an_entry_is_a_fragment_of_its_own(tree, capsys):
+    tree.with_baseline()
+    assert tree.add(draft_text("sliced"), "minor") == 0
+    capsys.readouterr()
+    assert changelog.main(["key", "--root", str(tree.root), "--entry", "sliced"]) == 0
+    assert capsys.readouterr().out.strip() == "sliced@2"
+    assert tree.add(draft_text("sliced", "Slices 3-4", "## Breaking\n- Gone. Adapt: use the new one.\n"), "minor") == 1
+    assert "`- Merge: 2`" in capsys.readouterr().err
+    assert tree.add(draft_text("sliced", "Slices 3-4", extra="- Merge: 2\n"), "patch") == 0
+    stored = tree.fragment_file("sliced@2").read_text(encoding="utf-8")
+    assert "- Entry: sliced\n- Merge: 2\n" in stored
+    capsys.readouterr()
+    assert tree.header() == (0, 2, 1) and tree.check() == []
+    assert "Entry: `sliced`. Merge: 2. Bump: patch." in (tree.root / changelog.CHANGELOG_FILE).read_text(encoding="utf-8")
+    assert changelog.main(["key", "--root", str(tree.root), "--entry", "sliced"]) == 0
+    assert capsys.readouterr().out.strip() == "sliced@3"
+    assert changelog.main(["key", "--root", str(tree.root), "--entry", "fresh"]) == 0
+    assert capsys.readouterr().out.strip() == "fresh"
+
+
+@pytest.mark.parametrize("merge, message", [("3", "`sliced@2`"), ("1", "from 2"), ("02", "from 2"), ("x", "from 2")])
+def test_a_merge_line_must_be_the_next_merge(tree, capsys, merge, message):
+    tree.with_baseline()
+    assert tree.add(draft_text("sliced"), "patch") == 0
+    capsys.readouterr()
+    assert tree.add(draft_text("sliced", extra=f"- Merge: {merge}\n"), "patch") == 1
+    assert message in capsys.readouterr().err
+    assert not tree.fragment_file("sliced@3").exists()
+
+
+def test_a_first_merge_with_a_merge_line_is_refused(tree, capsys):
+    tree.with_baseline()
+    assert tree.add(draft_text("new", extra="- Merge: 2\n"), "patch") == 1
+    assert "`new` (`changelog.py key`)" in capsys.readouterr().err
+
+
+def test_check_wants_a_later_merge_named_after_its_key(tree):
+    tree.with_baseline()
+    assert tree.add(draft_text("sliced"), "patch") == 0
+    assert tree.add(draft_text("sliced", extra="- Merge: 2\n"), "patch") == 0
+    tree.fragment_file("sliced@2").rename(tree.fragment_file("sliced-2"))
+    assert any("`sliced@2.md`" in problem for problem in tree.check())
