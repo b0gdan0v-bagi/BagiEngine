@@ -44,6 +44,10 @@ namespace BECore {
         return !text.empty() && (StringView{label} == text || VisiblePart(label) == text);
     }
 
+    bool ImGuiItemRecord::MatchesWindow(StringView text) const {
+        return !text.empty() && (StringView{window} == text || VisiblePart(window) == text);
+    }
+
     ImGuiItemIndex::~ImGuiItemIndex() {
         Disarm();
     }

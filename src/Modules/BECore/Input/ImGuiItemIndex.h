@@ -33,6 +33,9 @@ namespace BECore {
 
         /// Whether `text` (not empty) is the whole label or its part before the first `##`
         [[nodiscard]] bool MatchesLabel(StringView text) const;
+
+        /// Whether `text` (not empty) is the whole name of the window of this record or its part before the first `##`
+        [[nodiscard]] bool MatchesWindow(StringView text) const;
     };
 
     /**
