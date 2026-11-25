@@ -85,6 +85,17 @@ namespace BECore {
         inline constexpr auto kViewGame = "view.game"_intern;
         /// Shows and hides the Generate panel (art generation). ArtGenWidget owns the action
         inline constexpr auto kViewGenerate = "view.generate"_intern;
+        /// The Generate panel's buttons (config/panels/GeneratePanel.xml names them). ArtGenPanelModel owns them and runs them only while its panel is open.
+        /// Each takes a literal argument that names the action (ArtGenPanelArgs in ArtGenPanelModel.h) and does nothing for any other text, except listen
+        /// (play or stop the processed preview) and saveAsOpened (the open command of the Save-as dropdown, which carries none)
+        inline constexpr auto kArtGenService = "artgen.service"_intern;
+        inline constexpr auto kArtGenSetup = "artgen.setup"_intern;
+        inline constexpr auto kArtGenPreset = "artgen.preset"_intern;
+        inline constexpr auto kArtGenSaveAsOpened = "artgen.saveAsOpened"_intern;
+        inline constexpr auto kArtGenReference = "artgen.reference"_intern;
+        inline constexpr auto kArtGenRun = "artgen.run"_intern;
+        inline constexpr auto kArtGenAccept = "artgen.accept"_intern;
+        inline constexpr auto kArtGenListen = "artgen.listen"_intern;
         /// Show and hide the always-present panels; each panel owns its command. No default chord
         inline constexpr auto kViewSceneEditor = "view.sceneEditor"_intern;
         inline constexpr auto kViewConfigEditor = "view.configEditor"_intern;
