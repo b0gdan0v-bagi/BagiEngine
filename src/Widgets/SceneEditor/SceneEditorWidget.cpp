@@ -438,10 +438,6 @@ namespace BECore {
             ImGui::TextDisabled("Instance of %s", _hierarchy.selected->GetSourceRef().CStr());
         }
 
-        ImGui::TextUnformatted("Entity:");
-        ImGui::SameLine();
-        ImGui::Text("#%u", static_cast<unsigned int>(_hierarchy.selected->GetEntity()));
-
         ImGui::Separator();
         ImGui::TextUnformatted("Components");
 

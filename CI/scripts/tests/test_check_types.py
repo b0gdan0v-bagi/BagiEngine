@@ -209,7 +209,7 @@ def test_the_type_layer_and_the_format_layer_are_skipped_but_their_tests_are_not
 @pytest.mark.parametrize(
     "relative",
     [
-        "src/Modules/EnTT/x.h",
+        "src/Modules/tracy/x.h",
         "src/Modules/fmt/x.h",
         "external/lib/x.cpp",
         "build/x.cpp",

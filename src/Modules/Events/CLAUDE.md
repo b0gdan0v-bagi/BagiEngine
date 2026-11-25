@@ -2,7 +2,7 @@
 
 ## Overview
 
-Every event type has its own channel of listeners and its own queue (CRTP `EventBase<T>`), so there is no central bus to register with. The channel (`EventChannel.h`, header-only because `BECoreModule` emits events without linking `EventsModule`) is a type-erased list of (instance, invoker) pairs; no EnTT is involved.
+Every event type has its own channel of listeners and its own queue (CRTP `EventBase<T>`), so there is no central bus to register with. The channel (`EventChannel.h`, header-only because `BECoreModule` emits events without linking `EventsModule`) is a type-erased list of (instance, invoker) pairs.
 
 **Delivery rules** (pinned by `EventDispatchSemanticsTest` and `EventChannelTest`):
 - `Emit` calls the listeners from the **last subscribed to the first**, over the count at its start: a listener subscribed by a handler is called from the next `Emit`. A nested `Emit` is delivered at once.

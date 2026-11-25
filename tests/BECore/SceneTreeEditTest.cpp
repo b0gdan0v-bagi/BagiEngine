@@ -7,7 +7,6 @@
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
-#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -116,19 +115,16 @@ namespace BECore::Tests {
 
         EXPECT_EQ(Tree(), "B1 B1a. A B B2. C");
         EXPECT_EQ(Node("B1a").GetParent(), &Node("B1"));
-        EXPECT_TRUE(_scene->GetRegistry().valid(Node("B1a").GetEntity()));
     }
 
-    TEST_F(SceneTreeEditTest, AMoveKeepsTheEntityAndDoesNotAttachAgain) {
+    TEST_F(SceneTreeEditTest, AMoveDoesNotAttachAgain) {
         SceneNode& a = Node("A");
-        const entt::entity entity = a.GetEntity();
         const auto counter = a.GetComponent<SceneEventCounter>();
         ASSERT_TRUE(counter);
 
         ASSERT_TRUE(_scene->MoveNode(a, &Node("B")));
         _manager->UpdateAll();
 
-        EXPECT_EQ(a.GetEntity(), entity);
         EXPECT_EQ(counter->updateCount, 1);
         EXPECT_EQ(&counter->GetNode(), &a);
     }
@@ -157,6 +153,23 @@ namespace BECore::Tests {
 
         EXPECT_EQ(Tree(), before);
         EXPECT_EQ(TreeOf(other.GetRootNode()), otherBefore);
+    }
+
+    TEST_F(SceneTreeEditTest, ARemovedSubtreeAndWhatIsMadeUnderItAreNotLive) {
+        SceneNode& removed = Node("B");
+        SceneNode& removedChild = Node("B1");
+        const IntrusivePtr<SceneNode> removedHolder(&removed);
+        _scene->GetRootNode().RemoveChild(&removed);
+        const IntrusivePtr<SceneNode> madeUnder = removed.AddChild("Late"_intern);
+        const String before = Tree();
+
+        EXPECT_FALSE(_scene->MoveNode(removed, nullptr));
+        EXPECT_FALSE(_scene->MoveNode(removedChild, nullptr));
+        EXPECT_FALSE(_scene->MoveNode(*madeUnder, nullptr));
+        EXPECT_FALSE(_scene->MoveNode(Node("A"), &removed));
+        EXPECT_FALSE(_scene->DuplicateNode(removedChild));
+        EXPECT_FALSE(_scene->DuplicateNode(*madeUnder));
+        EXPECT_EQ(Tree(), before);
     }
 
     TEST_F(SceneTreeEditTest, TheDrawRankFollowsAMove) {
@@ -193,8 +206,7 @@ namespace BECore::Tests {
         const IntrusivePtr<SceneNode> copy = _scene->DuplicateNode(a);
 
         ASSERT_TRUE(copy);
-        EXPECT_TRUE(_scene->GetRegistry().valid(copy->GetEntity()));
-        EXPECT_NE(copy->GetEntity(), a.GetEntity());
+        EXPECT_NE(copy.Get(), &a);
         ASSERT_EQ(copy->GetComponents().size(), a.GetComponents().size());
         for (const auto& component : copy->GetComponents()) {
             EXPECT_EQ(&component->GetNode(), copy.Get());
@@ -213,6 +225,7 @@ namespace BECore::Tests {
         copy->SetLayer(7);
         EXPECT_FLOAT_EQ(Require(a.GetComponent<TransformComponent>())._x, kOriginalX);
         EXPECT_EQ(a.GetLayer(), 0);
+        EXPECT_TRUE(_scene->MoveNode(*copy, nullptr));
     }
 
     TEST_F(SceneTreeEditTest, TheNameOfADuplicateIsFreeAmongTheSiblings) {

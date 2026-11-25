@@ -11,7 +11,6 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Generated/SceneDrawSystemTest.gen.hpp>
-#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -71,13 +70,22 @@ namespace BECore::Tests {
             return ids;
         }
 
-        /// The names of the nodes in the order of the view over SceneDrawItem, which is the order Draw() calls OnDraw().
+        /// The names of the nodes in the order of SceneDrawList::items, which is the order Draw() calls OnDraw().
         Vector<PoolString> ViewNames(Scene& scene) {
             Vector<PoolString> names;
-            for (const auto [entity, item] : scene.GetRegistry().view<SceneDrawItem>().each()) {
+            for (const SceneDrawItem& item : scene.GetDrawList().items) {
                 names.push_back(item.node->GetName());
             }
             return names;
+        }
+
+        const SceneDrawItem* FindItem(const Scene& scene, const SceneNode& node) {
+            for (const SceneDrawItem& item : scene.GetDrawList().items) {
+                if (item.node == &node) {
+                    return &item;
+                }
+            }
+            return nullptr;
         }
 
         void CollectNodes(SceneNode& node, Vector<SceneNode*>& nodes) {
@@ -144,16 +152,13 @@ namespace BECore::Tests {
         Vector<SceneNode*> nodes;
         CollectNodes(_scene->GetRootNode(), nodes);
         ASSERT_EQ(nodes.size(), 4u);
-        auto& registry = _scene->GetRegistry();
-        EXPECT_EQ(registry.view<SceneDrawItem>().size(), nodes.size());
+        EXPECT_EQ(_scene->GetDrawList().items.size(), nodes.size());
         for (size_t index = 0; index < nodes.size(); ++index) {
             const SceneNode& node = *nodes[index];
-            ASSERT_TRUE(registry.valid(node.GetEntity())) << node.GetName().CStr();
-            ASSERT_TRUE(registry.all_of<SceneDrawItem>(node.GetEntity())) << node.GetName().CStr();
-            const SceneDrawItem& item = registry.get<SceneDrawItem>(node.GetEntity());
-            EXPECT_EQ(item.node, &node) << node.GetName().CStr();
-            EXPECT_EQ(item.layer, node.GetLayer()) << node.GetName().CStr();
-            EXPECT_EQ(item.order, static_cast<uint32_t>(index)) << node.GetName().CStr();
+            const SceneDrawItem* item = FindItem(*_scene, node);
+            ASSERT_NE(item, nullptr) << node.GetName().CStr();
+            EXPECT_EQ(item->layer, node.GetLayer()) << node.GetName().CStr();
+            EXPECT_EQ(item->order, static_cast<uint32_t>(index)) << node.GetName().CStr();
         }
     }
 
@@ -194,36 +199,31 @@ namespace BECore::Tests {
 
         a->SetLayer(-1);
         EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, 3.0f}));
-        EXPECT_EQ(_scene->GetRegistry().get<SceneDrawItem>(a->GetEntity()).layer, -1);
+        const SceneDrawItem* item = FindItem(*_scene, *a);
+        ASSERT_NE(item, nullptr);
+        EXPECT_EQ(item->layer, -1);
     }
 
-    TEST_F(SceneDrawSystemTest, RemovingANodeDestroysTheEntitiesOfItsWholeSubtree) {
+    TEST_F(SceneDrawSystemTest, RemovingANodeDropsItsWholeSubtreeFromTheDrawOrder) {
         auto removed = AddQuad(*_scene, nullptr, "Removed", 1.0f);
         auto child = AddQuad(*_scene, removed.Get(), "Child", 2.0f);
         auto grandChild = AddQuad(*_scene, child.Get(), "GrandChild", 3.0f);
-        auto kept = AddQuad(*_scene, nullptr, "Kept", 4.0f);
+        AddQuad(*_scene, nullptr, "Kept", 4.0f);
         EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, 3.0f, 4.0f}));
-
-        auto& registry = _scene->GetRegistry();
-        const entt::entity removedEntities[] = {removed->GetEntity(), child->GetEntity(), grandChild->GetEntity()};
-        for (const entt::entity entity : removedEntities) {
-            ASSERT_TRUE(registry.valid(entity));
-        }
+        ASSERT_GT(_scene->GetDrawRank(*grandChild), 0);
 
         _scene->GetRootNode().RemoveChild(removed.Get());
 
-        for (const entt::entity entity : removedEntities) {
-            EXPECT_FALSE(registry.valid(entity));
-        }
-        EXPECT_TRUE(removed->GetEntity() == entt::null);
-        EXPECT_TRUE(child->GetEntity() == entt::null);
-        EXPECT_TRUE(grandChild->GetEntity() == entt::null);
-        EXPECT_TRUE(registry.valid(kept->GetEntity()));
-        // Only the root and Kept are left: the items went with the entities, before any further draw
-        EXPECT_EQ(registry.view<SceneDrawItem>().size(), 2u);
+        // Nothing may read a rank or an item that points into the removed subtree before the next draw
+        EXPECT_FALSE(_scene->IsDrawListValid());
+        EXPECT_EQ(removed->GetParent(), nullptr);
+        EXPECT_FALSE(_scene->MoveNode(*removed, nullptr));
+        EXPECT_FALSE(_scene->DuplicateNode(*child));
+        EXPECT_EQ(_scene->GetDrawRank(*removed), 0);
+        EXPECT_EQ(_scene->GetDrawRank(*grandChild), 0);
 
         EXPECT_EQ(Draw(), (Vector<float>{4.0f}));
-        EXPECT_EQ(registry.view<SceneDrawItem>().size(), 2u);
+        EXPECT_EQ(_scene->GetDrawList().items.size(), 2u);
     }
 
     TEST_F(SceneDrawSystemTest, ANodeAddedBetweenTwoDrawsIsDrawnAtItsScenePosition) {
@@ -234,7 +234,7 @@ namespace BECore::Tests {
         auto child = AddQuad(*_scene, a.Get(), "AChild", 3.0f);
 
         EXPECT_EQ(Draw(), (Vector<float>{1.0f, 3.0f, 2.0f}));
-        EXPECT_TRUE(_scene->GetRegistry().all_of<SceneDrawItem>(child->GetEntity()));
+        EXPECT_NE(FindItem(*_scene, *child), nullptr);
     }
 
     TEST_F(SceneDrawSystemTest, DrawRankAgreesWithTheViewOrderWithoutADraw) {
@@ -555,10 +555,12 @@ namespace BECore::Tests {
         EXPECT_EQ(_scene->GetDrawRank(*a), rankA);
         EXPECT_EQ(_scene->GetDrawRank(*aChild), rankChild);
         EXPECT_EQ(_scene->GetDrawRank(*b), rankB);
-        const auto& registry = _scene->GetRegistry();
-        EXPECT_TRUE(registry.get<SceneDrawItem>(a->GetEntity()).hidden);
-        EXPECT_TRUE(registry.get<SceneDrawItem>(aChild->GetEntity()).hidden);
-        EXPECT_FALSE(registry.get<SceneDrawItem>(b->GetEntity()).hidden);
+        ASSERT_NE(FindItem(*_scene, *a), nullptr);
+        ASSERT_NE(FindItem(*_scene, *aChild), nullptr);
+        ASSERT_NE(FindItem(*_scene, *b), nullptr);
+        EXPECT_TRUE(FindItem(*_scene, *a)->hidden);
+        EXPECT_TRUE(FindItem(*_scene, *aChild)->hidden);
+        EXPECT_FALSE(FindItem(*_scene, *b)->hidden);
     }
 
     TEST_F(SceneDrawSystemTest, AFieldChangedWhileANodeIsHiddenShowsWhenItIsShownAgain) {

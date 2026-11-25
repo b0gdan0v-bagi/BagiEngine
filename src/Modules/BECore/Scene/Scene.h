@@ -15,7 +15,6 @@
 #include <BECore/Utils/PassKey.h>
 #include <cstddef>
 #include <cstdint>
-#include <entt/entity/fwd.hpp>
 #include <limits>
 
 namespace BECore {
@@ -27,9 +26,6 @@ namespace BECore {
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
     public:
-        Scene();
-        ~Scene() override;
-
         void Initialize();
 
         /**
@@ -151,7 +147,6 @@ namespace BECore {
          */
         void PrepareForSave();
 
-        entt::registry& GetRegistry();
         SceneNode& GetRootNode();
         PoolString GetName() const;
 
@@ -165,7 +160,7 @@ namespace BECore {
          *
          * @p reference is a `<node ref=".." name=".." layer="..">` element with the overrides of ApplyNodeOverrides, which a game writes as
          * XML text and loads with XmlDocument. It is expanded by ExpandNodeReference with the source mark, so the new node answers
-         * SceneNode::GetSourceRef(), wired as a loaded node is (entity, then IComponent::OnAttached of every component) and inserted into
+         * SceneNode::GetSourceRef(), wired as a loaded node is (IComponent::OnAttached of every component) and inserted into
          * the children of @p parent at @p index; its draw and input order follow from the tree. It has no children of its own.
          *
          * A reference that cannot be used, a scene that is not initialized and a @p parent that is not a live node of this scene are one
@@ -188,19 +183,19 @@ namespace BECore {
          * @brief Moves @p node under @p newParent (the root when null) at @p index among its children, in this scene
          *
          * @p index counts the children of the new parent **after @p node has left its old place**, so moving a node down inside one parent to
-         * index `n` puts it behind `n` of the others; it is clamped, kAppend is the last. The node keeps its entity, its components and its
+         * index `n` puts it behind `n` of the others; it is clamped, kAppend is the last. The node keeps its components and its
          * subtree (no second `OnAttached`).
          *
-         * Refused, with nothing changed, and false returned: the root, a node of another scene, a parent of another scene, and a parent that
-         * is the node itself or below it.
+         * Refused, with nothing changed, and false returned: the root, a node or a parent that is not in the tree of this scene
+         * (another scene, or taken out by RemoveChild()), and a parent that is the node itself or below it.
          */
         bool MoveNode(SceneNode& node, SceneNode* newParent, size_t index = kAppend);
 
         /**
          * @brief Copies @p node and everything below it, placed right after it among the children of its parent
          *
-         * The copy is read from the node's inline XML (AppendNodeElement, DeserializeNode) and wired as InstantiateNode wires a node (entity,
-         * `OnAttached` of every component), so it shares nothing with the original. Its name is `Name (copy)`, or `Name (copy 2)` and up while
+         * The copy is read from the node's inline XML (AppendNodeElement, DeserializeNode) and wired as InstantiateNode wires a node (`OnAttached` of every
+         * component), so it shares nothing with the original. Its name is `Name (copy)`, or `Name (copy 2)` and up while
          * a sibling has it. The top node keeps SceneNode::GetSourceRef(), so a copied instance is an instance.
          *
          * @return The copy, empty for the root and for a node that is not in this scene (nothing changed)
@@ -213,8 +208,8 @@ namespace BECore {
         /// Clears the editor flags (SceneNode::GetEditorFlags()) of every node of the tree, the root included. The scene editor calls it when it goes away
         void ClearEditorFlags();
 
-        /// Called by SceneNode::RemoveChild() only: destroys the entity of @p node and of its descendants and resets their GetEntity() to entt::null.
-        void DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>);
+        /// Called by SceneNode::RemoveChild() only, before the node leaves its parent: the draw order is stale, and the components of @p node and of its descendants leave the update lists
+        void NodeRemoved(SceneNode& node, PassKey<SceneNode>);
 
         /// Called by IComponent::SubscribeInScene() only, through RegisterSceneUpdate(): @p component joins the update list of @p kind, unless its node is not in the tree under the root (removed)
         void AddUpdater(SceneUpdateKind kind, IComponent& component, SceneUpdateInvoker invoke, PassKey<IComponent>);
@@ -237,7 +232,7 @@ namespace BECore {
         /// False when the next draw pass has to rebuild the draw list: a node, a component, a layer or the editor flags changed since the last build
         bool IsDrawListValid() const;
 
-        /// Called by SceneDrawSystem::Run() only, once it has written SceneDrawItem::rank of every node
+        /// Called by SceneDrawSystem::Run() only, once the draw items are sorted: writes the rank of every node (its index in SceneDrawList::items)
         void DrawRanksWritten(PassKey<SceneDrawSystem>);
 
         /// How many times SceneDrawSystem rebuilt the draw list; a steady frame leaves it as it is
@@ -246,6 +241,9 @@ namespace BECore {
         /// SceneDrawSystem::Run() only: the list it fills and walks
         SceneDrawList& GetDrawList(PassKey<SceneDrawSystem>);
 
+        /// The list of the last draw pass; its `items` are the draw order, one per node
+        const SceneDrawList& GetDrawList() const;
+
         /// Called by SceneDrawSystem::Run() only, once it has filled the draw list: the list holds until the next change
         void DrawListBuilt(PassKey<SceneDrawSystem>);
 
@@ -253,8 +251,11 @@ namespace BECore {
         void SetDrawing(bool drawing, PassKey<SceneDrawSystem>);
 
     private:
+        /// @p node belongs to this scene and its parents lead up to the root: false for a node RemoveChild() took out, and for one made under it
         bool IsLiveNode(const SceneNode& node) const;
-        void DestroyEntities(SceneNode& node);
+        /// True when following the parents from @p node ends at the root of this scene
+        bool IsInTree(const SceneNode& node) const;
+        void ReleaseSubtree(SceneNode& node);
         SceneUpdateList& GetUpdateList(SceneUpdateKind kind);
         void DropUpdaters(IComponent& component);
         void PickView(float outputWidth, float outputHeight);
@@ -267,7 +268,6 @@ namespace BECore {
         BE_REFLECT_FIELD float _viewHeight = 0.0f;
         BE_REFLECT_FIELD Vector<SceneViewVariant> _viewVariants;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) Vector<IntrusivePtr<SceneNode>> _nodes;
-        UniquePtr<entt::registry> _registry;  // by pointer so that this header needs no entt.hpp
         IntrusivePtr<SceneNode> _rootNode;
         ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*
         int32_t _activeViewIndex = -1;  // index in _viewVariants, -1 the default view; set by Draw()
@@ -276,7 +276,7 @@ namespace BECore {
         Optional<int32_t> _viewOverride;     // a tool's forced view, see SetViewOverride(); never saved
         bool _active = false;
         uint32_t _drawPass = 0;
-        bool _drawRanksValid = false;  // SceneDrawItem::rank is what the tree says: set by the draw system, cleared by every edit of the tree
+        bool _drawRanksValid = false;  // SceneNode::_drawRank is what the tree says: set by the draw system, cleared by every edit of the tree
         bool _drawing = false;         // a draw pass is running: the hooks that make the list stale must not be called
         uint32_t _drawListBuilds = 0;
         SceneDrawList _drawList;

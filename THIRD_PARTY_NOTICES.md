@@ -16,7 +16,6 @@ file. A new library adds its row here in the same commit.
 |------|-----------|---------|---------|--------------|-----------|
 | `src/Modules/EABase/EABase` | EABase (Electronic Arts) | 2.09.12 | BSD 3-Clause | `src/Modules/EABase/EABase/LICENSE` | ships |
 | `src/Modules/EABase/EASTL` | EASTL (Electronic Arts) | 3.27.00 | BSD 3-Clause | `src/Modules/EABase/EASTL/LICENSE` | ships |
-| `src/Modules/EnTT` | EnTT (Michele Caini) | 3.13.2 | MIT | `src/Modules/EnTT/LICENSE` | ships |
 | `src/Modules/fmt` | {fmt} (Victor Zverovich) | 11.0.2 | MIT with the {fmt} binary exception (no notice needed for object code) | `src/Modules/fmt/LICENSE` | ships |
 | `src/Modules/imgui` | Dear ImGui (Omar Cornut) | 1.92.6 WIP | MIT | `src/Modules/imgui/LICENSE.txt` | ships (the editor; a game links it too) |
 | `src/Modules/BECore/Control/JsonDoubleText.cpp` | Grisu2 and the number format of JSON for Modern C++ (Niels Lohmann, Florian Loitsch), ported; the UTF-8 decoder of `JsonWriter.cpp` (Björn Hoehrmann) is under the same text | 3.11.3 | MIT | `src/Modules/BECore/Control/JsonDoubleText.cpp` (its header) | ships |

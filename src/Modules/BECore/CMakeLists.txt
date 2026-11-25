@@ -93,7 +93,6 @@ target_link_libraries(BECoreModule PUBLIC
     imgui
     EASTL
     fmt
-    EnTT
     stb
     dr_libs
     SDL3-shared

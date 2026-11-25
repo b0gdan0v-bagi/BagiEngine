@@ -6,7 +6,6 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
-#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -79,9 +78,8 @@ namespace BECore::Tests {
         SceneNode* deep = FindNodeBelow(scene.GetRootNode(), "Deep");
         ASSERT_NE(inner, nullptr);
         ASSERT_NE(deep, nullptr);
-        EXPECT_TRUE(scene.GetRegistry().valid(inner->GetEntity()));
-        EXPECT_TRUE(scene.GetRegistry().valid(deep->GetEntity()));
-        EXPECT_NE(inner->GetEntity(), deep->GetEntity());
+        EXPECT_TRUE(scene.MoveNode(*inner, nullptr));
+        EXPECT_TRUE(scene.MoveNode(*deep, nullptr));
         for (const auto& component : inner->GetComponents()) {
             EXPECT_EQ(&component->GetNode(), inner);
             EXPECT_EQ(&component->GetScene(), &scene);

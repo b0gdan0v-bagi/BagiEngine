@@ -107,9 +107,8 @@ add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL_image)
 message(STATUS "Configuring Vulkan-Headers (vendored)...")
 add_subdirectory(${BAGI_ENGINE_DIR}/external/Vulkan-Headers)
 
-# Vendored libraries (EnTT, pugixml, ImGui, fmt, stb, dr_libs)
+# Vendored libraries (pugixml, ImGui, fmt, stb, dr_libs)
 message(STATUS "Configuring vendored libraries...")
-add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EnTT)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/pugixml)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/imgui)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/fmt)
@@ -385,7 +384,7 @@ endif()
 # =============================================================================
 
 # The PCH instantiates the templates it only declares (Clang's -fpch-instantiate-templates), once, when it is built; without the
-# option every TU that loads the PCH instantiates them again (the EnTT dispatcher, fmt and std::format rows of time_trace_report.py).
+# option every TU that loads the PCH instantiates them again (the fmt and std::format rows of time_trace_report.py).
 # CMake adds the option to the PCH compile itself (property PCH_INSTANTIATE_TEMPLATES, ON by default) for Clang >= 11, Emscripten
 # included, and not for AppleClang, which its Modules/Compiler/Clang.cmake leaves out although AppleClang 17 has the option. MSVC
 # and GCC have no such option and get nothing. The variable is internal to CMake's compiler modules (checked with CMake 4.2.1);

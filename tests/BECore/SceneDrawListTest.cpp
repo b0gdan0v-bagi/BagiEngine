@@ -17,7 +17,6 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Generated/SceneDrawListTest.gen.hpp>
-#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -277,10 +276,11 @@ namespace BECore::Tests {
         hidden->SetEditorFlags(EditorFlags::Hidden);
 
         EXPECT_EQ(Draw(), (Vector<float>{3.0f}));
-        const auto& registry = _scene->GetRegistry();
+        const Vector<SceneDrawItem>& items = _scene->GetDrawList().items;
         for (const SceneNode* node : {bare.Get(), hidden.Get(), hiddenChild.Get()}) {
-            ASSERT_TRUE(registry.all_of<SceneDrawItem>(node->GetEntity())) << node->GetName().CStr();
-            EXPECT_EQ(registry.get<SceneDrawItem>(node->GetEntity()).rank, _scene->GetDrawRank(*node));
+            const auto at = eastl::find_if(items.begin(), items.end(), [node](const SceneDrawItem& item) { return item.node == node; });
+            ASSERT_NE(at, items.end()) << node->GetName().CStr();
+            EXPECT_EQ(at - items.begin(), _scene->GetDrawRank(*node)) << node->GetName().CStr();
         }
         EXPECT_EQ(_scene->GetDrawRank(*shown), rankOfShown);
         EXPECT_EQ(_scene->GetDrawRank(*hiddenChild), rankOfChild);
@@ -362,6 +362,26 @@ namespace BECore::Tests {
                 _scene->Draw();
             }
         });
+    }
+
+    TEST_F(SceneDrawListBuildTest, ARebuildAllocatesNothingOnceTheCapacityIsThere) {
+        for (size_t index = 0; index < kSteadyNodes; ++index) {
+            AddQuad(*_scene, nullptr, "Quad", static_cast<float>(index));
+        }
+        auto moved = AddQuad(*_scene, nullptr, "Moved", 0.0f);
+        Draw();
+        moved->SetLayer(1);
+        Draw();
+        moved->SetLayer(0);
+        Draw();
+        const uint32_t builds = _scene->GetDrawListBuilds();
+
+        ExpectNoAllocations([&] {
+            moved->SetLayer(1);
+            _scene->Draw();
+        });
+
+        EXPECT_EQ(_scene->GetDrawListBuilds(), builds + 1);
     }
 
     TEST_F(SceneDrawListBuildTest, ASceneDrawnWithNoRendererStillCallsOnDraw) {
