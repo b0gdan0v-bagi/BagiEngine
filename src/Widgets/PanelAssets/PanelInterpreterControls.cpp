@@ -35,6 +35,11 @@ namespace BECore {
             }
         }
 
+        /// The click step of a stepper: `step`, or 1 when it is 0 (as for a drag, 0 picks one)
+        double StepOf(const PanelNumber& number) {
+            return number.step > 0.0f ? static_cast<double>(number.step) : 1.0;
+        }
+
         /// An index of a combo held in a number field; none when it is not a whole non-negative number
         bool AsIndex(double value, size_t& out) {
             if (!(value >= 0.0) || value > static_cast<double>(UINT32_MAX)) {
@@ -85,6 +90,57 @@ namespace BECore {
         ImGui::EndDisabled();
         if (changed) {
             static_cast<void>(_writer.WriteBool(*_sources, prepared.bind.binding, next));
+        }
+    }
+
+    void PanelInterpreter::DrawRadio(const PreparedElement& prepared) {
+        const PanelRadio& radio = *prepared.element->Cast<PanelRadio>();
+        if (prepared.bind.state != PreparedBindingState::Ok) {
+            DrawUnreadable();
+            return;
+        }
+        // A value that cannot be read, or that the enum has no name for, selects no radio of the group
+        const bool selected = prepared.match.state == PreparedBindingState::Ok && ReadCondition(prepared.match, false);
+        _label.clear();
+        if (prepared.glyph != nullptr) {
+            _label.append(prepared.glyph);
+            if (!radio.text.empty()) {
+                _label.append(kGlyphGap);
+            }
+        }
+        _label.append(radio.text);
+        _label.append(kStableIdSuffix);
+        _label.append(radio.id);
+
+        ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
+        const bool clicked = ImGui::RadioButton(_label.c_str(), selected);
+        ItemTooltip(OrNull(radio.tooltip));
+        ImGui::EndDisabled();
+        if (clicked && !selected) {
+            WriteRadioValue(prepared);
+        }
+    }
+
+    void PanelInterpreter::WriteRadioValue(const PreparedElement& prepared) {
+        if (prepared.match.state != PreparedBindingState::Ok) {
+            return;
+        }
+        const PanelConditionTerm& term = prepared.match.condition.alternatives.front().front();
+        if (term.numeric) {
+            static_cast<void>(_writer.WriteNumber(*_sources, prepared.bind.binding, term.number));
+            return;
+        }
+        if (!prepared.radioIndexKnown) {
+            Span<const StringView> names;
+            if (_reader.EnumNames(*_sources, prepared.bind.binding, names) != PanelReadStatus::Ok) {
+                return;
+            }
+            const auto found = eastl::find(names.begin(), names.end(), StringView(term.word));
+            prepared.radioIndex = found != names.end() ? Optional<size_t>(static_cast<size_t>(found - names.begin())) : std::nullopt;
+            prepared.radioIndexKnown = true;
+        }
+        if (prepared.radioIndex.has_value()) {
+            static_cast<void>(_writer.WriteEnumIndex(*_sources, prepared.bind.binding, *prepared.radioIndex));
         }
     }
 
@@ -195,7 +251,9 @@ namespace BECore {
         _label.append(number.id);
         SetWidth(number.width);
         ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
-        if (number.input) {
+        if (number.stepper) {
+            DrawStepperNumber(prepared, value, integer);
+        } else if (number.input) {
             DrawTypedNumber(prepared, value, integer);
         } else {
             DrawDraggedNumber(prepared, value, integer);
@@ -276,6 +334,39 @@ namespace BECore {
         }
         if (_typedId == id && !ImGui::IsItemActive()) {
             _typedId = 0;
+        }
+    }
+
+    void PanelInterpreter::DrawStepperNumber(const PreparedElement& prepared, double value, bool integer) {
+        const PanelNumber& number = *prepared.element->Cast<PanelNumber>();
+        // A Ctrl-click with no `stepFast` steps as a plain click does
+        const bool hasFastStep = number.stepFast > 0.0f;
+        bool changed = false;
+        double written = value;
+        {
+            const ScopedMonoFont mono;
+            if (integer) {
+                int64_t held = FieldPresentation::FromDouble<int64_t>(value);
+                // A fraction of a step would round to a button that does nothing, so an integer steps by at least one
+                const int64_t step = eastl::max<int64_t>(1, FieldPresentation::FromDouble<int64_t>(StepOf(number)));
+                const int64_t stepFast = eastl::max<int64_t>(1, FieldPresentation::FromDouble<int64_t>(number.stepFast));
+                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_S64, &held, &step, hasFastStep ? &stepFast : nullptr);
+                written = static_cast<double>(held);
+            } else {
+                float held = static_cast<float>(value);
+                const float step = static_cast<float>(StepOf(number));
+                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_Float, &held, &step, hasFastStep ? &number.stepFast : nullptr);
+                written = static_cast<double>(held);
+            }
+        }
+        if (changed) {
+            if (number.min < number.max) {
+                written = eastl::clamp(written, static_cast<double>(number.min), static_cast<double>(number.max));
+            }
+            static_cast<void>(_writer.WriteNumber(*_sources, prepared.bind.binding, written));
+        }
+        if (!number.commitCommand.empty() && ImGui::IsItemDeactivatedAfterEdit()) {
+            NoteClick(number.commitCommand, StringView{});
         }
     }
 

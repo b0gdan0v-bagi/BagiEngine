@@ -85,12 +85,18 @@ namespace BECore {
      * the start and a changed width is followed one frame later. **A button** with a `fill` is painted with the palette's accent or muted accent while its `fillWhen` reads true (hover and active as
      * the accent's); `repeat` is `ImGuiItemFlags_ButtonRepeat`, so a held button notes a click on every repeat frame; an `icon` with no `text` is the square `IconButton` labelled `<icon>##<id>`.
      *
+     * **A radio** (`PanelRadio`) is `<icon> <text>###<id>`, selected while `bind == value` reads true (a condition of one term, prepared once); a click writes `value`, a word as its index
+     * among the enum's names (looked up once), and writes nothing when the enum lacks the name. **A section** is `<icon> <title>###<id>`; with `openBind` the header's open state is written to
+     * that bool whenever it differs from what the field reads (a read that fails writes nothing). **A stepper** (`PanelNumber stepper`) is an `InputScalar` with - and + buttons, written
+     * and clamped at every change; `step` 0 steps by one. **A multiline input** (`PanelInput lines`) is `lines` text lines high on the same buffer. A button of width
+     * `kPanelFillLineWidth` fills the rest of its line.
+     *
      * Main thread only; needs an ImGui frame in progress.
      */
     class PanelInterpreter {
     public:
-        /// The bytes a text field holds, the terminator included: room for the longest text a panel edits (the external-editor command is up to 512 bytes)
-        static constexpr size_t kInputBufferSize = 1024;
+        /// The bytes a text field holds, the terminator included: room for the longest text a panel edits (the Sprite Library's list of names)
+        static constexpr size_t kInputBufferSize = 2048;
 
         PanelInterpreter();
 
@@ -120,18 +126,24 @@ namespace BECore {
 
         void DrawElements(const Vector<PreparedElement>& elements);
         void DrawElement(const PreparedElement& prepared);
+        void DrawSection(const PreparedElement& prepared);
         void DrawRow(const PreparedElement& prepared);
         void DrawTextLine(const PreparedElement& prepared);
         static void DrawLines(bool wrap, StringView shown);
         void DrawButton(const PreparedElement& prepared);
         void DrawInput(const PreparedElement& prepared);
         void DrawCheckbox(const PreparedElement& prepared);
+        void DrawRadio(const PreparedElement& prepared);
+        /// Writes a radio's `value` into its field: a number as it is, a word as its index among the enum's names (nothing when the enum lacks it)
+        void WriteRadioValue(const PreparedElement& prepared);
         void DrawCombo(const PreparedElement& prepared);
         void DrawNumber(const PreparedElement& prepared);
         /// A number as a drag or a slider, written at every change
         void DrawDraggedNumber(const PreparedElement& prepared, double value, bool integer);
         /// A number with `input`: a typed field, written (clamped) and its `commitCommand` noted only when the user confirms or leaves it after an edit
         void DrawTypedNumber(const PreparedElement& prepared, double value, bool integer);
+        /// A number with `stepper`: a typed field with - and + buttons, written (clamped) at every change
+        void DrawStepperNumber(const PreparedElement& prepared, double value, bool integer);
         /// The combo of an enum with no `items`: its names, the index of the value held
         void DrawEnumCombo(const PanelCombo& combo, const PreparedElement& prepared);
         /// The combo over a list: the value is an index into it or the text of one of its rows
@@ -162,6 +174,8 @@ namespace BECore {
         [[nodiscard]] bool ReadRowCondition(const PanelBinding& list, size_t row, StringView path);
         /// Whether the bool cell @p path of a row reads true (a selected row, a combo's separator row); false when it is empty or cannot be read
         [[nodiscard]] bool ReadRowFlag(const PanelBinding& list, size_t row, StringView path);
+        /// Copies @p current into `_inputBuffer`, cut at a character boundary when it does not fit
+        void FillInputBuffer(StringView current);
         /// Shows @p current in a text field under @p label; true when the user changed it (with @p enterOnly: pressed Enter), the new text being in `_inputBuffer`
         [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly = false);
         void NoteClick(StringView command, StringView argument);

@@ -451,6 +451,34 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        /// The form controls of the Sprite Library: radios over an enum and over an integer, a multiline input, a stepper, a section that reports its open state
+        /// to `probe.flag` and a button that fills its line
+        constexpr int kNamesLines = 3;
+        constexpr const char* kSpriteForm = R"(
+<PanelAsset id="SpriteForm" title="SpriteForm">
+  <elements>
+    <element type="PanelRow" id="modes">
+      <elements>
+        <element type="PanelRadio" id="normal" bind="probe.mode" value="Normal" text="Normal"/>
+        <element type="PanelRadio" id="error" bind="probe.mode" value="Error" text="Error" icon="check" enableWhen="!probe.hidden"/>
+        <element type="PanelRadio" id="unknown" bind="probe.mode" value="Nothing" text="Nothing"/>
+      </elements>
+    </element>
+    <element type="PanelRow" id="levels">
+      <elements>
+        <element type="PanelRadio" id="one" bind="probe.level" value="1" text="One"/>
+        <element type="PanelRadio" id="three" bind="probe.level" value="3" text="Three"/>
+      </elements>
+    </element>
+    <element type="PanelInput" id="names" bind="probe.filter" lines="3"/>
+    <element type="PanelNumber" id="count" bind="probe.level" stepper="true" step="2" min="0" max="5" width="10"/>
+    <element type="PanelSection" id="slice" title="Slice sheet" icon="check" openBind="probe.flag" defaultOpen="false">
+      <elements><element type="PanelText" id="inside" bind="probe.title"/></elements>
+    </element>
+    <element type="PanelButton" id="add" text="Add" icon="check" width="-1" command="probe.add"/>
+  </elements>
+</PanelAsset>)";
+
         /// A provider with one chord, as the editor's hotkey map would be
         class FakeChords : public PanelChordText {
         public:
@@ -768,6 +796,37 @@ namespace BECore::Tests {
         static ImGuiID CheckboxCellId(ImGuiID seed, const char* tableElement, int row, const char* label) {
             const ImGuiID table = Chain(seed, {tableElement, "table"});
             return Chain(ImHashData(&row, sizeof(row), table), {"on", label});
+        }
+
+        /// What the item index recorded of the control @p id in the next frame: its label and rect; none when it was not drawn
+        Optional<ImGuiItemRecord> RecordOf(ImGuiID id) {
+            ImGuiItemIndex index;
+            index.Arm(*ImGui::GetCurrentContext());
+            Frame();
+            const ImGuiItemRecord* found = index.FindById(id);
+            Optional<ImGuiItemRecord> record = found != nullptr ? Optional<ImGuiItemRecord>(*found) : std::nullopt;
+            index.Disarm();
+            return record;
+        }
+
+        /// Whether the radio @p id is drawn selected: the dot of a selected radio is drawn in the check mark colour inside its rect
+        bool RadioSelected(ImGuiID id) {
+            const Optional<ImGuiItemRecord> record = RecordOf(id);
+            EXPECT_TRUE(record.has_value()) << "radio not drawn";
+            if (!record) {
+                return false;
+            }
+            const ImU32 dot = ImGui::GetColorU32(ImGuiCol_CheckMark);
+            for (const ImDrawVert& vertex : ImGui::FindWindowByName(kHostName)->DrawList->VtxBuffer) {
+                if (vertex.col == dot && vertex.pos.x >= record->minX && vertex.pos.x <= record->maxX && vertex.pos.y >= record->minY && vertex.pos.y <= record->maxY) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static ImGuiID RadioId(const char* rowId, const char* elementId, const char* label) {
+            return Chain(HostId(), {rowId, elementId, label});
         }
 
         bool menuBar = false;
@@ -2016,6 +2075,143 @@ namespace BECore::Tests {
             }
         });
         EXPECT_NE(DropdownPopup("bar", "overlays"), nullptr);
+    }
+
+    TEST_F(PanelInterpreterTest, TwoRadiosOverAnEnumAreSelectedByTheFieldAndAClickWritesTheOtherValue) {
+        const PanelLoadResult loaded = LoadPanelAsset(kSpriteForm);
+        const PanelElement& modes = Require(At(Require(loaded.asset).elements, 0));
+        EXPECT_TRUE(PanelInterpreter::CanDraw(Require(At(modes.elements, 0))));
+        Load(kSpriteForm);
+        const ImGuiID normal = RadioId("modes", "normal", "Normal###normal");
+        const ImGuiID error = RadioId("modes", "error", ICON_LC_CHECK " Error###error");
+        EXPECT_TRUE(RadioSelected(normal));
+        EXPECT_FALSE(RadioSelected(error));
+
+        ClickAt(Locate(error));
+        EXPECT_EQ(probe.mode, PanelTextStyle::Error);
+        EXPECT_FALSE(RadioSelected(normal));
+        EXPECT_TRUE(RadioSelected(error));
+        EXPECT_EQ(clicks, 0) << "a radio writes its field and runs no command";
+
+        ClickAt(Locate(normal));
+        EXPECT_EQ(probe.mode, PanelTextStyle::Normal);
+    }
+
+    TEST_F(PanelInterpreterTest, ARadioOverAnIntegerIsSelectedByItsNumberAndAClickWritesIt) {
+        Load(kSpriteForm);
+        const ImGuiID three = RadioId("levels", "three", "Three###three");
+        EXPECT_FALSE(RadioSelected(three));
+        ClickAt(Locate(three));
+        EXPECT_EQ(probe.level, 3);
+        EXPECT_TRUE(RadioSelected(three));
+        EXPECT_FALSE(RadioSelected(RadioId("levels", "one", "One###one")));
+    }
+
+    TEST_F(PanelInterpreterTest, ARadioWhoseValueTheEnumLacksIsNeverSelectedAndWritesNothing) {
+        probe.mode = PanelTextStyle::Warning;
+        Load(kSpriteForm);
+        const ImGuiID unknown = RadioId("modes", "unknown", "Nothing###unknown");
+        EXPECT_FALSE(RadioSelected(unknown));
+        ClickAt(Locate(unknown));
+        ClickAt(Locate(unknown));
+        EXPECT_EQ(probe.mode, PanelTextStyle::Warning);
+        EXPECT_FALSE(RadioSelected(unknown));
+    }
+
+    TEST_F(PanelInterpreterTest, ARadioUnderAFalseEnableWhenWritesNothing) {
+        probe.hidden = true;
+        Load(kSpriteForm);
+        ClickAt(Locate(RadioId("modes", "error", ICON_LC_CHECK " Error###error")));
+        EXPECT_EQ(probe.mode, PanelTextStyle::Normal);
+    }
+
+    TEST_F(PanelInterpreterTest, AMultilineInputIsItsLinesHighAndWritesATextWithANewLine) {
+        Load(kSpriteForm);
+        const ImGuiID names = Chain(HostId(), {"names", "##names"});
+        const Optional<ImGuiItemRecord> record = RecordOf(names);
+        ASSERT_TRUE(record.has_value());
+        const float expected = static_cast<float>(kNamesLines) * ImGui::GetTextLineHeight() + ImGui::GetStyle().FramePadding.y * 2.0f;
+        EXPECT_NEAR(record->maxY - record->minY, expected, 1.0f);
+
+        ClickAt(Locate(names));
+        Type("a");
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiKey_Enter, true);
+        Frame();
+        io.AddKeyEvent(ImGuiKey_Enter, false);
+        Type("b");
+        EXPECT_EQ(probe.filter, "a\nb");
+        EXPECT_EQ(clicks, 0) << "Enter in a multiline field is a new line, never a command";
+    }
+
+    TEST_F(PanelInterpreterTest, AMultilineInputHoldsATextOfTwoThousandBytesWithoutCuttingIt) {
+        constexpr size_t kLongText = 2000;
+        probe.filter.assign(kLongText, 'x');
+        Load(kSpriteForm);
+        ClickAt(Locate(Chain(HostId(), {"names", "##names"})));
+        Type("y");
+        EXPECT_EQ(probe.filter.size(), kLongText + 1);
+        EXPECT_EQ(eastl::count(probe.filter.begin(), probe.filter.end(), 'x'), static_cast<ptrdiff_t>(kLongText));
+    }
+
+    TEST_F(PanelInterpreterTest, AStepperButtonAddsTheStepAtOnceAndTheFieldStaysWithinItsBounds) {
+        Load(kSpriteForm);
+        const ImVec2 plus = Locate(Chain(HostId(), {"count", "##count", "+"}));
+        ClickAt(plus);
+        EXPECT_EQ(probe.level, 2);
+        ClickAt(plus);
+        ClickAt(plus);
+        EXPECT_EQ(probe.level, 5);
+
+        const ImVec2 minus = Locate(Chain(HostId(), {"count", "##count", "-"}));
+        for (int i = 0; i < 3; ++i) {
+            ClickAt(minus);
+        }
+        EXPECT_EQ(probe.level, 0);
+    }
+
+    TEST_F(PanelInterpreterTest, ASectionWritesItsOpenStateToItsOpenBindAndNeverFollowsTheField) {
+        probe.flag = true;
+        Load(kSpriteForm);
+        EXPECT_FALSE(probe.flag) << "the closed header writes its state";
+
+        const ImGuiID header = Chain(HostId(), {"slice", ICON_LC_CHECK " Slice sheet###slice"});
+        const Optional<ImGuiItemRecord> record = RecordOf(header);
+        ASSERT_TRUE(record.has_value());
+        EXPECT_EQ(record->label, ICON_LC_CHECK " Slice sheet###slice");
+
+        ClickAt(Locate(header));
+        EXPECT_TRUE(probe.flag);
+        ClickAt(Locate(header));
+        EXPECT_FALSE(probe.flag);
+
+        probe.flag = true;
+        Settle();
+        EXPECT_FALSE(probe.flag) << "the field does not open the header";
+    }
+
+    TEST_F(PanelInterpreterTest, AFillingButtonReachesTheRightEdgeOfItsLine) {
+        Load(kSpriteForm);
+        const Optional<ImGuiItemRecord> record = RecordOf(Chain(HostId(), {"add", ICON_LC_CHECK " Add"}));
+        ASSERT_TRUE(record.has_value());
+        EXPECT_NEAR(record->maxX, ImGui::FindWindowByName(kHostName)->WorkRect.Max.x, 1.0f);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfTheSpriteFormAllocatesNothingWithTheSectionOpenAndTheMultilineInputActive) {
+        probe.title = "inside";
+        Load(kSpriteForm);
+        ClickAt(Locate(Chain(HostId(), {"slice", ICON_LC_CHECK " Slice sheet###slice"})));
+        ASSERT_TRUE(probe.flag);
+        ClickAt(Locate(Chain(HostId(), {"names", "##names"})));
+        Type("a");
+        for (int i = 0; i < kInputWarmUpFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
     }
 
 }  // namespace BECore::Tests

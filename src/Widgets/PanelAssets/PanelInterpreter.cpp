@@ -37,6 +37,25 @@ namespace BECore {
             return prepared;
         }
 
+        /// A radio's `bind == value` as a condition of one term, so the frame compares as a condition does; `Bad` when either text does not parse
+        PreparedCondition PrepareRadioMatch(const PreparedBinding& bind, StringView value) {
+            PreparedCondition prepared;
+            if (bind.state != PreparedBindingState::Ok) {
+                prepared.state = bind.state;
+                return prepared;
+            }
+            PanelConditionTerm term;
+            term.binding = bind.binding;
+            term.compare = PanelCompare::Equal;
+            if (!ParsePanelConditionLiteral(value, term).has_value()) {
+                prepared.state = PreparedBindingState::Bad;
+                return prepared;
+            }
+            prepared.state = PreparedBindingState::Ok;
+            prepared.condition.alternatives.emplace_back().push_back(std::move(term));
+            return prepared;
+        }
+
         PreparedCondition PrepareCondition(StringView text) {
             PreparedCondition prepared;
             if (text.empty()) {
@@ -175,6 +194,9 @@ namespace BECore {
             if (element.Is<PanelDropdown>()) {
                 return PreparedKind::Dropdown;
             }
+            if (element.Is<PanelRadio>()) {
+                return PreparedKind::Radio;
+            }
             return PreparedKind::Unknown;
         }
 
@@ -206,7 +228,13 @@ namespace BECore {
             prepared.kind = KindOf(*element);
             prepared.visible = PrepareCondition(element->visible);
             switch (prepared.kind) {
-                case PreparedKind::Section:
+                case PreparedKind::Section: {
+                    const PanelSection& section = *element->Cast<PanelSection>();
+                    prepared.bind = PrepareBinding(section.openBind, BindingForm::Field);
+                    prepared.glyph = GlyphOf(section.icon);
+                    PrepareElements(element->elements, prepared.children);
+                    break;
+                }
                 case PreparedKind::Row:
                 case PreparedKind::Child:
                 case PreparedKind::Tabs:
@@ -273,6 +301,14 @@ namespace BECore {
                     const PanelNumber& number = *element->Cast<PanelNumber>();
                     prepared.bind = PrepareBinding(number.bind, BindingForm::Field);
                     prepared.enableWhen = PrepareCondition(number.enableWhen);
+                    break;
+                }
+                case PreparedKind::Radio: {
+                    const PanelRadio& radio = *element->Cast<PanelRadio>();
+                    prepared.bind = PrepareBinding(radio.bind, BindingForm::Field);
+                    prepared.match = PrepareRadioMatch(prepared.bind, radio.value);
+                    prepared.enableWhen = PrepareCondition(radio.enableWhen);
+                    prepared.glyph = GlyphOf(radio.icon);
                     break;
                 }
                 case PreparedKind::Button: {
@@ -348,16 +384,9 @@ namespace BECore {
         const PanelElement& element = *prepared.element;
         const ScopedId id(element.id.c_str());
         switch (prepared.kind) {
-            case PreparedKind::Section: {
-                const auto& section = *element.Cast<PanelSection>();
-                const ImGuiTreeNodeFlags flags = section.defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;
-                const bool open = ImGui::CollapsingHeader(section.title.empty() ? "##section" : section.title.c_str(), flags);
-                ItemTooltip(OrNull(element.tooltip));
-                if (open) {
-                    DrawElements(prepared.children);
-                }
+            case PreparedKind::Section:
+                DrawSection(prepared);
                 break;
-            }
             case PreparedKind::Row:
                 DrawRow(prepared);
                 break;
@@ -375,6 +404,9 @@ namespace BECore {
                 break;
             case PreparedKind::Checkbox:
                 DrawCheckbox(prepared);
+                break;
+            case PreparedKind::Radio:
+                DrawRadio(prepared);
                 break;
             case PreparedKind::Combo:
                 DrawCombo(prepared);
@@ -432,6 +464,31 @@ namespace BECore {
                 // A plain `PanelElement` of an unknown type: shown, so a file that names one is seen
                 DrawUnreadable();
                 break;
+        }
+    }
+
+    void PanelInterpreter::DrawSection(const PreparedElement& prepared) {
+        const PanelSection& section = *prepared.element->Cast<PanelSection>();
+        // The title may change with the file, the id after `###` does not
+        _label.clear();
+        if (prepared.glyph != nullptr) {
+            _label.append(prepared.glyph);
+            if (!section.title.empty()) {
+                _label.append(kGlyphGap);
+            }
+        }
+        _label.append(section.title);
+        _label.append(kStableIdSuffix);
+        _label.append(section.id);
+        const ImGuiTreeNodeFlags flags = section.defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;
+        const bool open = ImGui::CollapsingHeader(_label.c_str(), flags);
+        ItemTooltip(OrNull(section.tooltip));
+        bool held = false;
+        if (prepared.bind.state == PreparedBindingState::Ok && _reader.ReadBool(*_sources, prepared.bind.binding, held) == PanelReadStatus::Ok && held != open) {
+            static_cast<void>(_writer.WriteBool(*_sources, prepared.bind.binding, open));
+        }
+        if (open) {
+            DrawElements(prepared.children);
         }
     }
 
@@ -693,7 +750,7 @@ namespace BECore {
         ImGui::PushItemFlag(ImGuiItemFlags_NoNav, !button.navigable);
         ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, button.repeat);
         const ScopedButtonFill fill(button.fill, ReadCondition(prepared.fillWhen));
-        const float widthPixels = button.width * ImGui::GetFontSize();
+        const float widthPixels = button.width == kPanelFillLineWidth ? kFillWidth : button.width * ImGui::GetFontSize();
         bool clicked = false;
         if (prepared.glyph != nullptr && button.text.empty()) {
             clicked = IconButton(prepared.glyph, tooltip, button.id.c_str());
@@ -711,11 +768,15 @@ namespace BECore {
         }
     }
 
-    bool PanelInterpreter::DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly) {
-        const ImGuiInputTextFlags flags = enterOnly ? ImGuiInputTextFlags_EnterReturnsTrue : ImGuiInputTextFlags_None;
+    void PanelInterpreter::FillInputBuffer(StringView current) {
         const size_t size = FittingBytes(current, kInputBufferSize - 1);
         std::memcpy(_inputBuffer, current.data(), size);
         _inputBuffer[size] = '\0';
+    }
+
+    bool PanelInterpreter::DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly) {
+        const ImGuiInputTextFlags flags = enterOnly ? ImGuiInputTextFlags_EnterReturnsTrue : ImGuiInputTextFlags_None;
+        FillInputBuffer(current);
         ImGui::SetNextItemWidth(widthInEm > 0.0f ? widthInEm * ImGui::GetFontSize() : kFillWidth);
         if (hint != nullptr) {
             return ImGui::InputTextWithHint(label, hint, _inputBuffer, sizeof(_inputBuffer), flags);
@@ -735,9 +796,18 @@ namespace BECore {
         if (input.focus && ImGui::IsWindowAppearing()) {
             ImGui::SetKeyboardFocusHere();
         }
-        // `EnterReturnsTrue` turns the result into "Enter was pressed", so a change is asked of the item
-        const bool submits = !input.submitCommand.empty();
-        const bool result = DrawTextBox(_label.c_str(), shown, OrNull(prepared.hint), input.width, submits);
+        // `EnterReturnsTrue` turns the result into "Enter was pressed", so a change is asked of the item; the loader keeps a submit off a multiline field
+        const bool submits = !input.submitCommand.empty() && input.lines == 0;
+        bool result = false;
+        if (input.lines > 0) {
+            FillInputBuffer(shown);
+            const ImGuiStyle& style = ImGui::GetStyle();
+            const ImVec2 size(input.width > 0.0f ? input.width * ImGui::GetFontSize() : kFillWidth, static_cast<float>(input.lines) * ImGui::GetTextLineHeight() + style.FramePadding.y * 2.0f);
+            // `InputTextMultiline` takes no hint; this is the call it makes, with the hint
+            result = ImGui::InputTextEx(_label.c_str(), OrNull(prepared.hint), _inputBuffer, static_cast<int>(sizeof(_inputBuffer)), size, ImGuiInputTextFlags_Multiline);
+        } else {
+            result = DrawTextBox(_label.c_str(), shown, OrNull(prepared.hint), input.width, submits);
+        }
         if (submits ? ImGui::IsItemEdited() : result) {
             // A field that is not a `String` reads fine but refuses the write: the text then comes back as it was next frame
             static_cast<void>(_writer.WriteText(*_sources, prepared.bind.binding, StringView(_inputBuffer)));
