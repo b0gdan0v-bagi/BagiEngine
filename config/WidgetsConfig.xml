@@ -27,7 +27,8 @@
       type="AssetPanelWidget"
       asset="FileChangesPanel" />
     <widget
-      type="GamePanelWidget" />
+      type="AssetPanelWidget"
+      asset="GamePanel" />
     <widget
       type="ArtGenWidget" />
   </widgets>

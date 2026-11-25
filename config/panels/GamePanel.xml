@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<PanelAsset id="GamePanel" title="Game" command="view.game" open="false" width="420" height="560">
+  <sources>
+    <item name="panel" model="GamePanelAssetModel"/>
+    <item name="game" model="ActiveGameSourceModel"/>
+  </sources>
+  <elements>
+    <element type="PanelEmptyState" id="noGame" icon="gamepad-2" text="No game is active" visible="!panel.hasGame"/>
+    <element type="PanelRow" id="header" visible="panel.hasGame">
+      <elements>
+        <element type="PanelText" id="gameName" bind="panel.gameName"/>
+        <element type="PanelText" id="version" bind="panel.versionText" style="Disabled" mono="true" visible="panel.isControllable" tooltip="The state version: it grows with every change a controller has to see"/>
+        <element type="PanelText" id="notControllable" text="(not controllable)" style="Disabled" visible="panel.notControllable" tooltip="The game hands out no IControllableGame: it has no state or actions, only its reflected fields and methods"/>
+        <element type="PanelButton" id="gameReset" icon="rotate-ccw" text="Reset" command="gamePanel.reset" tooltip="Start the game over (IControllableGame::Reset with no options, or IGame::Reset)"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="resultOk" bind="panel.lastResult" style="Success" wrap="true" visible="panel.resultOk"/>
+    <element type="PanelText" id="resultError" bind="panel.lastResult" style="Error" wrap="true" visible="panel.resultError"/>
+    <element type="PanelSection" id="actions" title="Actions" visible="panel.isControllable">
+      <elements>
+        <element type="PanelRow" id="filterRow">
+          <elements>
+            <element type="PanelInput" id="gameActionFilter" bind="panel.filter" hint="Filter actions" icon="filter" width="14" tooltip="Actions whose label holds this (upper and lower case alike)"/>
+            <element type="PanelText" id="count" bind="panel.countText" style="Disabled"/>
+          </elements>
+        </element>
+        <element type="PanelText" id="noActionsLegal" text="No action is legal now" style="Disabled" visible="panel.noActionsLegal"/>
+        <element type="PanelText" id="noActionMatches" text="No action matches the filter" style="Disabled" visible="panel.noActionMatches"/>
+        <element type="PanelTable" id="gameActions" source="panel.actions" header="false" borders="true" scrollRows="10" visible="panel.showActionsList">
+          <columns>
+            <item type="Button" id="perform" field="label" command="gamePanel.perform" argument="index"/>
+          </columns>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelSection" id="fields" title="Fields" visible="panel.hasGame">
+      <elements>
+        <element type="PanelFields" id="gameFields" bind="game"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="methods" title="Methods" visible="panel.showMethods">
+      <elements>
+        <element type="PanelTable" id="gameMethods" source="panel.methods" header="false">
+          <columns>
+            <item type="Button" id="call" icon="play" field="signature" enableField="callable" command="gamePanel.call" argument="index" tooltip="Call the method (not callable when a parameter or the result cannot be read or written)"/>
+            <item type="Input" id="arguments" field="arguments" enableField="hasParams" hint="name=value ... or {&quot;name&quot;: value}" tooltip="The arguments by their parameter names, as in the Console"/>
+          </columns>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelSection" id="state" title="State" defaultOpen="false" visible="panel.isControllable">
+      <elements>
+        <element type="PanelButton" id="gameStateCopy" icon="copy" text="Copy" command="gamePanel.copyState" tooltip="Copy the state as JSON"/>
+        <element type="PanelText" id="stateText" bind="panel.stateText" mono="true" maxLines="12"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>
