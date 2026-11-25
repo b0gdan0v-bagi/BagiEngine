@@ -19,6 +19,7 @@ namespace BECore {
         constexpr uint8_t kUtf8ContinuationBits = 0x80;
         constexpr char kReplacementChar = '?';
         constexpr StringView kFileWhere = "file";
+        constexpr StringView kBaseElementType = "PanelElement";
         constexpr StringView kNoParseMessage = "the text is not a valid XML document";
         constexpr StringView kMoreIssuesMessage = "more issues were found and are not listed";
 
@@ -149,6 +150,11 @@ namespace BECore {
                     _issues.Add(where, Format("id '{}' is used twice", element.id));
                 }
                 Condition(where, "visible", element.visible);
+
+                // An element with no `type` loads as the base class without a reader finding, and writes `type="PanelElement"`, which is no kind
+                if (element.GetTypeMeta().typeName == kBaseElementType) {
+                    _issues.Add(where, "type is required");
+                }
 
                 const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>();
                 if (!isContainer && !element.elements.empty()) {

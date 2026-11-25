@@ -1,0 +1,31 @@
+<PanelAsset id="Sample" title="Sample" command="view.sample" open="true" width="640" height="320">
+  <sources>
+    <source name="files" model="FileChangesPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelEmptyState" id="idle" icon="file-diff" text="Nothing to show" visible="!files.running"/>
+    <element type="PanelSection" id="section" title="Details" defaultOpen="false" tooltip="A section">
+      <elements>
+        <element type="PanelRow" id="toolbar">
+          <elements>
+            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" enableWhen="files.hasPending"/>
+            <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
+          </elements>
+        </element>
+        <element type="PanelText" id="status" bind="files.status" style="Warning" wrap="true" mono="true"/>
+        <element type="PanelText" id="caption" text="Pending changes" style="Disabled"/>
+        <element type="PanelSeparator" id="line" title="Fields"/>
+        <element type="PanelField" id="one" bind="files.count" label="Count"/>
+        <element type="PanelFields" id="all" bind="files.options"/>
+        <element type="PanelSlot" id="custom" name="DiffView"/>
+      </elements>
+    </element>
+    <element type="PanelTable" id="pending" source="files.pending" header="false" borders="true" maxRows="20" visible="files.hasPending">
+      <columns>
+        <column id="path" type="Text" title="Path" field="path"/>
+        <column id="pick" type="Selectable" field="name"/>
+        <column id="apply" type="Button" icon="check" tooltip="Apply this change" command="fileChanges.apply" argument="path"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>

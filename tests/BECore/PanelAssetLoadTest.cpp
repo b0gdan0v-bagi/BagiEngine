@@ -187,6 +187,10 @@ namespace BECore::Tests {
         EXPECT_FALSE(LoadPanelAsset(StringView(Wrap(R"(<element type="PanelText" id="t" text="x" style="Loud"/>)"))).issues.empty());
     }
 
+    TEST(PanelAssetLoadTest, AnElementWithoutATypeIsAnIssue) {
+        ExpectSingleIssue(R"(<element id="y"/>)", "y", "type is required");
+    }
+
     TEST(PanelAssetLoadTest, BadInputGivesIssuesAndNoCrash) {
         for (const char* text : {"", "   ", "not xml", "<PanelAsset", "<PanelAsset id=\"x\"><elements></PanelAsset>"}) {
             const PanelLoadResult result = LoadPanelAsset(text);
