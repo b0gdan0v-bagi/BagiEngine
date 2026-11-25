@@ -45,8 +45,7 @@ On the web (Emscripten) there is no Vulkan: the window config and the renderer c
 
 - `SDLMainWindow` sets the hint `SDL_HINT_VIDEO_DRIVER` to `dummy` before `SDL_Init` (the hint is reset on `Destroy()`, so a later window picks its driver again) and takes `SDL_WINDOW_VULKAN` out of the configured flags. The window has the configured size, or the one of `--window` / `--density` / `set_window` (`.claude/rules/control-window-api.md`); the picture is its size times the density.
 - `SDL3ApplicationFabric` ignores the `renderer` attribute and creates `SDLRendererBackend`, which asks SDL for the `software` renderer when its window is headless (the Vulkan backend needs a real surface). The texture loader follows the renderer (`SDLTextureLoader::CanLoad`), so sprites load as usual.
-- The `dummy` driver with the software renderer works on macOS and Windows 11; a hidden `cocoa` window with it does not (`software not available`), and `offscreen` needs OpenGL.
-- The Editor run mode cannot be headless (its viewport is an offscreen render target, which this backend does not implement): `Application` stops the start-up with a log line.
+- The `dummy` driver with the software renderer works on macOS and Windows 11, and the Editor run mode too (`--headless --editor`: ImGui and the viewport target run on it); a hidden `cocoa` window with it does not (`software not available`), and `offscreen` needs OpenGL.
 - A headless game has no vsync, so on the real clock it draws as fast as it can: use `--manual-clock`.
 
 `IRenderer::RequestCapture(callback)` is how pixels leave a renderer: `SDLRendererBackend` serves the request in `PresentFrame()` just before `SDL_RenderPresent` (`SDL_RenderReadPixels`, converted to RGBA8; after the present the back buffer is undefined) and hands a `PixelBuffer` to the callback. A newer request replaces an unserved one, whose callback gets an error. The headless run and the windowed SDL renderer support it; `VulkanRendererBackend` does not (the default of `IRenderer` answers with an error).
@@ -55,7 +54,7 @@ The `screenshot` method (`RegisterScreenshotControl`, registered by `SDL3Applica
 
 ## Render targets
 
-`SetRenderTarget(target)` is `SDL_SetRenderTarget`, then a clear with the colour of the last `Clear()` and back to opaque black (as Vulkan: the viewport calls `Clear(color)` just before it; a `Clear()` with no target still fills the back buffer at once). A target of another backend or one whose renderer is gone keeps the back buffer (one `LOG_ERROR`). `PresentFrame()` unsets a target left open first: the window is what is presented and what a capture reads, so a screenshot of the editor is the whole window. SDL keeps the clip per target. Tests: `SDLRenderTargetTest.cpp`.
+`SetRenderTarget(target)` is `SDL_SetRenderTarget`, then a clear with the colour of the last `Clear()` and back to opaque black (as Vulkan: the viewport calls `Clear(color)` just before it; a `Clear()` with no target still fills the back buffer at once). A target of another backend or one whose renderer is gone keeps the back buffer (one `LOG_ERROR`). `PresentFrame()` unsets a target left open first: the window is what is presented and what a capture reads, so a screenshot of the editor (`--headless --editor`: ImGui and the viewport run on the dummy driver) is the whole window. SDL keeps the clip per target. Tests: `SDLRenderTargetTest.cpp`.
 
 ## The software present allocates per rotated sprite
 

@@ -9,6 +9,7 @@
 #include <BECore/Time/GamePause.h>
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIEnvironment.h>
+#include <BECore/Widgets/WidgetManager.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
 #include <gtest/gtest.h>
@@ -22,7 +23,7 @@ namespace BECore::Tests {
         /// The text `status` answers for a service with no main window (the test environment has none) on the clock the fixture sets (two frames of
         /// kFrameSeconds); pinned from what the DOM wrote before the writer
         String StatusText(bool manualClock, bool paused) {
-            return Format(R"({{"deltaTime":0.125,"fixedDeltaTime":0.01666666753590107,"frame":2,"log":{{"errors":0,"warnings":0}},"manualClock":{},"paused":{},"totalTime":0.25,)"
+            return Format(R"({{"deltaTime":0.125,"fixedDeltaTime":0.01666666753590107,"frame":2,"log":{{"errors":0,"warnings":0}},"manualClock":{},"paused":{},"runMode":"Game","totalTime":0.25,)"
                           R"("window":{{"density":1.0,"displayScale":1.0,"headless":false,"height":0,"outputHeight":0,"outputWidth":0,)"
                           R"("safeArea":{{"bottom":0.0,"left":0.0,"right":0.0,"top":0.0}},"userScale":1.0,"width":0}}}})",
                           manualClock, paused);
@@ -78,6 +79,21 @@ namespace BECore::Tests {
 
         service.SetManualClock(true);
         EXPECT_EQ(Ask(3, "status"), OkText("3", StatusText(true, true)));
+    }
+
+    TEST_F(ControlBuiltinsReplyTest, StatusNamesTheRunModeOfTheWidgetManager) {
+        WidgetManager& widgets = CoreManager::GetWidgetManager();
+        widgets.SetWidgetLoader([](RunMode) { return Vector<IntrusivePtr<IWidget>>{}; });
+        const auto runModeAfter = [&](RunMode mode) {
+            widgets.CreateWidgets(mode);
+            const ControlReply reply(Ask(1, "status"));
+            return reply.View().IsValid() ? StringOf(reply.Result(), "runMode") : String();
+        };
+
+        EXPECT_EQ(runModeAfter(RunMode::Editor), String("Editor"));
+        EXPECT_EQ(runModeAfter(RunMode::Game), String("Game"));
+
+        widgets.SetWidgetLoader({});
     }
 
     TEST_F(ControlBuiltinsReplyTest, StatusWithoutAPauseReportsNotPaused) {

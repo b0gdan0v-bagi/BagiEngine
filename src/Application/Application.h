@@ -80,7 +80,7 @@ namespace BECore {
         bool _isRunning = false;
         bool _finished = false;  // Finish() has run: it must run once
         int _exitCode = 0;
-        bool _headless = false;  // there is no window to show an editor in: the switch chord is ignored
+        bool _headless = false;  // a headless window gets no keys: the switch chord is ignored
         // The key of the title last applied: the active game's name and the editor mode
         PoolString _titleGame;
         bool _titleEditor = false;
