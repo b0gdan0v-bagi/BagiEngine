@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<PanelAsset id="ConfigEditor" title="Config Editor" command="view.configEditor" open="true" width="900" height="550">
+  <sources>
+    <item name="editor" model="ConfigEditorPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="panes">
+      <elements>
+        <element type="PanelChild" id="list" width="15.7" border="true">
+          <elements>
+            <element type="PanelRow" id="listHeader">
+              <elements>
+                <element type="PanelText" id="listTitle" text="Configs"/>
+                <element type="PanelText" id="listCount" bind="editor.configsCount" style="Disabled"/>
+              </elements>
+            </element>
+            <element type="PanelSeparator" id="listLine"/>
+            <element type="PanelTable" id="configs" source="editor.configs" header="false">
+              <columns>
+                <item type="Selectable" id="name" field="name" selectedField="selected" command="configEditor.select" argument="name"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+        <element type="PanelChild" id="detail" border="true">
+          <elements>
+            <element type="PanelEmptyState" id="noSelection" icon="file-text" text="Select a config on the left to start editing." visible="editor.noSelection"/>
+            <element type="PanelRow" id="header" visible="editor.hasSelection">
+              <elements>
+                <element type="PanelText" id="configName" bind="editor.configName"/>
+                <element type="PanelText" id="filePath" bind="editor.filePathText" style="Disabled" visible="editor.hasPath"/>
+              </elements>
+            </element>
+            <element type="PanelSeparator" id="headerLine" visible="editor.hasSelection"/>
+            <element type="PanelRow" id="actions" visible="editor.hasSelection">
+              <elements>
+                <element type="PanelButton" id="save" icon="save" text="Save" command="config.save" enableWhen="editor.hasStaged" tooltip="Write the staged changes to the config file"/>
+                <element type="PanelButton" id="reload" icon="refresh-cw" text="Reload" command="configEditor.reload" tooltip="Read the config again from disk"/>
+                <element type="PanelText" id="unsaved" text="(unsaved changes)" style="Warning" visible="editor.hasStaged"/>
+                <element type="PanelText" id="changedOnDisk" text="changed on disk, staged edits dropped" style="Warning" visible="editor.changedOnDisk"/>
+              </elements>
+            </element>
+            <element type="PanelSeparator" id="actionsLine" visible="editor.hasSelection"/>
+            <element type="PanelEmptyState" id="configMissing" icon="circle-alert" text="This config is empty or failed to load" visible="editor.configMissing"/>
+            <element type="PanelSlot" id="tree" name="configTree" visible="editor.showTree"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="reloadConfirm" title="Unsaved Changes" open="editor.reloadConfirmOpen">
+      <elements>
+        <element type="PanelText" id="reloadMessage" bind="editor.reloadMessage"/>
+        <element type="PanelText" id="reloadQuestion" text="Reload from disk and discard all changes?"/>
+        <element type="PanelSeparator" id="reloadLine"/>
+        <element type="PanelRow" id="reloadButtons">
+          <elements>
+            <element type="PanelButton" id="reloadDiscard" icon="undo-2" text="Discard &amp; Reload" command="configEditor.reloadDiscard"/>
+            <element type="PanelButton" id="reloadCancel" icon="x" text="Cancel" command="configEditor.reloadCancel"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="switchConfirm" title="Unsaved Changes" open="editor.switchConfirmOpen">
+      <elements>
+        <element type="PanelText" id="switchMessage" bind="editor.switchMessage"/>
+        <element type="PanelText" id="switchQuestion" text="Switch config and discard changes?"/>
+        <element type="PanelSeparator" id="switchLine"/>
+        <element type="PanelRow" id="switchButtons">
+          <elements>
+            <element type="PanelButton" id="switchDiscard" icon="undo-2" text="Discard &amp; Switch" command="configEditor.switchDiscard"/>
+            <element type="PanelButton" id="switchCancel" icon="x" text="Cancel" command="configEditor.switchCancel"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

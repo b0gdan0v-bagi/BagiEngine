@@ -438,7 +438,7 @@ namespace BECore {
         ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.3f, &leftBottom, &leftTop);
 
         ImGui::DockBuilderDockWindow("Scene Editor", leftTop);
-        ImGui::DockBuilderDockWindow("Config Editor", leftBottom);
+        ImGui::DockBuilderDockWindow("Config Editor###ConfigEditor", leftBottom);
         ImGui::DockBuilderDockWindow("Viewport", viewport);
         ImGui::DockBuilderDockWindow("Sprite Library", right);
 
