@@ -6,7 +6,7 @@ the bad values, screenshots that are not flat, `set_language` rewording the `ui`
 on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `rmlui` scenario probes `get_state.scenes`
 and prints a skip line when the build has no `rmlui` (only `ENGINE_UI_RMLUI` builds list it), so the same script passes in every preset; with it the scene's documents, textures,
 `wheel_at` on both axes, `ReloadRmlUiDocuments` and the scene switch are checked. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
-`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; the View menu opens the Game panel, a chord closes it and opens it again, its filter takes typed text, and an action button changes `get_state` and the picture, all through `imgui_find` / `imgui_input`; it also runs with `--content-overlay=<temp folder>`, and `editor_state` must say nothing is dirty, name a `scene:` document whose `file` is inside that folder, and the checkout's `SceneConfig.xml` is unchanged with nothing written into the folder (a build without the editor prints a skip line). The `editor cycle` step starts an editor of its own through `GameSession` (the moves of `tools/qa/bagi_qa_editor.py` need its `imgui_*` helpers): a rename makes the scene dirty in `dirty`, `any_dirty` and `editor_state`, the overlay holds no scene file yet, Save clears the flag and writes the overlay's file only, and the checkout's `SceneConfig.xml` keeps its hash. The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
+`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; the View menu opens the Game panel, a chord closes it and opens it again, its filter takes typed text, and an action button changes `get_state` and the picture, all through `imgui_find` / `imgui_input`; it also runs with `--content-overlay=<temp folder>`, and `editor_state` must say nothing is dirty, name a `scene:` document whose `file` is inside that folder, and the checkout's `SceneConfig.xml` is unchanged with nothing written into the folder (a build without the editor prints a skip line). The `editor cycle` step starts an editor of its own through `GameSession` (the moves of `tools/qa/bagi_qa_editor.py` need its `imgui_*` helpers): a rename makes the scene dirty in `dirty`, `any_dirty` and `editor_state`, the overlay holds no scene file yet, Save clears the flag and writes the overlay's file only, and the checkout's `SceneConfig.xml` keeps its hash; first the Config Editor must sit docked under the Scene Editor (a stale `imgui.ini` leaves it floating). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
 path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 failed, 77 skipped (the executable is not built).
@@ -57,6 +57,7 @@ EDITOR_WINDOW = (1280, 720)  # window units: room for the docks of the editor
 CYCLE_FLAGS = ["--stress-scene=entities", "--stress-count=1"]  # the scene of the edit charter (tools/stress/qa/editor_charter.py)
 CYCLE_NODE = "Run"
 CYCLE_RENAMED = "RunRenamed"
+CONFIG_EDITOR_WINDOW = "ConfigEditor"  # the id part of `Config Editor###ConfigEditor`; an ini that knew the window as `Config Editor` leaves it floating
 EDITOR_FRAMES = 5  # ImGui lays its docks out over more than one frame
 STRESS_SCENE_FILE = ENGINE_DIR / "tools" / "stress" / "config" / "SceneConfig.xml"  # the tracked file the editor's scene document stands for
 EDITOR_SCENE_PATH = "config/SceneConfig.xml"
@@ -551,9 +552,23 @@ def launch_cycle_editor(session: GameSession, exe: Path, overlay: Path) -> dict:
     raise AssertionError("unreachable")
 
 
+def check_config_editor_docked(session: GameSession) -> None:
+    """The Config Editor stacks under the Scene Editor in the left column; a layout file that knows the window by an old name leaves it floating."""
+    scene = session.imgui_find(kind="window", label=editor.SCENE_EDITOR)["matches"]
+    config = [match for match in session.imgui_find(kind="window", label_contains=CONFIG_EDITOR_WINDOW)["matches"] if match["label"].endswith(CONFIG_EDITOR_WINDOW)]
+    check(len(scene) == 1 and len(config) == 1, f"expected one Scene Editor and one Config Editor window, found {len(scene)} and {len(config)}")
+    top, bottom = scene[0], config[0]
+    found = f"Scene Editor at ({top['x']}, {top['y']}) {top['width']}x{top['height']}, Config Editor at ({bottom['x']}, {bottom['y']}) {bottom['width']}x{bottom['height']}"
+    docked = bottom["x"] == top["x"] and bottom["width"] == top["width"] and bottom["y"] >= top["y"] + top["height"]
+    check(docked, f"the Config Editor is not docked under the Scene Editor: {found}; a layout file that knows the window by an old name is the usual cause")
+    print("editor cycle: the Config Editor is docked under the Scene Editor", flush=True)
+
+
 def drive_editor_cycle(session: GameSession, overlay: Path, scene_hash: str) -> None:
     check(editor.dirty(session) is False and editor.any_dirty(session) is False, "a fresh editor reports unsaved changes")
     session.call("reset", {"scene": "entities", "count": 1})
+    session.step(EDITOR_FRAMES)
+    check_config_editor_docked(session)
     editor.widen_left_dock(session)
     editor.open_panel(session, editor.SCENE_EDITOR)
     editor.select_node(session, CYCLE_NODE)
