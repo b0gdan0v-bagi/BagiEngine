@@ -261,3 +261,9 @@ def test_the_script_runs_as_a_command(rig):
     result = subprocess.run([sys.executable, str(SYNC_DIR / "engine_sync.py"), "--repo", str(rig.work), "status", "--json"], capture_output=True, text=True, check=False)
     assert result.returncode == 0
     assert json.loads(result.stdout)["branches"][0]["name"] == "main"
+
+
+def test_the_changelog_merge_driver_is_reported_until_it_is_installed(rig, capsys):
+    assert rig.run(capsys)[1]["changelog_driver"] is False
+    git(rig.work, "config", "--local", engine_sync.CONFIG_CHANGELOG_DRIVER, "python3 changelog.py merge-driver %O %A %B %P")
+    assert rig.run(capsys)[1]["changelog_driver"] is True

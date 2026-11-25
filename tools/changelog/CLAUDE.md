@@ -10,6 +10,8 @@ python3 <engine>/tools/changelog/changelog.py render [--check]                # 
 python3 <engine>/tools/changelog/changelog.py check                           # ctest BagiChangelogCheck
 python3 <engine>/tools/changelog/changelog.py breaking --since <commit|version|pointer> [--repo E] [--json] [--all] [--check]
 python3 <engine>/tools/changelog/changelog.py renumber --plan|--apply [--floor V] [--ref R ...]
+python3 <engine>/tools/changelog/changelog.py install-driver                   # once per clone (below)
+python3 <engine>/tools/changelog/changelog.py settle                           # inside a merge in progress (below)
 ```
 
 Every command takes `--root E` (the engine folder; default the one the tool is in); `breaking` calls it `--repo E` (`engine` in a game) too.
@@ -48,6 +50,13 @@ The first fragment of an empty log (`baseline.md`) takes the header's version as
 ## What `check` reports (exit 1, one line per problem naming the file)
 
 Ctest `BagiChangelogCheck` (`tests/CMakeLists.txt`) and `tests/test_real_tree.py` run it on the real tree. It reports: a malformed fragment; a fragment not named after its `Entry`; a repeated version; the highest fragment version differing from the header; `CHANGELOG.md` missing or differing from the rendering. Gaps between versions are allowed. It does **not** compare `kContentVersion` with the fragments: a branch that bumped it has no fragment until `todo-merge` adds one after the merge, and the ctest would fail the branch.
+
+## Merging: the two generated files never conflict
+
+`EngineVersion.h` (the highest fragment's version) and `CHANGELOG.md` (the rendering) follow from the fragments, which never conflict, yet a merge where both sides added a fragment changes the same lines of both. Two parts take it off every merge (`sync-engine`, `todo-merge`; any other merge in a clone with the config gets the driver):
+
+- **The git merge driver** `bagi-changelog` (`.gitattributes` names exactly those two paths; `install-driver` registers `python3 tools/changelog/changelog.py merge-driver %O %A %B %P` in the clone's local config (the interpreter by name: an absolute path breaks on a Python upgrade), which its worktrees share, so once per clone; `engine_sync.py status` reports `changelog_driver`). For the header it sets all three sides to the highest version and line-merges the rest with `git merge-file`, so a conflict is left only where the sides edit the same other line. For the log it takes the union of the version blocks of both sides minus a block one side removed (the fragments of the other side are not in the working tree yet, so it cannot render). The driver runs `tools/changelog/changelog.py` of the checkout that merges: a checkout without it, or a clone without the config (git then merges those two files as text), leaves the files conflicted, which `settle` also takes.
+- **`settle`**, run in the checkout during a merge that has not been committed (`merge --no-commit`): exit 1, touching nothing, outside a merge (no `MERGE_HEAD`) or when any conflicted path is not one of the two. Otherwise it rebuilds a conflicted header from the stages with the same rule as the driver, sets the header to the highest fragment version, renders `CHANGELOG.md`, runs `check` and stages both; exit 1 on a problem of `check` (a version two fragments share, a malformed fragment), after which the caller aborts the merge. It makes the result exact whatever the driver left, so it runs after every such merge, conflicted or not.
 
 ## `breaking`: what an engine update breaks for a game
 

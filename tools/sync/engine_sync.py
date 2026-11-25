@@ -22,6 +22,7 @@ MAIN = "main"
 GAMES_PREFIX = "games/"
 CONFIG_EXCLUDE = "engine-sync.exclude"
 CONFIG_INCLUDE = "engine-sync.include"
+CONFIG_CHANGELOG_DRIVER = "merge.bagi-changelog.driver"  # set by `changelog.py install-driver`
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_STOP = 2
@@ -192,6 +193,7 @@ def read_state(repo: Path) -> dict:
         "repo": str(repo),
         "head": {"branch": symbolic.stdout.strip() or None, "sha": head.stdout.strip() or None},
         "linked_worktree": linked,
+        "changelog_driver": bool(config_values(repo, CONFIG_CHANGELOG_DRIVER)),
         "branches": [asdict(state) for state in branches],
         "undecided": undecided,
         "excluded": excluded,
@@ -222,6 +224,8 @@ def print_status(report: dict) -> None:
         print("  " + "  ".join(parts))
         for subject in branch["merges"]:
             print(f"      {subject}")
+    if not report["changelog_driver"]:
+        print("  merge driver bagi-changelog is not installed: run `changelog.py install-driver`")
     if report["undecided"]:
         print(f"  undecided (neither {CONFIG_INCLUDE} nor {CONFIG_EXCLUDE}): {', '.join(report['undecided'])}")
     if report["excluded"]:
