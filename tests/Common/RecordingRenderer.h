@@ -56,9 +56,9 @@ namespace BECore::Tests {
         uint32_t _height = 0;
     };
 
-    CORE_ENUM(DrawKind, uint8_t, Rect, Texture, Geometry)
+    CORE_ENUM(DrawKind, uint8_t, Rect, Texture, Geometry, Batch)
 
-    /// One call of DrawFilledRect(), DrawTexture() or DrawGeometry() as the backend would see it
+    /// One call of DrawFilledRect(), DrawTexture() or DrawGeometry(), or one submitted batch, as the backend would see it
     struct DrawCall {
         DrawKind kind = DrawKind::Rect;
         Rect rect;    ///< the destination in output pixels, after the view transform; for geometry the box around its vertices
@@ -67,8 +67,9 @@ namespace BECore::Tests {
         Optional<Rect> source;               ///< the source rect of a texture draw, as it was passed
         Optional<Rect> clip;                 ///< the clip in effect for this call
         BlendMode blend = BlendMode::Alpha;  ///< the blend mode in effect for this call
-        Vector<GeometryVertex> vertices;     ///< geometry: the vertices with their positions in output pixels (translation and view transform applied)
-        Vector<int> indices;                 ///< geometry: the indices as they were passed
+        Vector<GeometryVertex> vertices;     ///< geometry and batch: the vertices with their positions in output pixels (translation and view transform applied)
+        Vector<int> indices;                 ///< geometry: the indices as they were passed; batch: four vertices and six indices per quad
+        uint32_t quads = 0;                  ///< batch: how many quads it holds
     };
 
     /**
@@ -76,6 +77,10 @@ namespace BECore::Tests {
      *
      * Needs no window or GPU, so layout and draw-order tests can run anywhere. It applies the view transform and the
      * clip like a backend does, which lets a test read the calls in output pixels. Textures it makes keep their pixels.
+     *
+     * Batching is off until SetBatchingEnabled(true); then the rect, texture and transformed draws gather into DrawKind::Batch calls that are
+     * recorded in `calls` where the batch was submitted, so a test reads the order a backend would see. DrawGeometry() and the frame and target
+     * calls submit the open batch first, as a backend does.
      *
      * An allocation test calls ClearCalls() between frames: it keeps the storage of the calls, so from the second equal frame on the recorder
      * allocates nothing and the test counts only the code it measures. `calls.clear()` gives the geometry storage up.
@@ -87,16 +92,30 @@ namespace BECore::Tests {
         bool Initialize(IMainWindow&) override {
             return true;
         }
-        void Destroy() override {}
-        void BeginFrame() override {}
-        void EndFrame() override {}
-        void Clear(const Color&) override {}
-        void Present() override {}
+        void Destroy() override {
+            DiscardBatch();
+        }
+        void BeginFrame() override {
+            Flush();
+        }
+        void EndFrame() override {
+            Flush();
+        }
+        void Clear(const Color&) override {
+            Flush();
+        }
+        void Present() override {
+            Flush();
+        }
         void WaitIdle() override {
             ++waitIdleCalls;
         }
 
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override {
+            if (IsBatchingEnabled()) {
+                BatchRect(x, y, w, h, color);
+                return;
+            }
             if (IsClipEmpty()) {
                 return;
             }
@@ -112,6 +131,10 @@ namespace BECore::Tests {
 
         using IRenderer::DrawTexture;
         void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) override {
+            if (IsBatchingEnabled()) {
+                BatchTexture(texture, srcRect, dstX, dstY, dstW, dstH, tint);
+                return;
+            }
             if (IsClipEmpty()) {
                 return;
             }
@@ -130,15 +153,11 @@ namespace BECore::Tests {
         }
 
         void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) override {
+            Flush();
             if (IsClipEmpty() || vertices.empty()) {
                 return;
             }
-            DrawCall call;
-            if (!_spareGeometry.empty()) {
-                call.vertices = std::move(_spareGeometry.back().vertices);
-                call.indices = std::move(_spareGeometry.back().indices);
-                _spareGeometry.pop_back();
-            }
+            DrawCall call = MakeCallWithSpareStorage();
             call.kind = DrawKind::Geometry;
             call.texture = texture;
             call.color = ApplyOpacity(vertices[0].color);
@@ -178,8 +197,12 @@ namespace BECore::Tests {
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t, uint32_t) override {
             return {};
         }
-        void SetRenderTarget(IRenderTarget*) override {}
-        void UnsetRenderTarget() override {}
+        void SetRenderTarget(IRenderTarget*) override {
+            Flush();
+        }
+        void UnsetRenderTarget() override {
+            Flush();
+        }
 
         float GetOutputWidth() const override {
             return width;
@@ -203,7 +226,7 @@ namespace BECore::Tests {
             // Last call first: the spare lists are taken from the back, so each draw of an equal frame gets the list that already fits it
             for (size_t i = calls.size(); i > 0; --i) {
                 DrawCall& call = calls[i - 1];
-                if (call.kind == DrawKind::Geometry) {
+                if (call.kind == DrawKind::Geometry || call.kind == DrawKind::Batch) {
                     call.vertices.clear();
                     call.indices.clear();
                     _spareGeometry.push_back(GeometryStorage{std::move(call.vertices), std::move(call.indices)});
@@ -218,7 +241,47 @@ namespace BECore::Tests {
         uint32_t texturesCreated = 0;
         uint32_t waitIdleCalls = 0;
 
+    protected:
+        void SubmitBatch(const RenderBatch& batch) override {
+            DrawCall call = MakeCallWithSpareStorage();
+            call.kind = DrawKind::Batch;
+            call.texture = batch.texture.Get();
+            call.clip = GetClipRect();
+            call.blend = batch.blend;
+            call.quads = batch.quads;
+            call.vertices.assign(batch.vertices.begin(), batch.vertices.end());
+            call.indices.assign(batch.indices.begin(), batch.indices.end());
+            call.color = call.vertices[0].color;
+            float left = call.vertices[0].x;
+            float top = call.vertices[0].y;
+            float right = left;
+            float bottom = top;
+            for (const GeometryVertex& vertex : call.vertices) {
+                left = std::min(left, vertex.x);
+                top = std::min(top, vertex.y);
+                right = std::max(right, vertex.x);
+                bottom = std::max(bottom, vertex.y);
+            }
+            call.rect = Rect{left, top, right - left, bottom - top};
+            calls.push_back(std::move(call));
+        }
+
+        /// Like a backend: only a texture this renderer made can be drawn
+        [[nodiscard]] bool CanDrawTexture(const ITexture& texture) const override {
+            return dynamic_cast<const RecordedTexture*>(&texture) != nullptr;
+        }
+
     private:
+        DrawCall MakeCallWithSpareStorage() {
+            DrawCall call;
+            if (!_spareGeometry.empty()) {
+                call.vertices = std::move(_spareGeometry.back().vertices);
+                call.indices = std::move(_spareGeometry.back().indices);
+                _spareGeometry.pop_back();
+            }
+            return call;
+        }
+
         struct GeometryStorage {
             Vector<GeometryVertex> vertices;
             Vector<int> indices;

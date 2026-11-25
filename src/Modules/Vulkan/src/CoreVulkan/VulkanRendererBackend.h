@@ -105,6 +105,11 @@ namespace BECore {
             return _device;
         }
 
+    protected:
+        // One geometry draw of the quads gathered by the batcher (IRenderer), at the flush: under the scissor of the clip in effect then
+        void SubmitBatch(const RenderBatch& batch) override;
+        [[nodiscard]] bool CanDrawTexture(const ITexture& texture) const override;
+
     private:
         // The scissor of the next draw: the clip rect cut to the current extent, or the whole extent when nothing is
         // clipped. False when the clip leaves nothing visible, so the draw is skipped.
@@ -153,8 +158,13 @@ namespace BECore {
         void OnImGuiNewFrame();
         void OnImGuiRender();
 
+        // Writes the vertices (translation, then view transform, on the CPU; the opacity when @p fade) and the indices into the frame slot's
+        // geometry buffer and records one indexed draw under the scissor of the clip stack. The indices are valid. Returns the triangles drawn,
+        // 0 when the clip leaves nothing or the memory cannot be had.
+        size_t RecordGeometry(VkDescriptorSet descriptorSet, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY, const ViewTransform& view, bool fade);
+
         // Draws take only straight alpha: logs once, the first time a draw comes with another blend mode, then draws as usual
-        void WarnIfBlendModeIgnored();
+        void WarnIfBlendModeIgnored(BlendMode mode);
 
         VulkanDevice _device;
         VulkanSwapchain _swapchain;

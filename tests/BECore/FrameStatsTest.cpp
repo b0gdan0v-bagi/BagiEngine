@@ -59,6 +59,7 @@ namespace BECore::Tests {
 
         const RenderCounters counters = renderer->TakeRenderCounters();
         EXPECT_EQ(counters.drawCalls, 5u);
+        EXPECT_EQ(counters.primitives, counters.drawCalls);  // nothing batches here: a primitive is a submission
         EXPECT_EQ(counters.triangles, 10u);
         EXPECT_EQ(counters.textureSwitches, 2u);
     }
@@ -82,6 +83,7 @@ namespace BECore::Tests {
             renderer->DrawFilledRect(0, 0, 1, 1, Color{});
         }
         EXPECT_EQ(renderer->PeekRenderCounters().drawCalls, 0u);
+        EXPECT_EQ(renderer->PeekRenderCounters().primitives, 0u);
 
         renderer->DrawTexture(*a, nullptr, 0, 0, 1, 1);
         EXPECT_EQ(renderer->TakeRenderCounters().textureSwitches, 1u);
@@ -161,7 +163,7 @@ namespace BECore::Tests {
         collector.EndStage(FrameStage::Render);
         collector.SetCounter("Things"_intern, 3.0);
         collector.SetCounter("Things"_intern, 5.0);
-        collector.EndFrame(RenderCounters{.drawCalls = 7, .triangles = 14, .textureSwitches = 1}, AllocTotals{});
+        collector.EndFrame(RenderCounters{.drawCalls = 7, .primitives = 20, .triangles = 14, .textureSwitches = 1}, AllocTotals{});
 
         const FrameStats* last = collector.GetLast();
         ASSERT_NE(last, nullptr);
@@ -173,6 +175,7 @@ namespace BECore::Tests {
         EXPECT_DOUBLE_EQ(last->GetStageMs(FrameStage::Render), 4.0);
         EXPECT_DOUBLE_EQ(last->GetStageMs(FrameStage::Present), 0.0);
         EXPECT_EQ(last->draws.drawCalls, 7u);
+        EXPECT_EQ(last->draws.primitives, 20u);
         EXPECT_EQ(last->FindCounter("Things"_intern), 5.0);
         EXPECT_FALSE(last->FindCounter("Other"_intern).has_value());
 

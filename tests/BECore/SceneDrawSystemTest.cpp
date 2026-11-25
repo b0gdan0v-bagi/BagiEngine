@@ -3,11 +3,13 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/RendererManager.h>
+#include <BECore/Scene/Components/ClipRectComponent.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneDrawSystem.h>
+#include <Common/AllocCheck.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Generated/SceneDrawSystemTest.gen.hpp>
@@ -17,6 +19,12 @@ namespace BECore::Tests {
 
     void DrawMarkerComponent::OnDraw() {
         CoreManager::GetRenderer()->DrawFilledRect(marker, 0.0f, 1.0f, 1.0f, Color{1, 2, 3, 4});
+    }
+
+    void DrawGeometryMarkerComponent::OnDraw() {
+        const GeometryVertex triangle[3] = {{marker, 0.0f, Color{1, 2, 3, 4}, 0.0f, 0.0f}, {marker + 1.0f, 0.0f, Color{1, 2, 3, 4}, 1.0f, 0.0f}, {marker, 1.0f, Color{1, 2, 3, 4}, 0.0f, 1.0f}};
+        const int indices[3] = {0, 1, 2};
+        CoreManager::GetRenderer()->DrawGeometry(nullptr, triangle, indices, 0.0f, 0.0f);
     }
 
     namespace {
@@ -95,6 +103,61 @@ namespace BECore::Tests {
             }
         }
 
+        constexpr float kQuadCorners = 4;
+        constexpr float kFloatTolerance = 1e-4f;
+        constexpr int kWarmFrames = 3;
+
+        /// What the renderer was asked to draw, one entry per primitive in the order of the draw calls: a batch is split into its quads
+        struct DrawnPrimitive {
+            const ITexture* texture = nullptr;
+            BlendMode blend = BlendMode::Alpha;
+            Optional<Rect> clip;
+            Rect box;
+            Color color;
+        };
+
+        Vector<DrawnPrimitive> Flatten(const Vector<DrawCall>& calls) {
+            Vector<DrawnPrimitive> primitives;
+            for (const DrawCall& call : calls) {
+                if (call.kind != DrawKind::Batch) {
+                    primitives.push_back({call.texture, call.blend, call.clip, call.rect, call.color});
+                    continue;
+                }
+                for (size_t first = 0; first + kQuadCorners <= call.vertices.size(); first += kQuadCorners) {
+                    float left = call.vertices[first].x;
+                    float top = call.vertices[first].y;
+                    float right = left;
+                    float bottom = top;
+                    for (size_t i = first; i < first + kQuadCorners; ++i) {
+                        left = std::min(left, call.vertices[i].x);
+                        top = std::min(top, call.vertices[i].y);
+                        right = std::max(right, call.vertices[i].x);
+                        bottom = std::max(bottom, call.vertices[i].y);
+                    }
+                    primitives.push_back({call.texture, call.blend, call.clip, Rect{left, top, right - left, bottom - top}, call.vertices[first].color});
+                }
+            }
+            return primitives;
+        }
+
+        void ExpectSamePrimitive(const DrawnPrimitive& batched, const DrawnPrimitive& plain, size_t index) {
+            EXPECT_EQ(batched.texture, plain.texture) << index;
+            EXPECT_EQ(batched.blend, plain.blend) << index;
+            ASSERT_EQ(batched.clip.has_value(), plain.clip.has_value()) << index;
+            if (batched.clip) {
+                EXPECT_NEAR(batched.clip->x, plain.clip->x, kFloatTolerance) << index;
+                EXPECT_NEAR(batched.clip->y, plain.clip->y, kFloatTolerance) << index;
+                EXPECT_NEAR(batched.clip->w, plain.clip->w, kFloatTolerance) << index;
+                EXPECT_NEAR(batched.clip->h, plain.clip->h, kFloatTolerance) << index;
+            }
+            EXPECT_NEAR(batched.box.x, plain.box.x, kFloatTolerance) << index;
+            EXPECT_NEAR(batched.box.y, plain.box.y, kFloatTolerance) << index;
+            EXPECT_NEAR(batched.box.w, plain.box.w, kFloatTolerance) << index;
+            EXPECT_NEAR(batched.box.h, plain.box.h, kFloatTolerance) << index;
+            EXPECT_EQ(batched.color.r, plain.color.r) << index;
+            EXPECT_EQ(batched.color.a, plain.color.a) << index;
+        }
+
     }  // namespace
 
     class SceneDrawSystemTest : public ::testing::Test {
@@ -137,6 +200,68 @@ namespace BECore::Tests {
             node->AddComponent(sprite);
             return node;
         }
+
+        /// A texture the sprites of a scene can share, so that they are one batch
+        IntrusivePtr<ITexture> MakeSharedTexture() {
+            const Vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
+            return _renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize);
+        }
+
+        /// Adds a node of 10 x 10 at (@p x, 0) under @p parent with a sprite of @p texture, drawn with @p blend
+        IntrusivePtr<SceneNode> AddSharedSprite(const IntrusivePtr<ITexture>& texture, float x, SceneNode* parent = nullptr, BlendMode blend = BlendMode::Alpha, float rotation = 0.0f) {
+            auto node = _scene->CreateNode("Shared"_intern, parent);
+            auto transform = BECore::New<TransformComponent>();
+            transform->_x = x;
+            transform->_width = kSpriteSize;
+            transform->_height = kSpriteSize;
+            transform->_rotation = rotation;
+            node->AddComponent(transform);
+            auto sprite = BECore::New<SpriteRendererComponent>();
+            sprite->SetTexture(texture);
+            sprite->_blend = blend;
+            node->AddComponent(sprite);
+            return node;
+        }
+
+        /// A node of @p size at the origin that clips its subtree
+        IntrusivePtr<SceneNode> AddClip(float size) {
+            auto node = _scene->CreateNode("Clip"_intern, nullptr);
+            auto transform = BECore::New<TransformComponent>();
+            transform->_width = size;
+            transform->_height = size;
+            node->AddComponent(transform);
+            node->AddComponent(BECore::New<ClipRectComponent>());
+            return node;
+        }
+
+        void AddGeometryMarker(float x) {
+            auto node = _scene->CreateNode("Geometry"_intern, nullptr);
+            auto marker = BECore::New<DrawGeometryMarkerComponent>();
+            marker->marker = x;
+            node->AddComponent(marker);
+        }
+
+        /// A scene of every kind of break: textures, blend modes, a clip subtree, a custom geometry draw, a turned sprite and quads
+        void BuildMixedScene(const IntrusivePtr<ITexture>& first, const IntrusivePtr<ITexture>& second) {
+            AddSharedSprite(first, 0.0f);
+            AddSharedSprite(first, 11.0f);
+            AddSharedSprite(first, 22.0f);
+            AddSharedSprite(second, 33.0f);
+            AddSharedSprite(second, 44.0f, nullptr, BlendMode::Add);
+            AddSharedSprite(second, 55.0f);
+            auto clip = AddClip(kClipSize);
+            AddSharedSprite(second, 5.0f, clip.Get());
+            AddQuad(*_scene, clip.Get(), "ClippedQuad", 6.0f);
+            AddGeometryMarker(70.0f);
+            AddSharedSprite(first, 80.0f);
+            AddQuad(*_scene, nullptr, "Quad", 90.0f);
+            AddSharedSprite(first, 100.0f, nullptr, BlendMode::Alpha, kTurn);
+            AddSharedSprite(first, 111.0f);
+        }
+
+        static constexpr float kSpriteSize = 10.0f;
+        static constexpr float kClipSize = 8.0f;
+        static constexpr float kTurn = 30.0f;
 
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtr<Scene> _scene;
@@ -572,6 +697,128 @@ namespace BECore::Tests {
 
         node->SetEditorFlags(EditorFlags::None);
         EXPECT_EQ(Draw(), (Vector<float>{7.0f}));
+    }
+
+    TEST_F(SceneDrawSystemTest, SpritesOfOneTextureInARowAreOneBatchAndOneSubmission) {
+        _renderer->SetBatchingEnabled(true);
+        const auto texture = MakeSharedTexture();
+        for (int i = 0; i < 4; ++i) {
+            AddSharedSprite(texture, static_cast<float>(i) * 11.0f);
+        }
+
+        Draw();
+
+        ASSERT_EQ(_renderer->calls.size(), 1u) << "the pass ends with a flush: nothing is left in the batch";
+        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Batch);
+        EXPECT_EQ(_renderer->calls[0].quads, 4u);
+        const RenderCounters counters = _renderer->TakeRenderCounters();
+        EXPECT_EQ(counters.primitives, 4u);
+        EXPECT_EQ(counters.drawCalls, 1u);
+    }
+
+    TEST_F(SceneDrawSystemTest, ATextureOrABlendChangeSplitsTheBatchInTheOrderOfTheScene) {
+        _renderer->SetBatchingEnabled(true);
+        const auto first = MakeSharedTexture();
+        const auto second = MakeSharedTexture();
+        AddSharedSprite(first, 0.0f);
+        AddSharedSprite(first, 11.0f);
+        AddSharedSprite(second, 22.0f);
+        AddSharedSprite(second, 33.0f, nullptr, BlendMode::Add);
+        AddSharedSprite(second, 44.0f);
+
+        Draw();
+
+        ASSERT_EQ(_renderer->calls.size(), 4u);
+        const uint32_t quads[] = {2, 1, 1, 1};
+        const ITexture* textures[] = {first.Get(), second.Get(), second.Get(), second.Get()};
+        const BlendMode blends[] = {BlendMode::Alpha, BlendMode::Alpha, BlendMode::Add, BlendMode::Alpha};
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_EQ(At(_renderer->calls, i).quads, quads[i]) << i;
+            EXPECT_EQ(At(_renderer->calls, i).texture, textures[i]) << i;
+            EXPECT_EQ(At(_renderer->calls, i).blend, blends[i]) << i;
+        }
+        EXPECT_EQ(_renderer->GetBlendMode(), BlendMode::Alpha);
+    }
+
+    TEST_F(SceneDrawSystemTest, AClipRectSubtreeSplitsTheBatchAndEachPartKeepsItsClip) {
+        _renderer->SetBatchingEnabled(true);
+        const auto texture = MakeSharedTexture();
+        AddSharedSprite(texture, 0.0f);
+        auto clip = AddClip(kClipSize);
+        AddSharedSprite(texture, 1.0f, clip.Get());
+        AddSharedSprite(texture, 2.0f, clip.Get());
+        AddSharedSprite(texture, 50.0f);
+
+        Draw();
+
+        ASSERT_EQ(_renderer->calls.size(), 3u);
+        EXPECT_EQ(At(_renderer->calls, 0).quads, 1u);
+        EXPECT_FALSE(At(_renderer->calls, 0).clip.has_value());
+        EXPECT_EQ(At(_renderer->calls, 1).quads, 2u);
+        ASSERT_TRUE(At(_renderer->calls, 1).clip.has_value());
+        EXPECT_FLOAT_EQ(At(_renderer->calls, 1).clip->w, kClipSize);
+        EXPECT_EQ(At(_renderer->calls, 2).quads, 1u);
+        EXPECT_FALSE(At(_renderer->calls, 2).clip.has_value());
+    }
+
+    TEST_F(SceneDrawSystemTest, ACustomGeometryDrawBetweenSpritesKeepsItsPlace) {
+        _renderer->SetBatchingEnabled(true);
+        const auto texture = MakeSharedTexture();
+        AddSharedSprite(texture, 0.0f);
+        AddSharedSprite(texture, 11.0f);
+        AddGeometryMarker(kMarkerId);
+        AddSharedSprite(texture, 22.0f);
+
+        Draw();
+
+        ASSERT_EQ(_renderer->calls.size(), 3u);
+        EXPECT_EQ(At(_renderer->calls, 0).kind, DrawKind::Batch);
+        EXPECT_EQ(At(_renderer->calls, 0).quads, 2u);
+        EXPECT_EQ(At(_renderer->calls, 1).kind, DrawKind::Geometry);
+        EXPECT_EQ(At(_renderer->calls, 2).kind, DrawKind::Batch);
+        EXPECT_EQ(At(_renderer->calls, 2).quads, 1u);
+    }
+
+    TEST_F(SceneDrawSystemTest, ABatchedSceneDrawsTheSamePrimitivesInTheSameOrderAndUnderTheSameClipAsTheUnbatchedOne) {
+        const auto first = MakeSharedTexture();
+        const auto second = MakeSharedTexture();
+        BuildMixedScene(first, second);
+
+        _renderer->SetBatchingEnabled(false);
+        _scene->Draw();
+        const Vector<DrawnPrimitive> plain = Flatten(_renderer->calls);
+        const RenderCounters plainCounters = _renderer->TakeRenderCounters();
+        _renderer->ClearCalls();
+
+        _renderer->SetBatchingEnabled(true);
+        _scene->Draw();
+        const Vector<DrawnPrimitive> batched = Flatten(_renderer->calls);
+        const RenderCounters batchedCounters = _renderer->TakeRenderCounters();
+
+        ASSERT_EQ(batched.size(), plain.size());
+        for (size_t i = 0; i < plain.size(); ++i) {
+            ExpectSamePrimitive(At(batched, i), At(plain, i), i);
+        }
+        EXPECT_EQ(batchedCounters.primitives, plainCounters.primitives);
+        EXPECT_EQ(plainCounters.drawCalls, plainCounters.primitives);
+        EXPECT_LT(batchedCounters.drawCalls, plainCounters.drawCalls);
+        EXPECT_EQ(batchedCounters.drawCalls, _renderer->calls.size()) << "drawCalls is the number of batches and geometry draws";
+    }
+
+    TEST_F(SceneDrawSystemTest, ASteadyBatchedFrameAllocatesNothing) {
+        _renderer->SetBatchingEnabled(true);
+        const auto first = MakeSharedTexture();
+        const auto second = MakeSharedTexture();
+        BuildMixedScene(first, second);
+        const auto frame = [&] {
+            _renderer->ClearCalls();
+            _scene->Draw();
+            _renderer->TakeRenderCounters();
+        };
+        for (int i = 0; i < kWarmFrames; ++i) {
+            frame();
+        }
+        ExpectNoAllocations(frame);
     }
 
 }  // namespace BECore::Tests

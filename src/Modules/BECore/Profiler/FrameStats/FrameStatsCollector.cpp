@@ -101,6 +101,7 @@ namespace BECore {
         _ring[(_frames - 1) % kFrameHistory] = _current;
 
         BE_PROFILE_COUNTER("Draw calls", draws.drawCalls);
+        BE_PROFILE_COUNTER("Primitives", draws.primitives);
         BE_PROFILE_COUNTER("Allocations", _current.allocCount);
         BE_PROFILE_COUNTER("Live bytes", _current.liveBytes);
     }
