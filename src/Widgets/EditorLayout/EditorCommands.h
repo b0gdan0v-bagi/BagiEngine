@@ -77,12 +77,16 @@ namespace BECore {
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.
+    /// A button of an asset panel passes a value of its row as the argument (a String: it is read from a file, so no pool entry);
+    /// the palette, a menu item and a hotkey leave it empty.
     struct EditorCommandEvent : public EventBase<EditorCommandEvent> {
         BE_EVENT(EditorCommandEvent)
         BE_REFLECT_FIELD PoolString commandId;
+        BE_REFLECT_FIELD String argument;
 
         EditorCommandEvent() = default;
         explicit EditorCommandEvent(PoolString id) : commandId(id) {}
+        EditorCommandEvent(PoolString id, String commandArgument) : commandId(id), argument(std::move(commandArgument)) {}
     };
 
     /// The preferences that other panels read changed (or the editor just started): sent by EditorLayoutWidget, which owns the
