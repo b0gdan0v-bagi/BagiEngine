@@ -38,6 +38,7 @@ namespace BECore::Stress {
         inline constexpr StringView kRamp = "--stress-ramp";
         inline constexpr StringView kMeasure = "--stress-measure";
         inline constexpr StringView kInterleave = "--stress-interleave";
+        inline constexpr StringView kNoBatching = "--stress-no-batching";
         inline constexpr StringView kAtlases = "--stress-atlases";
         inline constexpr StringView kLanguage = "--stress-language";
     }  // namespace StressFlags
@@ -52,6 +53,7 @@ namespace BECore::Stress {
         bool ramp = false;
         StressMeasure measure = StressMeasure::Work;
         bool interleave = false;  // a new atlas and blend mode on every sprite instead of runs (the worst case for a batcher)
+        bool noBatching = false;  // the renderer's 2D batcher is turned off at the first update: the comparison of a GPU backend with and without it
         uint32_t atlases = kDefaultAtlases;
         StressLanguage language = StressLanguage::En;
 
@@ -73,6 +75,7 @@ namespace BECore::Stress {
      * | --stress-ramp | bare flag (the ramp starts at kRampStart: StressGame ignores --stress-count then; it wins over --stress-frames) |
      * | --stress-measure= | work, cpu |
      * | --stress-interleave | bare flag |
+     * | --stress-no-batching | bare flag |
      * | --stress-atlases= | kMinAtlases..kMaxAtlases |
      * | --stress-language= | en, ru |
      *

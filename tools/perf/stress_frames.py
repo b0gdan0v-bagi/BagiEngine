@@ -10,10 +10,16 @@ game's JSON line unchanged** and nothing else: the last line of its log that sta
 metric). The connection closing during a step is the normal end; every other end (no line, a non-zero exit code, the step bound, the
 time limit) is an error with the end of the game's log on stderr and exit code 1. `--trace FILE` passes `--trace=FILE` to the game
 (a profile build), recorded over the whole run: the warm-up is in the trace too.
+
+`--backend sdl-gpu|vulkan` runs the game on that GPU backend in a hidden window (`--hidden-window --backend=<it>` instead of `--headless`;
+`software`, the default, is the headless run). A machine without the backend cannot start the game, which logs `BACKEND_UNAVAILABLE_MARKER`
+before it exits: that is not an error here but the line `skip: <the game's own words>` on stdout and exit code 77 (`EXIT_SKIPPED`), which
+`perf.py` reports as a skipped benchmark. Any other early exit stays an error. `--no-batching` passes `--stress-no-batching`.
 """
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -21,9 +27,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "control"))
 
 from bagi_control_client import ConnectionClosed, ControlError  # noqa: E402
-from game_process import GameLaunchError, GameProcess, build_game_command, free_port  # noqa: E402
+from game_process import BACKEND_UNAVAILABLE_MARKER, GameLaunchError, GameProcess, build_game_command, free_port  # noqa: E402
 
 SCENES = ("sprites", "entities", "ui")
+BACKENDS = ("software", "sdl-gpu", "vulkan")
+DEFAULT_BACKEND = "software"
+LOG_PREFIX_RE = re.compile(r"^\[[^\]]*\]\s*\[[^\]]*\]\s*")  # "[Error] [12:00:00.000] "
+EXIT_SKIPPED = 77  # the convention of the smokes (tools/control/CLAUDE.md); perf.py reads it
 MEASURES = ("work", "cpu")
 STEP_DT = 1.0 / 60.0
 DEFAULT_CHUNK = 60  # frames per `step`: a second of game time
@@ -43,6 +53,10 @@ class StressRunError(Exception):
     """The run did not give a line; the message says why and carries the end of the game's log."""
 
 
+class BackendUnavailable(Exception):
+    """The game could not start on the backend asked for; the message is the game's own line about it."""
+
+
 def stress_flags(args: argparse.Namespace) -> list[str]:
     """The `--stress-*` flags of the game for these arguments. A ramp starts at its own count and ignores `--count`, `--frames` and `--warmup`."""
     flags = [f"--stress-scene={args.scene}", f"--stress-measure={args.measure}", f"--stress-atlases={args.atlases}"]
@@ -52,9 +66,30 @@ def stress_flags(args: argparse.Namespace) -> list[str]:
         flags += [f"--stress-count={args.count}", f"--stress-frames={args.frames}", f"--stress-warmup={args.warmup}"]
     if args.interleave:
         flags.append("--stress-interleave")
+    if args.no_batching:
+        flags.append("--stress-no-batching")
     if args.trace:
         flags.append(f"--trace={Path(args.trace).resolve()}")
     return flags
+
+
+def game_command(exe: Path, port: int, args: argparse.Namespace) -> list[str]:
+    """The software renderer is the headless run; a GPU backend needs a window, hidden so that nothing shows on the screen."""
+    if args.backend == DEFAULT_BACKEND:
+        return build_game_command(exe, port, extra=stress_flags(args))
+    return build_game_command(exe, port, headless=False, extra=["--hidden-window", f"--backend={args.backend}", *stress_flags(args)])
+
+
+def unavailable_reason(log_path: Path) -> str | None:
+    """The game's line that says the backend cannot start on this machine (without its time stamp), or None."""
+    try:
+        text = log_path.read_text(errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if BACKEND_UNAVAILABLE_MARKER in line:
+            return LOG_PREFIX_RE.sub("", line).strip()
+    return None
 
 
 def step_bound(args: argparse.Namespace) -> int:
@@ -86,8 +121,14 @@ def run(args: argparse.Namespace) -> str:
     port = free_port()
     bound = step_bound(args)
     deadline = time.monotonic() + args.timeout
-    with GameProcess(build_game_command(exe, port, extra=stress_flags(args)), cwd=exe.parent) as game:
-        client = game.connect(port, timeout=args.timeout)  # also the limit of one step: a slow frame is not a dead game
+    with GameProcess(game_command(exe, port, args), cwd=exe.parent) as game:
+        try:
+            client = game.connect(port, timeout=args.timeout)  # also the limit of one step: a slow frame is not a dead game
+        except GameLaunchError:
+            reason = unavailable_reason(game.log_path)
+            if reason is None:
+                raise
+            raise BackendUnavailable(reason) from None
         stepped = 0
         ended = False
         try:
@@ -132,6 +173,8 @@ def main() -> int:
     parser.add_argument("--measure", choices=MEASURES, default="work", help="the number the ramp budgets: workMs or the whole cpuMs (default work)")
     parser.add_argument("--interleave", action="store_true", help="change the atlas and the blend mode on every sprite (the worst case)")
     parser.add_argument("--atlases", type=int, default=DEFAULT_ATLASES, help=f"atlases of the sprites scene (default {DEFAULT_ATLASES})")
+    parser.add_argument("--backend", choices=BACKENDS, default=DEFAULT_BACKEND, help="the renderer: software (headless, default) or a GPU backend in a hidden window; a machine without it skips")
+    parser.add_argument("--no-batching", action="store_true", help="turn the 2D batcher off for the run (--stress-no-batching)")
     parser.add_argument("--chunk", type=int, default=DEFAULT_CHUNK, help=f"frames per step (default {DEFAULT_CHUNK})")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS, help=f"seconds the whole run may take (default {DEFAULT_TIMEOUT_SECONDS:g})")
     parser.add_argument("--trace", help="record a Chrome trace into this file (a profile build)")
@@ -140,6 +183,9 @@ def main() -> int:
         parser.error("--chunk, --frames and --count must be at least 1, --warmup at least 0 and --timeout positive")
     try:
         print(run(args))
+    except BackendUnavailable as skipped:
+        print(f"skip: {skipped}")
+        return EXIT_SKIPPED
     except (StressRunError, GameLaunchError) as error:
         print(f"stress_frames: {error}", file=sys.stderr)
         return 1

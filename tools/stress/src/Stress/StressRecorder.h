@@ -86,6 +86,7 @@ namespace BECore::Stress {
         uint32_t warmup = 0;
         bool interleave = false;
         uint32_t atlases = 0;
+        bool batching = true;      // the renderer batched 2D quads during the run
         bool manualClock = false;  // `frameMs` of a manual-clock run includes the idle between steps: it is reported, nothing gates on it
         bool allocTracking = false;
     };

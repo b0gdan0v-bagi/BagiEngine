@@ -27,6 +27,7 @@ DEFAULT_STARTUP_TIMEOUT = 30.0
 DEFAULT_SHUTDOWN_TIMEOUT = 10.0
 CONNECT_RETRY_SECONDS = 0.1
 LOG_TAIL_LINES = 25
+BACKEND_UNAVAILABLE_MARKER = "is not available on this machine"  # what the game logs when a backend asked for with --backend cannot start (SDL3ApplicationFabric::Create)
 PORT_TAKEN_MARKER = "cannot listen on 127.0.0.1:"  # what the game logs when it cannot bind the control port (Application::StartControlServer)
 # A log line is "[Warning] [12:00:00.000] text", with the level tag wrapped in an ANSI colour when the console sink colours (ConsoleSink.cpp)
 ANSI_COLOR = re.compile(r"\x1b\[[0-9;]*m")

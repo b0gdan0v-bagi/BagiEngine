@@ -6,7 +6,8 @@
 Run from the root of a repository whose `.claude/rules/perf-project.md` holds the benchmark set (a fenced JSON block under
 "## Benchmark set"; the format is in `tools/perf/CLAUDE.md`). It builds the set's preset and targets, runs each benchmark N times after
 its warm-up runs, reads the metrics each run prints, and compares the means with the baseline of this machine in the todo store
-(`perf-baseline-<area>-<machine>.md`). Exit code: 0 no regression, 3 a regression, 1 an error (a failed build or run, a bad set).
+(`perf-baseline-<area>-<machine>.md`). Exit code: 0 no regression, 3 a regression, 1 an error (a failed build or run, a bad set). A benchmark whose command exits with
+77 and prints a `skip: <reason>` line (a backend this machine lacks) is skipped: reported, never measured, compared or recorded.
 """
 
 import argparse
@@ -28,6 +29,8 @@ SET_RE = re.compile(r"^## Benchmark set\s*$.*?```json\n(.*?)\n```", re.DOTALL | 
 PERF_DIR = Path(__file__).resolve().parent
 ENGINE_DIR = PERF_DIR.parents[1]
 EXIT_REGRESSION = 3
+EXIT_SKIPPED = 77  # the command's own: "this benchmark cannot run here"; it is not a failure
+SKIP_PREFIX = "skip:"
 DEFAULT_REPETITIONS = 5
 DEFAULT_WARMUP = 1
 DEFAULT_THRESHOLD_PERCENT = 3.0
@@ -38,6 +41,10 @@ SOURCES = ("regex", "json", "wall")
 
 class PerfError(Exception):
     pass
+
+
+class Skipped(Exception):
+    """A benchmark that cannot run on this machine (its command exited with 77); the message is the reason."""
 
 
 def load_set(rules: Path) -> dict:
@@ -151,6 +158,10 @@ def run_once(bench: dict, root: Path, preset: str) -> dict[str, float]:
     except OSError as error:
         raise PerfError(f"{bench['name']}: cannot run {' '.join(command)}: {error}") from error
     wall = time.perf_counter() - started
+    if done.returncode == EXIT_SKIPPED:
+        reasons = [line[len(SKIP_PREFIX):].strip() for line in done.stdout.splitlines() if line.startswith(SKIP_PREFIX)]
+        if reasons:  # without the line an exit code 77 is a failure like any other
+            raise Skipped(reasons[-1])
     if done.returncode != 0:
         raise failed_run(bench, root, f"exit code {done.returncode}", command, done)
     return read_metrics(bench, done.stdout, wall)
@@ -335,10 +346,15 @@ def main() -> int:
         if not args.no_build:
             print(f"build {preset}: {', '.join(bench_set.get('targets', [])) or 'all'}", file=sys.stderr)
             build(root, preset, bench_set.get("targets", []))
-        results = {}
+        results, skipped = {}, {}
         for bench in benches:
             runs = args.repetitions or bench.get("repetitions", repetitions)
-            samples = measure(bench, root, preset, runs, lambda text: print(text, file=sys.stderr))
+            try:
+                samples = measure(bench, root, preset, runs, lambda text: print(text, file=sys.stderr))
+            except Skipped as reason:
+                skipped[bench["name"]] = str(reason)
+                print(f"skipped: {bench['name']}: {reason}", file=sys.stderr)
+                continue
             results[bench["name"]] = {
                 "commit": commit,
                 "repetitions": runs,
@@ -348,12 +364,14 @@ def main() -> int:
         print(f"{bench_set['area']} on {perf_baseline.machine_slug(fingerprint)}, {preset}, commit {commit}, {repetitions} runs each, baseline {name}"
               f"{'' if baseline else ' (none yet)'}")
         print(format_report(report))
+        for skipped_name, reason in skipped.items():
+            print(f"{skipped_name}: SKIPPED ({reason})")
         if args.json:
             Path(args.json).write_text(
-                json.dumps({"area": bench_set["area"], "commit": commit, "preset": preset, "machine": fingerprint, "baseline": name, "report": report, "results": results}, indent=2),
+                json.dumps({"area": bench_set["area"], "commit": commit, "preset": preset, "machine": fingerprint, "baseline": name, "report": report, "results": results, "skipped": skipped}, indent=2),
                 encoding="utf-8",
             )
-        if args.update_baseline:
+        if args.update_baseline and results:
             write_baseline(content, baseline, results, preset, fingerprint, bench_set, name, args)
         regressed = [name for name, bench in report.items() if bench["verdict"] == perf_stats.REGRESSION]
         return EXIT_REGRESSION if regressed else 0

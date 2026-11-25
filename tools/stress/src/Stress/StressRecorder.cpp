@@ -146,6 +146,7 @@ namespace BECore::Stress {
         AddBool(line, "allocTracking", context.allocTracking);
         AddNumber(line, "allocsPerFrame", summary.allocsPerFrame);
         AddInteger(line, "atlases", context.atlases);
+        AddInteger(line, "batching", context.batching ? 1 : 0);
         AddInteger(line, "count", context.count);
         AddNumber(line, "cpuMs", summary.cpuMs);
         AddNumber(line, "cpuMsP50", summary.cpuMsP50);

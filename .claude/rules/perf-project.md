@@ -21,7 +21,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
   "benchmarks": [
     {
       "name": "stress-sprites",
-      "about": "BagiStress sprites without a window: 5000 spinning sprites, one IRenderer call each, 300 frames after 30 of warm-up. work_ms_p50 is about 0.8 ms (the scene update and the calls); a frame is about 63 ms because the software renderer draws the sprites in its present, so more sprites or frames only make the run longer (10000 sprites: 43 s a run). The 2D batcher leaves textured quads unbatched on the software renderer (a byte-exactness gate, rendering-module.md, Batching), so work_ms does not move and draw_calls stays one per sprite (the in-process line of `StressRecorder` carries no `primitives` key; the profiler answer does); the gain of batching is on a GPU driver, which a headless run does not use",
+      "about": "BagiStress sprites without a window: 5000 spinning sprites, one IRenderer call each, 300 frames after 30 of warm-up. work_ms_p50 is about 0.8 ms (the scene update and the calls); a frame is about 63 ms because the software renderer draws the sprites in its present, so more sprites or frames only make the run longer (10000 sprites: 43 s a run). The 2D batcher leaves textured quads unbatched on the software renderer (a byte-exactness gate, rendering-module.md, Batching), so work_ms does not move and draw_calls stays one per sprite (the in-process line of `StressRecorder` carries no `primitives` key; the profiler answer does); the gain of batching is on a GPU driver, which a headless run does not use: see stress-sprites-gpu and stress-sprites-vulkan",
       "fast": false,
       "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30"],
       "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--trace", "{trace}"],
@@ -30,6 +30,36 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "work_ms_p99": {"source": "json", "key": "workMsP99", "unit": "ms/frame", "better": "lower", "gate": false},
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false},
+        "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
+      }
+    },
+    {
+      "name": "stress-sprites-gpu",
+      "about": "5000 spinning sprites over 4 atlases, 300 frames after 30 of warm-up, a run of about 2 s, in a hidden window with the present uncapped (no vsync wait); the benchmark is skipped (never failed) on a machine without the backend or a display. SDL's hardware renderer (Metal on macOS). work_ms_p50 is the frame without the present: the scene update and the IRenderer calls, the part the 2D batcher cuts (on the benchmark machine 0.28 ms batched, 0.52 ms with --no-batching; cpu_ms_p50 shows no gain: 0.7 to 1.5 ms batched, 1.2 ms unbatched, the present and the noise around it hide what work_ms shows); draw_calls is exact (23 batched against 5000 for one sprite per call), so a jump in it is a batcher regression and it gates at 1 %. cpu_ms_p50 and frame_ms_p50 include the present and are noisy on a laptop, so they only inform. `--no-batching` of stress_frames.py gives the unbatched side for a comparison by hand",
+      "fast": false,
+      "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--backend", "sdl-gpu"],
+      "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--backend", "sdl-gpu", "--trace", "{trace}"],
+      "metrics": {
+        "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower"},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 1},
+        "work_ms_p99": {"source": "json", "key": "workMsP99", "unit": "ms/frame", "better": "lower", "gate": false},
+        "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "frame_ms_p50": {"source": "json", "key": "frameMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
+      }
+    },
+    {
+      "name": "stress-sprites-vulkan",
+      "about": "5000 spinning sprites over 4 atlases, 300 frames after 30 of warm-up, a run of about 2 s, in a hidden window with the present uncapped (no vsync wait); the benchmark is skipped (never failed) on a machine without the backend or a display. VulkanRendererBackend on MoltenVK. work_ms_p50 is the frame without the present: the scene update and the IRenderer calls, the part the 2D batcher cuts (on the benchmark machine 0.24 ms batched, 2.9 ms with --no-batching, cpu_ms_p50 1.8 against 3.5); draw_calls is exact (23 batched against 5000 for one sprite per call), so a jump in it is a batcher regression and it gates at 1 %. cpu_ms_p50 and frame_ms_p50 include the present and are noisy on a laptop, so they only inform. `--no-batching` of stress_frames.py gives the unbatched side for a comparison by hand",
+      "fast": false,
+      "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--backend", "vulkan"],
+      "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--backend", "vulkan", "--trace", "{trace}"],
+      "metrics": {
+        "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower"},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 1},
+        "work_ms_p99": {"source": "json", "key": "workMsP99", "unit": "ms/frame", "better": "lower", "gate": false},
+        "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "frame_ms_p50": {"source": "json", "key": "frameMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
       }
     },
@@ -263,6 +293,6 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
 ## Notes
 
 - Headless, the present of the SDL software renderer is most of a frame whatever the scene draws; `work_ms` (the frame without the present) is the number that moves with scene and UI code.
-- The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). The stress scenes are the engine's frame benchmarks; the engine has no game of its own. Their baseline is the owner's word, like every other.
+- The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). The stress scenes are the engine's frame benchmarks; the engine has no game of its own. Their baseline is the owner's word, like every other. `stress-sprites-gpu` and `stress-sprites-vulkan` run the same scene on a GPU backend in a hidden window (`--backend`, `--hidden-window`: `tools/stress/CLAUDE.md`) and skip where the backend is missing (`tools/perf/CLAUDE.md`, exit codes); a machine under load of other workers moves their cpu and frame numbers, not draw_calls.
 - `value-get` has a line per case and type (`ValueBench <type> <case> ns_per_get=<x>`: `plain`, `const`, `slot`, `tree_field`, `tree_slot`, then `formula_plain`, `formula_tree`, `formula_program`, `formula_native`, `formula_run` (printed, not in the set: `Run` without the look for a bound function), `formula_unfused`, `formula_cached` and `madd_plain`, `madd_program`, `madd_native`, `madd_unfused`; the `Vec3` `madd` program is fused like the numbers), then `ValueBench mask_<case>` with no type (`mask_plain`, `mask_program`, `mask_run` (printed, not in the set), `mask_native`), then `ValueBench derived_hit_1`, `derived_hit_2`, `derived_hit_sources` and `derived_hand` (a `Derived` hit over one level, two levels and one source counter against the hand-kept compare, no type), then `ValueBench trigger_plain` and `trigger_script` (a script of a cell over `RunEffects` against C++, no type), then `ValueBench int32_t list_<op>_<case>` and `ValueBench bool list_<op>_<case>` (`list_count`, `list_any`, `list_any_early`, `list_sum` and `list_nested`, each as `_plain`, `_program` and `_native`: a formula with a loop over a hand's lists against a C++ loop). Nothing in it gates. Only the ratios of one run mean anything, and a loaded machine (other worker loops) moves every one: take the lowest of several runs.
 - The sentinel (`todo-merge`): `ask`.
