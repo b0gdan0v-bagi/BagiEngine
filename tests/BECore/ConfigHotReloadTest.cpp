@@ -45,6 +45,27 @@ namespace BECore::Tests {
             }
         };
 
+        class FailureRecorder : public SubscriptionHolder {
+        public:
+            FailureRecorder() {
+                Subscribe<ConfigEvents::ConfigReloadFailedEvent, &FailureRecorder::OnFailed>(this);
+            }
+
+            Vector<PoolString> names;
+            Vector<String> reasons;
+            std::thread::id lastThread;
+
+        private:
+            void OnFailed(const ConfigEvents::ConfigReloadFailedEvent& event) {
+                names.push_back(event.name);
+                reasons.push_back(event.reason);
+                lastThread = std::this_thread::get_id();
+            }
+        };
+
+        /// A reason is one line for a banner, never a dump of the file
+        constexpr size_t kMaxReasonLength = 200;
+
     }  // namespace
 
     /// A manager and a watcher of their own over a `config` folder in a temporary directory: the engine's own configs are never written. The watcher runs
@@ -164,6 +185,52 @@ namespace BECore::Tests {
         EXPECT_TRUE(recorder.names.empty());
         EXPECT_EQ(HotValue(), "one");
         EXPECT_EQ(log.Count(LogLevel::Error, {"HotConfig"}), 1u);
+    }
+
+    TEST_F(ConfigHotReloadTest, AFileThatDoesNotParseEmitsTheFailureOnceAndALaterGoodFileTheChange) {
+        StartOnFake();
+        ChangeRecorder changes;
+        FailureRecorder failures;
+        WriteFile(HotPath(), "<HotConfig value=\"broken\"");
+
+        PostAndSettle(HotPath());
+
+        ASSERT_EQ(failures.names.size(), 1u);
+        EXPECT_EQ(failures.names[0], kHot);
+        EXPECT_FALSE(failures.reasons[0].empty());
+        EXPECT_LT(failures.reasons[0].size(), kMaxReasonLength);
+        EXPECT_EQ(failures.lastThread, std::this_thread::get_id());
+        EXPECT_TRUE(changes.names.empty());
+        EXPECT_EQ(HotValue(), "one") << "the old document is kept";
+
+        WriteFile(HotPath(), "<HotConfig value=\"two\"/>\n");
+        PostAndSettle(HotPath());
+
+        EXPECT_EQ(failures.names.size(), 1u);
+        ASSERT_EQ(changes.names.size(), 1u);
+        EXPECT_EQ(HotValue(), "two");
+    }
+
+    TEST_F(ConfigHotReloadTest, AFileThatIsGoneEmitsTheFailure) {
+        StartOnFake();
+        FailureRecorder failures;
+        const auto removed = RemoveFile(HotPath());
+        ASSERT_TRUE(removed) << removed.error().c_str();
+
+        PostAndSettle(HotPath());
+
+        ASSERT_EQ(failures.names.size(), 1u);
+        EXPECT_EQ(failures.names[0], kHot);
+        EXPECT_EQ(HotValue(), "one");
+    }
+
+    TEST_F(ConfigHotReloadTest, ReloadConfigByHandEmitsNoFailure) {
+        FailureRecorder failures;
+        WriteFile(HotPath(), "<HotConfig value=\"broken\"");
+
+        EXPECT_FALSE(_manager.ReloadConfig(kHot));
+
+        EXPECT_TRUE(failures.names.empty());
     }
 
     TEST_F(ConfigHotReloadTest, ANewFileARemovedFileAndAFileNoConfigOwnsEmitNothing) {

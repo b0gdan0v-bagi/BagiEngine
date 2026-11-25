@@ -433,7 +433,8 @@ namespace BECore {
             NotifyConfigChanged(name);
         } else if (!failure.empty()) {
             change.ok = false;
-            change.error = std::move(failure);
+            change.error = failure;
+            ConfigEvents::ConfigReloadFailedEvent::Emit(name, std::move(failure));
         }
     }
 
