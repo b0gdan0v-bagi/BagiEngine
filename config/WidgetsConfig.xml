@@ -7,6 +7,9 @@
       type="AssetPanelWidget"
       asset="MainToolbarPanel" />
     <widget
+      type="AssetPanelWidget"
+      asset="MainMenuPanel" />
+    <widget
       type="EditorLayoutWidget" />
     <widget
       type="AssetPanelWidget"

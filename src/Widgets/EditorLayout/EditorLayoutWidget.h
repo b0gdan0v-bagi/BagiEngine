@@ -5,6 +5,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/CommandPalette.h>
+#include <Widgets/EditorLayout/EditorChordText.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorPlayModel.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
@@ -49,7 +50,6 @@ namespace BECore {
         std::expected<void, String> SaveCurrentLayoutAs(StringView name) override;
         void LoadLayout(StringView name) override;
         void NotifyPreferencesChanged() override;
-        void NotifyLayoutsChanged() override;
 
     private:
         void BuildDefaultLayout(ImGuiID dockspaceId, ImVec2 size);
@@ -68,7 +68,6 @@ namespace BECore {
         void ApplyPreferences(const EditorPreferences& preferences);
 
         void DrawMenuBar();
-        void DrawLayoutsMenu();
         /// Emits the command of every chord pressed this frame
         void DispatchHotkeys();
         /// Pause / Resume through the model, written to the engine's GamePause (the pause of a manual clock is not lifted)
@@ -79,16 +78,12 @@ namespace BECore {
         void WritePauseToEngine();
         /// Tells the panels the preferences they read (EditorPreferencesChangedEvent)
         void AnnouncePreferences() const;
-        /// A menu item that emits the command @p id, with its chord shown right-aligned
-        void CommandMenuItem(PoolString id, const char* label, bool enabled = true);
 
         Optional<EditorSettings> _settings;
         Optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
-        LayoutNameCache _layoutNames;    // stale when a Layouts menu opens and after a save or a delete
-        MenuOpenTracker _layoutsMenuOpen;
-        MenuOpenTracker _deleteLayoutMenuOpen;
 
         EditorPlayModel _playModel;
+        EditorChordText _chordText;
         StatusBar _statusBar;
 
         CommandPalette _palette;

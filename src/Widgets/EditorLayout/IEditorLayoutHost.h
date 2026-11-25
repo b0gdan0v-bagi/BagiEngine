@@ -11,7 +11,7 @@
 namespace BECore {
 
     /**
-     * @brief What the panels made of assets need from the layout widget: its per-user settings and layouts and the two "something changed" calls
+     * @brief What the panels made of assets need from the layout widget: its per-user settings and layouts, the layout load and save, and the "preferences changed" call
      *
      * `EditorLayoutWidget` owns the `EditorSettings` and the `LayoutStore`, applies the font scale and tells the other panels what the
      * preferences hold; a model of a panel asset reaches it through `EditorLayoutHostRegistry` instead of a pointer to the widget, and a test
@@ -41,9 +41,6 @@ namespace BECore {
         /// The preferences of `GetSettings()` were changed by the caller: the host applies them (the font scale) and tells the panels, in its next
         /// `Update` at the latest, so the call may come every frame of a drag and costs a flag
         virtual void NotifyPreferencesChanged() = 0;
-
-        /// The layouts of `GetLayouts()` changed: the host reads the names again when a menu next needs them
-        virtual void NotifyLayoutsChanged() = 0;
     };
 
     class EditorLayoutHostRegistry;

@@ -46,10 +46,6 @@ namespace BECore::Tests {
             ++preferencesNotified;
         }
 
-        void NotifyLayoutsChanged() override {
-            ++layoutsNotified;
-        }
-
         Optional<EditorSettings> settings;
         Optional<LayoutStore> layouts;
         /// The model the toolbar reads; the test drives it directly, as the widget's commands would
@@ -58,7 +54,6 @@ namespace BECore::Tests {
         /// The names `LoadLayout` was asked for, in order
         Vector<String> loadedLayouts;
         int preferencesNotified = 0;
-        int layoutsNotified = 0;
     };
 
 }  // namespace BECore::Tests

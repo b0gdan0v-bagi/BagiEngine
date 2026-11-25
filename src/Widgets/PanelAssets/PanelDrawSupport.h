@@ -101,6 +101,26 @@ namespace BECore {
         /// The chord of the editor command @p command as text, empty for none. The view is valid until the next call; the interpreter calls it for every item of an open menu
         /// every frame, so an implementation caches and allocates nothing in a steady frame
         [[nodiscard]] virtual StringView ChordOf(StringView command) = 0;
+
+        /// Makes @p chords the provider `Installed()` returns; the host calls it when it is made and `Uninstall` when it ends. A provider installed later replaces the first
+        static void Install(PanelChordText* chords) {
+            _installed = chords;
+        }
+
+        /// Clears the installed provider when it is @p chords, so a replaced one does not remove its successor
+        static void Uninstall(const PanelChordText* chords) {
+            if (_installed == chords) {
+                _installed = nullptr;
+            }
+        }
+
+        /// The provider of the editor, or null where no host installed one (a game's own panels, a test); a widget asks again every frame, because the host is made after the assets
+        [[nodiscard]] static PanelChordText* Installed() {
+            return _installed;
+        }
+
+    private:
+        static inline PanelChordText* _installed = nullptr;
     };
 
 }  // namespace BECore

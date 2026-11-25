@@ -5,6 +5,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/AssetPanelWidget.gen.hpp>
 #include <Widgets/ImGuiTheme.h>
+#include <Widgets/PanelAssets/PanelDrawSupport.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -251,6 +252,7 @@ namespace BECore {
         if (ImGui::Begin(_windowTitle.c_str(), dialogs ? nullptr : &_open, flags)) {
             DrawBanner();
             if (_interpreter.IsPrepared()) {
+                _interpreter.SetChordText(PanelChordText::Installed());
                 _interpreter.Draw(_sources, _result);
             }
         }
@@ -295,6 +297,7 @@ namespace BECore {
         }
         DrawBarBanner();
         _result.Clear();
+        _interpreter.SetChordText(PanelChordText::Installed());
         _interpreter.Draw(_sources, _result);
         EndBarFrame();
         EmitClick();
