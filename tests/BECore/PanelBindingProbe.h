@@ -38,6 +38,14 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD Vector<PanelProbeRow> rows;
         BE_REFLECT_FIELD Vector<int32_t> numbers;
         BE_REFLECT_FIELD Vector<String> names;
+        BE_REFLECT_FIELD Array<int32_t, 3> triple{};
+    };
+
+    /// Has a field of the name `count` like PanelProbe, of another type: a source whose object changes type at run time
+    struct PanelProbeOther {
+        BE_CLASS(PanelProbeOther)
+
+        BE_REFLECT_FIELD float count = 0.0f;
     };
 
 }  // namespace BECore::Tests
