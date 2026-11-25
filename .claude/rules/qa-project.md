@@ -37,6 +37,8 @@ Fields the `qa` and `qa-loop` skills read. A game fills every row.
 | Bug area | the area `todo add --area` takes; in a game its own area, or `engine` when the cause is in the engine (the skill decides by where the cause is) | `engine` |
 | Bug id prefix | the id of an entry is `bug-<short>`, as the drafts name it | `bug-` |
 | Scenario folder | the product's recorded scenarios, relative to `<R>`: the fix of a `bug-*` entry leaves its reproduction here as `<short>.jsonl`, and the ctests of `be_add_game_scenario_tests` glob it | `tools/stress/tests/scenarios/` |
+| Editor content files | what the editor's Save writes: `QaSession` backs these files up before an editor launch and puts them back after it (`tools/qa/CLAUDE.md`, "The session"); `none` for a game with no editor charter | the member `EDITOR_CONTENT_FILES` of `<invariants>`: `tools/stress/config/SceneConfig.xml` |
+| Editor charter | the command `/qa-loop` runs once per run, after the monkey sweeps; its exit codes are the sweep's (0 clean, 1 a bug, 2 a bad option, 77 skipped); `none` for a game with no editor charter | `python3 tools/stress/qa/editor_charter.py --exe <exe> --out <out> --charter all` |
 
 ## Invariants
 
@@ -59,6 +61,8 @@ A charter is one sentence; the skill takes the first one when the user names non
 | A count sweep up to the maximum | `set_count` through small counts, the listed half and double, and `maxCount`, in each scene; a refused `0` and `maxCount + 1`; at a large count the `ui` scene needs tens of seconds in a Debug build, so take it one scene at a time and keep the session to a few hundred calls |
 | Reset and the manual clock | `reset` with and without `scene` / `count` from every scene, `step` with several `frames` and `dt`, the state the same after a `reset` as after a start, no frame advancing between two calls that do not `step` |
 | RmlUi scene: documents, reload and wheel | only in a build with `ENGINE_UI_RMLUI` (`macos-rmlui-debug`, where `get_state.scenes` lists `rmlui`); `reset` to `rmlui` at a small and at a large count (a few hundred documents), `set_count` up and down, `set_language` both ways, `call_method` `ReloadRmlUiDocuments`, `wheel_at` over the panel (`x` 1700, `y` 920) on both axes and with both `flipped`, a `step` of a few dozen frames after each wheel, screenshots, the counters `Stress rmlui ...` of `frame_stats`. The scene makes many contexts and documents; it does not make hundreds of textures (the glyph pages are shared by all contexts), so it does not exercise the growth of the Vulkan descriptor pool |
+| The editor: edit, save and reload a scene | `editor_charter.py --charter edit`: in a headless editor (`--editor`, no window) select the node `Run` of `StressEntities`, set a number, the layer and the name in the inspector, see the unsaved-changes marker, Save, see it go; the saved `SceneConfig.xml` differs from the one before in those edits only (the findings `editor.*`); a second start on the saved file shows the renamed node |
+| The editor: panels and chords, no save | `editor_charter.py --charter panels`: open every panel of the View menu, close and open the Game panel by its chord, open the command palette, filter it, close it, show the `ui` scene; a picture of each; the content file is never written (`editor.content_file_written`) and the log stays clean |
 
 ## Monkey
 
@@ -70,6 +74,8 @@ A charter is one sentence; the skill takes the first one when the user names non
 | A count sweep up to the maximum | not a monkey charter: a walk cannot keep a big count and a Debug `ui` scene at it in a minute, so `monkey_moves` caps `set_count` | none |
 | Reset and the manual clock | `{"count": 20}` | `action,reset,step` |
 | RmlUi scene: documents, reload and wheel | not a monkey charter: the monkey reaches the scene through the first charter's scene list (`reset` adds `rmlui` to it in that build) and finds its moves there | none |
+| The editor: edit, save and reload a scene | not a monkey charter: the walk knows `list_actions` and `ui_tree`, not ImGui; `/qa-loop` runs the field `Editor charter` once per run | none |
+| The editor: panels and chords, no save | not a monkey charter, as above | none |
 
 Budget per seed: the runner's default steps and 3 minutes (`--minutes 3`), whichever ends first. Engine, `BagiStress`: `monkey_moves` drops a `set_count` above `MONKEY_MAX_COUNT` and adds a `reset` to each scene of `state.scenes` with a small count; on the scene `rmlui` it also adds a `wheel_at` over the panel (both axes, `flipped`) and the `call_method` `ReloadRmlUiDocuments`, as kind `click` (the runner follows a `click` with a `step`). The cap needs no lower value for that scene (measured in `invariants.py`). A game's file has the same headings: its charters, start parameters and kinds, and what its `monkey_moves` does.
 
@@ -77,7 +83,20 @@ Budget per seed: the runner's default steps and 3 minutes (`--minutes 3`), which
 
 What is not a bug. The module's `KNOWN_DEVIATIONS` holds the names; the reason for each is written here, never a name without one.
 
-Engine, `BagiStress`: none today.
+Engine, `BagiStress`: none today. These are not names but properties the editor charters meet, so they are no findings:
+
+- The `ui` scene in the editor: its `Screen` canvas takes the shape of the viewport panel (1436 x 1444 in the default layout), while the stress grid fills a 1920 x 1080 view, so its labels are `OutsideCanvas` there. The panels charter shows the scene and leaves its `ui_tree` unchecked; a name in `KNOWN_DEVIATIONS` would hide the same finding in Game mode.
+- A saved stress scene holds the nodes its component made (`EDITOR_GENERATED`) and the defaults the writer adds to a transform (`EDITOR_ADDED_DEFAULTS`); the second start then shows the generated nodes twice (the file's and the component's).
+
+## The editor
+
+How `/qa` and `/qa-loop` use the editor (`tools/qa/CLAUDE.md`, "The session"; the moves are `tools/qa/bagi_qa_editor.py`, which names every label the editor shows):
+
+- **No scene or editor method exists on the control API.** A scene is opened by the game's `reset`, "reload" is a fresh launch, and Save is a click on the Save button; the dirty marker is read from the picture, since "(unsaved changes)" is text, not an item.
+- **Save writes the checkout's content file** (the content roots are compiled into the executable, so a copy cannot be edited instead): the executable must be this checkout's, the library puts the file back after every session (also a lost game, `replay` and every `shrink` probe), and `git status --short` is checked at the end of the run.
+- **A saved file holds more than the edits** (the live tree, the writer's defaults, a comment with `--` rewritten): `compare_scene_files` takes the game's allow lists, never a loose comparison.
+- **A build without the editor** answers `status.runMode` Game: the charter is skipped (exit 77), not a finding.
+- **A reproduction with `--editor` in its header never goes into the `Scenario folder`**: `be_add_game_scenario_tests` plays every `*.jsonl` there in Game mode, and one that clicks Save would write the content file of the checkout. The regression test of a fix is a gtest (`SceneEditorSaveTest` is the pattern) and the plan `bug-<short>-repro.md` keeps the scenario and the command of the charter.
 
 ## Screenshots
 
