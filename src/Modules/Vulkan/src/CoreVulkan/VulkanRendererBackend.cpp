@@ -169,8 +169,10 @@ namespace BECore {
 
         for (int i = 0; i < kMaxFramesInFlight; ++i) {
             vkDestroySemaphore(vkDevice, _imageAvailableSemaphores[i], nullptr);
-            vkDestroySemaphore(vkDevice, _renderFinishedSemaphores[i], nullptr);
             vkDestroyFence(vkDevice, _inFlightFences[i], nullptr);
+        }
+        for (const VkSemaphore semaphore : _renderFinishedSemaphores) {
+            vkDestroySemaphore(vkDevice, semaphore, nullptr);
         }
         _imageAvailableSemaphores.clear();
         _renderFinishedSemaphores.clear();
@@ -204,6 +206,12 @@ namespace BECore {
 
         switch (_swapchain.Recreate(_device, _surface, pixelWidth, pixelHeight)) {
             case SwapchainRecreateResult::Done:
+                // The image count may have changed; the semaphores that a failed present left signaled go with the old ones
+                if (!RemakeRenderFinishedSemaphores()) {
+                    LOG_ERROR("VulkanRendererBackend: the render-finished semaphores could not be made again, the frame is skipped");
+                    SDL_Delay(kRecreateFailedSleepMs);
+                    break;
+                }
                 _requestedPixelExtent = {static_cast<uint32_t>(pixelWidth), static_cast<uint32_t>(pixelHeight)};
                 _swapchainDirty = false;
                 _currentExtent = _swapchain.GetExtent();
@@ -388,7 +396,7 @@ namespace BECore {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers    = &cmd;
         submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores    = &_renderFinishedSemaphores[frameIdx];
+        submitInfo.pSignalSemaphores    = &_renderFinishedSemaphores[_currentImageIndex];
 
         // Reset just before the submit that signals it, never earlier: see AcquireFrame()
         if (!FrameCallSucceeded(vkResetFences(_device.GetDevice(), 1, &_inFlightFences[frameIdx]), "resetting the fence")) {
@@ -496,7 +504,7 @@ namespace BECore {
 
         const uint32_t frameIdx = _currentFrame;
         BE_PROFILE_SCOPE("Vulkan::QueuePresent");
-        HandleSwapchainStatus(_swapchain.Present(_device, _renderFinishedSemaphores[frameIdx], _currentImageIndex), SwapchainStage::Present);
+        HandleSwapchainStatus(_swapchain.Present(_device, _renderFinishedSemaphores[_currentImageIndex], _currentImageIndex), SwapchainStage::Present);
 
         _currentFrame = (_currentFrame + 1) % kMaxFramesInFlight;
     }
@@ -528,16 +536,33 @@ namespace BECore {
 
     bool VulkanRendererBackend::CreateSyncObjects() {
         _imageAvailableSemaphores.resize(kMaxFramesInFlight);
-        _renderFinishedSemaphores.resize(kMaxFramesInFlight);
         _inFlightFences.resize(kMaxFramesInFlight);
 
         for (int i = 0; i < kMaxFramesInFlight; ++i) {
             if (!MakeSemaphore(_device.GetDevice(), _imageAvailableSemaphores[i]) ||
-                !MakeSemaphore(_device.GetDevice(), _renderFinishedSemaphores[i]) ||
                 !MakeSignaledFence(_device.GetDevice(), _inFlightFences[i])) {
                 return false;
             }
         }
+        return RemakeRenderFinishedSemaphores();
+    }
+
+    bool VulkanRendererBackend::RemakeRenderFinishedSemaphores() {
+        VkDevice vkDevice = _device.GetDevice();
+        Vector<VkSemaphore> semaphores(_swapchain.GetImageCount(), VK_NULL_HANDLE);
+        for (VkSemaphore& semaphore : semaphores) {
+            if (!MakeSemaphore(vkDevice, semaphore)) {
+                for (const VkSemaphore made : semaphores) {
+                    vkDestroySemaphore(vkDevice, made, nullptr);
+                }
+                return false;
+            }
+        }
+        // The caller has waited for the device to be idle, so nothing is pending on the old ones
+        for (const VkSemaphore old : _renderFinishedSemaphores) {
+            vkDestroySemaphore(vkDevice, old, nullptr);
+        }
+        _renderFinishedSemaphores = std::move(semaphores);
         return true;
     }
 
