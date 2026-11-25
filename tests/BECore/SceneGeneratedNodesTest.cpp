@@ -1,5 +1,3 @@
-#include "SceneGeneratedNodesTypes.h"
-
 #include <BECore/Config/StringXmlWriter.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
@@ -9,6 +7,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodeInstance.h>
+#include <BECore/SceneGeneratedNodesTypes.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
@@ -214,7 +213,7 @@ namespace BECore::Tests {
             R"(<node name="N"><components>
   <component type="TransformComponent" x="3" width="50" height="1" rotation="90" pivotX="0"/>
   <component type="QuadRendererComponent"><color r="0" g="255" b="0" a="255"/></component>
-  <component type="SpriteRendererComponent" spriteId="Hero" flipY="true" blend="Additive"/>
+  <component type="SpriteRendererComponent" spriteId="Hero" flipY="true" blend="Add"/>
 </components></node>)");
 
         pugi::xml_document document;
