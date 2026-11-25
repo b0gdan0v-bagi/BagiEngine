@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
 
 import build_and_deploy
+import deploy_checkout
 
 TOOLS_WEB = Path(build_and_deploy.__file__).resolve().parent
 ENGINE_DIR = TOOLS_WEB.parents[1]
@@ -61,6 +62,22 @@ class FakeRunner:
         return SimpleNamespace(returncode=3 if command[0] == self.fail_on else 0)
 
 
+class FakeCheckout:
+    """Stands in for deploy_checkout.prepare: records what it was asked and hands back a folder that needs no git. A `failure` is
+    raised as the CheckoutError a real fetch that went wrong would raise."""
+
+    def __init__(self, checkout: deploy_checkout.Checkout, failure: str | None = None):
+        self.checkout = checkout
+        self.failure = failure
+        self.calls: list[tuple[Path, str, Path, bool]] = []
+
+    def __call__(self, project, base, checkout_dir, *, dry_run):
+        self.calls.append((Path(project), base, Path(checkout_dir), dry_run))
+        if self.failure:
+            raise deploy_checkout.CheckoutError(self.failure)
+        return self.checkout
+
+
 class DeployTestCase(unittest.TestCase):
     def setUp(self):
         self._temp = tempfile.TemporaryDirectory()
@@ -70,6 +87,14 @@ class DeployTestCase(unittest.TestCase):
         # A fake emsdk folder with the files the SDK check looks for (the real SDK is not needed)
         self.emsdk = Path(self._temp.name) / "emsdk"
         self.install_sdk(self.emsdk)
+        # The checkout of --fetch and --target: a folder of its own with an engine that has its own tool files and SDK
+        self.checkout_dir = Path(self._temp.name).resolve() / "work" / "checkout"
+        self.engine = self.checkout_dir / "engine"
+        for name in build_and_deploy.STAGED_FILES:
+            (self.engine / "tools" / "web").mkdir(parents=True, exist_ok=True)
+            (self.engine / "tools" / "web" / name).write_text(f"checkout {name}", encoding="utf-8")
+        self.install_sdk(self.engine / build_and_deploy.EMSDK_RELATIVE)
+        self.fake_checkout = FakeCheckout(deploy_checkout.Checkout(self.checkout_dir, GREEN_COMMIT, self.engine, OTHER_COMMIT))
 
     @staticmethod
     def install_sdk(emsdk: Path):
@@ -77,12 +102,15 @@ class DeployTestCase(unittest.TestCase):
             (emsdk / name).parent.mkdir(parents=True, exist_ok=True)
             (emsdk / name).write_text("", encoding="utf-8")
 
-    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None, gate=green_gate):
+    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None, gate=green_gate, checkout=None):
         out, err = io.StringIO(), io.StringIO()
         runner = runner or FakeRunner()
         arguments = ["--source-dir", str(self.source), *argv]
+        if ("--target" in argv or "--fetch" in argv) and "--checkout-dir" not in argv:
+            arguments += ["--checkout-dir", str(self.checkout_dir)]
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner, gate=gate)
+            code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner, gate=gate,
+                                     checkout=checkout or self.fake_checkout)
         return code, out.getvalue(), err.getvalue(), runner
 
 
@@ -324,6 +352,105 @@ class StatusFileTest(DeployTestCase):
         data = self.status()
         self.assertEqual((data["target"], data["service"], data["url"]), ("t", "svc", "https://svc.example.dev"))
         self.assertEqual(data["stages"], ["fetch", "build", "package"])
+
+
+class CheckoutRunTest(DeployTestCase):
+    """--fetch: the build runs in the folder `prepare` returned, with the tool files and the SDK of its engine."""
+
+    def status(self) -> dict:
+        return json.loads((self.source / "status.json").read_text(encoding="utf-8"))
+
+    def test_the_steps_run_in_the_checkout_and_package_py_is_the_one_of_its_engine(self):
+        code, _, err, runner = self.run_script("--fetch")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.fake_checkout.calls, [(self.source.resolve(), "main", self.checkout_dir, False)])
+        self.assertEqual({cwd for _, cwd in runner.calls}, {self.checkout_dir})
+        self.assertEqual(Path(runner.calls[-1][0][1]), self.engine / "tools" / "web" / "package.py")
+        self.assertIn(str(self.checkout_dir / "build" / "web-release" / "bin"), runner.calls[-1][0])
+        self.assertEqual(list(self.source.iterdir()), [])
+
+    def test_the_base_of_the_target_is_the_branch_that_is_fetched(self):
+        (self.source / "web").mkdir()
+        (self.source / "web" / "targets.json").write_text(json.dumps({"format": 1, "targets": {"t": {
+            "game": "G", "preset": "web-editor", "service": "svc", "address": "svc.example.dev", "base": "release"}}}), encoding="utf-8")
+        self.run_script("--target", "t")
+        self.assertEqual(self.fake_checkout.calls[0][1], "release")
+
+    def test_the_staged_files_and_the_gate_are_the_checkouts(self):
+        gated = []
+
+        def gate(project, results, ignored):
+            gated.append((project, tuple(ignored)))
+            return green_gate(project, results)
+
+        (self.checkout_dir / "dist").mkdir()
+        (self.checkout_dir / "dist" / "index.html").write_bytes(b"<html></html>")
+        code, _, err, runner = self.run_script("--fetch", "--deploy", which=have_railway, gate=gate)
+        self.assertEqual(code, 0, err)
+        stage_dir = self.checkout_dir / "build" / "web-deploy"
+        self.assertEqual(runner.calls[-1], ([RAILWAY_PATH, "up", str(stage_dir), "--path-as-root", "--service", "bagi-web", "--detach"], stage_dir))
+        for name in build_and_deploy.STAGED_FILES:
+            self.assertEqual((stage_dir / name).read_text(encoding="utf-8"), f"checkout {name}")
+        self.assertEqual(gated, [(self.checkout_dir, (self.checkout_dir / "dist", stage_dir))])
+
+    def test_a_failing_checkout_is_exit_2_failed_at_fetch_and_nothing_else_runs(self):
+        failing = FakeCheckout(self.fake_checkout.checkout, failure="origin has no branch main")
+        code, out, err, runner = self.run_script("--fetch", "--status-file", str(self.source / "status.json"), checkout=failing)
+        self.assertEqual(code, 2)
+        self.assertIn("origin has no branch main", err)
+        self.assertEqual((out, runner.calls), ("", []))
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"]), ("failed", "fetch"))
+        self.assertIn("origin has no branch main", data["error"])
+
+    def test_the_commits_of_the_checkout_are_in_the_status(self):
+        code, _, err, _ = self.run_script("--fetch", "--status-file", str(self.source / "status.json"))
+        self.assertEqual(code, 0, err)
+        data = self.status()
+        self.assertEqual((data["commit"], data["engineCommit"], data["stages"]), (GREEN_COMMIT, OTHER_COMMIT, ["fetch", "build", "package"]))
+
+    def test_a_checkout_without_the_sdk_installs_it_first_instead_of_refusing(self):
+        (self.engine / build_and_deploy.EMSDK_RELATIVE / ".emscripten").unlink()
+        code, _, err, runner = self.run_script("--fetch", "--status-file", str(self.source / "status.json"))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(runner.calls[0], ([sys.executable, str(self.engine / "CI" / "scripts" / "setup_emsdk.py")], self.checkout_dir))
+        self.assertEqual([call[0][0] for call in runner.calls[1:3]], ["cmake", "cmake"])
+        code, out, _, runner = self.run_script("--fetch", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertRegex(out.splitlines()[0], r"^\+ \(.*checkout\) .*setup_emsdk\.py")
+
+    def test_the_sdk_step_is_not_planned_when_the_checkout_has_the_sdk(self):
+        _, _, _, runner = self.run_script("--fetch")
+        self.assertNotIn("setup_emsdk.py", " ".join(" ".join(call[0]) for call in runner.calls))
+
+    def test_a_dry_run_asks_for_the_checkout_dry_and_starts_nothing(self):
+        def no_gate(*_):
+            raise AssertionError("the gate was asked before the fetch")
+
+        code, out, err, runner = self.run_script("--fetch", "--deploy", "--dry-run", which=have_railway, gate=no_gate)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.fake_checkout.calls, [(self.source.resolve(), "main", self.checkout_dir, True)])
+        self.assertIn("alltests gate: asked after the fetch, on origin/main", out)
+        self.assertEqual(runner.calls, [])
+        self.assertFalse(deploy_checkout.lock_path(self.checkout_dir).exists())
+
+    def test_the_lock_is_held_during_the_run_and_a_second_run_is_refused(self):
+        lock = deploy_checkout.lock_path(self.checkout_dir)
+        seen = []
+        original = self.fake_checkout.__call__
+
+        def checking(*args, **kwargs):
+            seen.append(lock.exists())
+            code, _, err, _ = self.run_script("--fetch")
+            seen.append((code, err))
+            return original(*args, **kwargs)
+
+        code, _, err, _ = self.run_script("--fetch", checkout=checking)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(seen[0])
+        self.assertEqual(seen[1][0], 2)
+        self.assertIn(str(lock), seen[1][1])
+        self.assertFalse(lock.exists())
 
 
 class PreconditionTest(DeployTestCase):

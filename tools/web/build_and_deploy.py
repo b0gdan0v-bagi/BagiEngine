@@ -23,6 +23,7 @@ Standard library only. Nothing here reads or writes a secret.
 """
 
 import argparse
+import contextlib
 import os
 import shlex
 import shutil
@@ -35,10 +36,11 @@ TOOLS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS_DIR.parent / "alltests"))
 
 import alltests_results  # noqa: E402
+import deploy_checkout  # noqa: E402
 import deploy_status  # noqa: E402
 import deploy_targets  # noqa: E402
 
-PACKAGE_SCRIPT = TOOLS_DIR / "package.py"
+PACKAGE_SCRIPT = "package.py"
 STAGED_FILES = ("Dockerfile", "serve.py")
 DEFAULT_GAME = "BagiStress"
 DEFAULT_PRESET = "web-release"
@@ -47,8 +49,10 @@ DEFAULT_SERVICE = "bagi-web"
 # file, and emcc reads .emscripten; setup_emsdk.py --check looks at nearly the same files (this script stays stand-alone and does not
 # import it; the version is that script's business)
 ENGINE_DIR = TOOLS_DIR.parents[1]
-EMSDK_DIR = ENGINE_DIR / "external" / "emsdk"
+EMSDK_RELATIVE = Path("external") / "emsdk"
+EMSDK_DIR = ENGINE_DIR / EMSDK_RELATIVE
 SDK_FILES = (Path("upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"), Path("upstream/emscripten/emcc.py"), Path(".emscripten"))
+SETUP_EMSDK_SCRIPT = Path("CI") / "scripts" / "setup_emsdk.py"
 SDK_MISSING_MESSAGE = "the Emscripten SDK is not installed: run: python CI/scripts/setup_emsdk.py (in a game: python engine/CI/scripts/setup_emsdk.py)"
 # The suffix of the presets of the single-thread page (CMakePresets.json: web-release-single-thread, web-debug-single-thread)
 SINGLE_THREAD_SUFFIX = "-single-thread"
@@ -110,18 +114,21 @@ def output_folder(preset: str) -> Path:
     return Path("build") / preset / BIN_FOLDER
 
 
-def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_dir: Path) -> list[Step]:
-    """The steps to run, in order. The staging between step 3 and the deploy is done by stage()."""
+def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_dir: Path, tools_dir: Path = TOOLS_DIR,
+                  setup_sdk: Path | None = None) -> list[Step]:
+    """The steps to run, in order. The staging between step 3 and the deploy is done by stage(). `tools_dir` holds package.py (the
+    checkout's own in checkout mode); `setup_sdk` is the script that installs the SDK first, for a checkout that has none."""
     preset = resolve_preset(args)
     build_dir = args.build_dir or source_dir / output_folder(preset)
-    package_command = [sys.executable, str(PACKAGE_SCRIPT), str(build_dir), str(dist), "--game", args.game]
+    package_command = [sys.executable, str(tools_dir / PACKAGE_SCRIPT), str(build_dir), str(dist), "--game", args.game]
     app_file = args.app or (source_dir / APP_FILE if (source_dir / APP_FILE).is_file() else None)
     if app_file:
         package_command += ["--app", str(app_file)]
     if preset.endswith(SINGLE_THREAD_SUFFIX):
         # The manifest says threads: false, so serve.py (and the image) send no COOP / COEP for this page
         package_command.append("--single-thread")
-    steps = [
+    steps = [Step([sys.executable, str(setup_sdk)], source_dir)] if setup_sdk else []
+    steps += [
         Step(["cmake", "--preset", preset], source_dir),
         Step(["cmake", "--build", "--preset", preset, "--target", args.game], source_dir),
         Step(package_command, source_dir, stage="package"),
@@ -152,6 +159,10 @@ def is_sdk_installed(emsdk_dir: Path) -> bool:
 def check_environment(args: argparse.Namespace, emsdk_dir: Path, which) -> None:
     if not is_sdk_installed(emsdk_dir):
         raise DeployError(SDK_MISSING_MESSAGE)
+    check_railway(args, which)
+
+
+def check_railway(args: argparse.Namespace, which) -> None:
     if args.deploy and not which("railway"):
         raise DeployError("--deploy needs the Railway CLI (`railway`) on PATH: https://docs.railway.com/guides/cli")
 
@@ -170,15 +181,22 @@ def empty_stage(stage_dir: Path, source_dir: Path) -> None:
     stage_dir.mkdir(parents=True, exist_ok=True)
 
 
-def stage(dist: Path, stage_dir: Path, source_dir: Path) -> None:
+def stage(dist: Path, stage_dir: Path, source_dir: Path, tools_dir: Path = TOOLS_DIR) -> None:
     """Puts what the Dockerfile copies into one folder: the files of tools/web and a fresh copy of dist/, nothing else."""
     empty_stage(stage_dir, source_dir)
     for name in STAGED_FILES:
-        shutil.copyfile(TOOLS_DIR / name, stage_dir / name)
+        shutil.copyfile(tools_dir / name, stage_dir / name)
     shutil.copytree(dist, stage_dir / "dist")
 
 
-def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run, gate=alltests_results.check) -> int:
+def fail(status: deploy_status.Status, message: str, code: int) -> int:
+    print(f"build_and_deploy.py: {message}", file=sys.stderr)
+    status.fail(message)
+    return code
+
+
+def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run, gate=alltests_results.check,
+        checkout=deploy_checkout.prepare) -> int:
     parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to Railway.")
     parser.add_argument("--target", help="a named target of <source>/web/targets.json: game, preset and service come from it, and no free option is allowed")
     parser.add_argument("--game", help=f"the game target (default: {DEFAULT_GAME})")
@@ -208,34 +226,60 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
 
     target = args.target_info
     status = deploy_status.Status(None if args.dry_run else args.status_file, args.target, stages_of(args), target and target.address, args.service)
-
-    def fail(message: str, code: int) -> int:
-        print(f"build_and_deploy.py: {message}", file=sys.stderr)
-        status.fail(message)
-        return code
+    if not args.fetch:
+        try:
+            check_environment(args, emsdk_dir, which)
+        except DeployError as error:
+            return fail(status, str(error), 2)
+        return build_and_package(args, source_dir, TOOLS_DIR, status, which, runner, gate)
 
     try:
-        check_environment(args, emsdk_dir, which)
+        check_railway(args, which)
     except DeployError as error:
-        return fail(str(error), 2)
-    dist = args.dist or source_dir / DIST_FOLDER
-    stage_dir = args.stage_dir or source_dir / STAGE_FOLDER
-    if args.deploy:
-        verdict = gate(source_dir, args.alltests_results, (dist, stage_dir))
-        if not alltests_results.allows_deploy(verdict, args.skip_alltests, args.dry_run):
-            status.fail(verdict.message)
-            return 2
+        return fail(status, str(error), 2)
+    base = target.base if target else deploy_targets.DEFAULT_BASE
+    status.enter("fetch")
+    with contextlib.ExitStack() as held:
+        try:
+            checkout_dir = args.checkout_dir.resolve() if args.checkout_dir else deploy_checkout.default_checkout_dir(source_dir)
+            if not args.dry_run:
+                held.enter_context(deploy_checkout.lock(checkout_dir))
+            fetched = checkout(source_dir, base, checkout_dir, dry_run=args.dry_run)
+        except (deploy_checkout.CheckoutError, OSError) as error:
+            return fail(status, f"cannot make the checkout: {error}", 2)
+        status.set(commit=fetched.commit, engineCommit=fetched.engine_commit)
+        # The SDK of a checkout is installed once, by its first run: a step here, where a hand run refuses and says how
+        sdk_script = None if is_sdk_installed(fetched.engine_dir / EMSDK_RELATIVE) else fetched.engine_dir / SETUP_EMSDK_SCRIPT
+        return build_and_package(args, fetched.path, fetched.engine_dir / "tools" / "web", status, which, runner, gate, sdk_script,
+                                 f"alltests gate: asked after the fetch, on origin/{base}")
 
-    for step in plan_commands(args, source_dir, dist, stage_dir):
+
+def build_and_package(args: argparse.Namespace, project: Path, tools_dir: Path, status: deploy_status.Status, which, runner, gate,
+                      setup_sdk: Path | None = None, dry_run_gate_note: str | None = None) -> int:
+    """Everything after the project is known: `project` is the folder that is built (the checkout in checkout mode) and `tools_dir` the folder of
+    package.py, serve.py and the Dockerfile that travel with it. In checkout mode the gate runs after the fetch, so a dry run says
+    so instead of asking it about a checkout that does not exist."""
+    dist = args.dist or project / DIST_FOLDER
+    stage_dir = args.stage_dir or project / STAGE_FOLDER
+    if args.deploy:
+        if dry_run_gate_note and args.dry_run:
+            print(dry_run_gate_note, flush=True)
+        else:
+            verdict = gate(project, args.alltests_results, (dist, stage_dir))
+            if not alltests_results.allows_deploy(verdict, args.skip_alltests, args.dry_run):
+                status.fail(verdict.message)
+                return 2
+
+    for step in plan_commands(args, project, dist, stage_dir, tools_dir, setup_sdk):
         program = step.command[0]
         status.enter(step.stage)
         if step.is_deploy:
             print(f"stage {dist} and {', '.join(STAGED_FILES)} into {stage_dir}", flush=True)
             if not args.dry_run:
                 try:
-                    stage(dist, stage_dir, source_dir)
+                    stage(dist, stage_dir, project, tools_dir)
                 except (DeployError, OSError) as error:
-                    return fail(f"cannot stage {dist} into {stage_dir}: {error}", 2)
+                    return fail(status, f"cannot stage {dist} into {stage_dir}: {error}", 2)
         print(f"+ ({step.cwd}) {format_command(step.command)}", flush=True)
         if args.dry_run:
             continue
@@ -245,9 +289,9 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
         try:
             completed = runner(command, cwd=step.cwd, check=False)
         except OSError as error:
-            return fail(f"cannot start `{command[0]}`: {error}", 2)
+            return fail(status, f"cannot start `{command[0]}`: {error}", 2)
         if completed.returncode != 0:
-            return fail(f"`{program}` failed with exit code {completed.returncode}", completed.returncode or 1)
+            return fail(status, f"`{program}` failed with exit code {completed.returncode}", completed.returncode or 1)
     status.done()
     return 0
 
