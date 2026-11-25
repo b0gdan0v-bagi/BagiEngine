@@ -5,6 +5,7 @@
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Widgets/EditorDocuments.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/ArtGen/Sets/ArtGenSet.h>
@@ -33,6 +34,9 @@ namespace BECore {
         ~TextureEditorWidget() override = default;
 
         bool Initialize(IDeserializer& deserializer) override;
+
+        /// The Sprite Library with its unsaved flag, for `editor_state` (`.claude/rules/control-editor-api.md`). A closed panel reports too
+        void AppendDocuments(Vector<EditorDocumentState>& out);
         void Update() override;
         void Draw() override;
 
@@ -61,6 +65,7 @@ namespace BECore {
 
         int _selectedIndex = -1;
         bool _isDirty = false;
+        EditorDocumentsHandle _documents;  // the source of `editor_state`, ends with the widget
 
         Vector<PoolString> _cachedAssets;
         bool _assetsLoaded = false;

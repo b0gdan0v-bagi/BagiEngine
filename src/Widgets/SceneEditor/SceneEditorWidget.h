@@ -5,6 +5,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIElement.h>
+#include <BECore/Widgets/EditorDocuments.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
@@ -33,6 +34,9 @@ namespace BECore {
         ~SceneEditorWidget() override;
 
         bool Initialize(IDeserializer& deserializer) override;
+
+        /// The scene and the node files with unsaved changes, for `editor_state` (`.claude/rules/control-editor-api.md`); nothing without an active scene
+        void AppendDocuments(Vector<EditorDocumentState>& out);
         void Update() override;
         void Draw() override;
 
@@ -142,6 +146,8 @@ namespace BECore {
         const Scene* _announcedUIScene = nullptr;
         const SceneNode* _announcedUINode = nullptr;
         const UIElement* _announcedUIElement = nullptr;
+
+        EditorDocumentsHandle _documents;  // the source of `editor_state`, ends with the widget
     };
 
 }  // namespace BECore

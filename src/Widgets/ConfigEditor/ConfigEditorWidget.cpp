@@ -13,6 +13,7 @@
 #include <Widgets/ConfigEditor/FieldInspectors.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/EditorLayout/EditorDocumentRows.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
@@ -44,7 +45,14 @@ namespace BECore {
 
         Subscribe<EditorCommandEvent, &ConfigEditorWidget::OnCommand>(this);
         Subscribe<ConfigEvents::ConfigChangedEvent, &ConfigEditorWidget::OnConfigChanged>(this);
+        _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         return true;
+    }
+
+    void ConfigEditorWidget::AppendDocuments(Vector<EditorDocumentState>& out) {
+        if (!_selectedConfig.Empty()) {
+            out.push_back(MakeConfigDocument(Manager(), EditorDocumentKind::Config, _selectedConfig.ToStringView(), !_staged.IsEmpty(), _selectedConfig));
+        }
     }
 
     ConfigManager& ConfigEditorWidget::Manager() {

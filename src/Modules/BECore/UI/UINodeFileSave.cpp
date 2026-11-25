@@ -133,6 +133,22 @@ namespace BECore {
         return CountWithSourceRef(nodes, ref);
     }
 
+    Vector<PoolString> NodeFilesToPatch(Scene& scene, Span<const IntrusivePtr<UIElement>> edited) {
+        Vector<SceneNode*> nodes;
+        CollectNodes(scene.GetRootNode(), nodes);
+        Vector<PoolString> refs;
+        for (const SceneNode* node : nodes) {
+            const PoolString ref = node->GetSourceRef();
+            if (ref.Empty() || !HoldsEditedElement(*node, edited) || eastl::find(refs.begin(), refs.end(), ref) != refs.end()) {
+                continue;
+            }
+            if (CountWithSourceRef(nodes, ref) == 1 && IsValidNodeRef(ref.ToStringView())) {
+                refs.push_back(ref);
+            }
+        }
+        return refs;
+    }
+
     UINodeFileReport SaveUIRectsToNodeFiles(Scene& scene, Span<const IntrusivePtr<UIElement>> edited, const UINodeFileIo& io) {
         UINodeFileReport report;
         Vector<SceneNode*> nodes;

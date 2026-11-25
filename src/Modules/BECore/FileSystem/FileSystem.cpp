@@ -63,6 +63,56 @@ namespace BECore {
                 }
             }
         }
+
+        // Last, so the overlay is the top layer of both mount points even when no root has the folder
+        if (!_overlay.Empty()) {
+            for (const PoolString name : Array<PoolString, 2>{MountPoints::config, MountPoints::assets}) {
+                const Path dirPath = _overlay / name.ToStringView();
+                if (const auto made = CreateDirectories(dirPath.View()); !made) {
+                    LOG_ERROR("[FileSystem] Content overlay: {}", made.error());
+                    continue;
+                }
+                Mount(name, dirPath);
+            }
+        }
+    }
+
+    std::expected<void, String> FileSystem::SetContentOverlay(const Path& folder) {
+        if (folder.Empty()) {
+            return std::unexpected(String("the content overlay folder is empty"));
+        }
+        const Path normalized = AbsoluteNormalPath(folder);
+        if (auto made = CreateDirectories(normalized.View()); !made) {
+            return std::unexpected(eastl::move(made.error()));
+        }
+        _overlay = normalized;
+        return {};
+    }
+
+    Path FileSystem::WriteTarget(const Path& realFile) const {
+        if (_overlay.Empty()) {
+            return realFile;
+        }
+        const Path file = AbsoluteNormalPath(realFile);
+        if (file.IsUnder(_overlay)) {
+            return realFile;
+        }
+
+        // The deepest layer wins when layers nest; the overlay's own layers were handled above
+        const Path* bestLayer = nullptr;
+        PoolString bestMount;
+        for (const auto& [mount, layers] : _mountPoints) {
+            for (const Path& layer : layers) {
+                if (file.IsUnder(layer) && !file.Relative(layer).Empty() && (bestLayer == nullptr || layer.View().size() > bestLayer->View().size())) {
+                    bestLayer = &layer;
+                    bestMount = mount;
+                }
+            }
+        }
+        if (bestLayer == nullptr) {
+            return realFile;
+        }
+        return _overlay / bestMount.ToStringView() / file.Relative(*bestLayer).View();
     }
 
     void FileSystem::AddContentRoot(const Path& root) {
