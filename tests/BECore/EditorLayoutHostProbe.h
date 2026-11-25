@@ -24,6 +24,10 @@ namespace BECore::Tests {
             return layouts ? &*layouts : nullptr;
         }
 
+        [[nodiscard]] const EditorPlayModel* GetPlayModel() const override {
+            return hasPlayModel ? &playModel : nullptr;
+        }
+
         std::expected<void, String> SaveCurrentLayoutAs(StringView name) override {
             if (!layouts) {
                 return std::unexpected(String("no layouts folder"));
@@ -44,6 +48,9 @@ namespace BECore::Tests {
 
         Optional<EditorSettings> settings;
         Optional<LayoutStore> layouts;
+        /// The model the toolbar reads; the test drives it directly, as the widget's commands would
+        EditorPlayModel playModel;
+        bool hasPlayModel = true;
         int preferencesNotified = 0;
         int layoutsNotified = 0;
     };

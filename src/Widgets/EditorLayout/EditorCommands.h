@@ -45,6 +45,8 @@ namespace BECore {
         inline constexpr auto kSceneSave = "scene.save"_intern;
         inline constexpr auto kConfigSave = "config.save"_intern;
         inline constexpr auto kTextureSave = "texture.save"_intern;
+        /// Play / Stop of the main toolbar: `EditorPlayModel::PressPlay`, then the pause of the model is written to the engine (state only until `editor-play-in-editor`)
+        inline constexpr auto kGamePlay = "game.play"_intern;
         /// Pauses or resumes the game through the engine's GamePause (the same state as the toolbar's Pause button and the control API)
         inline constexpr auto kGamePause = "game.pause"_intern;
         /// One stepped frame while the game is paused; repeats while its hotkey is held

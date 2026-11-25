@@ -2,6 +2,7 @@
 
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/Singleton.h>
+#include <Widgets/EditorLayout/EditorPlayModel.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/EditorLayout/LayoutStore.h>
 #include <cstdint>
@@ -25,6 +26,10 @@ namespace BECore {
 
         /// The named layouts; null when the system gives no per-user folder
         [[nodiscard]] virtual LayoutStore* GetLayouts() = 0;
+
+        /// The state behind the main toolbar's buttons; null when the host has none. The host owns it and changes it by the commands `game.play`, `game.pause`
+        /// and `game.step`, so a model only reads it
+        [[nodiscard]] virtual const EditorPlayModel* GetPlayModel() const = 0;
 
         /// Writes the current dock layout under @p name. The error is a sentence for the dialog
         virtual std::expected<void, String> SaveCurrentLayoutAs(StringView name) = 0;

@@ -83,6 +83,9 @@ namespace BECore {
             _forceResetLayout = true;
         } else if (event.commandId == kViewCommandPalette) {
             _palette.Open();
+        } else if (event.commandId == kGamePlay) {
+            _playModel.PressPlay();
+            WritePauseToEngine();
         } else if (event.commandId == kGamePause) {
             TogglePause();
         } else if (event.commandId == kGameStep) {
@@ -165,13 +168,7 @@ namespace BECore {
         ImGui::PopStyleVar(3);
 
         DrawMenuBar();
-        const MainToolbar::Presses presses = _toolbar.Draw(_playModel);
-        if (presses.play || presses.pause) {
-            WritePauseToEngine();
-        }
-        if (presses.step) {
-            CoreManager::GetPause().RequestSteps(1, kDefaultStepSeconds);
-        }
+        MainToolbar::Draw();
         CloseItemGap();
         DispatchHotkeys();
         if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys()); !chosen.Empty()) {
@@ -221,6 +218,10 @@ namespace BECore {
 
     LayoutStore* EditorLayoutWidget::GetLayouts() {
         return _layouts ? &*_layouts : nullptr;
+    }
+
+    const EditorPlayModel* EditorLayoutWidget::GetPlayModel() const {
+        return &_playModel;
     }
 
     void EditorLayoutWidget::NotifyPreferencesChanged() {

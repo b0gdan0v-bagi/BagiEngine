@@ -26,8 +26,8 @@ namespace BECore {
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
     // (EditorCommandEvent): quit, switch mode, reset the layout and open the palette (`view.preferences` is the Preferences asset's own command, `view.saveLayout` is run by `EditorDialogsModel`). It
-    // also turns the chords of the hotkey map into those events. The toolbar's Pause and Step and the commands game.pause and game.step drive the engine's GamePause, which is the single truth: the
-    // model copies its flag every frame.
+    // also turns the chords of the hotkey map into those events. The toolbar's buttons are the asset `MainToolbarPanel`; its commands game.play, game.pause and game.step drive the engine's GamePause,
+    // which is the single truth: the model copies its flag every frame.
     //
     // It is the IEditorLayoutHost of the editor (registered in Initialize, for its lifetime): the models of the panel assets reach the
     // settings and the layouts through it. A NotifyPreferencesChanged is applied and announced in the next Update.
@@ -44,6 +44,7 @@ namespace BECore {
 
         [[nodiscard]] EditorSettings* GetSettings() override;
         [[nodiscard]] LayoutStore* GetLayouts() override;
+        [[nodiscard]] const EditorPlayModel* GetPlayModel() const override;
         /// Needs an ImGui context: the text is ImGui's ini of the moment
         std::expected<void, String> SaveCurrentLayoutAs(StringView name) override;
         void NotifyPreferencesChanged() override;
@@ -90,7 +91,6 @@ namespace BECore {
         MenuOpenTracker _deleteLayoutMenuOpen;
 
         EditorPlayModel _playModel;
-        MainToolbar _toolbar;
         StatusBar _statusBar;
 
         CommandPalette _palette;

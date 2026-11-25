@@ -4,6 +4,9 @@
     <widget
       type="ImGuiWidget" />
     <widget
+      type="AssetPanelWidget"
+      asset="MainToolbarPanel" />
+    <widget
       type="EditorLayoutWidget" />
     <widget
       type="AssetPanelWidget"

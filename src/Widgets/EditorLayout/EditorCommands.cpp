@@ -29,6 +29,7 @@ namespace BECore {
                 {kSceneSave, "Save Scene", kCtrlS, true},
                 {kConfigSave, "Save Config", kCtrlShiftS, true},
                 {kTextureSave, "Save Texture", std::nullopt, true},
+                {kGamePlay, "Play / Stop Game", std::nullopt, true},
                 {kGamePause, "Pause / Resume Game", kF6, true},
                 {kGameStep, "Step One Frame", kF7, true, true},
                 {kViewportInputMode, "Toggle Viewport Input: Edit / Play", kF8, true},
