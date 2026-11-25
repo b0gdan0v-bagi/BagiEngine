@@ -4,7 +4,7 @@
     python3 <engine>/tools/perf/perf.py --update-baseline --from-report FILE [--env-file F]
 
 Run from the root of a repository whose `.claude/rules/perf-project.md` holds the benchmark set (a fenced JSON block under
-"## Benchmark set"; the format is in `tools/perf/CLAUDE.md`). It builds the set's preset and targets, runs each benchmark N times after
+"## Benchmark set"; the format is in `tools/perf/CLAUDE.md`). It builds the set's preset and targets (and the own preset of a benchmark that names one), runs each benchmark N times after
 its warm-up runs, reads the metrics each run prints, and compares the means with the baseline of this machine in the todo store
 (`perf-baseline-<area>-<machine>.md`). Exit code: 0 no regression, 3 a regression, 1 an error (a failed build or run, a bad set). A benchmark whose command exits with
 77 and prints a `skip: <reason>` line (a backend this machine lacks) is skipped: reported, never measured, compared or recorded.
@@ -76,7 +76,38 @@ def load_set(rules: Path) -> dict:
                 raise PerfError(f"{rules}: {name}.{metric}: a regex metric needs 'pattern', a json metric 'key'")
             if spec.get("better", "lower") not in ("lower", "higher"):
                 raise PerfError(f"{rules}: {name}.{metric}: 'better' must be 'lower' or 'higher'")
+        for key in ("preset", "profilePreset"):
+            if key in bench and (not isinstance(bench[key], str) or not bench[key]):
+                raise PerfError(f"{rules}: benchmark '{name}': '{key}' must be a non-empty string")
+        targets = bench.get("targets", [])
+        if not isinstance(targets, list) or not all(isinstance(target, str) for target in targets):
+            raise PerfError(f"{rules}: benchmark '{name}': 'targets' must be a list of strings")
     return bench_set
+
+
+def preset_of(bench: dict, bench_set: dict) -> str:
+    """The build whose `{bin}` the benchmark's command uses: its own `preset` (a benchmark that needs another build, such as the editor's), else the set's."""
+    return bench.get("preset", bench_set["preset"])
+
+
+def trace_preset_of(bench: dict, bench_set: dict) -> str:
+    return bench.get("profilePreset", bench_set.get("profilePreset", DEFAULT_PROFILE_PRESET))
+
+
+def build_plan(benches: list[dict], bench_set: dict) -> dict[str, list[str]]:
+    """What to build for the selected benchmarks: preset -> targets (empty: everything). The set's preset only when a benchmark uses it, each
+    own preset once with the targets of all the benchmarks that use it."""
+    plan: dict[str, list[str]] = {}
+    for bench in benches:
+        preset = preset_of(bench, bench_set)
+        targets = bench.get("targets", bench_set.get("targets", []))
+        if preset not in plan:
+            plan[preset] = list(targets)
+        elif not plan[preset] or not targets:
+            plan[preset] = []  # one of them wants every target
+        else:
+            plan[preset] += [target for target in targets if target not in plan[preset]]
+    return plan
 
 
 def expand(command: list[str], root: Path, preset: str, trace: str = "") -> list[str]:
@@ -294,16 +325,17 @@ def main() -> int:
         benches = bench_set["benchmarks"]
         if args.list:
             for bench in benches:
-                print(f"{bench['name']:<28} {'fast' if bench.get('fast') else '    '}  {', '.join(bench['metrics'])}  {bench.get('about', '')}")
+                own_preset = f"[{bench['preset']}] " if "preset" in bench else ""
+                print(f"{bench['name']:<28} {'fast' if bench.get('fast') else '    '}  {', '.join(bench['metrics'])}  {own_preset}{bench.get('about', '')}")
             return 0
         if args.trace:
             matches = [bench for bench in benches if bench["name"] == args.trace]
             if not matches:
                 raise PerfError(f"unknown benchmark: {args.trace}")
-            profile = bench_set.get("profilePreset", DEFAULT_PROFILE_PRESET)
+            profile = trace_preset_of(matches[0], bench_set)
             if not args.no_build:
                 print(f"build {profile}", file=sys.stderr)
-                build(root, profile, bench_set.get("targets", []))
+                build(root, profile, matches[0].get("targets", bench_set.get("targets", [])))
             trace = Path(args.trace_file) if args.trace_file else root / "build" / "perf" / f"{args.trace}-trace.json"
             trace.parent.mkdir(parents=True, exist_ok=True)
             command = record_trace(matches[0], root, profile, trace)
@@ -344,19 +376,21 @@ def main() -> int:
         name, content, baseline = read_baseline(bench_set, fingerprint, args)
 
         if not args.no_build:
-            print(f"build {preset}: {', '.join(bench_set.get('targets', [])) or 'all'}", file=sys.stderr)
-            build(root, preset, bench_set.get("targets", []))
+            for built, targets in build_plan(benches, bench_set).items():
+                print(f"build {built}: {', '.join(targets) or 'all'}", file=sys.stderr)
+                build(root, built, targets)
         results, skipped = {}, {}
         for bench in benches:
             runs = args.repetitions or bench.get("repetitions", repetitions)
             try:
-                samples = measure(bench, root, preset, runs, lambda text: print(text, file=sys.stderr))
+                samples = measure(bench, root, preset_of(bench, bench_set), runs, lambda text: print(text, file=sys.stderr))
             except Skipped as reason:
                 skipped[bench["name"]] = str(reason)
                 print(f"skipped: {bench['name']}: {reason}", file=sys.stderr)
                 continue
             results[bench["name"]] = {
                 "commit": commit,
+                **({"preset": bench["preset"]} if "preset" in bench else {}),
                 "repetitions": runs,
                 "metrics": {metric: {**perf_stats.summarize(values).to_json(), "samples": values} for metric, values in samples.items()},
             }
