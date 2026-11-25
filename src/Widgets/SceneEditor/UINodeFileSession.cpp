@@ -12,9 +12,9 @@ namespace BECore {
 
     namespace {
 
-        Path NodeFilePath(StringView ref) {
+        Path NodeFilePath(const FileSystem& fileSystem, StringView ref) {
             const String virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
-            return CoreManager::GetFileSystem().ResolvePath(virtualPath);
+            return fileSystem.ResolvePath(virtualPath);
         }
 
     }  // namespace
@@ -38,9 +38,13 @@ namespace BECore {
     }
 
     UINodeFileReport UINodeFileSession::Save(Scene& scene) {
+        return Save(scene, CoreManager::GetFileSystem());
+    }
+
+    UINodeFileReport UINodeFileSession::Save(Scene& scene, const FileSystem& fileSystem) {
         // Named, because the FunctionRefs of `io` only point at them
-        const auto read = [](StringView ref, String& text, String& error) {
-            auto content = ReadTextFile(NodeFilePath(ref));
+        const auto read = [&fileSystem](StringView ref, String& text, String& error) {
+            auto content = ReadTextFile(NodeFilePath(fileSystem, ref));
             if (!content) {
                 error = content.error();
                 return false;
@@ -48,8 +52,8 @@ namespace BECore {
             text = eastl::move(*content);
             return true;
         };
-        const auto write = [](StringView ref, StringView text, String& error) {
-            const auto written = WriteFileAtomically(NodeFilePath(ref), text);
+        const auto write = [&fileSystem](StringView ref, StringView text, String& error) {
+            const auto written = WriteFileAtomically(fileSystem.WriteTarget(NodeFilePath(fileSystem, ref)), text);
             if (!written) {
                 error = written.error();
                 return false;

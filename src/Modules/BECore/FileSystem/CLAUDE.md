@@ -10,6 +10,10 @@ Content is layered. A **content root** is a directory with `config/` and/or `ass
 
 `main.cpp` adds the roots (`AddContentRoot`, engine first, game, then `BAGI_WEB_ROOT` when it is defined) before `Application::Initialize()`. On the desktop the roots are the paths of the checkouts, defined in one generated source per target (`be_link_content_roots`; a `-D` define would put the checkout path into every object's cache key). On the web (`be_web_configure_target`, `cmake/BagiWeb.cmake`) the macros `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` / `BAGI_WEB_ROOT` are virtual paths inside the preloaded package (`/bagi/engine`, `/bagi/game`, `/bagi/web`), where the `config/` and `assets/` folders of each root are packed. The gtest environment adds the engine root only.
 
+## Content overlay
+
+`--content-overlay=<dir>` (read by `Application::Initialize` from `CoreManager::GetCommandLine()` before `FileSystem::Initialize`; a flag without a value or a folder that cannot be made is a logged error and the start-up stops) sends every editor write into a copy, so a QA run never touches a checkout. `Initialize` mounts `<dir>/config` and `<dir>/assets` (made when missing) **last**, so they are the top layers: a file of the overlay wins as a whole, one a previous run left there too. `WriteTarget(realFile)` maps a resolved file to `<dir>/<mount>/<path below its layer>`; it is the identity with no overlay, for a file already under the overlay and for a file in no layer. The writers (`ConfigManager::SaveConfig`, `UINodeFileSession::Save`) call it; `GetMountedPath` now answers with the overlay's folder, so a writer that builds its path from it (the sprite atlas, the Generate panel) lands in the overlay too. The engine does not refuse a folder inside a git work tree: that is a QA rule of the launcher (`GameSession`).
+
 ## Initialization
 
 `Initialize()` (first real service in `InitializeCoreServices()`):
@@ -30,6 +34,7 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 | `GetRootPath()` | Highest priority root (the game's) |
 | `EnumerateFiles(mountPoint, extensions)` | Recursive listing of all layers of a mount point, filtered by extension, as `PoolString`s, in the order of `PathCompare` (component by component: `a/b.txt` before `a.txt`; the OS order of `WalkDirectory` is arbitrary, so the sort stays); a file present in several layers is listed once. Its working lists are on the scratch arena |
 | `SetRootPath(path)` | Replace all roots with this one |
+| `SetContentOverlay(folder)` / `WriteTarget(realFile)` | The content overlay (`Content overlay` above) / where an editor write of a resolved file goes |
 | `AbsoluteNormalPath(path)` (free) | `AbsolutePath` of the file layer in a `Path`; the path as given when the OS cannot say. Roots, mounts and `FileWatcher` keep their paths in this form |
 
 `ResolvePath` tries, in order: absolute path as given → mount point (first path segment) + remainder, layer by layer from the top → relative to each root, top first → relative to the current directory. A missing file gives an empty path, not an error: check the result.
@@ -38,7 +43,7 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 
 - Never build asset or config paths by concatenating strings or file calls in engine or game code; pass the virtual path to `FileSystem`, `ResourceManager` or `ConfigManager`.
 - Use `PoolString` for mount-point names; the engine's own are `MountPoints::assets` / `config` (`MountPoints.h`), a literal is `"name"_intern`.
-- Writing files (saves, config edits) goes through the resolved real path; do not assume the working directory is the root. An edited engine default is written back into the engine checkout (the layer where it was found), not copied into the game.
+- Writing files (saves, config edits) goes through the resolved real path; do not assume the working directory is the root. An edited engine default is written back into the engine checkout (the layer where it was found), not copied into the game (with a content overlay it goes into the overlay).
 - Reading or writing a resolved real path goes through `BECore/File/` (`File/CLAUDE.md`), not a stream; `BECore/pch.h` holds no stream header. A test reaches a host path (a `Path` from `TempPath.h`) through `tests/Common/TestFiles.h` and the layer.
 - Saves are written into a mounted folder (`saves`) by `SaveGameService` (`Save/CLAUDE.md`), not by hand.
 - A new file for a game belongs in the `config/` or `assets/` of the game's repository; a game file with the name of an engine file replaces it as a whole (configs are not merged).

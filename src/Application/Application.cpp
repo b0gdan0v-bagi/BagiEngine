@@ -8,6 +8,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/Cook/CookCommand.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/FileWatchSetting.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
@@ -46,6 +47,28 @@ namespace BECore {
 #else
         constexpr bool kIsWeb = false;
 #endif
+
+        constexpr StringView kContentOverlayFlag = "--content-overlay";
+
+        /// Applies `--content-overlay=<dir>` to the FileSystem (it must run before the FileSystem initializes); false, with the reason in the log,
+        /// when the flag has no value or the folder cannot be made
+        bool ApplyContentOverlayFlag() {
+            const Optional<CommandLineArgument> flag = CoreManager::GetCommandLine().Find(kContentOverlayFlag);
+            if (!flag) {
+                return true;
+            }
+            if (!flag->hasValue || flag->value.empty()) {
+                LOG_ERROR("Content overlay: {} needs a folder: {}=<dir>", kContentOverlayFlag, kContentOverlayFlag);
+                return false;
+            }
+            const auto set = CoreManager::GetFileSystem().SetContentOverlay(Path(flag->value));
+            if (!set) {
+                LOG_ERROR("Content overlay: {}", set.error());
+                return false;
+            }
+            LOG_INFO("Content overlay: editor writes go to {}", CoreManager::GetFileSystem().GetContentOverlay().View());
+            return true;
+        }
     }  // namespace
 
     Application::Application() = default;
@@ -94,6 +117,11 @@ namespace BECore {
 #if BE_WITH_REMOTE_CONTROL
         Subscribe<ApplicationEvents::StartControlServerRequestEvent, &Application::OnStartControlServerRequest>(this);
 #endif
+
+        if (!ApplyContentOverlayFlag()) {
+            LogEvent::Flush();
+            return false;
+        }
 
         CoreManager::GetInstance().OnApplicationPreInit({});
 
