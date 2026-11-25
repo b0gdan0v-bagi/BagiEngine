@@ -10,6 +10,8 @@ namespace BECore {
         static constexpr auto text = "TextConfig"_intern;
         static constexpr auto tests = "TestsConfig"_intern;
         static constexpr auto assertHandlers = "AssertHandlersConfig"_intern;
+        static constexpr auto scene = "SceneConfig"_intern;
+        static constexpr auto textureLibrary = "TextureLibrary"_intern;
     };
 
 }  // namespace BECore

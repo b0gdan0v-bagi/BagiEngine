@@ -1,4 +1,5 @@
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -21,6 +22,7 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
+#include <Widgets/SceneEditor/UINodeFileSession.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>
 
 namespace BECore::Tests {
@@ -1145,6 +1147,35 @@ namespace BECore::Tests {
         ASSERT_EQ(loadedNested.size(), 1u);
         EXPECT_TRUE(loadedNested[0]->GetSourceRef().Empty());
         EXPECT_EQ(ComponentTexts(*loadedNested[0]), ComponentTexts(*Child("Main", 1).GetChildren()[0]));
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, TheNodeFilePatchGoesToTheContentOverlayAndTheSourceStaysAsItWas) {
+        constexpr float kFirstX = 33.0f;
+        constexpr float kSecondX = 44.0f;
+        const Path root = _dir / "root";
+        const Path source = root / "config" / "nodes" / "Panel.xml";
+        const Path overlayCopy = _dir / "overlay" / "config" / "nodes" / "Panel.xml";
+        WriteFile(source, kPanelFile);
+        FileSystem fileSystem;
+        fileSystem.AddContentRoot(root);
+        ASSERT_TRUE(fileSystem.SetContentOverlay(_dir / "overlay"));
+        fileSystem.Initialize();
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        const IntrusivePtr<UIElement> title = Child("Main", 3).GetComponent<UICanvasComponent>()->_elements[0];
+        UINodeFileSession session;
+
+        title->style.rect.x = UILength::Px(kFirstX);
+        session.Note(title);
+        EXPECT_EQ(session.Save(GetScene("Main"), fileSystem).filesWritten, 1u);
+        EXPECT_EQ(ReadFile(source), String(kPanelFile));
+        EXPECT_NE(ReadFile(overlayCopy).find("x=\"33\""), String::npos);
+
+        // The second save patches the overlay's copy: a lookup finds it before the source
+        title->style.rect.x = UILength::Px(kSecondX);
+        session.Note(title);
+        EXPECT_EQ(session.Save(GetScene("Main"), fileSystem).filesWritten, 1u);
+        EXPECT_EQ(ReadFile(source), String(kPanelFile));
+        EXPECT_NE(ReadFile(overlayCopy).find("x=\"44\""), String::npos);
     }
 
     namespace {

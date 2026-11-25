@@ -55,6 +55,8 @@ def echo_handler(method: str, params: dict | None):
         raise FakeError("not_recording", "the Chrome trace is not recording")
     if method == "zone_allocs":
         return {"enabled": False, "zones": [], "totals": {"count": 0}, "params": params}
+    if method == "editor_state":
+        return {"anyDirty": False, "documents": []}
     if method == "log_mark":
         return {"mark": 5, "warnings": 1, "errors": 0}
     if method == "log_since":
@@ -318,7 +320,7 @@ EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "click_at", "game_log", "quit",
     "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop", "image_diff",
     "log_mark", "log_since", "log_subscribe", "batch", "run_until", "set_window",
-    "imgui_find", "imgui_click", "imgui_type", "imgui_key",
+    "imgui_find", "imgui_click", "imgui_type", "imgui_key", "editor_state",
 }
 
 
@@ -384,6 +386,9 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             assert dumped.is_error and "not_recording" in dumped.content[0].text
             zones = await client.call_tool("zone_allocs", {"top": 5, "reset": True})
             assert not zones.is_error and "totals" in zones.content[0].text
+
+            editor = await client.call_tool("editor_state", {})
+            assert not editor.is_error and '"anyDirty": false' in editor.content[0].text
 
             marked = await client.call_tool("log_mark", {})
             assert not marked.is_error and '"mark": 5' in marked.content[0].text

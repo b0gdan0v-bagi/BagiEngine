@@ -1,5 +1,7 @@
 #include "TextureEditorWidget.h"
 
+#include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -10,6 +12,7 @@
 #include <Generated/TextureEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/EditorLayout/EditorDocumentRows.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
@@ -23,12 +26,18 @@ namespace BECore {
 
         constexpr float kLibraryListWidth = 300.0f;
         const char* const kAddSpritePopup = "Add sprite";
+        constexpr StringView kSpriteLibraryName = "sprites";
 
     }  // namespace
 
     bool TextureEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &TextureEditorWidget::OnCommand>(this);
+        _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         return true;
+    }
+
+    void TextureEditorWidget::AppendDocuments(Vector<EditorDocumentState>& out) {
+        out.push_back(MakeConfigDocument(CoreManager::GetConfigManager(), EditorDocumentKind::Library, kSpriteLibraryName, _isDirty, ConfigNames::textureLibrary));
     }
 
     void TextureEditorWidget::OnCommand(const EditorCommandEvent& event) {
