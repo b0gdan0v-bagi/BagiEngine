@@ -10,6 +10,7 @@
 #include <Common/Require.h>
 #include <Events/SubscriptionHolder.h>
 #include <Widgets/Viewport/ViewportToolbarModel.h>
+#include <Widgets/Viewport/ViewportUIDebug.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -51,7 +52,7 @@ namespace BECore::Tests {
             return kFirstDeviceRow + DeviceCount() + 1;
         }
 
-        // A scene with a named and an unnamed view variant over a default of 1280 x 720, and one with none
+        // A scene with a named and an unnamed view variant over a default of 1280 x 720, and one with none and two canvases
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Responsive" viewWidth="1280" viewHeight="720">
@@ -60,7 +61,10 @@ namespace BECore::Tests {
       <view when="minAspect:2" width="1600" height="600"/>
     </viewVariants>
   </scene>
-  <scene type="Scene" name="Plain"/>
+  <scene type="Scene" name="Plain"><nodes>
+    <node name="Hud"><components><component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize"/></components></node>
+    <node name="Menu"><components><component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize"/></components></node>
+  </nodes></scene>
 </scenes></SceneManager>)";
 
         // The same scene with its second variant removed
@@ -108,6 +112,7 @@ namespace BECore::Tests {
         }
 
         void TearDown() override {
+            _uiDebug.Release();
             _model.Reset();
             EngineEnvironment::UseSceneManager({});
             _scenes.Reset();
@@ -122,6 +127,20 @@ namespace BECore::Tests {
 
         Scene& Active() const {
             return Require(_scenes->GetActiveScene());
+        }
+
+        Scene& Plain() const {
+            return Require(_scenes->GetSceneByName("Plain"_intern));
+        }
+
+        /// Collects the canvases of @p scene as the viewport's pass does and publishes them to the model
+        void PublishCanvasesOf(Scene& scene) {
+            _uiDebug.Collect(&scene, [this](const SceneNode* node) { return _model->IsCanvasEnabled(node); });
+            _model->PublishCanvases(&scene, _uiDebug.GetCanvasRows());
+        }
+
+        const SceneNode* CanvasNode(size_t index) const {
+            return At(Plain().GetRootNode().GetChildren(), index).Get();
         }
 
         /// The object the asset's controls write
@@ -140,6 +159,7 @@ namespace BECore::Tests {
 
         IntrusivePtr<SceneManager> _scenes;
         IntrusivePtr<ViewportToolbarModel> _model;
+        ViewportUIDebug _uiDebug;
     };
 
     TEST_F(ViewportToolbarModelTest, TheRowsAreTheAspectsTheDevicesAndCustomWithALineBetweenTheGroups) {
@@ -393,13 +413,79 @@ namespace BECore::Tests {
         ExpectNoAllocations([this] { _model->PublishCamera(150.2f, true); });
     }
 
+    TEST_F(ViewportToolbarModelTest, TheCanvasRowsFollowThePublishedCanvasesAndASwitchDisablesItsNode) {
+        PublishCanvasesOf(Plain());
+        const ViewportToolbarView& view = _model->GetView();
+        EXPECT_TRUE(view.hasCanvases);
+        ASSERT_EQ(view.canvases.size(), 2u);
+        EXPECT_EQ(view.canvases[0].name, "Hud");
+        EXPECT_EQ(view.canvases[1].name, "Menu");
+        EXPECT_TRUE(view.canvases[0].enabled);
+
+        Controls().canvases[0].enabled = false;
+        _model->Update();
+        EXPECT_FALSE(_model->IsCanvasEnabled(CanvasNode(0)));
+        EXPECT_TRUE(_model->IsCanvasEnabled(CanvasNode(1)));
+        EXPECT_TRUE(_model->IsCanvasEnabled(&Plain().GetRootNode()));
+
+        // The same list again keeps the rows, and the pass reads the switch through the model
+        PublishCanvasesOf(Plain());
+        EXPECT_FALSE(view.canvases[0].enabled);
+
+        Controls().canvases[0].enabled = true;
+        _model->Update();
+        EXPECT_TRUE(_model->IsCanvasEnabled(CanvasNode(0)));
+    }
+
+    TEST_F(ViewportToolbarModelTest, ASwitchClickedInTheFrameOfANewCanvasListIsKept) {
+        PublishCanvasesOf(Plain());
+        Controls().canvases[1].enabled = false;
+
+        const CanvasSwitchRow onlyMenu[] = {{CanvasNode(1), "Menu"_intern}};
+        _model->PublishCanvases(&Plain(), onlyMenu);
+        EXPECT_FALSE(_model->IsCanvasEnabled(CanvasNode(1)));
+        ASSERT_EQ(_model->GetView().canvases.size(), 1u);
+        EXPECT_FALSE(_model->GetView().canvases[0].enabled);
+    }
+
+    TEST_F(ViewportToolbarModelTest, ACanvasListOfAnotherSceneForgetsTheSwitches) {
+        PublishCanvasesOf(Plain());
+        Controls().canvases[0].enabled = false;
+        _model->Update();
+        ASSERT_FALSE(_model->IsCanvasEnabled(CanvasNode(0)));
+
+        PublishCanvasesOf(Active());
+        EXPECT_FALSE(_model->GetView().hasCanvases);
+        EXPECT_TRUE(_model->IsCanvasEnabled(CanvasNode(0)));
+
+        PublishCanvasesOf(Plain());
+        EXPECT_TRUE(_model->GetView().canvases[0].enabled);
+    }
+
+    TEST_F(ViewportToolbarModelTest, TheShapeMaskAndLandscapeFollowTheDeviceRows) {
+        ASSERT_EQ(_model->GetView().devices.size(), std::min(UIPreview::GetDevices().size(), kMaxShapeDevices));
+        ASSERT_GE(DeviceCount(), 3);
+        EXPECT_EQ(_model->GetShapeMask(), 0u);
+        EXPECT_FALSE(_model->IsLandscapeShapes());
+
+        Controls().devices[0].checked = true;
+        Controls().devices[2].checked = true;
+        Controls().landscape = true;
+        _model->Update();
+        EXPECT_EQ(_model->GetShapeMask(), 0b101u);
+        EXPECT_TRUE(_model->IsLandscapeShapes());
+    }
+
     TEST_F(ViewportToolbarModelTest, ASteadyUpdateAllocatesNothing) {
         Controls().sizeRow = kFirstDeviceRow;
         Controls().viewRow = kFirstVariantRow;
+        PublishCanvasesOf(Plain());
+        Controls().canvases[0].enabled = false;
         _model->Update();
         ExpectNoAllocations([this] {
             for (int i = 0; i < 4; ++i) {
                 _model->Update();
+                PublishCanvasesOf(Plain());
             }
         });
     }

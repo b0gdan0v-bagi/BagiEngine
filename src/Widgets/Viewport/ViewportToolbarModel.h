@@ -22,6 +22,22 @@ namespace BECore {
         BE_REFLECT_FIELD bool separator = false;
     };
 
+    /// A canvas's switch in the Overlays popup: off hides its element rects, anchors, design rectangle and findings
+    struct ViewportCanvasRow {
+        BE_CLASS(ViewportCanvasRow)
+
+        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD bool enabled = true;
+    };
+
+    /// A device whose shape outlines the selected element over the image
+    struct ViewportDeviceRow {
+        BE_CLASS(ViewportDeviceRow)
+
+        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD bool checked = false;
+    };
+
     /**
      * @brief What `ViewportToolbarPanel.xml` binds to: the Viewport's choices as rows, indices and bools
      *
@@ -67,6 +83,13 @@ namespace BECore {
         BE_REFLECT_FIELD String zoomText;
         /// The editor camera left its fit (Reset is enabled)
         BE_REFLECT_FIELD bool cameraMoved = false;
+        /// The canvases the viewport's pass last published, each with its switch
+        BE_REFLECT_FIELD Vector<ViewportCanvasRow> canvases;
+        BE_REFLECT_FIELD bool hasCanvases = false;
+        /// The shapes of the checked devices are laid out in landscape
+        BE_REFLECT_FIELD bool landscape = false;
+        /// One row per device of `UIPreview::GetDevices()` (at most `kMaxShapeDevices`)
+        BE_REFLECT_FIELD Vector<ViewportDeviceRow> devices;
     };
 
     /**
@@ -78,7 +101,8 @@ namespace BECore {
      * that reads it. The size rules: a device brings the Device safe area, any other size drops it, Custom keeps the shape's other fields, and a stored
      * device this build lacks shows the row of its aspect. The forced view is session state, kept with the name of the scene it was chosen in and dropped
      * (Auto) when another scene is active or the variant is gone. Command: `viewport.inputMode` flips the mode. The rows, the view text and the zoom text are
-     * made again only when what they show changed, so a steady `Update` allocates nothing.
+     * made again only when what they show changed, so a steady `Update` allocates nothing. The per-canvas switches and the checked devices are session state,
+     * never stored; a canvas switched off is kept by its node (compared, never dereferenced) until a canvas list of another scene comes.
      */
     class ViewportToolbarModel : public IPanelModel, public SubscriptionHolder, public IViewportToolbar {
         BE_CLASS(ViewportToolbarModel)
@@ -96,6 +120,12 @@ namespace BECore {
         }
         [[nodiscard]] Optional<int32_t> GetForcedView(const Scene* scene) const override;
         void PublishCamera(float zoomPercent, bool moved) override;
+        void PublishCanvases(const Scene* scene, Span<const CanvasSwitchRow> canvases) override;
+        [[nodiscard]] bool IsCanvasEnabled(const SceneNode* node) const override;
+        [[nodiscard]] uint64_t GetShapeMask() const override;
+        [[nodiscard]] bool IsLandscapeShapes() const override {
+            return _view.landscape;
+        }
 
         [[nodiscard]] const ViewportToolbarView& GetView() const {
             return _view;
@@ -113,6 +143,8 @@ namespace BECore {
         void ChooseViewRow(const Scene* scene, int32_t row);
         /// The rows of the view combo and the view text of @p scene, made again when the scene, a variant's name or the active view moved
         void SyncScene(const Scene* scene);
+        /// Takes the canvas switches the user wrote into the rows of the canvases last published
+        void ReadCanvasRows();
         /// Writes the state into the view and notes the rows written
         void WriteView();
         /// Tells the editor what differs from what it last stored or was told
@@ -135,7 +167,10 @@ namespace BECore {
         Vector<PoolString> _itemsNames;
         bool _hasTextView = false;
         ActiveSceneView _textView;
-        Optional<int32_t> _zoomShown;  // the rounded percent zoomText shows
+        Optional<int32_t> _zoomShown;             // the rounded percent zoomText shows
+        const Scene* _canvasScene = nullptr;      // the scene of the last published canvases, compared only
+        Vector<CanvasSwitchRow> _canvasList;      // the canvases the rows of `canvases` show
+        Vector<const SceneNode*> _disabledNodes;  // the canvases switched off, compared with the published ones, never dereferenced
         ViewportToolbarHandle _registration;
     };
 

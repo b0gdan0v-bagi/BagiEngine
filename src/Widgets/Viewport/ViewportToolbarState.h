@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
 #include <BECore/Utils/Singleton.h>
@@ -9,10 +10,20 @@
 namespace BECore {
 
     class Scene;
+    class SceneNode;
+
+    /// The devices of `UIPreview::GetDevices()` the shapes overlay can check: the width of the mask of `IViewportToolbar::GetShapeMask()`
+    inline constexpr size_t kMaxShapeDevices = 64;
+
+    /// A canvas the viewport's pass found, for its switch in the Overlays popup. The node is compared, never dereferenced, by whoever keeps it
+    struct CanvasSwitchRow {
+        const SceneNode* node = nullptr;
+        PoolString name;
+    };
 
     /**
-     * @brief The choices of the Viewport's toolbar as `ViewportWidget` reads them (the shape, the safe area, the overlays, the input mode, the forced view),
-     * and what only the viewport knows, which it publishes back (the camera)
+     * @brief The choices of the Viewport's toolbar as `ViewportWidget` reads them (the shape, the safe area, the overlays, the input mode, the forced view,
+     * the per-canvas switches, the shapes of other devices), and what only the viewport knows, which it publishes back (the camera, the canvases)
      *
      * The toolbar is a panel asset whose model owns the choices and lives inside its `AssetPanelWidget`, so the viewport reaches it through
      * `ViewportToolbarRegistry` instead of a pointer to another widget. Main thread only.
@@ -33,6 +44,18 @@ namespace BECore {
 
         /// The image's size on the screen in percent of the target and whether the editor camera left its fit, for the zoom text and Reset. Called every frame
         virtual void PublishCamera(float zoomPercent, bool moved) = 0;
+
+        /// The canvases of @p scene the pass found, in the order of the scene, for their switches. A list of another scene than the last one forgets the switches
+        virtual void PublishCanvases(const Scene* scene, Span<const CanvasSwitchRow> canvases) = 0;
+
+        /// False for a canvas whose node the user switched off; true for any node the toolbar does not know
+        [[nodiscard]] virtual bool IsCanvasEnabled(const SceneNode* node) const = 0;
+
+        /// Bit i: the device i of `UIPreview::GetDevices()` is checked in the shapes overlay
+        [[nodiscard]] virtual uint64_t GetShapeMask() const = 0;
+
+        /// The shapes overlay lays the devices out in landscape
+        [[nodiscard]] virtual bool IsLandscapeShapes() const = 0;
     };
 
     /// The choices of a viewport whose editor has no toolbar model (a game's own `WidgetsConfig.xml` without the asset line): every default
@@ -51,6 +74,20 @@ namespace BECore {
         }
 
         void PublishCamera(float /*zoomPercent*/, bool /*moved*/) override {}
+
+        void PublishCanvases(const Scene* /*scene*/, Span<const CanvasSwitchRow> /*canvases*/) override {}
+
+        [[nodiscard]] bool IsCanvasEnabled(const SceneNode* /*node*/) const override {
+            return true;
+        }
+
+        [[nodiscard]] uint64_t GetShapeMask() const override {
+            return 0;
+        }
+
+        [[nodiscard]] bool IsLandscapeShapes() const override {
+            return false;
+        }
     };
 
     class ViewportToolbarRegistry;

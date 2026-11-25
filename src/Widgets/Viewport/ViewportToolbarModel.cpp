@@ -24,6 +24,8 @@ namespace BECore {
         constexpr int32_t kViewRowAuto = 0;
         constexpr int32_t kViewRowDefault = 1;
         constexpr int32_t kViewRowFirstVariant = 2;
+        // The switch of a canvas whose node has no name
+        constexpr const char* kUnnamedCanvas = "(unnamed)";
         // A device at least this wide (logical points, portrait) is shown with the tablet icon
         constexpr uint32_t kTabletMinWidth = 600;
 
@@ -68,6 +70,19 @@ namespace BECore {
             return variant.name.Empty() ? Format("{} #{}", ICON_LC_EYE, index) : Format("{} {}", ICON_LC_EYE, variant.name.ToStringView());
         }
 
+        // The same nodes with the same names in the same order
+        bool SameCanvases(Span<const CanvasSwitchRow> canvases, const Vector<CanvasSwitchRow>& kept) {
+            if (canvases.size() != kept.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < canvases.size(); ++i) {
+                if (canvases[i].node != kept[i].node || canvases[i].name != kept[i].name) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         // The variant names of @p variants equal @p names
         bool SameNames(Span<const SceneViewVariant> variants, const Vector<PoolString>& names) {
             if (variants.size() != names.size()) {
@@ -103,6 +118,11 @@ namespace BECore {
         for (const char* label : kSafeAreaLabels) {
             _view.safeAreaItems.push_back(label);
         }
+        const size_t shapeDevices = std::min(devices.size(), kMaxShapeDevices);
+        _view.devices.resize(shapeDevices);
+        for (size_t i = 0; i < shapeDevices; ++i) {
+            _view.devices[i].name = String(devices[i].name.data(), devices[i].name.size());
+        }
         _view.viewItems.push_back(kViewAutoLabel);
         _view.viewItems.push_back(kViewDefaultLabel);
         PublishCamera(0.0f, false);
@@ -122,6 +142,7 @@ namespace BECore {
         const SceneManager* scenes = CoreManager::FindSceneManager();
         const Scene* scene = scenes != nullptr ? scenes->GetActiveScene() : nullptr;
         ReadView(scene);
+        ReadCanvasRows();
         if (_forcedView && !GetForcedView(scene)) {
             _forcedView = std::nullopt;
         }
@@ -157,6 +178,57 @@ namespace BECore {
         if (_zoomShown != shown) {
             _zoomShown = shown;
             _view.zoomText = Format("{:3}%", shown);
+        }
+    }
+
+    void ViewportToolbarModel::PublishCanvases(const Scene* scene, Span<const CanvasSwitchRow> canvases) {
+        // A switch clicked in this frame's draw counts before the rows may be made again for the new list
+        ReadCanvasRows();
+        if (scene != _canvasScene) {
+            _canvasScene = scene;
+            _disabledNodes.clear();
+        } else if (SameCanvases(canvases, _canvasList)) {
+            return;
+        }
+        _canvasList.assign(canvases.begin(), canvases.end());
+        _view.canvases.resize(canvases.size());
+        for (size_t i = 0; i < canvases.size(); ++i) {
+            ViewportCanvasRow& row = _view.canvases[i];
+            const PoolString name = canvases[i].name;
+            row.name = name.Empty() ? String(kUnnamedCanvas) : String(name.ToStringView().data(), name.ToStringView().size());
+            row.enabled = IsCanvasEnabled(canvases[i].node);
+        }
+        _view.hasCanvases = !canvases.empty();
+    }
+
+    bool ViewportToolbarModel::IsCanvasEnabled(const SceneNode* node) const {
+        return std::find(_disabledNodes.begin(), _disabledNodes.end(), node) == _disabledNodes.end();
+    }
+
+    uint64_t ViewportToolbarModel::GetShapeMask() const {
+        uint64_t mask = 0;
+        for (size_t i = 0; i < _view.devices.size(); ++i) {
+            if (_view.devices[i].checked) {
+                mask |= uint64_t{1} << i;
+            }
+        }
+        return mask;
+    }
+
+    void ViewportToolbarModel::ReadCanvasRows() {
+        const size_t count = std::min(_view.canvases.size(), _canvasList.size());
+        for (size_t i = 0; i < count; ++i) {
+            const SceneNode* node = _canvasList[i].node;
+            const auto found = std::find(_disabledNodes.begin(), _disabledNodes.end(), node);
+            const bool wasEnabled = found == _disabledNodes.end();
+            if (_view.canvases[i].enabled == wasEnabled) {
+                continue;
+            }
+            if (wasEnabled) {
+                _disabledNodes.push_back(node);
+            } else {
+                _disabledNodes.erase(found);
+            }
         }
     }
 

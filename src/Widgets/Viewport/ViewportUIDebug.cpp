@@ -149,15 +149,20 @@ namespace BECore {
     }
 
     void ViewportUIDebug::Collect(Scene* scene) {
+        if (scene && scene != _scene) {
+            _disabledNodes.clear();
+        }
+        Collect(scene, [this](const SceneNode* node) { return std::find(_disabledNodes.begin(), _disabledNodes.end(), node) == _disabledNodes.end(); });
+    }
+
+    void ViewportUIDebug::Collect(Scene* scene, FunctionRef<bool(const SceneNode*)> isEnabled) {
         if (!scene) {
             Release();
             return;
         }
-        if (scene != _scene) {
-            _disabledNodes.clear();
-            _scene = scene;
-        }
+        _scene = scene;
         _collected.clear();
+        _canvasRows.clear();
         CollectCanvases(scene->GetRootNode(), _collected);
 
         // The states follow the order of the scene; a canvas that is still there keeps its marks
@@ -173,7 +178,8 @@ namespace BECore {
             CanvasState& state = _states[place];
             state.node = &canvas->GetNode();
             state.name = state.node->GetName();
-            state.enabled = std::find(_disabledNodes.begin(), _disabledNodes.end(), state.node) == _disabledNodes.end();
+            state.enabled = isEnabled(state.node);
+            _canvasRows.push_back({state.node, state.name});
             ++place;
         }
         _states.erase(_states.begin() + static_cast<ptrdiff_t>(place), _states.end());
@@ -183,6 +189,7 @@ namespace BECore {
     void ViewportUIDebug::Release() {
         _states.clear();
         _collected.clear();
+        _canvasRows.clear();
         _hoverElement.reset();
         _hoverFinding.reset();
     }

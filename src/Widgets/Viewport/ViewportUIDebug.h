@@ -7,7 +7,9 @@
 #include <BECore/UI/UIPreview.h>
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/UI/UIVariant.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
+#include <Widgets/Viewport/ViewportToolbarState.h>
 #include <cstdint>
 #include <imgui.h>
 
@@ -36,6 +38,14 @@ namespace BECore {
 
         /// Finds the canvases of @p scene (visible or not: a hidden canvas is listed for its switch and draws nothing). A scene that is not the one of the last call forgets the switches.
         void Collect(Scene* scene);
+
+        /// The same, with the switches kept by the caller: @p isEnabled says whether the overlays of a canvas's node are on
+        void Collect(Scene* scene, FunctionRef<bool(const SceneNode*)> isEnabled);
+
+        /// The canvases of the last Collect(), in the order of the scene, for their switches
+        [[nodiscard]] Span<const CanvasSwitchRow> GetCanvasRows() const {
+            return {_canvasRows.data(), _canvasRows.size()};
+        }
 
         /// Lets the canvases go (the overlays are all off, or the scene is gone); the per-canvas switches stay, to be dropped by the next Collect() of another scene
         void Release();
@@ -106,6 +116,7 @@ namespace BECore {
         Vector<IntrusivePtr<UICanvasComponent>> _collected;  // the scratch of Collect(), kept for its capacity
         Vector<CanvasState> _states;                         // in the order of the scene; the last is drawn on top
         Vector<const SceneNode*> _disabledNodes;             // the nodes whose canvas is switched off: compared with the live canvases, never dereferenced
+        Vector<CanvasSwitchRow> _canvasRows;                 // the canvases of the last Collect(), kept for its capacity
         const Scene* _scene = nullptr;                       // compared only: another scene forgets the switches
         float _minTouchSize = 0.0f;                          // of the last Draw(), the key of the findings the tooltip asks for
         Optional<HoverElement> _hoverElement;

@@ -25,6 +25,12 @@ namespace BECore {
         /// The Landscape box and a box per device, in the "Overlays" popup
         void DrawPopupItems();
 
+        /// The checked devices (bit i: the device i of UIPreview::GetDevices()) and the landscape flag, chosen elsewhere
+        void SetShapes(uint64_t mask, bool landscape) {
+            _mask = mask;
+            _landscape = landscape;
+        }
+
         /// True when a shape is checked: only then a selected element is probed
         [[nodiscard]] bool AnyChecked() const {
             return _mask != 0;
