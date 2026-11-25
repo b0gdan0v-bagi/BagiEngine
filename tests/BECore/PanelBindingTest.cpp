@@ -288,6 +288,20 @@ namespace BECore::Tests {
         EXPECT_EQ(value, -1.25);
     }
 
+    TEST_F(PanelBindingReadTest, TellsAnIntegerFieldFromAFloatOneAlsoWhenItIsReachedThroughTheLiveObject) {
+        bool isInteger = false;
+        double value = 0.0;
+        EXPECT_EQ(reader.ReadNumber(sources, Bind("small"), value, &isInteger), PanelReadStatus::Ok);
+        EXPECT_TRUE(isInteger);
+        EXPECT_EQ(reader.ReadNumber(sources, Bind("ratio"), value, &isInteger), PanelReadStatus::Ok);
+        EXPECT_FALSE(isInteger);
+        EXPECT_EQ(reader.ReadNumber(sources, Bind("wide"), value, &isInteger), PanelReadStatus::Ok);
+        EXPECT_FALSE(isInteger);
+        probe.numbers = {1, 2, 3};
+        EXPECT_EQ(reader.ReadNumber(sources, Bind("numbers[1]"), value, &isInteger), PanelReadStatus::Ok);
+        EXPECT_TRUE(isInteger);
+    }
+
     TEST_F(PanelBindingReadTest, ReadsATextOfEveryKind) {
         probe.flag = true;
         probe.ratio = 0.1f;

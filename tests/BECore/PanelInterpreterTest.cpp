@@ -233,6 +233,19 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        constexpr const char* kControls = R"(
+<PanelAsset id="Controls" title="Controls">
+  <elements>
+    <element type="PanelCheckbox" id="chk" bind="probe.flag" text="Flag"/>
+    <element type="PanelCheckbox" id="tog" bind="probe.hidden" labelBind="probe.title" look="Toggle" style="Error"/>
+    <element type="PanelCombo" id="mode" bind="probe.mode" width="10"/>
+    <element type="PanelCombo" id="pick" bind="probe.pick" items="probe.options" width="10"/>
+    <element type="PanelCombo" id="choice" bind="probe.choice" items="probe.rows" itemField="name" width="10"/>
+    <element type="PanelNumber" id="level" bind="probe.level" text="Level" min="0" max="5" step="1" width="10"/>
+    <element type="PanelNumber" id="gain" bind="probe.gain" min="0" max="1" step="0.01" slider="true" width="10"/>
+  </elements>
+</PanelAsset>)";
+
         constexpr const char* kSelectedRows = R"(
 <PanelAsset id="Selected" title="Selected">
   <elements>
@@ -268,6 +281,7 @@ namespace BECore::Tests {
             SetActiveImGuiFonts(fonts);
             ApplyImGuiTheme(ImGui::GetStyle(), 1.0f);
             handle = sources.Register("probe", [this] { return TypedRef::Of(probe); });
+            probe.options = {"alpha", "beta", "gamma"};
             probe.rows = {MakeRow("alpha", PanelTextStyle::Normal), MakeRow("beta", PanelTextStyle::Error), MakeRow("gamma", PanelTextStyle::Success)};
         }
 
@@ -388,6 +402,55 @@ namespace BECore::Tests {
             io.AddMouseButtonEvent(0, false);
             clicks = 0;
             Frame();
+        }
+
+        /// A press at @p from, the mouse moved by @p dx in steps and released: a drag of the control under it
+        void DragBy(ImVec2 from, float dx) {
+            constexpr int kSteps = 10;
+            ImGuiIO& io = ImGui::GetIO();
+            // A second press inside the double click time turns a drag into a text input
+            const int pauseFrames = static_cast<int>(io.MouseDoubleClickTime / kFrameSeconds) + 1;
+            for (int i = 0; i < pauseFrames; ++i) {
+                Frame();
+            }
+            io.AddMousePosEvent(from.x, from.y);
+            Frame();
+            io.AddMouseButtonEvent(0, true);
+            Frame();
+            for (int step = 1; step <= kSteps; ++step) {
+                io.AddMousePosEvent(from.x + dx * static_cast<float>(step) / kSteps, from.y);
+                Frame();
+            }
+            io.AddMouseButtonEvent(0, false);
+            Settle();
+        }
+
+        /// The popup of the combo that is open: ImGui names it `##Combo_<depth>`
+        static const ImGuiWindow* ComboPopup() {
+            const ImGuiWindow* popup = ImGui::FindWindowByName("##Combo_00");
+            EXPECT_NE(popup, nullptr) << "no combo is open";
+            return popup;
+        }
+
+        /// The id of the row @p index of a combo's popup: the popup pushes the row, the label comes last
+        static ImGuiID ComboRowId(const ImGuiWindow& popup, int index, const char* label) {
+            return Chain(ImHashData(&index, sizeof(index), popup.ID), {label});
+        }
+
+        /// Opens the combo @p id, clicks its row @p index and leaves it closed
+        void PickFromCombo(ImGuiID id, int index, const char* label) {
+            ClickAt(Locate(id));
+            Settle();
+            const ImGuiWindow* popup = ComboPopup();
+            ASSERT_NE(popup, nullptr);
+            ClickAt(LocateInWindow(ComboRowId(*popup, index, label), *popup));
+            Settle();
+            EXPECT_FALSE(AnyPopupOpen()) << "the combo stays open";
+        }
+
+        /// How many vertices the host has drawn so far
+        static int HostVertices() {
+            return ImGui::FindWindowByName(kHostName)->DrawList->VtxBuffer.Size;
         }
 
         /// Characters typed into the text field that is active
@@ -874,6 +937,127 @@ namespace BECore::Tests {
                 Frame();
             }
         });
+    }
+
+    TEST_F(PanelInterpreterTest, ACheckboxFlipsTheBoundBoolAndAToggleKeepsItsIdWhileItsLabelTextChanges) {
+        Load(kControls);
+        const ImVec2 flag = Locate(Chain(HostId(), {"chk", "Flag###chk"}));
+        ClickAt(flag);
+        EXPECT_TRUE(probe.flag);
+        ClickAt(flag);
+        EXPECT_FALSE(probe.flag);
+        EXPECT_EQ(clicks, 0) << "a control writes its field and runs no command";
+
+        const ImGuiID toggle = Chain(HostId(), {"tog", "###tog"});
+        probe.title = "Hidden";
+        Settle();
+        ClickAt(Locate(toggle));
+        EXPECT_TRUE(probe.hidden);
+
+        probe.title = "Hidden by the user";
+        Settle();
+        ClickAt(Locate(toggle));
+        EXPECT_FALSE(probe.hidden);
+    }
+
+    TEST_F(PanelInterpreterTest, AToggleIsFilledWhileOn) {
+        probe.title = "Hidden";
+        Load(kControls);
+        const ImU32 fill = ImGui::GetColorU32(GetImGuiPalette().accentMuted);
+        const auto filled = [&] {
+            size_t count = 0;
+            for (const ImDrawVert& vertex : ImGui::FindWindowByName(kHostName)->DrawList->VtxBuffer) {
+                count += vertex.col == fill ? 1 : 0;
+            }
+            return count;
+        };
+        const size_t before = filled();
+        probe.hidden = true;
+        Settle();
+        EXPECT_GT(filled(), before);
+    }
+
+    TEST_F(PanelInterpreterTest, AComboOverAnEnumSetsTheValueByTheNameClicked) {
+        Load(kControls);
+        PickFromCombo(Chain(HostId(), {"mode", "##mode"}), static_cast<int>(PanelTextStyle::Warning), "Warning");
+        EXPECT_EQ(probe.mode, PanelTextStyle::Warning);
+    }
+
+    TEST_F(PanelInterpreterTest, AComboOverAnIndexAndAListSetsTheIndexOfTheRowClicked) {
+        Load(kControls);
+        PickFromCombo(Chain(HostId(), {"pick", "##pick"}), 2, "gamma");
+        EXPECT_EQ(probe.pick, 2);
+    }
+
+    TEST_F(PanelInterpreterTest, AComboOverATextAndAListOfRowsSetsTheTextOfTheRowClicked) {
+        Load(kControls);
+        PickFromCombo(Chain(HostId(), {"choice", "##choice"}), 1, "beta");
+        EXPECT_EQ(probe.choice, "beta");
+    }
+
+    TEST_F(PanelInterpreterTest, AComboWhoseIndexIsOutOfRangeShowsAQuestionMarkInsteadOfARowAndStillSetsAnIndex) {
+        probe.pick = 1;
+        Load(kControls);
+        const int row = HostVertices();
+        probe.pick = 9;
+        Settle();
+        EXPECT_LT(HostVertices(), row);
+
+        PickFromCombo(Chain(HostId(), {"pick", "##pick"}), 0, "alpha");
+        EXPECT_EQ(probe.pick, 0);
+    }
+
+    TEST_F(PanelInterpreterTest, ANumberDragsWithinItsBoundsAndAnIntegerFieldStaysAnInteger) {
+        Load(kControls);
+        const ImVec2 level = Locate(Chain(HostId(), {"level", "##level"}));
+        DragBy(level, 300.0f);
+        EXPECT_EQ(probe.level, 5);
+        DragBy(level, -300.0f);
+        EXPECT_EQ(probe.level, 0);
+        DragBy(level, 12.0f);
+        EXPECT_GT(probe.level, 0);
+        EXPECT_LE(probe.level, 5);
+    }
+
+    TEST_F(PanelInterpreterTest, ASliderOverAFloatStaysBetweenItsBounds) {
+        Load(kControls);
+        const ImVec2 gain = Locate(Chain(HostId(), {"gain", "##gain"}));
+        DragBy(gain, 600.0f);
+        EXPECT_FLOAT_EQ(probe.gain, 1.0f);
+        DragBy(gain, -600.0f);
+        EXPECT_FLOAT_EQ(probe.gain, 0.0f);
+    }
+
+    TEST_F(PanelInterpreterTest, ControlsOverAGoneSourceAreAQuestionMarkAndWriteNothing) {
+        Load(R"(
+<PanelAsset id="Gone" title="Gone">
+  <elements>
+    <element type="PanelCheckbox" id="chk" bind="nobody.flag" text="Flag"/>
+    <element type="PanelCombo" id="mode" bind="nobody.mode"/>
+    <element type="PanelNumber" id="level" bind="probe.nothing"/>
+  </elements>
+</PanelAsset>)");
+        EXPECT_FALSE(TryLocate(Chain(HostId(), {"chk", "Flag###chk"})).has_value());
+        EXPECT_FALSE(TryLocate(Chain(HostId(), {"level", "##level"})).has_value());
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfACheckboxAComboAndANumberAllocatesNothingClosedOrOpen) {
+        Load(kControls);
+        const auto steady = [&] {
+            for (int i = 0; i < kWarmUpFrames; ++i) {
+                Frame();
+            }
+            ExpectNoAllocations([&] {
+                for (int i = 0; i < kSteadyFrames; ++i) {
+                    Frame();
+                }
+            });
+        };
+        steady();
+
+        ClickAt(Locate(Chain(HostId(), {"choice", "##choice"})));
+        ASSERT_NE(ComboPopup(), nullptr);
+        steady();
     }
 
     TEST_F(PanelInterpreterTest, ASelectableRowIsDrawnSelectedOnlyWhereItsFieldIsTrue) {

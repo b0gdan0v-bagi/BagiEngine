@@ -6,6 +6,7 @@
 #include <BECore/Widgets/PanelAssets/PanelBindingReader.h>
 #include <BECore/Widgets/PanelAssets/PanelBindingWriter.h>
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
+#include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <BECore/Widgets/PanelAssets/SingleFieldVisitor.h>
 #include <Widgets/PanelAssets/PanelSlots.h>
 #include <Widgets/PanelAssets/PreparedPanel.h>
@@ -96,6 +97,13 @@ namespace BECore {
         static void DrawLines(bool wrap, StringView shown);
         void DrawButton(const PreparedElement& prepared);
         void DrawInput(const PreparedElement& prepared);
+        void DrawCheckbox(const PreparedElement& prepared);
+        void DrawCombo(const PreparedElement& prepared);
+        void DrawNumber(const PreparedElement& prepared);
+        /// The combo of an enum with no `items`: its names, the index of the value held
+        void DrawEnumCombo(const PanelCombo& combo, const PreparedElement& prepared);
+        /// The combo over a list: the value is an index into it or the text of one of its rows
+        void DrawListCombo(const PanelCombo& combo, const PreparedElement& prepared);
         void DrawField(const PreparedElement& prepared, bool openCompound);
         void DrawTable(const PreparedElement& prepared);
         void DrawCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
@@ -130,6 +138,8 @@ namespace BECore {
         String _styleScratch;
         String _cellScratch;
         String _label;
+        /// What a combo shows closed; `BeginCombo` wants it as a C string
+        String _preview;
         /// What the text field being drawn edits; one field is drawn at a time
         char _inputBuffer[kInputBufferSize] = {};
         ImGuiPropertyVisitor _inspector;

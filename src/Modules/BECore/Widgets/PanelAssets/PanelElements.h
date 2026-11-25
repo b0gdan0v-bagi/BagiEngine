@@ -70,7 +70,7 @@ namespace BECore {
         BE_REFLECT_FIELD String bind;
     };
 
-    /// A text field bound to a `String` field; `width` is in em, 0 fills the line
+    /// A text field bound to a `String` field; `width` is in em, 0 is ImGui's default item width, which leaves room for the label
     class PanelInput : public PanelElement {
         BE_CLASS(PanelInput)
     public:
@@ -93,7 +93,7 @@ namespace BECore {
     };
 
     /// A combo over the enum, the index or the `String` field `bind`; the items are the texts of the list `items` (`itemField`, a path relative to a row, empty for a list of scalars)
-    /// or, with no `items`, the names of an enum. It writes the field itself and runs no command; `width` is in em, 0 fits the longest item
+    /// or, with no `items`, the names of an enum. It writes the field itself and runs no command; `width` is in em, 0 is ImGui's default item width
     class PanelCombo : public PanelElement {
         BE_CLASS(PanelCombo)
     public:
@@ -104,7 +104,7 @@ namespace BECore {
     };
 
     /// A number field `bind` as a drag, or as a slider when `slider` is set (it needs `min` < `max`); `min` equal to `max` (the default) leaves a drag unbounded; `step` is the drag speed,
-    /// 0 picks one; `text` is the label after the control. It writes the field itself and runs no command; `width` is in em, 0 fills the line
+    /// 0 picks one; `text` is the label after the control. It writes the field itself and runs no command; `width` is in em, 0 is ImGui's default item width, which leaves room for the label
     class PanelNumber : public PanelElement {
         BE_CLASS(PanelNumber)
     public:

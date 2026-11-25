@@ -46,8 +46,8 @@ namespace BECore {
         /// The condition of a binding: the value of a bool field, inverted for `!source.path`
         [[nodiscard]] PanelReadStatus ReadBool(const PanelDataSources& sources, const PanelBinding& binding, bool& out);
 
-        /// Any number field (an integer or a float); a bool, an enum and a text are `WrongType`
-        [[nodiscard]] PanelReadStatus ReadNumber(const PanelDataSources& sources, const PanelBinding& binding, double& out);
+        /// Any number field (an integer or a float); a bool, an enum and a text are `WrongType`. @p isInteger, when given, tells an integer field from a float one
+        [[nodiscard]] PanelReadStatus ReadNumber(const PanelDataSources& sources, const PanelBinding& binding, double& out, bool* isInteger = nullptr);
 
         /// A text, a number, a bool or an enum name as text. @p out views the field itself or @p scratch: valid until either changes
         [[nodiscard]] PanelReadStatus ReadText(const PanelDataSources& sources, const PanelBinding& binding, String& scratch, StringView& out);
@@ -113,7 +113,7 @@ namespace BECore {
         Located LocateCell(const PanelDataSources& sources, const PanelBinding& list, size_t row, StringView relativePath, PanelReadStatus& status);
 
         static PanelReadStatus AsBool(const Located& at, bool& out);
-        static PanelReadStatus AsNumber(const Located& at, double& out);
+        static PanelReadStatus AsNumber(const Located& at, double& out, bool* isInteger = nullptr);
         static PanelReadStatus AsText(const Located& at, String& scratch, StringView& out);
         static PanelReadStatus AsEnumIndex(const Located& at, size_t& out);
 

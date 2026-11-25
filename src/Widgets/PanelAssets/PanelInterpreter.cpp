@@ -5,19 +5,16 @@
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/IconTable.h>
 #include <Widgets/ImGuiFonts.h>
-#include <Widgets/ImGuiTheme.h>
-#include <cfloat>
+#include <Widgets/PanelAssets/PanelDrawSupport.h>
 #include <imgui.h>
 
 namespace BECore {
 
+    using namespace PanelDraw;
+
     namespace {
 
-        constexpr const char* kUnreadable = "?";
         constexpr const char* kSelectableSuffix = "##select";
-        constexpr const char* kIdSuffix = "##";
-        /// The unlimited width of ImGui: the item ends at the right edge of the window
-        constexpr float kFillWidth = -FLT_MIN;
         /// The glyph of an icon and the text after it are one label
         constexpr const char* kGlyphGap = " ";
 
@@ -84,55 +81,9 @@ namespace BECore {
             return size;
         }
 
-        const char* OrNull(const String& text) {
-            return text.empty() ? nullptr : text.c_str();
-        }
-
         void TextOf(StringView text) {
             ImGui::TextUnformatted(text.data(), text.data() + text.size());
         }
-
-        void DrawUnreadable() {
-            ImGui::TextDisabled("%s", kUnreadable);
-        }
-
-        /// The colour of a text style; null for the normal one, which keeps the theme's text colour
-        const ImVec4* ColorOf(PanelTextStyle style) {
-            const ImGuiPalette& palette = GetImGuiPalette();
-            switch (style) {
-                case PanelTextStyle::Disabled:
-                    return &palette.textDisabled;
-                case PanelTextStyle::Success:
-                    return &palette.success;
-                case PanelTextStyle::Warning:
-                    return &palette.warning;
-                case PanelTextStyle::Error:
-                    return &palette.error;
-                default:
-                    return nullptr;
-            }
-        }
-
-        /// Pushes the colour of a style for the next item; the destructor pops it
-        class ScopedTextStyle {
-        public:
-            explicit ScopedTextStyle(PanelTextStyle style) {
-                if (const ImVec4* color = ColorOf(style)) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, *color);
-                    _pushed = true;
-                }
-            }
-            ~ScopedTextStyle() {
-                if (_pushed) {
-                    ImGui::PopStyleColor();
-                }
-            }
-            ScopedTextStyle(const ScopedTextStyle&) = delete;
-            ScopedTextStyle& operator=(const ScopedTextStyle&) = delete;
-
-        private:
-            bool _pushed = false;
-        };
 
         /// An id of the walk: `PushID` of a text or an index, popped when the scope ends
         class ScopedId {
@@ -168,6 +119,15 @@ namespace BECore {
             }
             if (element.Is<PanelInput>()) {
                 return PreparedKind::Input;
+            }
+            if (element.Is<PanelCheckbox>()) {
+                return PreparedKind::Checkbox;
+            }
+            if (element.Is<PanelCombo>()) {
+                return PreparedKind::Combo;
+            }
+            if (element.Is<PanelNumber>()) {
+                return PreparedKind::Number;
             }
             if (element.Is<PanelButton>()) {
                 return PreparedKind::Button;
@@ -246,6 +206,21 @@ namespace BECore {
                     prepared.hint = HintOf(prepared.glyph, input.hint);
                     break;
                 }
+                case PreparedKind::Checkbox: {
+                    const PanelCheckbox& checkbox = *element->Cast<PanelCheckbox>();
+                    prepared.bind = PrepareBinding(checkbox.bind, BindingForm::Field);
+                    prepared.label = PrepareBinding(checkbox.labelBind, BindingForm::Field);
+                    break;
+                }
+                case PreparedKind::Combo: {
+                    const PanelCombo& combo = *element->Cast<PanelCombo>();
+                    prepared.bind = PrepareBinding(combo.bind, BindingForm::Field);
+                    prepared.items = PrepareBinding(combo.items, BindingForm::Field);
+                    break;
+                }
+                case PreparedKind::Number:
+                    prepared.bind = PrepareBinding(element->Cast<PanelNumber>()->bind, BindingForm::Field);
+                    break;
                 case PreparedKind::Button: {
                     const PanelButton& button = *element->Cast<PanelButton>();
                     prepared.enableWhen = PrepareCondition(button.enableWhen);
@@ -342,6 +317,15 @@ namespace BECore {
                 break;
             case PreparedKind::Input:
                 DrawInput(prepared);
+                break;
+            case PreparedKind::Checkbox:
+                DrawCheckbox(prepared);
+                break;
+            case PreparedKind::Combo:
+                DrawCombo(prepared);
+                break;
+            case PreparedKind::Number:
+                DrawNumber(prepared);
                 break;
             case PreparedKind::Button:
                 DrawButton(prepared);

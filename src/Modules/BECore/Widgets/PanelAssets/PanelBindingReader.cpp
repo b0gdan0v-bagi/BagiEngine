@@ -247,10 +247,13 @@ namespace BECore {
         return PanelReadStatus::Ok;
     }
 
-    PanelReadStatus PanelBindingReader::AsNumber(const Located& at, double& out) {
+    PanelReadStatus PanelBindingReader::AsNumber(const Located& at, double& out, bool* isInteger) {
         if (at.address != nullptr && at.type->kind != TypeKind::Optional) {
             if (!IsNumberKind(at.type->kind)) {
                 return PanelReadStatus::WrongType;
+            }
+            if (isInteger != nullptr) {
+                *isInteger = at.type->kind != TypeKind::Float && at.type->kind != TypeKind::Double;
             }
             out = NumberAt(at.type->kind, at.address);
             return PanelReadStatus::Ok;
@@ -268,8 +271,15 @@ namespace BECore {
             out = static_cast<double>(*unsignedValue);
         } else if (const double* floating = std::get_if<double>(&*value)) {
             out = *floating;
+            if (isInteger != nullptr) {
+                *isInteger = false;
+            }
+            return PanelReadStatus::Ok;
         } else {
             return PanelReadStatus::WrongType;
+        }
+        if (isInteger != nullptr) {
+            *isInteger = true;
         }
         return PanelReadStatus::Ok;
     }
@@ -355,9 +365,9 @@ namespace BECore {
         return status;
     }
 
-    PanelReadStatus PanelBindingReader::ReadNumber(const PanelDataSources& sources, const PanelBinding& binding, double& out) {
+    PanelReadStatus PanelBindingReader::ReadNumber(const PanelDataSources& sources, const PanelBinding& binding, double& out, bool* isInteger) {
         const Located at = LocateBinding(sources, binding);
-        return at.status != PanelReadStatus::Ok ? at.status : AsNumber(at, out);
+        return at.status != PanelReadStatus::Ok ? at.status : AsNumber(at, out, isInteger);
     }
 
     PanelReadStatus PanelBindingReader::ReadText(const PanelDataSources& sources, const PanelBinding& binding, String& scratch, StringView& out) {
