@@ -1,7 +1,9 @@
 #include <BECore/PanelBindingProbe.h>
 #include <BECore/Reflection/TypedRef.h>
+#include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelBinding.h>
 #include <BECore/Widgets/PanelAssets/PanelBindingReader.h>
+#include <BECore/Widgets/PanelAssets/PanelBindingWriter.h>
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
 #include <Common/AllocCheck.h>
 #include <Common/FreshText.h>
@@ -43,6 +45,25 @@ namespace BECore::Tests {
         for (const StringView bad : {"", "files", ".path", "files.", "1x.y", "a b.c", "a.b[", "a.[1]x", "!a.b"}) {
             EXPECT_FALSE(ParseBinding(bad).has_value()) << String(bad).c_str();
         }
+    }
+
+    TEST(PanelBindingTest, ParseObjectBindingTakesASourceAlone) {
+        const auto whole = ParseObjectBinding("game");
+        ASSERT_TRUE(whole.has_value());
+        EXPECT_EQ(whole->source, "game");
+        EXPECT_TRUE(whole->path.empty());
+        EXPECT_FALSE(whole->negated);
+
+        const auto inner = ParseObjectBinding("game.fields");
+        ASSERT_TRUE(inner.has_value());
+        EXPECT_EQ(inner->source, "game");
+        EXPECT_EQ(inner->path, "fields");
+
+        for (const StringView bad : {"", "!game", "1x", "a b", "game.", "game.a[", ".game"}) {
+            EXPECT_FALSE(ParseObjectBinding(bad).has_value()) << String(bad).c_str();
+        }
+        const String tooLong(PanelAssetLimits::kMaxTextBytes + 1, 'a');
+        EXPECT_FALSE(ParseObjectBinding(tooLong).has_value());
     }
 
     TEST(PanelBindingTest, ParseConditionTakesALeadingNegation) {
@@ -436,6 +457,100 @@ namespace BECore::Tests {
         readAll();
 
         ExpectNoAllocations(readAll);
+    }
+
+    namespace {
+
+        class PanelBindingWriteTest : public PanelBindingReadTest {
+        protected:
+            PanelBindingWriter writer{reader};
+        };
+
+    }  // namespace
+
+    TEST_F(PanelBindingWriteTest, WritesATopLevelAnEmbeddedAndARowString) {
+        EXPECT_EQ(writer.WriteText(sources, Bind("title"), "Renamed"), PanelReadStatus::Ok);
+        EXPECT_EQ(probe.title, "Renamed");
+        EXPECT_EQ(Text("title"), "Renamed");
+
+        EXPECT_EQ(writer.WriteText(sources, Bind("inner.path"), "deep"), PanelReadStatus::Ok);
+        EXPECT_EQ(probe.inner.path, "deep");
+
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("rows"), 1, "path", "second"), PanelReadStatus::Ok);
+        EXPECT_EQ(probe.rows[1].path, "second");
+        EXPECT_EQ(probe.rows[0].path, "a.txt");
+        StringView text;
+        EXPECT_EQ(reader.ReadRowText(sources, Bind("rows"), 1, "path", scratch, text), PanelReadStatus::Ok);
+        EXPECT_EQ(text, "second");
+
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("names"), 0, "", "first"), PanelReadStatus::Ok);
+        EXPECT_EQ(probe.names[0], "first");
+    }
+
+    TEST_F(PanelBindingWriteTest, AFieldThatIsNotAnEngineStringIsWrongTypeAndStaysAsItWas) {
+        EXPECT_EQ(writer.WriteText(sources, Bind("count"), "5"), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteText(sources, Bind("flag"), "true"), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteText(sources, Bind("code"), "other"), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteText(sources, Bind("mode"), "Idle"), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteText(sources, Bind("rows"), "x"), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteText(sources, Bind("maybe"), "1"), PanelReadStatus::WrongType);
+        EXPECT_EQ(probe.count, kProbeCount);
+        EXPECT_EQ(probe.code, "fixed");
+    }
+
+    TEST_F(PanelBindingWriteTest, APoolStringIsNeverInterned) {
+        const String fresh = FreshText("panel_write");
+        EXPECT_EQ(writer.WriteText(sources, Bind("tag"), fresh), PanelReadStatus::WrongType);
+        EXPECT_EQ(probe.tag.ToStringView(), "tag-text");
+        EXPECT_FALSE(PoolString::Find(StringView(fresh)).has_value());
+    }
+
+    TEST_F(PanelBindingWriteTest, AMissingSourcePathOrRowIsAStatus) {
+        PanelBinding other = Bind("title");
+        other.source = "nowhere";
+        EXPECT_EQ(writer.WriteText(sources, other, "x"), PanelReadStatus::UnknownSource);
+        EXPECT_EQ(writer.WriteText(sources, Bind("nope"), "x"), PanelReadStatus::BadPath);
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("rows"), 2, "path", "x"), PanelReadStatus::NoRow);
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("rows"), 0, "nope", "x"), PanelReadStatus::BadPath);
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("count"), 0, "path", "x"), PanelReadStatus::NotAList);
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("numbers"), 0, "", "x"), PanelReadStatus::WrongType);
+
+        current = nullptr;
+        EXPECT_EQ(writer.WriteText(sources, Bind("title"), "x"), PanelReadStatus::NoObject);
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("rows"), 0, "path", "x"), PanelReadStatus::NoObject);
+    }
+
+    TEST_F(PanelBindingWriteTest, AConstSourceObjectIsNotWritten) {
+        const PanelProbe& frozen = probe;
+        current = nullptr;
+        const PanelSourceHandle constHandle = sources.Register(kSource, [&frozen] { return TypedRef::Of(frozen); });
+
+        EXPECT_EQ(writer.WriteText(sources, Bind("title"), "x"), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteText(sources, Bind("inner.path"), "x"), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("rows"), 0, "path", "x"), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteRowText(sources, Bind("names"), 0, "", "x"), PanelReadStatus::WrongType);
+        EXPECT_EQ(probe.title, "Files");
+        EXPECT_EQ(probe.rows[0].path, "a.txt");
+        EXPECT_EQ(Text("title"), "Files") << "a const object is still read";
+    }
+
+    TEST_F(PanelBindingWriteTest, ASteadyWriteAllocatesNothingAndSharesTheReadersCache) {
+        const PanelBinding title = Bind("title");
+        const PanelBinding rows = Bind("rows");
+        probe.title = String(64, 'a');
+        probe.rows[0].path = String(64, 'b');
+        const String same(32, 'c');
+
+        const auto writeAll = [&] {
+            EXPECT_EQ(writer.WriteText(sources, title, same), PanelReadStatus::Ok);
+            EXPECT_EQ(writer.WriteRowText(sources, rows, 0, "path", same), PanelReadStatus::Ok);
+        };
+        writeAll();
+        const size_t compiled = reader.CompiledCount();
+        EXPECT_GT(compiled, 0u) << "the writer compiles its paths in the reader's cache";
+
+        ExpectNoAllocations(writeAll);
+        EXPECT_EQ(reader.CompiledCount(), compiled);
     }
 
 }  // namespace BECore::Tests

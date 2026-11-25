@@ -149,6 +149,7 @@ namespace BECore {
         }
         at.status = PanelReadStatus::Ok;
         at.object = object;
+        at.writable = !object.isConst;
         at.path = &compiled->path;
         if (compiled->path.IsFixed()) {
             at.address = static_cast<const uint8_t*>(object.ConstAddress()) + compiled->path.offset;
@@ -180,7 +181,7 @@ namespace BECore {
             return PanelReadStatus::NotAList;
         }
         const ListImage image = Kernel::ReadList(at.address, *descriptor);
-        out = ListView{image.data, image.count, image.stride, at.type->element};
+        out = ListView{image.data, image.count, image.stride, at.type->element, at.writable};
         return PanelReadStatus::Ok;
     }
 
@@ -202,6 +203,7 @@ namespace BECore {
             at.status = PanelReadStatus::Ok;
             at.address = element;
             at.type = view.element;
+            at.writable = view.writable;
             return at;
         }
         const TypeInfo* info = view.element->kind == TypeKind::Object ? TypeRegistry::GetInstance().Find(view.element->ObjectHash()) : nullptr;
@@ -210,8 +212,8 @@ namespace BECore {
             at.status = status;
             return at;
         }
-        // The cell is only read: the promise of isConst is kept
-        at = Locate(TypedRef{const_cast<uint8_t*>(element), info, true}, relativePath);
+        // The reader only reads the cell; the writer may change it when the list's own object is not const
+        at = Locate(TypedRef{const_cast<uint8_t*>(element), info, !view.writable}, relativePath);
         status = at.status;
         return at;
     }
