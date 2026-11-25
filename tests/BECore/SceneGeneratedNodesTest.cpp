@@ -105,7 +105,7 @@ namespace BECore::Tests {
         XmlSerializer serializer;
         _scene->Serialize(serializer);
         Vector<String> saved;
-        for (pugi::xml_node node : serializer.GetRootNode().child("nodes").children("node")) {
+        for (pugi::xml_node node : serializer.GetRootNode().child("nodes").children()) {
             saved.emplace_back(node.attribute("name").value());
         }
         EXPECT_EQ(saved, (Vector<String>{"Maker", "Plain", "Added"}));
