@@ -74,6 +74,7 @@ def launch_game(
     record: str = "",
     window: str = "",
     density: float | None = None,
+    editor: bool = False,
 ) -> dict[str, Any]:
     """Starts a game executable with the control API and connects to it (a game started earlier by this server is stopped).
 
@@ -84,9 +85,10 @@ def launch_game(
     record: the path of a scenario file to record the session to, as record_start does (error codes and version steps).
     window: "WxH" in window units (64 to 4096 each), the start size of the headless window instead of the one in the game's config, e.g. "390x844".
     density: the start pixel density (0.5 to 4, default 1): the pictures are round(size * density) pixels. Both need headless; set_window changes them later.
+    editor: start in the editor run mode (--editor), headless too: a screenshot is the whole editor window; status.runMode says which mode runs (Game in a build without the editor).
     Answers the port, the clock status and the games the executable has.
     """
-    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None, window=window or None, density=density)
+    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None, window=window or None, density=density, editor=editor)
 
 
 @server.tool()

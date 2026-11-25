@@ -12,6 +12,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Time/Time.h>
 #include <BECore/Values/Explain/ValueExplainControl.h>
+#include <BECore/Widgets/WidgetManager.h>
 #include <Events/ApplicationEvents.h>
 
 namespace BECore {
@@ -67,6 +68,7 @@ namespace BECore {
             answer.log.warnings = service.Log().GetWarnings();
             answer.manualClock = service.IsManualClock();
             answer.paused = pause != nullptr && pause->IsPaused();
+            answer.runMode = EnumUtils<RunMode>::ToPoolString(CoreManager::GetWidgetManager().GetMode());
             answer.window = ControlWindowStatus::Read();
             call.ReplyObject(answer);
         }
@@ -432,8 +434,8 @@ namespace BECore {
         RegisterWindowControl(service);
 
         service.DescribeMethod("ping", {"Answers pong and the protocol version", {}});
-        service.DescribeMethod("status", {"The frame clock, whether the clock is manual, whether the game is paused, the totals of warnings and errors logged since the start and the window (size, "
-                                          "density, safe area, output, user scale)",
+        service.DescribeMethod("status", {"The frame clock, whether the clock is manual, whether the game is paused, the totals of warnings and errors logged since the start, the window (size, "
+                                          "density, safe area, output, user scale) and the run mode that runs (Editor or Game)",
                                           {}});
         service.DescribeMethod("step", {"Runs frames and answers with the clock after the last one",
                                         {{"frames", "integer", false, Format("Frames to run, 1 to {} (default 1)", kMaxStepFrames)},

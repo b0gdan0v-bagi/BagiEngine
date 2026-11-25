@@ -142,14 +142,6 @@ namespace BECore {
             CoreManager::GetPause().SetPaused(true);  // a manual clock is a pause that only `step` advances
         }
 
-        // The editor draws its viewport into an offscreen target, which the software renderer of a headless run does not have
-        // The resolved mode (ResolveRunMode) without its warning: CreateWidgets resolves and warns once
-        if (controlSettings->headless && kEditorBuilt && config._mode == RunMode::Editor) {
-            LOG_ERROR("Headless: the Editor run mode cannot run without a window; drop --editor or set mode=\"Game\" in ApplicationConfig.xml");
-            LogEvent::Flush();
-            return false;
-        }
-
         _headless = controlSettings->headless;
 
         ApplicationOptions options;
@@ -310,7 +302,7 @@ namespace BECore {
             return;
         }
         if (_headless) {
-            LOG_WARNING("Run mode: Ctrl+Shift+E ignored, a headless run has no window for the editor");
+            LOG_WARNING("Run mode: Ctrl+Shift+E ignored, a headless run gets no keys");
             return;
         }
         CoreManager::GetWidgetManager().RequestToggle();

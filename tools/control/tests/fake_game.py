@@ -306,7 +306,7 @@ def main() -> int:
         if method == "ping":
             return {"pong": True, "protocol": 1}
         if method == "status":
-            return {"frame": frame["count"], "manualClock": manual_clock, "log": counts(), "window": window_object(window, headless)}
+            return {"frame": frame["count"], "manualClock": manual_clock, "log": counts(), "runMode": "Editor" if "--editor" in args else "Game", "window": window_object(window, headless)}
         if method == "set_window":
             if not headless:
                 raise FakeError("not_headless", "the window of a real game cannot be simulated")

@@ -49,10 +49,10 @@ namespace BECore {
      * An element that does not `OwnsState()` (no `UIInputClicker`) is drawn in the state of its nearest ancestor that does (`GetVisualState`), so the `UIImageComponent` and the
      * `UITextComponent` of the children of a composed button follow its hover, press and disabled state; the child itself is not hovered (its flags, the hit test and `ui_tree` are its own).
      *
-     * **Theme tokens.** A colour field may be a token (`color="@primary"`, UIThemes). The canvas calls `ResolveTheme()` before it draws the element: the token's colour is written into the
-     * channels of every colour field (the element's own, the box's, its controls' and components'), so every reader of a colour keeps reading channels. `_themeVersion` is the version of
-     * the table the channels were last resolved at (runtime, neither reflected nor saved; a new element starts at 0 and resolves on its first draw). Code that assigns a token to a live
-     * element calls `ResetTheme()`.
+     * **Theme tokens.** A colour field may be a token (`color="@primary"`, UIThemes). The canvas calls `ResolveTheme()` before it draws the element, when `IsThemeStale()` of the version it read once
+     * for the draw: the token's colour is written into the channels of every colour field (the element's own, the box's, its controls' and components'), so every reader of a colour keeps reading
+     * channels. `_themeVersion` is the version of the table the channels were last resolved at (runtime, neither reflected nor saved; a new element starts at 0 and resolves on its first draw). Code
+     * that assigns a token to a live element calls `ResetTheme()`.
      */
     class UIElement : public RefCounted {
         BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element, REGISTER_SELF)
@@ -97,9 +97,15 @@ namespace BECore {
         /// Draws the components in list order, with the view transform of the canvas in effect. The canvas calls it after `DrawSelf` and before the children
         void DrawComponents(IRenderer& renderer);
 
-        /// Resolves the theme tokens of this element (not its children: the canvas walks the tree) when the version of @p themes moved since the last call; at once otherwise. The
-        /// canvas calls it before `DrawSelf`, so a theme switch recolours the open screen at the next frame with no tree edit and no `Invalidate()`; a hidden element resolves when it is shown
+        /// Resolves the theme tokens of this element (not its children: the draw list visits each) when the version of @p themes moved since the last call; at once otherwise. The
+        /// canvas calls it before `DrawSelf`, so a theme switch or a `ResetTheme()` recolours the open screen at the next frame with no tree edit and no `Invalidate()`; a hidden element resolves when
+        /// it is shown
         void ResolveTheme(UIThemes& themes);
+
+        /// The next `ResolveTheme` with a theme of this @p version would resolve: the cheap test a loop that visits every element makes before it calls it
+        [[nodiscard]] bool IsThemeStale(uint64_t version) const {
+            return _themeVersion != version;
+        }
 
         /// Forgets what was resolved: the next `ResolveTheme` resolves again. **Call it after assigning a token to a live element** (`color = UIColor::FromToken(...)`); a token loaded from a file
         /// needs nothing, the element has not been resolved yet
@@ -163,7 +169,8 @@ namespace BECore {
             return nullptr;
         }
 
-        /// The component of type T, made and appended when the element has none: an element holds one of each type
+        /// The component of type T, made and appended when the element has none: an element holds one of each type. Like an edit of the tree, an edit of `components` of an element on a live
+        /// canvas needs `UICanvasComponent::Invalidate()`: the canvas keeps its transition component and whether it owns the pointer state until the next layout
         template <typename T>
         T& AddComponent() {
             if (T* existing = GetComponent<T>()) {
