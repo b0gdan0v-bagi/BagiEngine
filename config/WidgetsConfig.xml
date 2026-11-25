@@ -24,7 +24,8 @@
     <widget
       type="ConsoleWidget" />
     <widget
-      type="FileChangesWidget" />
+      type="AssetPanelWidget"
+      asset="FileChangesPanel" />
     <widget
       type="GamePanelWidget" />
     <widget

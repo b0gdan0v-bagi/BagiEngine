@@ -1,0 +1,134 @@
+#include <BECore/Reflection/AbstractFactory.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Widgets/PanelAssets/PanelAsset.h>
+#include <BECore/Widgets/PanelAssets/PanelElements.h>
+#include <Common/Printers.h>
+#include <gtest/gtest.h>
+
+namespace BECore::Tests {
+
+    namespace {
+
+        /// Every kind of element once, a table with each column type, and a nested container
+        constexpr const char* kSampleXml = R"(
+<PanelAsset id="Sample" title="Sample" command="view.sample" open="true" width="640" height="320">
+  <sources>
+    <source name="files" model="FileChangesPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelEmptyState" id="idle" icon="file-diff" text="Nothing to show" visible="!files.running"/>
+    <element type="PanelSection" id="section" title="Details" defaultOpen="false" tooltip="A section">
+      <elements>
+        <element type="PanelRow" id="toolbar">
+          <elements>
+            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" enableWhen="files.hasPending"/>
+            <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
+          </elements>
+        </element>
+        <element type="PanelText" id="status" bind="files.status" style="Warning" wrap="true" mono="true"/>
+        <element type="PanelText" id="caption" text="Pending changes" style="Disabled"/>
+        <element type="PanelSeparator" id="line" title="Fields"/>
+        <element type="PanelField" id="one" bind="files.count" label="Count"/>
+        <element type="PanelFields" id="all" bind="files.options"/>
+        <element type="PanelSlot" id="custom" name="DiffView"/>
+      </elements>
+    </element>
+    <element type="PanelTable" id="pending" source="files.pending" header="false" borders="true" maxRows="20" visible="files.hasPending">
+      <columns>
+        <column id="path" type="Text" title="Path" field="path"/>
+        <column id="pick" type="Selectable" field="name"/>
+        <column id="apply" type="Button" icon="check" tooltip="Apply this change" command="fileChanges.apply" argument="path"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        IntrusivePtr<PanelAsset> Read(const String& xml, XmlDeserializer& deserializer) {
+            EXPECT_TRUE(deserializer.LoadFromString(xml));
+            auto asset = New<PanelAsset>();
+            asset->Deserialize(deserializer);
+            return asset;
+        }
+
+        /// The serializer's own root element holds the asset's attributes, as a file's root element does for the reader
+        String Write(const PanelAsset& asset) {
+            XmlSerializer serializer;
+            asset.Serialize(serializer);
+            return serializer.SaveToString();
+        }
+
+        template <typename T>
+        const T* ElementAs(const IntrusivePtr<PanelElement>& element) {
+            return element ? element->Cast<T>() : nullptr;
+        }
+
+    }  // namespace
+
+    TEST(PanelAssetTest, RoundTrip) {
+        XmlDeserializer first;
+        const auto asset = Read(kSampleXml, first);
+        ASSERT_FALSE(first.HasErrors());
+
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+        EXPECT_EQ(again->id, "Sample");
+        EXPECT_TRUE(again->open);
+        EXPECT_FLOAT_EQ(again->width, 640.0f);
+        ASSERT_EQ(again->sources.size(), 1u);
+        EXPECT_EQ(again->sources[0].model, "FileChangesPanelModel");
+
+        ASSERT_EQ(again->elements.size(), 3u);
+        const auto* section = ElementAs<PanelSection>(again->elements[1]);
+        ASSERT_NE(section, nullptr);
+        EXPECT_FALSE(section->defaultOpen);
+        ASSERT_EQ(section->elements.size(), 7u);
+        const auto* row = ElementAs<PanelRow>(section->elements[0]);
+        ASSERT_NE(row, nullptr);
+        ASSERT_EQ(row->elements.size(), 2u);
+        const auto* input = ElementAs<PanelInput>(row->elements[1]);
+        ASSERT_NE(input, nullptr);
+        EXPECT_FLOAT_EQ(input->width, 12.5f);
+        const auto* status = ElementAs<PanelText>(section->elements[1]);
+        ASSERT_NE(status, nullptr);
+        EXPECT_EQ(status->style, PanelTextStyle::Warning);
+        EXPECT_TRUE(status->mono);
+
+        const auto* table = ElementAs<PanelTable>(again->elements[2]);
+        ASSERT_NE(table, nullptr);
+        EXPECT_FALSE(table->header);
+        EXPECT_EQ(table->maxRows, 20u);
+        ASSERT_EQ(table->columns.size(), 3u);
+        EXPECT_EQ(table->columns[1].type, PanelColumnType::Selectable);
+        EXPECT_EQ(table->columns[2].argument, "path");
+    }
+
+    TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {
+        for (const char* name : {"PanelSection", "PanelRow", "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelButton", "PanelTable", "PanelSeparator", "PanelEmptyState", "PanelSlot"}) {
+            const IntrusivePtr<PanelElement> element = AbstractFactory<PanelElement>::GetInstance().Create(StringView{name});
+            ASSERT_NE(element, nullptr) << name;
+            EXPECT_EQ(element->GetTypeMeta().typeName, StringView{name});
+        }
+    }
+
+    TEST(PanelAssetTest, UnknownTypeIsReportedAndLeavesAPlainElement) {
+        XmlDeserializer deserializer;
+        const auto asset = Read(R"(<PanelAsset id="A"><elements>
+                                     <element type="PanelHologram" id="x"/>
+                                     <element id="y"/>
+                                   </elements></PanelAsset>)",
+                                deserializer);
+
+        EXPECT_TRUE(deserializer.HasErrors());
+        ASSERT_EQ(asset->elements.size(), 2u);
+        for (const auto& element : asset->elements) {
+            ASSERT_NE(element, nullptr);
+            EXPECT_TRUE(element->Is<PanelElement>());
+        }
+    }
+
+}  // namespace BECore::Tests

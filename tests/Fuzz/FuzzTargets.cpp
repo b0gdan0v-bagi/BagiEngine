@@ -21,6 +21,7 @@ namespace BECore::Fuzz {
             {"ControlRequest", &FuzzControlRequest, "control_request", 1},
             {"WebUi", &FuzzWebUi, "web_ui", 15},
             {"UiTables", &FuzzUiTables, "ui_tables", 2},
+            {"PanelAsset", &FuzzPanelAsset, "panel_asset", 4},
             {"UiGeometry", &FuzzUiGeometry, "ui_geometry", 8},
             {"AudioWav", &FuzzAudioWav, "audio_wav", 1},
             {"AudioFlac", &FuzzAudioFlac, "audio_flac", 1},

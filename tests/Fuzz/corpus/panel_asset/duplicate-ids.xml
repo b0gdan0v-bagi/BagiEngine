@@ -1,0 +1,1 @@
+<PanelAsset id="Test"><elements><element type="PanelRow" id="a"/><element type="PanelRow" id="a"/><element type="PanelTable" id="t" source="a.b"><columns><column id="c" field="x"/><column id="c" field="y"/></columns></element></elements></PanelAsset>

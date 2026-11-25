@@ -60,6 +60,9 @@ namespace BECore {
         size_t elementSize = 0;
         /// String: the value is a `PoolString`, so writing it puts the text into the pool, which never shrinks. Not set on a container of them: look at its element
         bool interns = false;
+        /// String: the value is a `String` (the engine's own string), so code that holds only this descriptor may read it in place as one. A `FixedString` is told
+        /// from it by nothing else (same kind, same capacity when it can overflow), which is why `SameType` does not look at this member
+        bool isEngineString = false;
         /// List: the element. Optional: the value. Map: the value. Pair: the second member. Value: the `T` of `Value<T>`.
         const TypeDesc* element = nullptr;
         /// Map: the key. Pair: the first member.
@@ -357,6 +360,7 @@ namespace BECore {
                 desc.kind = TypeKind::String;
                 desc.capacity = TextTraits<T>::kCapacity;
                 desc.interns = std::is_same_v<T, PoolString>;
+                desc.isEngineString = std::is_same_v<T, String>;
             } else if constexpr (IsReflectedEnum<T>) {
                 desc.kind = TypeKind::Enum;
                 const auto& enumNames = EnumUtils<T>::Names();

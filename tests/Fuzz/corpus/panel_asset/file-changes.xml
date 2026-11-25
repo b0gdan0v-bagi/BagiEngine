@@ -1,0 +1,20 @@
+<PanelAsset id="FileChanges" title="File changes" command="view.fileChanges" open="false" width="640" height="320">
+  <sources>
+    <source name="files" model="FileChangesPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelEmptyState" id="notRunning" icon="file-diff" text="The file watcher is not running" visible="!files.running"/>
+    <element type="PanelRow" id="toolbar" visible="files.running">
+      <elements>
+        <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan"/>
+        <element type="PanelButton" id="applyAll" text="Apply all" command="fileChanges.applyAll" enableWhen="files.hasPending"/>
+      </elements>
+    </element>
+    <element type="PanelTable" id="pending" source="files.pending" visible="files.hasPending">
+      <columns>
+        <column type="Text" id="path" field="path"/>
+        <column type="Button" id="apply" icon="check" command="fileChanges.apply" argument="path"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>

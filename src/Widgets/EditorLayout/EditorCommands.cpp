@@ -48,6 +48,9 @@ namespace BECore {
                 {kViewSpriteLibrary, "Sprite Library", std::nullopt, true},
                 {kViewViewport, "Viewport", std::nullopt, true},
                 {kViewGenerate, "Generate Art", std::nullopt, true},
+                {kFileChangesRescan, "File Changes: Rescan", std::nullopt, true},
+                {kFileChangesApplyAll, "File Changes: Apply All", std::nullopt, true},
+                {kFileChangesApply, "File Changes: Apply One", std::nullopt, true},
             };
             return table;
         }
@@ -62,6 +65,15 @@ namespace BECore {
     const EditorCommand* FindEditorCommand(PoolString id) {
         for (const EditorCommand& command : CommandTable()) {
             if (command.id == id) {
+                return &command;
+            }
+        }
+        return nullptr;
+    }
+
+    const EditorCommand* FindEditorCommand(StringView id) {
+        for (const EditorCommand& command : CommandTable()) {
+            if (command.id.ToStringView() == id) {
                 return &command;
             }
         }

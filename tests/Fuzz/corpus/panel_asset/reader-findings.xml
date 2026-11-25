@@ -1,0 +1,1 @@
+<PanelAsset id="Test"><elements><element type="PanelHologram" id="h"/><element type="PanelInput" id="i" bind="a.b" width="wide"/><element type="PanelText" id="t" text="x" style="Loud" tooltips="y"/><element id="y"/></elements></PanelAsset>
