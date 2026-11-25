@@ -101,6 +101,11 @@ namespace BECore {
         /// canvas calls it before `DrawSelf`, so a theme switch recolours the open screen at the next frame with no tree edit and no `Invalidate()`; a hidden element resolves when it is shown
         void ResolveTheme(UIThemes& themes);
 
+        /// The next `ResolveTheme` with a theme of this @p version would resolve: the cheap test a loop that visits every element makes before it calls it
+        [[nodiscard]] bool IsThemeStale(uint64_t version) const {
+            return _themeVersion != version;
+        }
+
         /// Forgets what was resolved: the next `ResolveTheme` resolves again. **Call it after assigning a token to a live element** (`color = UIColor::FromToken(...)`); a token loaded from a file
         /// needs nothing, the element has not been resolved yet
         void ResetTheme() {

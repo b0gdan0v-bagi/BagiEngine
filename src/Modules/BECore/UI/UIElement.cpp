@@ -151,7 +151,7 @@ namespace BECore {
     }
 
     void UIElement::ResolveTheme(UIThemes& themes) {
-        if (_themeVersion == themes.GetVersion()) {
+        if (!IsThemeStale(themes.GetVersion())) {
             return;
         }
         ApplyTheme(themes);
