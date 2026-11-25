@@ -123,6 +123,12 @@ namespace BECore {
         inline constexpr auto kLayoutsSaveDialogSave = "layouts.saveDialog.save"_intern;
         inline constexpr auto kLayoutsSaveDialogEnter = "layouts.saveDialog.enter"_intern;
         inline constexpr auto kLayoutsSaveDialogCancel = "layouts.saveDialog.cancel"_intern;
+        /// The Scene Editor's Add Node and Add Component dialogs (config/panels/SceneDialogsPanel.xml names them). SceneDialogsModel owns them. addNode is the OK button
+        /// and the name field's `submitCommand`, addComponent takes the class name of a row as the argument and does nothing for an unknown one, cancel is both buttons
+        /// and both popups' `closeCommand`
+        inline constexpr auto kSceneDialogsAddNode = "sceneDialogs.addNode"_intern;
+        inline constexpr auto kSceneDialogsAddComponent = "sceneDialogs.addComponent"_intern;
+        inline constexpr auto kSceneDialogsCancel = "sceneDialogs.cancel"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

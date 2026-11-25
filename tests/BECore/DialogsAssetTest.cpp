@@ -4,14 +4,20 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Input/ImGuiItemIndex.h>
 #include <BECore/RefCounted/New.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/AssetPanelWidget.h>
+#include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <gtest/gtest.h>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -24,8 +30,12 @@ namespace BECore::Tests {
         constexpr float kFrameSeconds = 1.0f / 60.0f;
         constexpr int kSettleFrames = 3;
         constexpr StringView kSaveLayoutAsset = "EditorDialogsPanel";
+        constexpr StringView kSceneDialogsAsset = "SceneDialogsPanel";
         constexpr StringView kTypedName = "Wide";
-        constexpr Array<StringView, 1> kShippedAssets = {kSaveLayoutAsset};
+        constexpr StringView kSceneNodes = R"(<node name="Parent"/>)";
+        constexpr StringView kComponentSuffix = "Component";
+        constexpr StringView kDialogTitle = "Add Component";
+        constexpr Array<StringView, 2> kShippedAssets = {kSaveLayoutAsset, kSceneDialogsAsset};
 
         Path ShippedFile(StringView asset) {
             return Path(__FILE__).Parent().Parent().Parent() / "config" / "panels" / Path(Format("{}.xml", asset));
@@ -78,8 +88,24 @@ namespace BECore::Tests {
             SetActiveImGuiFonts({});
             _hostHandle.Reset();
             _host.reset();
+            EngineEnvironment::UseSceneManager({});
+            _sceneManager.Reset();
             RemoveDirectory(_dir);
             RemoveDirectory(_settingsDir);
+        }
+
+        /// A scene `Main` with one node `Parent`, made the active scene of `CoreManager`
+        void UseScene() {
+            XmlDeserializer deserializer;
+            ASSERT_TRUE(deserializer.LoadFromString(SceneConfigText(kSceneNodes)));
+            _sceneManager = New<SceneManager>();
+            _sceneManager->Deserialize(deserializer);
+            ASSERT_FALSE(deserializer.HasErrors());
+            _sceneManager->Initialize();
+            EngineEnvironment::UseSceneManager(_sceneManager);
+            _sceneManager->SetActiveScene("Main"_intern);
+            _scene = &Require(_sceneManager->GetActiveScene());
+            _parent = &Require(FindNodeBelow(_scene->GetRootNode(), "Parent"));
         }
 
         /// Hosts the shipped asset @p asset, copied into the config folder of the test
@@ -113,6 +139,16 @@ namespace BECore::Tests {
         const ImGuiItemRecord* Find(StringView part) {
             for (const ImGuiItemRecord& item : _index.Items()) {
                 if (item.visible && Contains(item.label, part)) {
+                    return &item;
+                }
+            }
+            return nullptr;
+        }
+
+        /// The first row of the Add Component list in view: a class name ends in `Component`, the dialog's own title is the only other label with it
+        const ImGuiItemRecord* FindFirstComponentRow() {
+            for (const ImGuiItemRecord& item : _index.Items()) {
+                if (item.visible && Contains(item.label, kComponentSuffix) && !Contains(item.label, kDialogTitle)) {
                     return &item;
                 }
             }
@@ -158,6 +194,9 @@ namespace BECore::Tests {
         ImGuiFonts _fonts;
         ImGuiItemIndex _index;
         Vector<IntrusivePtr<AssetPanelWidget>> _widgets;
+        IntrusivePtr<SceneManager> _sceneManager;
+        Scene* _scene = nullptr;
+        SceneNode* _parent = nullptr;
     };
 
     TEST_F(DialogsAssetTest, TheSaveLayoutCommandOpensTheDialogAndTheSaveButtonStoresTheTypedName) {
@@ -212,6 +251,49 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Click(Find("Overwrite")));
         EXPECT_EQ(Find("Cancel"), nullptr);
         EXPECT_EQ(_host->layouts->Load(kTypedName).value(), kProbeLayoutText);
+    }
+
+    TEST_F(DialogsAssetTest, TheAddNodeRequestOpensTheDialogAndOkAddsTheNodeUnderTheParent) {
+        ASSERT_NO_FATAL_FAILURE(UseScene());
+        ASSERT_NO_FATAL_FAILURE(Start(kSceneDialogsAsset));
+        EXPECT_EQ(Find("Cancel"), nullptr);
+
+        SceneAddNodeRequestEvent::Emit(_scene, _parent);
+        Settle();
+        ASSERT_NE(Find("Cancel"), nullptr);
+        Type(kTypedName.data());
+        ASSERT_NO_FATAL_FAILURE(Click(Find("OK")));
+
+        ASSERT_EQ(_parent->GetChildren().size(), 1u);
+        EXPECT_TRUE(Contains(_parent->GetChildren()[0]->GetName().ToStringView(), kTypedName)) << "typed into the field that held the default name";
+        EXPECT_EQ(Find("Cancel"), nullptr);
+    }
+
+    TEST_F(DialogsAssetTest, AClickOnAComponentRowAddsOneComponentToTheNode) {
+        ASSERT_NO_FATAL_FAILURE(UseScene());
+        ASSERT_NO_FATAL_FAILURE(Start(kSceneDialogsAsset));
+
+        SceneAddComponentRequestEvent::Emit(_scene, _parent);
+        Settle();
+        ASSERT_NO_FATAL_FAILURE(Click(FindFirstComponentRow()));
+
+        EXPECT_EQ(_parent->GetComponents().size(), 1u);
+        EXPECT_EQ(Find("Cancel"), nullptr);
+    }
+
+    TEST_F(DialogsAssetTest, EscClosesTheAddComponentDialogAndItOpensAgain) {
+        ASSERT_NO_FATAL_FAILURE(UseScene());
+        ASSERT_NO_FATAL_FAILURE(Start(kSceneDialogsAsset));
+
+        SceneAddComponentRequestEvent::Emit(_scene, _parent);
+        Settle();
+        ASSERT_NE(Find("Cancel"), nullptr);
+        PressKey(ImGuiKey_Escape);
+        EXPECT_EQ(Find("Cancel"), nullptr);
+
+        SceneAddComponentRequestEvent::Emit(_scene, _parent);
+        Settle();
+        EXPECT_NE(Find("Cancel"), nullptr);
     }
 
 }  // namespace BECore::Tests

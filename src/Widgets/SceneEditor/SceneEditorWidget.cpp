@@ -4,22 +4,20 @@
 #include <BECore/Config/ConfigNames.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/IDeserializer.h>
-#include <BECore/Scene/IComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
-#include <Widgets/EditorLayout/IconTable.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
+#include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneEditorDocuments.h>
 #include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/SceneEditor/UIEditEvents.h>
@@ -30,8 +28,6 @@ namespace BECore {
 
     namespace {
         constexpr float kUITreeHeight = 160.0f;
-        constexpr size_t kComponentLabelSize = 96;
-        constexpr float kPopupButtonWidth = 120.0f;
     }  // namespace
 
     SceneEditorWidget::~SceneEditorWidget() {
@@ -48,6 +44,7 @@ namespace BECore {
         Subscribe<ViewportBoxSelectEvent, &SceneEditorWidget::OnViewportBoxSelect>(this);
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
         Subscribe<SceneEditedEvent, &SceneEditorWidget::OnSceneEdited>(this);
+        Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         return true;
@@ -157,6 +154,13 @@ namespace BECore {
         }
     }
 
+    void SceneEditorWidget::OnNodeAdded(const SceneNodeAddedEvent& event) {
+        if (event.scene != nullptr && event.scene == CoreManager::GetSceneManager().GetActiveScene()) {
+            _isDirty = true;
+            _hierarchy.revealNode = event.parent;
+        }
+    }
+
     void SceneEditorWidget::OnUIRectDrag(const UIRectDragEvent& event) {
         const bool selected = event.element != nullptr && event.element == _selectedUIElement.Get();
         switch (event.phase) {
@@ -253,7 +257,6 @@ namespace BECore {
             // A replaced scene frees its nodes: the selection would dangle
             _hierarchy.Reset();
             _selection.Clear();
-            _contextMenuTargetNode = nullptr;
             ResetUISelection();
             _uiFileSession.Clear();
             _lastScene = scene;
@@ -287,7 +290,7 @@ namespace BECore {
 
         ImGui::EndChild();
         SyncSelection(*scene);
-        ApplyHierarchyAnswers();
+        ApplyHierarchyAnswers(*scene);
         AnnounceSelection(scene);
         AnnounceUIElement(scene);
 
@@ -301,19 +304,6 @@ namespace BECore {
 
         ImGui::EndChild();
 
-        // The popups are opened here: inside Begin/End, after the child windows
-        if (_showAddNodePopup) {
-            ImGui::OpenPopup("Add Node##modal");
-            _showAddNodePopup = false;
-        }
-        if (_showAddComponentPopup) {
-            ImGui::OpenPopup("Add Component##modal");
-            _showAddComponentPopup = false;
-        }
-
-        RenderAddNodePopup();
-        RenderAddComponentPopup();
-
         ImGui::End();
     }
 
@@ -321,23 +311,21 @@ namespace BECore {
         // All rendering is done in Update
     }
 
-    void SceneEditorWidget::ApplyHierarchyAnswers() {
+    void SceneEditorWidget::ApplyHierarchyAnswers(Scene& scene) {
         if (_hierarchy.dirty) {
             _isDirty = true;
             _hierarchy.dirty = false;
         }
         if (_hierarchy.nodeRemoved) {
-            // A removed subtree may have held the node of the add popup or the canvas element in the inspector
-            _contextMenuTargetNode = nullptr;
+            // A removed subtree may have held the canvas element in the inspector (the dialogs find their node again every frame)
             ResetUISelection();
             _hierarchy.nodeRemoved = false;
         }
         if (_hierarchy.addNodeRequested) {
             _hierarchy.addNodeRequested = false;
-            _contextMenuTargetNode = _hierarchy.addNodeParent;
+            SceneNode* const parent = _hierarchy.addNodeParent;
             _hierarchy.addNodeParent = nullptr;
-            _showAddNodePopup = true;
-            snprintf(_nodeNameBuffer, sizeof(_nodeNameBuffer), "%s", _contextMenuTargetNode ? "ChildNode" : "NewNode");
+            SceneAddNodeRequestEvent::Emit(&scene, parent);
         }
     }
 
@@ -485,82 +473,9 @@ namespace BECore {
 
         ImGui::Separator();
         if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add Component", "Add a component to the selected node", -1.0f)) {
-            _showAddComponentPopup = true;
+            SceneAddComponentRequestEvent::Emit(_lastScene, _hierarchy.selected);
         }
         ImGui::EndDisabled();
-    }
-
-    void SceneEditorWidget::RenderAddNodePopup() {
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::BeginPopupModal("Add Node##modal", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextUnformatted("Node name:");
-            if (ImGui::IsWindowAppearing()) {
-                ImGui::SetKeyboardFocusHere();
-            }
-            ImGui::InputText("##add_node_name", _nodeNameBuffer, sizeof(_nodeNameBuffer));
-
-            if (IconTextButton(ICON_LC_CHECK, "OK", nullptr, kPopupButtonWidth)) {
-                if (_nodeNameBuffer[0] != '\0') {
-                    auto* scene = CoreManager::GetSceneManager().GetActiveScene();
-                    if (scene) {
-                        SceneNode* target = _contextMenuTargetNode ? _contextMenuTargetNode : &scene->GetRootNode();
-                        // AddChild makes a generated node; this one is authored content, so Save writes it
-                        target->AddChild(PoolString::Intern(StringView(_nodeNameBuffer)))->SetGenerated(false);
-                        _hierarchy.revealNode = target;
-                        _isDirty = true;
-                    }
-                }
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::SameLine();
-            if (IconTextButton(ICON_LC_X, "Cancel", nullptr, kPopupButtonWidth)) {
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::EndPopup();
-        }
-    }
-
-    void SceneEditorWidget::RenderAddComponentPopup() {
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::BeginPopupModal("Add Component##modal", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextUnformatted("Select component type:");
-            ImGui::Separator();
-
-            const auto& factory = AbstractFactory<IComponent>::GetInstance();
-            const auto& registeredTypes = factory.GetRegisteredTypes();
-
-            bool firstItem = true;
-            for (const auto& meta : registeredTypes) {
-                if (firstItem) {
-                    if (ImGui::IsWindowAppearing()) {
-                        ImGui::SetKeyboardFocusHere();
-                    }
-                    firstItem = false;
-                }
-                // A stack buffer: the label is "icon name", and the popup draws it for every registered class
-                char label[kComponentLabelSize];
-                snprintf(label, sizeof(label), "%s %s", IconOfClass(meta), meta.typeName.data());
-                if (ImGui::Selectable(label)) {
-                    if (_hierarchy.selected) {
-                        auto newComponent = factory.Create(meta);
-                        if (newComponent) {
-                            _hierarchy.selected->AddComponent(newComponent);
-                            _isDirty = true;
-                        }
-                    }
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-
-            ImGui::Separator();
-            if (IconTextButton(ICON_LC_X, "Cancel", nullptr, kPopupButtonWidth)) {
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::EndPopup();
-        }
     }
 
     void SceneEditorWidget::SaveScene() {

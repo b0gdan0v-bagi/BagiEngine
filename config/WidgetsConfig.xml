@@ -25,6 +25,9 @@
     <widget
       type="SceneEditorWidget" />
     <widget
+      type="AssetPanelWidget"
+      asset="SceneDialogsPanel" />
+    <widget
       type="TextureEditorWidget" />
     <widget
       type="AssetPanelWidget"

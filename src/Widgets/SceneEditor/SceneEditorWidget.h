@@ -9,6 +9,7 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
+#include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/SceneEditor/UINodeFileSession.h>
@@ -84,6 +85,9 @@ namespace BECore {
         void OnTransformEdit(const NodeTransformEditEvent& event);
         void OnSceneEdited(const SceneEditedEvent& event);
 
+        /// Answers the Add Node dialog: the scene is unsaved and the parent of the new node is revealed, when the scene is the active one
+        void OnNodeAdded(const SceneNodeAddedEvent& event);
+
         /// Answers a drag of a canvas element in the viewport: a Change is a UIRectEditEvent like the inspector's (an undo stack merges the frames) and tells whether the layout kept the spec exact, a
         /// Commit notes the element for the Save and marks the scene as changed, a Cancel forgets the inexact mark
         void OnUIRectDrag(const UIRectDragEvent& event);
@@ -99,23 +103,14 @@ namespace BECore {
         /// Sends UIElementSelectedEvent when the (node, element) pair of the "UI elements" selection, or its scene, differs from the last one announced
         void AnnounceUIElement(const Scene* scene);
 
-        /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" popup
-        void ApplyHierarchyAnswers();
+        /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" dialog (asked of
+        /// `SceneDialogsModel` by SceneAddNodeRequestEvent)
+        void ApplyHierarchyAnswers(Scene& scene);
 
         /**
          * @brief Render the inspector panel for the selected node
          */
         void RenderInspector();
-
-        /**
-         * @brief Render the "Add Node" modal popup
-         */
-        void RenderAddNodePopup();
-
-        /**
-         * @brief Render the "Add Component" modal popup
-         */
-        void RenderAddComponentPopup();
 
         /**
          * @brief Replace the `<scene>` of the active scene in SceneConfig.xml (WriteSceneToConfig) and save the file
@@ -135,10 +130,6 @@ namespace BECore {
         IntrusivePtr<UIElement> _selectedUIElement;            // held, so that a tree edit cannot leave it dangling
         UINodeFileSession _uiFileSession;                      // the elements changed since the last save, whose rects go into their node files
         IntrusivePtr<UIElement> _inexactUIElement;             // the element whose last edit the layout limits kept from being exact (the inspector warns)
-        SceneNode* _contextMenuTargetNode = nullptr;           // node to add a child to (null = root)
-        char _nodeNameBuffer[256] = {};
-        bool _showAddNodePopup = false;
-        bool _showAddComponentPopup = false;
         bool _isDirty = false;
         bool _focusRequested = false;  // a reveal was asked for: the window comes to the front on the next Update (never inside the event), so a background dock tab shows the hierarchy
 

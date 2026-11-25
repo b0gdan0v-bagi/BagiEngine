@@ -78,6 +78,9 @@ namespace BECore {
                 {kLayoutsSaveDialogSave, "Save Layout Dialog: Save", std::nullopt, false},
                 {kLayoutsSaveDialogEnter, "Save Layout Dialog: Enter", std::nullopt, false},
                 {kLayoutsSaveDialogCancel, "Save Layout Dialog: Cancel", std::nullopt, false},
+                {kSceneDialogsAddNode, "Add Node Dialog: OK", std::nullopt, false},
+                {kSceneDialogsAddComponent, "Add Component Dialog: Add", std::nullopt, false},
+                {kSceneDialogsCancel, "Scene Dialogs: Cancel", std::nullopt, false},
             };
             return table;
         }
