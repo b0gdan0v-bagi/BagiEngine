@@ -48,5 +48,36 @@
         <element type="PanelText" id="viewText" bind="tb.viewText" style="Disabled" visible="tb.hasScene"/>
       </elements>
     </element>
+    <element type="PanelRow" id="gizmo">
+      <elements>
+        <element type="PanelButton" id="toolMove" icon="move-3d" fill="Accent" fillWhen="tb.tool == Translate" enableWhen="tb.inputMode == Edit" command="viewport.tool.translate" tooltip="Move the selected nodes: drag an arrow or the square (W)"/>
+        <element type="PanelButton" id="toolRotate" icon="rotate-3d" fill="Accent" fillWhen="tb.tool == Rotate" enableWhen="tb.inputMode == Edit" command="viewport.tool.rotate" tooltip="Rotate the selected nodes about the pivot: drag the ring (E)"/>
+        <element type="PanelButton" id="toolScale" icon="scale-3d" fill="Accent" fillWhen="tb.tool == Scale" enableWhen="tb.inputMode == Edit" command="viewport.tool.scale" tooltip="Scale the selected nodes: drag a corner or a side; Shift keeps the aspect (R)"/>
+        <element type="PanelButton" id="spaceWorld" text="World" icon="globe" visible="tb.space == World" enableWhen="tb.inputMode == Edit" command="viewport.gizmoSpace" tooltip="The axes of the Move gizmo: World (the screen's) or Local (the turned axes of the node); a group always uses World (X)"/>
+        <element type="PanelButton" id="spaceLocal" text="Local" icon="box" visible="tb.space == Local" enableWhen="tb.inputMode == Edit" command="viewport.gizmoSpace" tooltip="The axes of the Move gizmo: World (the screen's) or Local (the turned axes of the node); a group always uses World (X)"/>
+        <element type="PanelDropdown" id="snap" text="Snap" icon="magnet" enableWhen="tb.inputMode == Edit" tooltip="Snap a drag to a step; hold Ctrl (Cmd) to flip the switches for one drag">
+          <elements>
+            <element type="PanelRow" id="snapPositionRow">
+              <elements>
+                <element type="PanelCheckbox" id="snapPosition" bind="tb.snapPosition" text="Position"/>
+                <element type="PanelNumber" id="positionStep" bind="tb.positionStep" text="units" min="0.01" max="1024" step="0.5" width="5" enableWhen="tb.snapPosition"/>
+              </elements>
+            </element>
+            <element type="PanelRow" id="snapAngleRow">
+              <elements>
+                <element type="PanelCheckbox" id="snapAngle" bind="tb.snapAngle" text="Angle"/>
+                <element type="PanelNumber" id="angleStep" bind="tb.angleStep" text="deg" min="0.01" max="180" step="0.5" width="5" enableWhen="tb.snapAngle"/>
+              </elements>
+            </element>
+            <element type="PanelRow" id="snapScaleRow">
+              <elements>
+                <element type="PanelCheckbox" id="snapScale" bind="tb.snapScale" text="Scale"/>
+                <element type="PanelNumber" id="scaleStep" bind="tb.scaleStep" text="x" min="0.01" max="1" step="0.01" width="5" enableWhen="tb.snapScale"/>
+              </elements>
+            </element>
+          </elements>
+        </element>
+      </elements>
+    </element>
   </elements>
 </PanelAsset>

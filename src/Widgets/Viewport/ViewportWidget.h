@@ -32,8 +32,8 @@ namespace BECore {
     // draw), so this widget must appear before every widget that draws there.
     //
     // The toolbar above the image is the panel asset ViewportToolbarPanel (a Bar, drawn here through PanelBarsRegistry), and its model owns the choices: the shape
-    // of the image, the simulated safe area, the overlays, the input mode, the forced view variant, the per-canvas switches and the shapes of other devices. The
-    // widget reads them every frame through IViewportToolbar (ViewportToolbarRegistry; every default when no model is registered, and then no toolbar) right
+    // of the image, the simulated safe area, the overlays, the input mode, the forced view variant, the per-canvas switches, the shapes of other devices and the
+    // gizmo's tool, space and snap. The widget reads them every frame through IViewportToolbar (ViewportToolbarRegistry; every default when no model is registered, and then no toolbar) right
     // after the bar is drawn, and publishes back what only it knows: the camera's zoom and whether it moved, the canvases of its pass. The safe area canvases
     // see during the scene pass is the simulated one; a device or custom size renders the target at exactly that size and shows it scaled down to fit the panel
     // (never above 100%), the mouse is mapped back through that zoom. A forced view variant (Scene::SetViewOverride) lives around the viewport's own pass only.
@@ -43,7 +43,7 @@ namespace BECore {
     // whether a press goes to the game (Play) or to the editor as ViewportEditClickEvent (Edit); Alt flips it for one click.
     // Selected nodes (SceneSelectionChangedEvent) are outlined over the image, the primary in the accent colour. In Edit the
     // image has an editor camera (ViewportCamera), a drag on empty ground draws a rubber band, and the gizmo
-    // (ViewportGizmos) moves, turns and scales the selected nodes; its keys and commands are in EditorCommands.h.
+    // (ViewportGizmos) moves, turns and scales the selected nodes; its keys are read here and handed to the toolbar's model, which runs its commands.
     // The selected canvas element (UIElementSelectedEvent) gets eight handles and an anchor widget (ViewportUIGizmos): a drag writes its style.rect and tells UIRectDragEvent.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
@@ -69,7 +69,7 @@ namespace BECore {
         // The grid over the image: a line every _gridStep target pixels from its corner, clipped to the panel and to the target
         void DrawGrid(const ViewportFrame& frame) const;
 
-        // The commands of the window, the gizmo, the camera's reset and frame
+        // The commands of the window and of the camera (reset, frame the selection)
         void OnCommand(const EditorCommandEvent& event);
 
         // The overlays over the image, in target pixels through @p frame and clipped to the panel: the view bounds (bars tinted), the bounds of

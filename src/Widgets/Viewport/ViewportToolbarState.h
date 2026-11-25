@@ -4,6 +4,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIPreview.h>
 #include <BECore/Utils/Singleton.h>
+#include <Widgets/Viewport/GizmoGeometry.h>
 #include <Widgets/Viewport/ViewportInput.h>
 #include <cstdint>
 
@@ -21,9 +22,16 @@ namespace BECore {
         PoolString name;
     };
 
+    /// The choices of the gizmo: what a drag does, the axes of a move and the snap a drag starts with
+    struct ViewportGizmoSettings {
+        Gizmo::Tool tool = Gizmo::Tool::Translate;
+        Gizmo::Space space = Gizmo::Space::World;
+        Gizmo::SnapSettings snap;
+    };
+
     /**
      * @brief The choices of the Viewport's toolbar as `ViewportWidget` reads them (the shape, the safe area, the overlays, the input mode, the forced view,
-     * the per-canvas switches, the shapes of other devices), and what only the viewport knows, which it publishes back (the camera, the canvases)
+     * the per-canvas switches, the shapes of other devices, the gizmo's tool, space and snap), and what only the viewport knows, which it publishes back (the camera, the canvases)
      *
      * The toolbar is a panel asset whose model owns the choices and lives inside its `AssetPanelWidget`, so the viewport reaches it through
      * `ViewportToolbarRegistry` instead of a pointer to another widget. Main thread only.
@@ -59,6 +67,12 @@ namespace BECore {
 
         /// The user closed the "UI Findings" window, which is the Findings overlay: it is switched off as if its box were cleared
         virtual void ClearFindingsOverlay() = 0;
+
+        [[nodiscard]] virtual ViewportGizmoSettings GetGizmoSettings() const = 0;
+
+        /// The keys of the viewport (W / E / R and X), which only the viewport reads
+        virtual void SetTool(Gizmo::Tool tool) = 0;
+        virtual void ToggleSpace() = 0;
     };
 
     /// The choices of a viewport whose editor has no toolbar model (a game's own `WidgetsConfig.xml` without the asset line): every default
@@ -93,6 +107,14 @@ namespace BECore {
         }
 
         void ClearFindingsOverlay() override {}
+
+        [[nodiscard]] ViewportGizmoSettings GetGizmoSettings() const override {
+            return {};
+        }
+
+        void SetTool(Gizmo::Tool /*tool*/) override {}
+
+        void ToggleSpace() override {}
     };
 
     class ViewportToolbarRegistry;

@@ -4,6 +4,8 @@
 #include <BECore/Input/ImGuiItemIndex.h>
 #include <BECore/RefCounted/New.h>
 #include <BECore/UI/UIPreview.h>
+#include <BECore/Widgets/PanelAssets/PanelAsset.h>
+#include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -39,6 +41,10 @@ namespace BECore::Tests {
         constexpr const char* kEditText = "Edit";
         constexpr const char* kResetText = "Reset";
         constexpr ImVec2 kOutside{kDisplaySize.x - 4.0f, kDisplaySize.y - 4.0f};
+        constexpr const char* kWorldText = "World";
+        // Far enough that a drag at any snap step's speed runs past its maximum
+        constexpr float kLongDrag = 1000.0f;
+        constexpr int kDragSteps = 10;
 
         /// The commands a panel's subscriber would see
         class CommandRecorder : public SubscriptionHolder {
@@ -62,6 +68,18 @@ namespace BECore::Tests {
                 ids.push_back(event.commandId);
             }
         };
+
+        const PanelElement* FindElement(const Vector<IntrusivePtr<PanelElement>>& elements, StringView id) {
+            for (const IntrusivePtr<PanelElement>& element : elements) {
+                if (StringView(element->id.data(), element->id.size()) == id) {
+                    return element.Get();
+                }
+                if (const PanelElement* found = FindElement(element->elements, id)) {
+                    return found;
+                }
+            }
+            return nullptr;
+        }
 
         Path ShippedFile() {
             return Path(__FILE__).Parent().Parent().Parent() / "config" / "panels" / "ViewportToolbarPanel.xml";
@@ -151,21 +169,36 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        /// The visible item of the element @p id: a combo and a number are recorded with no label, so they are found by the chain of ids the interpreter
-        /// pushes (the row, the element, the control's own `##<id>`); a dropdown, a checkbox and a table cell by the `##<id>` of their label
-        const ImGuiItemRecord* Find(StringView id) {
-            const ImGuiWindow* host = ImGui::FindWindowByName(kHostName);
-            if (host != nullptr) {
-                const String element(id.data(), id.size());
-                const String control = Format("##{}", id);
-                const ImGuiID wanted = ImHashStr(control.c_str(), 0, ImHashStr(element.c_str(), 0, ImHashStr(kRowId, 0, host->ID)));
-                for (const ImGuiItemRecord& item : _index.Items()) {
-                    if (item.visible && item.id == wanted) {
-                        return &item;
-                    }
+        /// The visible item of the control @p id in the row @p row of the window @p window: a combo and a number are recorded with no label, so they are found by
+        /// the chain of ids the interpreter pushes (the row, the element, the control's own `##<id>`)
+        const ImGuiItemRecord* FindInRow(const ImGuiWindow* window, StringView row, StringView id) {
+            if (window == nullptr) {
+                return nullptr;
+            }
+            const String rowId(row.data(), row.size());
+            const String element(id.data(), id.size());
+            const String control = Format("##{}", id);
+            const ImGuiID wanted = ImHashStr(control.c_str(), 0, ImHashStr(element.c_str(), 0, ImHashStr(rowId.c_str(), 0, window->ID)));
+            for (const ImGuiItemRecord& item : _index.Items()) {
+                if (item.visible && item.id == wanted) {
+                    return &item;
                 }
             }
+            return nullptr;
+        }
+
+        /// The visible item of the element @p id of the first row by its chain of ids; a button, a dropdown, a checkbox and a table cell by the `##<id>` of their label
+        const ImGuiItemRecord* Find(StringView id) {
+            if (const ImGuiItemRecord* item = FindInRow(ImGui::FindWindowByName(kHostName), kRowId, id)) {
+                return item;
+            }
             return FindText(Format("##{}", id));
+        }
+
+        /// The control @p id in the row @p row of the dropdown that is open
+        const ImGuiItemRecord* FindInDropdown(StringView row, StringView id) {
+            const ImGuiContext& context = *ImGui::GetCurrentContext();
+            return context.OpenPopupStack.empty() ? nullptr : FindInRow(context.OpenPopupStack.back().Window, row, id);
         }
 
         void ClickAt(float x, float y) {
@@ -188,6 +221,27 @@ namespace BECore::Tests {
             const ImGuiItemRecord* item = Find(id);
             ASSERT_NE(item, nullptr) << String(id.data(), id.size()).c_str();
             ClickAt(item->CenterX(), item->CenterY());
+        }
+
+        /// A press on @p item, the mouse moved right by @p dx in steps and released: a drag of the control
+        void DragRight(const ImGuiItemRecord& item, float dx) {
+            const ImVec2 from(item.CenterX(), item.CenterY());
+            ImGuiIO& io = ImGui::GetIO();
+            // A second press inside the double click time would turn a drag into a text field
+            const int pauseFrames = static_cast<int>(io.MouseDoubleClickTime / kFrameSeconds) + 1;
+            for (int i = 0; i < pauseFrames; ++i) {
+                Frame();
+            }
+            io.AddMousePosEvent(from.x, from.y);
+            Frame();
+            io.AddMouseButtonEvent(0, true);
+            Frame();
+            for (int step = 1; step <= kDragSteps; ++step) {
+                io.AddMousePosEvent(from.x + dx * static_cast<float>(step) / kDragSteps, from.y);
+                Frame();
+            }
+            io.AddMouseButtonEvent(0, false);
+            Settle();
         }
 
         /// Opens the size combo and clicks the row whose text holds @p text; @p last scrolls the list to its end first, where Custom... is
@@ -302,6 +356,59 @@ namespace BECore::Tests {
         Toolbar().PublishCamera(100.0f, true);
         ASSERT_NO_FATAL_FAILURE(ClickText(kResetText));
         EXPECT_EQ(_commands.Count(EditorCommandIds::kViewportCameraReset), 1u);
+    }
+
+    TEST_F(ViewportToolbarAssetTest, TheGizmoRowIsDisabledInPlayAndItsButtonsSetTheToolAndTheSpaceInEdit) {
+        ASSERT_NO_FATAL_FAILURE(Click("toolRotate"));
+        EXPECT_EQ(Toolbar().GetGizmoSettings().tool, Gizmo::Tool::Translate);
+        EXPECT_EQ(_commands.Count(EditorCommandIds::kViewportToolRotate), 0u);
+        ASSERT_NO_FATAL_FAILURE(Click("snap"));
+        EXPECT_EQ(FindText("##snapAngle"), nullptr) << "the Snap dropdown does not open in Play";
+
+        ASSERT_NO_FATAL_FAILURE(ClickText(kPlayText));
+        ASSERT_NO_FATAL_FAILURE(Click("toolRotate"));
+        EXPECT_EQ(Toolbar().GetGizmoSettings().tool, Gizmo::Tool::Rotate);
+        ASSERT_NO_FATAL_FAILURE(ClickText(kWorldText));
+        EXPECT_EQ(Toolbar().GetGizmoSettings().space, Gizmo::Space::Local);
+        EXPECT_EQ(FindText(kWorldText), nullptr) << "the Local button replaces World";
+    }
+
+    TEST_F(ViewportToolbarAssetTest, ASnapStepIsDisabledWhileItsSwitchIsOffAndADragStopsAtItsMaximum) {
+        ASSERT_NO_FATAL_FAILURE(ClickText(kPlayText));
+        ASSERT_NO_FATAL_FAILURE(Click("snap"));
+        const ImGuiItemRecord* step = FindInDropdown("snapAngleRow", "angleStep");
+        ASSERT_NE(step, nullptr);
+        ASSERT_NO_FATAL_FAILURE(DragRight(*step, kLongDrag));
+        EXPECT_EQ(Toolbar().GetGizmoSettings().snap.angleStep, Gizmo::kDefaultAngleStep) << "the step of a switch that is off is disabled";
+
+        ASSERT_NO_FATAL_FAILURE(Click("snapAngle"));
+        EXPECT_TRUE(Toolbar().GetGizmoSettings().snap.angle);
+        step = FindInDropdown("snapAngleRow", "angleStep");
+        ASSERT_NE(step, nullptr);
+        ASSERT_NO_FATAL_FAILURE(DragRight(*step, kLongDrag));
+        EXPECT_EQ(Toolbar().GetGizmoSettings().snap.angleStep, Gizmo::kMaxAngleStep);
+    }
+
+    TEST_F(ViewportToolbarAssetTest, TheSnapStepsOfTheAssetHaveTheRangeAndSpeedOfTheGizmo) {
+        const IntrusivePtr<PanelAsset>& asset = _widget->GetHolder().Current();
+        ASSERT_NE(asset, nullptr);
+        struct Expected {
+            StringView id;
+            float max = 0.0f;
+            float speed = 0.0f;
+        };
+        const Expected steps[] = {{"positionStep", Gizmo::kMaxPositionStep, Gizmo::kPositionStepSpeed},
+                                  {"angleStep", Gizmo::kMaxAngleStep, Gizmo::kAngleStepSpeed},
+                                  {"scaleStep", Gizmo::kMaxScaleStep, Gizmo::kScaleStepSpeed}};
+        for (const Expected& expected : steps) {
+            const PanelElement* element = FindElement(asset->elements, expected.id);
+            ASSERT_NE(element, nullptr) << String(expected.id.data(), expected.id.size()).c_str();
+            const PanelNumber* number = element->Cast<PanelNumber>();
+            ASSERT_NE(number, nullptr);
+            EXPECT_EQ(number->min, Gizmo::kMinSnapStep);
+            EXPECT_EQ(number->max, expected.max);
+            EXPECT_EQ(number->step, expected.speed);
+        }
     }
 
     TEST_F(ViewportToolbarAssetTest, ASteadyFrameWithTheOverlaysOpenAllocatesNothing) {

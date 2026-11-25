@@ -160,12 +160,34 @@ namespace BECore {
     }
 
     bool ViewportToolbarModel::RunCommand(StringView id, StringView /*argument*/) {
-        if (id != EditorCommandIds::kViewportInputMode.View()) {
+        if (id == EditorCommandIds::kViewportInputMode.View()) {
+            _inputMode = _inputMode == ViewportInputMode::Play ? ViewportInputMode::Edit : ViewportInputMode::Play;
+        } else if (id == EditorCommandIds::kViewportToolTranslate.View()) {
+            _gizmo.tool = Gizmo::Tool::Translate;
+        } else if (id == EditorCommandIds::kViewportToolRotate.View()) {
+            _gizmo.tool = Gizmo::Tool::Rotate;
+        } else if (id == EditorCommandIds::kViewportToolScale.View()) {
+            _gizmo.tool = Gizmo::Tool::Scale;
+        } else if (id == EditorCommandIds::kViewportGizmoSpace.View()) {
+            _gizmo.space = _gizmo.space == Gizmo::Space::World ? Gizmo::Space::Local : Gizmo::Space::World;
+        } else if (id == EditorCommandIds::kViewportSnap.View()) {
+            Gizmo::SnapSettings& snap = _gizmo.snap;
+            const bool anyOn = snap.position || snap.angle || snap.scale;
+            snap.position = snap.angle = snap.scale = !anyOn;
+        } else {
             return false;
         }
-        _inputMode = _inputMode == ViewportInputMode::Play ? ViewportInputMode::Edit : ViewportInputMode::Play;
         WriteView();
         return true;
+    }
+
+    void ViewportToolbarModel::SetTool(Gizmo::Tool tool) {
+        _gizmo.tool = tool;
+        WriteView();
+    }
+
+    void ViewportToolbarModel::ToggleSpace() {
+        RunCommand(EditorCommandIds::kViewportGizmoSpace.View(), {});
     }
 
     PreviewSettings ViewportToolbarModel::GetPreview() const {
@@ -280,6 +302,12 @@ namespace BECore {
         _overlays.designRect = _view.overlayDesignRect;
         _overlays.findings = _view.overlayFindings;
         _inputMode = _view.inputMode;
+        _gizmo.snap.position = _view.snapPosition;
+        _gizmo.snap.angle = _view.snapAngle;
+        _gizmo.snap.scale = _view.snapScale;
+        _gizmo.snap.positionStep = _view.positionStep;
+        _gizmo.snap.angleStep = _view.angleStep;
+        _gizmo.snap.scaleStep = _view.scaleStep;
     }
 
     void ViewportToolbarModel::ChooseSizeRow(int32_t row) {
@@ -365,6 +393,14 @@ namespace BECore {
         _view.overlayDesignRect = _overlays.designRect;
         _view.overlayFindings = _overlays.findings;
         _view.inputMode = _inputMode;
+        _view.tool = _gizmo.tool;
+        _view.space = _gizmo.space;
+        _view.snapPosition = _gizmo.snap.position;
+        _view.snapAngle = _gizmo.snap.angle;
+        _view.snapScale = _gizmo.snap.scale;
+        _view.positionStep = _gizmo.snap.positionStep;
+        _view.angleStep = _gizmo.snap.angleStep;
+        _view.scaleStep = _gizmo.snap.scaleStep;
         _writtenViewRow = _forcedView ? kViewRowFirstVariant + *_forcedView : kViewRowAuto;
         _view.viewRow = _writtenViewRow;
     }

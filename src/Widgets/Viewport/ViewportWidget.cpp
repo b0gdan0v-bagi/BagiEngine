@@ -111,16 +111,6 @@ namespace BECore {
     void ViewportWidget::OnCommand(const EditorCommandEvent& event) {
         if (event.commandId == EditorCommandIds::kViewViewport) {
             _open = !_open;
-        } else if (event.commandId == EditorCommandIds::kViewportToolTranslate) {
-            _gizmos.SetTool(Gizmo::Tool::Translate);
-        } else if (event.commandId == EditorCommandIds::kViewportToolRotate) {
-            _gizmos.SetTool(Gizmo::Tool::Rotate);
-        } else if (event.commandId == EditorCommandIds::kViewportToolScale) {
-            _gizmos.SetTool(Gizmo::Tool::Scale);
-        } else if (event.commandId == EditorCommandIds::kViewportGizmoSpace) {
-            _gizmos.ToggleSpace();
-        } else if (event.commandId == EditorCommandIds::kViewportSnap) {
-            _gizmos.ToggleSnap();
         } else if (event.commandId == EditorCommandIds::kViewportFrameSelected) {
             _frameRequested = true;  // the panel size and the base zoom are known in Update
         } else if (event.commandId == EditorCommandIds::kViewportCameraReset) {
@@ -158,9 +148,6 @@ namespace BECore {
         IViewportToolbar& toolbar = ViewportToolbarRegistry::GetInstance().GetOrDefault();
         const PreviewSettings preview = toolbar.GetPreview();
         const ViewportInputMode inputMode = toolbar.GetInputMode();
-        ImGui::BeginDisabled(inputMode != ViewportInputMode::Edit);
-        _gizmos.DrawToolbar();
-        ImGui::EndDisabled();
 
         // The target is the shape's size (the largest rect of a preset's ratio that fits what is left of the panel, or the exact size
         // of a device or custom size) and is shown at `zoom`, centered in the panel
@@ -234,7 +221,7 @@ namespace BECore {
             bool panTookPress = false;
             if (editing) {
                 panTookPress = _cameraInput.Update(_camera, {imageMin.x, imageMin.y, shown.x, shown.y}, zoom, imageHovered, editorTarget);
-                _gizmos.ReadKeys();
+                _gizmos.ReadKeys(toolbar);
                 if (ViewportKeyPressed(ImGuiKey_F) || _frameRequested) {
                     FrameSelection(activeScene, shown, zoom);
                 }
@@ -263,7 +250,8 @@ namespace BECore {
             const SceneNode* const primary = activeScene && activeScene == _selectedScene && !_selectedNodes.empty() ? _selectedNodes.back() : nullptr;
             const bool uiTookPress = _uiGizmos.Update({activeScene, primary, &frame, editing, pointerFree && !_gizmos.IsDragging(), imageHovered});
             const bool nodeGizmoFree = pointerFree && !_uiGizmos.IsDragging() && !_uiGizmos.IsOverHandle();
-            const bool gizmoTookPress = _gizmos.Update({activeScene, {_liveSelection.data(), _liveSelection.size()}, &frame, editing, nodeGizmoFree, imageHovered}) || uiTookPress;
+            const bool gizmoTookPress =
+                _gizmos.Update({activeScene, {_liveSelection.data(), _liveSelection.size()}, &frame, editing, nodeGizmoFree, imageHovered, toolbar.GetGizmoSettings()}) || uiTookPress;
             _boxSelect.Update(frame, activeScene, pointerFree, imageHovered, gizmoTookPress);
 
             // Hand the mouse to the scene with target-pixel coordinates, so it can map them to scene units (Scene::ScreenToSceneX/Y) with the fit of its last draw

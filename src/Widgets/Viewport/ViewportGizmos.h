@@ -6,6 +6,7 @@
 #include <Widgets/Viewport/GizmoDrag.h>
 #include <Widgets/Viewport/ViewportCamera.h>
 #include <Widgets/Viewport/ViewportEvents.h>
+#include <Widgets/Viewport/ViewportToolbarState.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -90,9 +91,10 @@ namespace BECore {
         Scene* scene = nullptr;            ///< the active scene
         Span<SceneNode* const> selection;  ///< the selected nodes confirmed alive in @c scene this frame (HierarchyModel::ResolveLive), the primary last
         const ViewportFrame* frame = nullptr;
-        bool editMode = false;  ///< the input mode is Edit: a drag in progress ends cleanly when it is not
-        bool enabled = false;   ///< the Edit target owns the pointer and no pan is going: the gizmo is drawn and a press may grab a handle
-        bool hovered = false;   ///< the pointer is over the image
+        bool editMode = false;           ///< the input mode is Edit: a drag in progress ends cleanly when it is not
+        bool enabled = false;            ///< the Edit target owns the pointer and no pan is going: the gizmo is drawn and a press may grab a handle
+        bool hovered = false;            ///< the pointer is over the image
+        ViewportGizmoSettings settings;  ///< the tool, the space and the snap the toolbar holds this frame
     };
 
     /**
@@ -153,18 +155,16 @@ namespace BECore {
     };
 
     /**
-     * @brief The gizmo of the viewport over the selected nodes: the toolbar, the keys, the drawing, and the drag that moves, turns or scales them.
+     * @brief The gizmo of the viewport over the selected nodes: the keys, the drawing, and the drag that moves, turns or scales them.
      *
      * The maths are Gizmo::GizmoDrag and GizmoGeometry, the writes and the events are GizmoEditSession; this is the ImGui layer: it hit-tests, draws, starts a drag on a press and
-     * ends it at the release, on Esc, or when the session cannot go on (another scene, a node that is gone, the input mode left Edit, AbortDrag()).
+     * ends it at the release, on Esc, or when the session cannot go on (another scene, a node that is gone, the input mode left Edit, AbortDrag()). It holds no choice: the tool,
+     * the space and the snap belong to the toolbar's model (`IViewportToolbar`), which draws their buttons; a drag takes the snap at its press.
      */
     class ViewportGizmos {
     public:
-        /// The second toolbar row: the tool group, the World / Local toggle and the Snap popup
-        void DrawToolbar();
-
-        /// Reads W / E / R / X (tool and space) while the Viewport window has the keys
-        void ReadKeys();
+        /// Reads W / E / R / X while the Viewport window has the keys and hands the tool or the space to @p toolbar; nothing while a drag is going
+        void ReadKeys(IViewportToolbar& toolbar) const;
 
         /// One frame: continues or ends a drag, otherwise hit-tests, draws, and starts a drag on a press. @return true when the left press of this frame was taken (it is not an edit click)
         bool Update(const ViewportGizmoContext& context);
@@ -176,36 +176,9 @@ namespace BECore {
             return _session.IsActive();
         }
 
-        void SetTool(Gizmo::Tool tool) {
-            _tool = tool;
-        }
-
-        void ToggleSpace() {
-            _space = _space == Gizmo::Space::World ? Gizmo::Space::Local : Gizmo::Space::World;
-        }
-
-        /// All three snap switches off when any is on, otherwise all on (the steps stay)
-        void ToggleSnap() {
-            const bool anyOn = _snap.position || _snap.angle || _snap.scale;
-            _snap.position = _snap.angle = _snap.scale = !anyOn;
-        }
-
-        [[nodiscard]] Gizmo::Tool GetTool() const {
-            return _tool;
-        }
-
-        [[nodiscard]] Gizmo::Space GetSpace() const {
-            return _space;
-        }
-
     private:
         void Draw(const ViewportGizmoContext& context, const Gizmo::Frame& gizmoFrame, float unitsPerScreenPixel) const;
-        void DrawToolButton(const char* icon, const char* tooltip, const char* id, Gizmo::Tool tool);
-        void DrawSnapPopup();
 
-        Gizmo::Tool _tool = Gizmo::Tool::Translate;
-        Gizmo::Space _space = Gizmo::Space::World;
-        Gizmo::SnapSettings _snap;
         GizmoEditSession _session;
         Gizmo::Handle _hover = Gizmo::Handle::None;
         Vector<SceneNode*> _nodes;  // the movable selected nodes of the last hit test

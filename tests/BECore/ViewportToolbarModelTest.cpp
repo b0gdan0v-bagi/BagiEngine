@@ -326,6 +326,48 @@ namespace BECore::Tests {
         EXPECT_FALSE(_model->RunCommand(EditorCommandIds::kViewportFrameSelected.View(), {}));
     }
 
+    TEST_F(ViewportToolbarModelTest, TheToolAndSpaceCommandsSetTheGizmoChoicesTheViewShows) {
+        EXPECT_TRUE(_model->RunCommand(EditorCommandIds::kViewportToolScale.View(), {}));
+        EXPECT_EQ(_model->GetGizmoSettings().tool, Gizmo::Tool::Scale);
+        EXPECT_EQ(Updated().tool, Gizmo::Tool::Scale);
+        EXPECT_TRUE(_model->RunCommand(EditorCommandIds::kViewportToolTranslate.View(), {}));
+        EXPECT_EQ(_model->GetGizmoSettings().tool, Gizmo::Tool::Translate);
+
+        EXPECT_TRUE(_model->RunCommand(EditorCommandIds::kViewportGizmoSpace.View(), {}));
+        EXPECT_EQ(_model->GetGizmoSettings().space, Gizmo::Space::Local);
+        EXPECT_EQ(Updated().space, Gizmo::Space::Local);
+        EXPECT_TRUE(_model->RunCommand(EditorCommandIds::kViewportGizmoSpace.View(), {}));
+        EXPECT_EQ(_model->GetGizmoSettings().space, Gizmo::Space::World);
+    }
+
+    TEST_F(ViewportToolbarModelTest, TheSnapCommandTurnsEverySwitchOffWhenAnyIsOnOtherwiseOnAndKeepsTheSteps) {
+        Controls().snapAngle = true;
+        Controls().angleStep = 30.0f;
+        _model->Update();
+        ASSERT_TRUE(_model->GetGizmoSettings().snap.angle);
+
+        EXPECT_TRUE(_model->RunCommand(EditorCommandIds::kViewportSnap.View(), {}));
+        Gizmo::SnapSettings snap = _model->GetGizmoSettings().snap;
+        EXPECT_FALSE(snap.position || snap.angle || snap.scale);
+        EXPECT_FALSE(Updated().snapAngle);
+
+        EXPECT_TRUE(_model->RunCommand(EditorCommandIds::kViewportSnap.View(), {}));
+        snap = _model->GetGizmoSettings().snap;
+        EXPECT_TRUE(snap.position && snap.angle && snap.scale);
+        EXPECT_EQ(snap.angleStep, 30.0f);
+        EXPECT_EQ(snap.positionStep, Gizmo::kDefaultPositionStep);
+    }
+
+    TEST_F(ViewportToolbarModelTest, TheKeysSetTheToolAndFlipTheSpace) {
+        _model->SetTool(Gizmo::Tool::Rotate);
+        _model->ToggleSpace();
+        EXPECT_EQ(_model->GetGizmoSettings().tool, Gizmo::Tool::Rotate);
+        EXPECT_EQ(_model->GetGizmoSettings().space, Gizmo::Space::Local);
+        const ViewportToolbarView& view = Updated();
+        EXPECT_EQ(view.tool, Gizmo::Tool::Rotate);
+        EXPECT_EQ(view.space, Gizmo::Space::Local);
+    }
+
     TEST_F(ViewportToolbarModelTest, TheModelIsTheRegisteredToolbarWhileItLivesAndTheDefaultsServeWithoutIt) {
         ViewportToolbarRegistry& registry = ViewportToolbarRegistry::GetInstance();
         EXPECT_EQ(registry.Get(), _model.Get());
@@ -336,6 +378,10 @@ namespace BECore::Tests {
         const IViewportToolbar& fallback = registry.GetOrDefault();
         EXPECT_EQ(fallback.GetPreview(), PreviewSettings{});
         EXPECT_EQ(fallback.GetInputMode(), ViewportInputMode::Play);
+        const ViewportGizmoSettings gizmo = fallback.GetGizmoSettings();
+        EXPECT_EQ(gizmo.tool, Gizmo::Tool::Translate);
+        EXPECT_EQ(gizmo.space, Gizmo::Space::World);
+        EXPECT_FALSE(gizmo.snap.position || gizmo.snap.angle || gizmo.snap.scale);
     }
 
     TEST_F(ViewportToolbarModelTest, TheViewRowsAreAutoDefaultAndEachVariantByItsNameOrNumber) {

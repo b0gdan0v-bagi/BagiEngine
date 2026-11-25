@@ -90,6 +90,15 @@ namespace BECore {
         BE_REFLECT_FIELD bool landscape = false;
         /// One row per device of `UIPreview::GetDevices()` (at most `kMaxShapeDevices`)
         BE_REFLECT_FIELD Vector<ViewportDeviceRow> devices;
+        /// The gizmo's tool and space (the buttons run commands) and its snap switches and steps (the Snap popup writes them)
+        BE_REFLECT_FIELD Gizmo::Tool tool = Gizmo::Tool::Translate;
+        BE_REFLECT_FIELD Gizmo::Space space = Gizmo::Space::World;
+        BE_REFLECT_FIELD bool snapPosition = false;
+        BE_REFLECT_FIELD bool snapAngle = false;
+        BE_REFLECT_FIELD bool snapScale = false;
+        BE_REFLECT_FIELD float positionStep = Gizmo::kDefaultPositionStep;
+        BE_REFLECT_FIELD float angleStep = Gizmo::kDefaultAngleStep;
+        BE_REFLECT_FIELD float scaleStep = Gizmo::kDefaultScaleStep;
     };
 
     /**
@@ -100,7 +109,9 @@ namespace BECore {
      * without being told back; a change the user made is told once with `ViewportPreviewChangedEvent` or `ViewportInputModeChangedEvent` from the `Update`
      * that reads it. The size rules: a device brings the Device safe area, any other size drops it, Custom keeps the shape's other fields, and a stored
      * device this build lacks shows the row of its aspect. The forced view is session state, kept with the name of the scene it was chosen in and dropped
-     * (Auto) when another scene is active or the variant is gone. Command: `viewport.inputMode` flips the mode. The rows, the view text and the zoom text are
+     * (Auto) when another scene is active or the variant is gone. Commands: `viewport.inputMode` flips the mode; `viewport.tool.translate|rotate|scale`,
+     * `viewport.gizmoSpace` and `viewport.snap` (all three snap switches off when any is on, otherwise all on) set the gizmo's choices, which are session state
+     * like the keys that reach them through `SetTool` and `ToggleSpace`. The rows, the view text and the zoom text are
      * made again only when what they show changed, so a steady `Update` allocates nothing. The per-canvas switches and the checked devices are session state,
      * never stored; a canvas switched off is kept by its node (compared, never dereferenced) until a canvas list of another scene comes.
      */
@@ -129,6 +140,11 @@ namespace BECore {
             return _view.landscape;
         }
         void ClearFindingsOverlay() override;
+        [[nodiscard]] ViewportGizmoSettings GetGizmoSettings() const override {
+            return _gizmo;
+        }
+        void SetTool(Gizmo::Tool tool) override;
+        void ToggleSpace() override;
 
         [[nodiscard]] const ViewportToolbarView& GetView() const {
             return _view;
@@ -163,6 +179,7 @@ namespace BECore {
         ViewportInputMode _inputMode = ViewportInputMode::Play;
         PreviewSettings _storedPreview;  // what the editor last stored (applied from a preferences event, or told by us)
         ViewportInputMode _storedInputMode = ViewportInputMode::Play;
+        ViewportGizmoSettings _gizmo;
         int32_t _writtenSizeRow = 0;
         int32_t _writtenSafeAreaRow = 0;
         Optional<int32_t> _forcedView;  // the forced variant, -1 the default view, nullopt Auto
