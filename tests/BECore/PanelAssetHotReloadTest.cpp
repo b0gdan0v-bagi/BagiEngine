@@ -15,6 +15,7 @@
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/AssetPanelWidget.h>
+#include <Widgets/PanelAssets/PanelBars.h>
 #include <gtest/gtest.h>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -78,6 +79,17 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
         constexpr const char* kPopupWindowName = "Sure?##dialog";
+
+        constexpr const char* kBarHostName = "###BarHost";
+        constexpr ImVec2 kBarHostSize{300.0f, 120.0f};
+
+        /// `{}` slots: the source's model and the element's button text; a `Bar` has no window and no command
+        constexpr const char* kBarAsset = R"(<PanelAsset id="Hot" title="Bar" window="Bar" open="true">
+  <sources><source name="a" model="{}"/></sources>
+  <elements>
+    <element type="PanelButton" id="go" text="{}" command="fileChanges.rescan"/>
+  </elements>
+</PanelAsset>)";
 
         constexpr int kSteadyFrames = 8;
 
@@ -147,6 +159,15 @@ namespace BECore::Tests {
             ImGui::GetIO().DeltaTime = kFrameSeconds;
             ImGui::NewFrame();
             _widget->Update();
+            if (_hostBar) {
+                // What a C++ window does: its own window, the bar drawn into it
+                ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+                ImGui::SetNextWindowSize(kBarHostSize);
+                if (ImGui::Begin(kBarHostName)) {
+                    _barDrawn = PanelBarsRegistry::Draw(kConfigName);
+                }
+                ImGui::End();
+            }
             ImGui::Render();
         }
 
@@ -159,9 +180,12 @@ namespace BECore::Tests {
             return window != nullptr ? window->ContentSize.y : 0.0f;
         }
 
+        static ImGuiWindow* BarHost() {
+            return ImGui::FindWindowByName(kBarHostName);
+        }
+
         /// The id of a control: the element id and the label hashed onto the id of the window
-        static ImGuiID ButtonId(const char* label) {
-            const ImGuiWindow* window = Window();
+        static ImGuiID ButtonId(const char* label, const ImGuiWindow* window = Window()) {
             if (window == nullptr) {
                 return 0;
             }
@@ -202,6 +226,9 @@ namespace BECore::Tests {
             EditorCommandEvent::Emit(id);
         }
 
+        /// Whether a window of the test draws the bar of the asset each frame, and what `PanelBarsRegistry::Draw` answered last
+        bool _hostBar = false;
+        bool _barDrawn = false;
         Path _dir;
         FileSystem _fileSystem;
         ConfigManager _manager{_fileSystem};
@@ -479,6 +506,109 @@ namespace BECore::Tests {
 
         ASSERT_NO_FATAL_FAILURE(Edit(Format(kWindowKindAsset, "Docked", "view.fileChanges")));
         EXPECT_EQ(Window()->Flags & ImGuiWindowFlags_NoDocking, 0);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ABarAssetHasNoWindowAndIsDrawnByTheCallerWhoseClickReachesTheModel) {
+        _hostBar = true;
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kBarAsset, "CountingPanelModel", "Go")));
+        EXPECT_EQ(Window(), nullptr) << "a bar made a window of its own";
+        EXPECT_TRUE(_widget->IsOpen()) << "a bar is always open";
+        EXPECT_TRUE(_barDrawn);
+        const ImGuiWindow* host = BarHost();
+        ASSERT_NE(host, nullptr);
+
+        const Optional<ImVec2> point = TryLocate(ButtonId("Go", host), host);
+        ASSERT_TRUE(point.has_value()) << "the button is not at the ids of the host window and the asset";
+        EXPECT_EQ(CountingPanelModel::commands, 0);
+        ClickAt(*point);
+        EXPECT_EQ(CountingPanelModel::commands, 1);
+        EXPECT_EQ(CountingPanelModel::alive, 1);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ABarAssetIgnoresItsCommandAndStaysOpen) {
+        _hostBar = true;
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kBarAsset, "CountingPanelModel", "Go")));
+        Command(EditorCommandIds::kViewFileChanges);
+        Settle();
+        EXPECT_TRUE(_widget->IsOpen());
+        EXPECT_TRUE(_barDrawn);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ABarsModelsEndTheFrameWhenTheBarIsDrawnOrWhenTheNextUpdateFindsItUndrawn) {
+        HookPanelModel::log.clear();
+        _hostBar = true;
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kBarAsset, "HookPanelModel", "Go")));
+        EXPECT_EQ(HookPanelModel::log, "+UEUE") << "Update, then the caller's draw ends the frame";
+
+        HookPanelModel::log.clear();
+        _hostBar = false;
+        Frame();
+        EXPECT_EQ(HookPanelModel::log, "U");
+        Frame();
+        EXPECT_EQ(HookPanelModel::log, "UEU") << "the frame nobody drew was ended by the next Update";
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AReloadThatBreaksABarKeepsTheLastGoodAssetAndShowsOneLine) {
+        _hostBar = true;
+        const String good = Format(kBarAsset, "CountingPanelModel", "Go");
+        ASSERT_NO_FATAL_FAILURE(Start(good));
+        const ImGuiWindow* host = BarHost();
+        ASSERT_NE(host, nullptr);
+        const float clean = host->ContentSize.y;
+
+        ASSERT_NO_FATAL_FAILURE(Edit(R"(<PanelAsset id="Hot" title="Bar" window="Bar" open="true">
+  <elements><element type="PanelNobody" id="go"/></elements>
+</PanelAsset>)"));
+        EXPECT_FALSE(_widget->GetHolder().Issues().empty());
+        EXPECT_GT(host->ContentSize.y, clean) << "no banner line in the host";
+        EXPECT_TRUE(TryLocate(ButtonId("Go", host), host).has_value()) << "the last good asset is not drawn below the line";
+
+        ASSERT_NO_FATAL_FAILURE(Edit(good));
+        EXPECT_FLOAT_EQ(host->ContentSize.y, clean);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ABarIsFoundByTheConfigNameOnlyWhileItsAssetIsABar) {
+        _hostBar = true;
+        const String bar = Format(kBarAsset, "CountingPanelModel", "Go");
+        ASSERT_NO_FATAL_FAILURE(Start(bar));
+        EXPECT_TRUE(_barDrawn);
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Asset("Docked now", "Go")));
+        EXPECT_FALSE(_barDrawn) << "a reload to another kind left the registration";
+        EXPECT_NE(Window(), nullptr);
+
+        ASSERT_NO_FATAL_FAILURE(Edit(bar));
+        EXPECT_TRUE(_barDrawn);
+        // ImGui keeps the window of the Docked days by name; it is not submitted any more
+        ASSERT_NE(Window(), nullptr);
+        EXPECT_FALSE(Window()->WasActive);
+
+        _widget.Reset();
+        EXPECT_FALSE(PanelBarsRegistry::Draw(kConfigName)) << "the widget's death left the registration";
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AWidgetThatDiesWithABarFrameOwedEndsItForItsModels) {
+        HookPanelModel::log.clear();
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kBarAsset, "HookPanelModel", "Go")));
+        HookPanelModel::log.clear();
+        Frame();
+        EXPECT_EQ(HookPanelModel::log, "EU");
+        _widget.Reset();
+        EXPECT_EQ(HookPanelModel::log, "EU"
+                                       "E-");
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ASteadyBarFrameAllocatesNothing) {
+        _hostBar = true;
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kBarAsset, "CountingPanelModel", "Go")));
+        for (int i = 0; i < kSteadyFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
     }
 
 }  // namespace BECore::Tests

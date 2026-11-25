@@ -29,6 +29,8 @@ namespace BECore {
     }  // namespace
 
     AssetPanelWidget::~AssetPanelWidget() {
+        _barHandle.Reset();
+        EndBarFrame();
         // The members are destroyed after this body, so the models can still be told
         _open = false;
         NotifyOpenChanged();
@@ -183,8 +185,9 @@ namespace BECore {
     void AssetPanelWidget::OnCommand(const EditorCommandEvent& event) {
         const PanelAsset* asset = _holder.Current().Get();
         const StringView id = event.commandId.ToStringView();
-        // A `Dialogs` host is always open: its command, when it has one, reaches the models like any other
-        if (asset != nullptr && asset->window != PanelWindowKind::Dialogs && !asset->command.empty() && id == StringView(asset->command)) {
+        // A `Dialogs` host and a `Bar` are always open: their command, when they have one, reaches the models like any other
+        const bool alwaysOpen = asset != nullptr && (asset->window == PanelWindowKind::Dialogs || asset->window == PanelWindowKind::Bar);
+        if (asset != nullptr && !alwaysOpen && !asset->command.empty() && id == StringView(asset->command)) {
             _open = !_open;
             return;
         }
@@ -207,10 +210,14 @@ namespace BECore {
     void AssetPanelWidget::Draw() {}
 
     void AssetPanelWidget::Update() {
+        // A bar nobody drew last frame still owes its models the end of that frame
+        EndBarFrame();
         ApplyPendingReload();
         const PanelAsset* asset = _holder.Current().Get();
         const bool dialogs = asset != nullptr && asset->window == PanelWindowKind::Dialogs;
-        if (dialogs) {
+        const bool bar = asset != nullptr && asset->window == PanelWindowKind::Bar;
+        SyncBarRegistration(bar);
+        if (dialogs || bar) {
             _open = true;
         }
         NotifyOpenChanged();
@@ -219,6 +226,11 @@ namespace BECore {
         }
         for (const ModelEntry& entry : _models) {
             entry.model->Update();
+        }
+        if (bar) {
+            // The caller's window draws it, between this `Update` and the end of the frame
+            _barFrameOpen = true;
+            return;
         }
         SyncTitle();
         ImGuiWindowFlags flags = ImGuiWindowFlags_None;
@@ -248,12 +260,44 @@ namespace BECore {
         for (const ModelEntry& entry : _models) {
             entry.model->EndUpdate();
         }
+        EmitClick();
+    }
+
+    void AssetPanelWidget::EmitClick() {
         if (_result.clicked) {
             // The walk is over: a command may change the list it walked, or the asset itself
             if (const EditorCommand* command = FindEditorCommand(StringView(_result.command))) {
                 EditorCommandEvent::Emit(command->id, _result.argument);
             }
         }
+    }
+
+    void AssetPanelWidget::SyncBarRegistration(bool bar) {
+        if (!bar) {
+            _barHandle.Reset();
+        } else if (!_barHandle) {
+            _barHandle = PanelBarsRegistry::GetInstance().Register(_asset, *this);
+        }
+    }
+
+    void AssetPanelWidget::EndBarFrame() {
+        if (_barFrameOpen) {
+            _barFrameOpen = false;
+            for (const ModelEntry& entry : _models) {
+                entry.model->EndUpdate();
+            }
+        }
+    }
+
+    void AssetPanelWidget::DrawBar() {
+        if (!_interpreter.IsPrepared()) {
+            return;
+        }
+        DrawBarBanner();
+        _result.Clear();
+        _interpreter.Draw(_sources, _result);
+        EndBarFrame();
+        EmitClick();
     }
 
     void AssetPanelWidget::SyncTitle() {
@@ -272,6 +316,22 @@ namespace BECore {
             _titleText = String(text);
             _windowTitle = Format("{}###{}", _titleText, asset->id);
         }
+    }
+
+    void AssetPanelWidget::DrawBarBanner() const {
+        const Vector<PanelIssue>& issues = _holder.Issues();
+        const String& failure = _holder.Failure();
+        if (issues.empty() && failure.empty()) {
+            return;
+        }
+        // A bar has no room for a list: the first problem, on the line the bar would start at
+        ImGui::PushID(kBannerId);
+        if (!failure.empty()) {
+            ImGui::TextColored(GetImGuiPalette().error, "Could not reload: %s", failure.c_str());
+        } else {
+            ImGui::TextColored(GetImGuiPalette().error, "%s: %s", issues[0].where.c_str(), issues[0].message.c_str());
+        }
+        ImGui::PopID();
     }
 
     void AssetPanelWidget::DrawBanner() const {

@@ -10,6 +10,7 @@
 #include <Events/ConfigEvents.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
+#include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/PanelAssets/PanelInterpreter.h>
 
 namespace BECore {
@@ -36,9 +37,14 @@ namespace BECore {
      * `Update`, and the asset's `command`, when it has one, does not toggle it): the host is a one-pixel window that draws nothing and takes no input, with no close button, so the only
      * thing seen of it is the modals of its popups. A banner of a reload that failed is therefore not visible on a `Dialogs` host; the last good asset keeps working.
      *
+     * `Bar` is no window at all: `Update` runs the models and keeps the asset registered in `PanelBarsRegistry` under the config name, and the C++ window that holds the
+     * bar calls `PanelBarsRegistry::Draw(<asset name>)`, which is `DrawBar` here. The open flag is forced true and the asset's `command` is ignored, as for `Dialogs`. The
+     * models' `EndUpdate` comes at the end of `DrawBar`, or in the next `Update` when nobody drew the bar in between. A bad reload shows as one error line above the bar.
+     * The widget must be listed before the window that draws it in `WidgetsConfig.xml`, so the models update before the draw.
+     *
      * A click is emitted as `EditorCommandEvent` after the window is closed, never inside the walk (`PanelInterpreter`). Editor only.
      */
-    class AssetPanelWidget : public IWidget {
+    class AssetPanelWidget : public IWidget, public IPanelBar {
         BE_CLASS(AssetPanelWidget)
     public:
         AssetPanelWidget() = default;
@@ -48,6 +54,9 @@ namespace BECore {
         bool Initialize(IDeserializer& deserializer) override;
         void Update() override;
         void Draw() override;
+
+        /// `IPanelBar`: the bar of a `Bar` asset, drawn into the window the caller has begun
+        void DrawBar() override;
 
         /// The config manager the asset is read from; the one of `CoreManager` unless a test sets another. It must outlive the widget
         void SetConfigManager(const ConfigManager& configs);
@@ -88,6 +97,12 @@ namespace BECore {
         void SyncModels();
         void NotifyOpenChanged();
         void DrawBanner() const;
+        void DrawBarBanner() const;
+        void EmitClick();
+        /// Keeps the registration of a `Bar` asset and drops it when a reload made the asset another kind
+        void SyncBarRegistration(bool bar);
+        /// The `EndUpdate` of a bar frame whose `Update` ran, once
+        void EndBarFrame();
         void SyncTitle();
         [[nodiscard]] const ConfigManager& Configs() const;
 
@@ -114,6 +129,10 @@ namespace BECore {
         /// A reload failure told while a reload is pending: shown after that load, which clears the failure
         bool _failurePending = false;
         String _pendingFailure;
+        /// An `Update` of a `Bar` asset ran and its `EndUpdate` is still owed
+        bool _barFrameOpen = false;
+        /// Declared last: it unregisters before the members the bar uses are gone
+        PanelBarHandle _barHandle;
     };
 
 }  // namespace BECore
