@@ -4,12 +4,10 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
+#include <Widgets/EditorLayout/PreferencesHotkeys.h>
 #include <cstdint>
 
 namespace BECore {
-
-    /// The popup that rebinds one command: reading the next chord, or asking what to do about a conflict
-    CORE_ENUM(RebindStage, uint8_t, Closed, Capturing, Conflict)
 
     /**
      * @brief The Preferences window: the General tab (font scale, viewport grid) and the Hotkeys tab (rebinding).

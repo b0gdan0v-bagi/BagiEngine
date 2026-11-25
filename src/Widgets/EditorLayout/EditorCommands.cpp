@@ -69,6 +69,12 @@ namespace BECore {
                 {kConfigEditorSwitchDiscard, "Config Editor: Discard And Switch", std::nullopt, false},
                 {kConfigEditorSwitchCancel, "Config Editor: Cancel Switch", std::nullopt, false},
                 {kPreferencesCommit, "Preferences: Save", std::nullopt, false},
+                {kPreferencesRebind, "Preferences: Rebind Shortcut", std::nullopt, false},
+                {kPreferencesClear, "Preferences: Clear Shortcut", std::nullopt, false},
+                {kPreferencesReset, "Preferences: Reset Shortcut", std::nullopt, false},
+                {kPreferencesResetAll, "Preferences: Reset All Shortcuts", std::nullopt, false},
+                {kPreferencesSwap, "Preferences: Swap Shortcut", std::nullopt, false},
+                {kPreferencesCancelRebind, "Preferences: Cancel Rebind", std::nullopt, false},
             };
             return table;
         }

@@ -109,6 +109,15 @@ namespace BECore {
         /// The Preferences window's "save now": the `commitCommand` of its controls (config/panels/PreferencesPanel.xml). PreferencesPanelModel owns it and runs it
         /// only while its panel is open; it takes no argument
         inline constexpr auto kPreferencesCommit = "preferences.commit"_intern;
+        /// The Preferences window's Hotkeys tab (config/panels/PreferencesPanel.xml names them). PreferencesPanelModel owns them and runs them only while its panel
+        /// is open; rebind, clear and reset take the id of a command of the table as the argument and ignore an unknown or fixed one, the rest take none.
+        /// cancelRebind is also the `closeCommand` of the Rebind Shortcut popup
+        inline constexpr auto kPreferencesRebind = "preferences.rebind"_intern;
+        inline constexpr auto kPreferencesClear = "preferences.clear"_intern;
+        inline constexpr auto kPreferencesReset = "preferences.reset"_intern;
+        inline constexpr auto kPreferencesResetAll = "preferences.resetAll"_intern;
+        inline constexpr auto kPreferencesSwap = "preferences.swap"_intern;
+        inline constexpr auto kPreferencesCancelRebind = "preferences.cancelRebind"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.
