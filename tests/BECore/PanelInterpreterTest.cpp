@@ -216,6 +216,23 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        constexpr const char* kConditions = R"(
+<PanelAsset id="Conditions" title="Conditions">
+  <elements>
+    <element type="PanelButton" id="act" text="Act" command="probe.act" enableWhen="probe.level > 0 and !probe.hidden"/>
+    <element type="PanelRow" id="shown" visible="probe.flag and probe.level >= 2 or probe.mode == Error">
+      <elements>
+        <element type="PanelButton" id="inside" text="Inside" command="probe.inside"/>
+      </elements>
+    </element>
+    <element type="PanelRow" id="broken" visible="{}">
+      <elements>
+        <element type="PanelButton" id="kept" text="Kept" command="probe.kept"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
         constexpr const char* kSelectedRows = R"(
 <PanelAsset id="Selected" title="Selected">
   <elements>
@@ -265,6 +282,15 @@ namespace BECore::Tests {
             const PanelLoadResult loaded = LoadPanelAsset(xml);
             ASSERT_TRUE(loaded.asset);
             ASSERT_TRUE(loaded.issues.empty()) << loaded.issues[0].message.c_str();
+            interpreter.Prepare(loaded.asset);
+            Settle();
+        }
+
+        /// Draws an asset whose file has issues, as the widget keeps the last asset it could build; the loader still gives the tree
+        void LoadWithIssues(StringView xml) {
+            const PanelLoadResult loaded = LoadPanelAsset(xml);
+            ASSERT_TRUE(loaded.asset);
+            ASSERT_FALSE(loaded.issues.empty());
             interpreter.Prepare(loaded.asset);
             Settle();
         }
@@ -757,6 +783,97 @@ namespace BECore::Tests {
         Load(Format(kDialog, "probe.nothing"));
         Settle();
         EXPECT_FALSE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, AnExpressionOfAndOrAndACompareHidesAndShowsAnElementAndItsChildren) {
+        Load(Format(kConditions, "probe.flag"));
+        const ImGuiID inside = Chain(HostId(), {"shown", "inside", "Inside"});
+        EXPECT_FALSE(TryLocate(inside).has_value());
+
+        probe.flag = true;
+        Settle();
+        EXPECT_FALSE(TryLocate(inside).has_value()) << "and wants the compare too";
+
+        probe.level = 2;
+        Settle();
+        EXPECT_TRUE(TryLocate(inside).has_value());
+
+        probe.flag = false;
+        Settle();
+        EXPECT_FALSE(TryLocate(inside).has_value());
+
+        probe.mode = PanelTextStyle::Error;
+        Settle();
+        EXPECT_TRUE(TryLocate(inside).has_value()) << "or takes the other alternative";
+    }
+
+    TEST_F(PanelInterpreterTest, AnExpressionDisablesAButtonWhileOneOfItsTermsIsFalse) {
+        probe.level = 1;
+        Load(Format(kConditions, "probe.flag"));
+        const ImVec2 point = Locate(Chain(HostId(), {"act", "Act"}));
+        ClickAt(point);
+        EXPECT_EQ(lastCommand, "probe.act");
+
+        lastCommand.clear();
+        probe.hidden = true;
+        ClickAt(point);
+        EXPECT_TRUE(lastCommand.empty());
+
+        probe.hidden = false;
+        probe.level = 0;
+        ClickAt(point);
+        EXPECT_TRUE(lastCommand.empty());
+    }
+
+    TEST_F(PanelInterpreterTest, AConditionWithATermThatCannotBeReadOrThatDoesNotParseIsTrue) {
+        for (const char* text : {"probe.nothing > 1", "nobody.flag", "!probe.flag and probe.nothing == Error"}) {
+            Load(Format(kConditions, text));
+            EXPECT_TRUE(TryLocate(Chain(HostId(), {"broken", "kept", "Kept"})).has_value()) << text;
+        }
+        LoadWithIssues(Format(kConditions, "and and"));
+        EXPECT_TRUE(TryLocate(Chain(HostId(), {"broken", "kept", "Kept"})).has_value());
+    }
+
+    TEST_F(PanelInterpreterTest, APopupOpensOnlyWhenEveryTermOfItsExpressionReadsTrueAndAnUnreadableTermKeepsItClosed) {
+        Load(Format(kDialog, "probe.dialog and probe.level == 3"));
+        probe.dialog = true;
+        Settle();
+        EXPECT_FALSE(AnyPopupOpen());
+
+        probe.level = 3;
+        Settle();
+        EXPECT_TRUE(AnyPopupOpen());
+
+        probe.dialog = false;
+        Settle();
+        EXPECT_FALSE(AnyPopupOpen());
+
+        Load(Format(kDialog, "probe.dialog or probe.nothing == 3"));
+        probe.dialog = true;
+        Settle();
+        EXPECT_TRUE(AnyPopupOpen()) << "an alternative that holds opens it whatever the others read";
+        probe.dialog = false;
+        Settle();
+        EXPECT_FALSE(AnyPopupOpen());
+
+        LoadWithIssues(Format(kDialog, "probe.dialog and and"));
+        probe.dialog = true;
+        Settle();
+        EXPECT_FALSE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfAnExpressionWithACompareAllocatesNothing) {
+        probe.level = 2;
+        probe.flag = true;
+        Load(Format(kConditions, "probe.mode != Error and probe.level < 5"));
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
     }
 
     TEST_F(PanelInterpreterTest, ASelectableRowIsDrawnSelectedOnlyWhereItsFieldIsTrue) {

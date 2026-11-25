@@ -22,17 +22,32 @@ namespace BECore {
         constexpr const char* kGlyphGap = " ";
 
         /// How the text of a binding is parsed: the forms differ in what they accept
-        enum class BindingForm : uint8_t { Field, Condition, Object };
+        enum class BindingForm : uint8_t { Field, Object };
 
         PreparedBinding PrepareBinding(StringView text, BindingForm form) {
             PreparedBinding prepared;
             if (text.empty()) {
                 return prepared;
             }
-            auto parsed = form == BindingForm::Condition ? ParseCondition(text) : form == BindingForm::Object ? ParseObjectBinding(text) : ParseBinding(text);
+            auto parsed = form == BindingForm::Object ? ParseObjectBinding(text) : ParseBinding(text);
             if (parsed.has_value()) {
                 prepared.state = PreparedBindingState::Ok;
                 prepared.binding = std::move(*parsed);
+            } else {
+                prepared.state = PreparedBindingState::Bad;
+            }
+            return prepared;
+        }
+
+        PreparedCondition PrepareCondition(StringView text) {
+            PreparedCondition prepared;
+            if (text.empty()) {
+                return prepared;
+            }
+            auto parsed = ParsePanelCondition(text);
+            if (parsed.has_value()) {
+                prepared.state = PreparedBindingState::Ok;
+                prepared.condition = std::move(*parsed);
             } else {
                 prepared.state = PreparedBindingState::Bad;
             }
@@ -204,7 +219,7 @@ namespace BECore {
             PreparedElement& prepared = out.emplace_back();
             prepared.element = element.Get();
             prepared.kind = KindOf(*element);
-            prepared.visible = PrepareBinding(element->visible, BindingForm::Condition);
+            prepared.visible = PrepareCondition(element->visible);
             switch (prepared.kind) {
                 case PreparedKind::Section:
                 case PreparedKind::Row:
@@ -212,7 +227,7 @@ namespace BECore {
                     PrepareElements(element->elements, prepared.children);
                     break;
                 case PreparedKind::Popup:
-                    prepared.open = PrepareBinding(element->Cast<PanelPopup>()->open, BindingForm::Condition);
+                    prepared.open = PrepareCondition(element->Cast<PanelPopup>()->open);
                     PrepareElements(element->elements, prepared.children);
                     break;
                 case PreparedKind::Text:
@@ -233,7 +248,7 @@ namespace BECore {
                 }
                 case PreparedKind::Button: {
                     const PanelButton& button = *element->Cast<PanelButton>();
-                    prepared.enableWhen = PrepareBinding(button.enableWhen, BindingForm::Condition);
+                    prepared.enableWhen = PrepareCondition(button.enableWhen);
                     prepared.glyph = GlyphOf(button.icon);
                     break;
                 }
@@ -278,12 +293,15 @@ namespace BECore {
         }
     }
 
-    bool PanelInterpreter::ReadCondition(const PreparedBinding& condition) {
-        bool value = true;
-        if (condition.state == PreparedBindingState::Ok && _reader.ReadBool(*_sources, condition.binding, value) != PanelReadStatus::Ok) {
-            return true;
+    bool PanelInterpreter::ReadCondition(const PreparedCondition& condition, bool whenUnreadable) {
+        switch (condition.state) {
+            case PreparedBindingState::Empty:
+                return true;
+            case PreparedBindingState::Bad:
+                return whenUnreadable;
+            default:
+                return EvaluatePanelCondition(_reader, *_sources, condition.condition, whenUnreadable, _conditionScratch);
         }
-        return value;
     }
 
     bool PanelInterpreter::IsVisible(const PreparedElement& prepared) {
@@ -388,8 +406,7 @@ namespace BECore {
 
     void PanelInterpreter::DrawPopup(const PreparedElement& prepared) {
         const PanelPopup& popup = *prepared.element->Cast<PanelPopup>();
-        bool value = false;
-        const bool wanted = prepared.open.state == PreparedBindingState::Ok && _reader.ReadBool(*_sources, prepared.open.binding, value) == PanelReadStatus::Ok && value;
+        const bool wanted = prepared.open.state != PreparedBindingState::Empty && ReadCondition(prepared.open, false);
         _label.assign(popup.title.c_str(), popup.title.size());
         _label.append(kIdSuffix);
         _label.append(popup.id);

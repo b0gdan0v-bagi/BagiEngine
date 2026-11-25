@@ -32,6 +32,8 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD bool hidden = false;
         /// The condition of the popups of the tests
         BE_REFLECT_FIELD bool dialog = false;
+        BE_REFLECT_FIELD int level = 0;
+        BE_REFLECT_FIELD PanelTextStyle mode = PanelTextStyle::Normal;
         BE_REFLECT_FIELD String title;
         BE_REFLECT_FIELD String filter;
         BE_REFLECT_FIELD InterpreterInner inner;

@@ -41,9 +41,9 @@ namespace BECore {
      * **Ids** (the control API finds a control by them): `PushID` of the element's `id` around every element, and inside a table the row index
      * and the column `id` around every cell. A button's own label (`<icon> <text>`, `<icon>##<column id>` in a table) is the last link of the chain.
      *
-     * A condition that cannot be read counts as true (`visible`, `enableWhen`): a broken binding must be seen, not hide the element. `PanelField::label`
-     * is not drawn, the inspector draws the field's own name; `PanelFields` is a `PanelField` whose object or list node starts open (an object is reached as a field of its source: `game.fields`),
-     * or the whole object when its `bind` is a source alone.
+     * A condition (`visible`, `enableWhen`, `open`: `PanelCondition`, parsed once) with a term that cannot be read counts as true, except a popup's, which counts as closed: a broken binding must be
+     * seen, not hide the element. `PanelField::label` is not drawn, the inspector draws the field's own name; `PanelFields` is a `PanelField` whose object or list node starts open (an object is
+     * reached as a field of its source: `game.fields`), or the whole object when its `bind` is a source alone.
      *
      * **A text input** copies the bound `String` into a buffer of its own and writes it back through `PanelBindingWriter` when ImGui reports a
      * change, as the inspector does; a text longer than the buffer is cut at a character boundary, and an edit keeps only what the buffer holds.
@@ -107,7 +107,8 @@ namespace BECore {
         void DrawPopup(const PreparedElement& prepared);
 
         [[nodiscard]] bool IsVisible(const PreparedElement& prepared);
-        [[nodiscard]] bool ReadCondition(const PreparedBinding& condition);
+        /// @p whenUnreadable is what a condition that is bad or has a term that cannot be read counts as; an empty one is true
+        [[nodiscard]] bool ReadCondition(const PreparedCondition& condition, bool whenUnreadable = true);
         /// The text of the cell @p path of a row as a command's argument; false when it names a path that cannot be read
         [[nodiscard]] bool ReadArgument(const PanelBinding& list, size_t row, StringView path, StringView& out);
         /// The bool cell @p path of a row; true when @p path is empty or cannot be read, so a broken binding is seen and not hidden
@@ -124,6 +125,8 @@ namespace BECore {
         PanelBindingWriter _writer{_reader};
         /// Capacity survives frames: the text of a bound value, of a cell's style and of a button cell, and of a label
         String _scratch;
+        /// The text of a word term; apart from `_scratch`, which a cell or a child may still view while a condition is read
+        String _conditionScratch;
         String _styleScratch;
         String _cellScratch;
         String _label;

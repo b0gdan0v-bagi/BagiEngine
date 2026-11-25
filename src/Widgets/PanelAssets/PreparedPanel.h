@@ -4,6 +4,7 @@
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Widgets/PanelAssets/PanelBinding.h>
 #include <BECore/Widgets/PanelAssets/PanelColumn.h>
+#include <BECore/Widgets/PanelAssets/PanelCondition.h>
 #include <BECore/Widgets/PanelAssets/PanelElement.h>
 
 namespace BECore {
@@ -20,6 +21,12 @@ namespace BECore {
         PanelBinding binding;
     };
 
+    /// A condition text parsed once at `Prepare`; `Bad` and `Empty` hold no terms and are told apart because `open` treats an empty one as closed
+    struct PreparedCondition {
+        PreparedBindingState state = PreparedBindingState::Empty;
+        PanelCondition condition;
+    };
+
     struct PreparedColumn {
         /// Owned by the asset the interpreter holds
         const PanelColumn* column = nullptr;
@@ -33,11 +40,11 @@ namespace BECore {
     struct PreparedElement {
         const PanelElement* element = nullptr;
         PreparedKind kind = PreparedKind::Unknown;
-        PreparedBinding visible;
+        PreparedCondition visible;
         /// A button's `enableWhen`
-        PreparedBinding enableWhen;
+        PreparedCondition enableWhen;
         /// A popup's `open`: unlike the others, a condition that cannot be read counts as false
-        PreparedBinding open;
+        PreparedCondition open;
         /// The `bind` of a text, field, fields or input, the `source` of a table
         PreparedBinding bind;
         /// The glyph of a button's, an input's or an empty state's `icon`, null when it names none
