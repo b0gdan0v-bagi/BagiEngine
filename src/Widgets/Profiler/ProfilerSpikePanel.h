@@ -18,6 +18,10 @@ namespace BECore {
 
         /// @p openedFrame is the RingFrame::index of the spike the timeline shows now, none when it shows the live ring
         [[nodiscard]] Result Draw(SpikeCapture& capture, Optional<uint64_t> openedFrame);
+
+        /// The list of frozen frames alone, newest first, for a caller whose asset holds the settings and the buttons. @p openedFrame as in @c Draw
+        /// @return The position in SpikeCapture::GetSpikes() of the row clicked this frame
+        [[nodiscard]] Optional<size_t> DrawList(const SpikeCapture& capture, Optional<uint64_t> openedFrame);
     };
 
 }  // namespace BECore

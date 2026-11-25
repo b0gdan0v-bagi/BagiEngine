@@ -75,6 +75,12 @@ namespace BECore {
         ImGui::SameLine();
         ImGui::Text("%zu frozen", capture.GetSpikes().size());
 
+        result.open = DrawList(capture, openedFrame);
+        return result;
+    }
+
+    Optional<size_t> ProfilerSpikePanel::DrawList(const SpikeCapture& capture, Optional<uint64_t> openedFrame) {
+        Optional<size_t> opened;
         const Vector<FrozenFrame>& spikes = capture.GetSpikes();
         if (ImGui::BeginChild("##spikeList", ImVec2(0.0f, kListHeight), ImGuiChildFlags_Borders)) {
             if (spikes.empty()) {
@@ -90,12 +96,12 @@ namespace BECore {
                     snprintf(label, sizeof(label), "frame %llu, %.2f ms", static_cast<unsigned long long>(spike.frameIndex), spike.frameMs);
                 }
                 if (ImGui::Selectable(label, openedFrame && *openedFrame == spike.frameIndex)) {
-                    result.open = i;
+                    opened = i;
                 }
             }
         }
         ImGui::EndChild();
-        return result;
+        return opened;
     }
 
 }  // namespace BECore

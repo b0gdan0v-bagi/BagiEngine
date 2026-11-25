@@ -4,6 +4,7 @@
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <Widgets/ImGuiTheme.h>
+#include <Widgets/Profiler/ProfilerPanelModel.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -60,18 +61,34 @@ namespace BECore {
             return frameMs <= budgetMs * kOverBudgetFactor ? kOverColor : kWayOverColor;
         }
 
+        double BudgetOf(ProfilerBudget budget, float customMs) {
+            switch (budget) {
+                case ProfilerBudget::Fps60:
+                    return ProfilerFramePlot::kBudget60Ms;
+                case ProfilerBudget::Fps30:
+                    return ProfilerFramePlot::kBudget30Ms;
+                case ProfilerBudget::Custom:
+                    break;
+            }
+            return static_cast<double>(customMs);
+        }
+
     }  // namespace
 
     double ProfilerFramePlot::GetBudgetMs() const {
-        switch (_budget) {
-            case Budget::Fps60:
-                return kBudget60Ms;
-            case Budget::Fps30:
-                return kBudget30Ms;
-            case Budget::Custom:
-                break;
-        }
-        return static_cast<double>(_customBudgetMs);
+        return BudgetOf(_budget, _customBudgetMs);
+    }
+
+    double BudgetMs(const ProfilerPanelView& view) {
+        return BudgetOf(static_cast<ProfilerBudget>(view.budget), view.customBudgetMs);
+    }
+
+    ProfilerFramePlot::Settings PlotSettingsOf(const ProfilerPanelView& view) {
+        ProfilerFramePlot::Settings settings;
+        settings.budgetMs = BudgetMs(view);
+        settings.barMode = static_cast<ProfilerBarMode>(view.barMode);
+        settings.workOnly = view.workOnly;
+        return settings;
     }
 
     Optional<size_t> ProfilerFramePlot::RingFramePosition(size_t barIndex, size_t barCount, size_t ringFrameCount) {
@@ -86,31 +103,35 @@ namespace BECore {
     }
 
     Optional<uint64_t> ProfilerFramePlot::Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
-        int budgetChoice = static_cast<int>(_budget);
+        int budgetChoice = static_cast<int>(+_budget);
         ImGui::SetNextItemWidth(kBudgetComboWidth);
         if (ImGui::Combo("Budget", &budgetChoice, kBudgetLabels)) {
-            _budget = static_cast<Budget>(budgetChoice);
+            _budget = static_cast<ProfilerBudget>(budgetChoice);
         }
-        if (_budget == Budget::Custom) {
+        if (_budget == ProfilerBudget::Custom) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(kCustomFieldWidth);
             ImGui::DragFloat("ms##budget", &_customBudgetMs, 0.1f, kCustomMinMs, kCustomMaxMs, "%.1f");
         }
 
         ImGui::SameLine();
-        int modeChoice = static_cast<int>(_barMode);
+        int modeChoice = static_cast<int>(+_barMode);
         ImGui::SetNextItemWidth(kBarModeComboWidth);
         if (ImGui::Combo("Bars", &modeChoice, kBarModeLabels)) {
-            _barMode = static_cast<BarMode>(modeChoice);
+            _barMode = static_cast<ProfilerBarMode>(modeChoice);
         }
         ImGui::SameLine();
         ImGui::Checkbox("Work only", &_workOnly);
         ImGui::SetItemTooltip("Leave out the time the backend waited for the display (the Wait stage), so a bar is what the CPU did");
 
-        // The bar height of a frame: its time, or without the wait
-        const auto shownMs = [this](const FrameStats& frame) { return _workOnly ? FrameWorkMs(frame) : frame.frameMs; };
+        return DrawBars(history, snapshot, selectedFrame, Settings{GetBudgetMs(), _barMode, _workOnly});
+    }
 
-        const double budgetMs = GetBudgetMs();
+    Optional<uint64_t> ProfilerFramePlot::DrawBars(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame, const Settings& settings) {
+        // The bar height of a frame: its time, or without the wait
+        const auto shownMs = [&settings](const FrameStats& frame) { return settings.workOnly ? FrameWorkMs(frame) : frame.frameMs; };
+
+        const double budgetMs = settings.budgetMs;
         const size_t barCount = history.size();
         const ImVec2 size(ImGui::GetContentRegionAvail().x, kPlotHeight);
         const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -132,18 +153,18 @@ namespace BECore {
         for (size_t bar = 0; bar < barCount; ++bar) {
             const float x = origin.x + static_cast<float>(bar) * barWidth;
             Array<double, kExclusiveStageCount> stages{};
-            if (_barMode == BarMode::StageSplit) {
+            if (settings.barMode == ProfilerBarMode::StageSplit) {
                 stages = ExclusiveStageMs(history[bar]);
             }
             ImVec2 min(x, yOf(shownMs(history[bar])));
             const ImVec2 max(x + eastl::max(barWidth - kBarGap, 1.0f), bottom);
             if (history[bar].paused) {
                 drawList->AddRectFilled(min, max, PausedBarColor());
-            } else if (_barMode == BarMode::StageSplit) {
+            } else if (settings.barMode == ProfilerBarMode::StageSplit) {
                 // The stack is as high as the frame's cpu time, the segments from the bottom up
                 float segmentBottom = bottom;
                 // Wait is the last segment, so work only is every segment but the last
-                const size_t segmentCount = _workOnly ? kExclusiveStageCount - 1 : kExclusiveStageCount;
+                const size_t segmentCount = settings.workOnly ? kExclusiveStageCount - 1 : kExclusiveStageCount;
                 for (size_t segment = 0; segment < segmentCount; ++segment) {
                     const float top = eastl::max(segmentBottom - static_cast<float>(eastl::min(stages[segment] / scaleMs, 1.0)) * size.y, origin.y);
                     drawList->AddRectFilled(ImVec2(min.x, top), ImVec2(max.x, segmentBottom), kStageColors[segment]);
@@ -174,8 +195,8 @@ namespace BECore {
                 result = snapshot.frames[*position].index;
             }
         }
-        if (_barMode == BarMode::StageSplit) {
-            DrawStageLegend();
+        if (settings.barMode == ProfilerBarMode::StageSplit) {
+            DrawStageLegend(settings.workOnly);
         }
         DrawWorkWaitSummary(history);
         DrawCounters(history, snapshot, selectedFrame);
@@ -194,9 +215,9 @@ namespace BECore {
         ImGui::TextUnformatted(_summaryText.data());
     }
 
-    void ProfilerFramePlot::DrawStageLegend() const {
+    void ProfilerFramePlot::DrawStageLegend(bool workOnly) const {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const size_t segmentCount = _workOnly ? kExclusiveStageCount - 1 : kExclusiveStageCount;
+        const size_t segmentCount = workOnly ? kExclusiveStageCount - 1 : kExclusiveStageCount;
         for (size_t segment = 0; segment < segmentCount; ++segment) {
             if (segment > 0) {
                 ImGui::SameLine();

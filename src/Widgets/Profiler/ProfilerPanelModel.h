@@ -9,6 +9,7 @@
 #include <BECore/Types/Types.h>
 #include <Events/SubscriptionHolder.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
+#include <Widgets/Profiler/ProfilerSlots.h>
 #include <cstdint>
 
 namespace BECore {
@@ -95,7 +96,7 @@ namespace BECore {
      * `profiler.trace` takes the literal argument `record`, `restart`, `write` or `writeFrames`, `profiler.spikeLive`, `profiler.spikeClear` and
      * `profiler.resetZoneAllocs` take none; an unknown or empty argument does nothing.
      *
-     * The slots (`ProfilerSlots`) read the history, the snapshot and the capture from here and report their clicks back through `SelectFrame`,
+     * The slots (`ProfilerSlots`, registered in `Initialize`) read the history, the snapshot and the capture from here and report their clicks back through `SelectFrame`,
      * `OpenSpike`, `ShowLive` and `ShowWorstCall`.
      */
     class ProfilerPanelModel : public IPanelModel, public SubscriptionHolder {
@@ -189,6 +190,7 @@ namespace BECore {
         [[nodiscard]] const FrameRingBackend* GetRing() const;
 
         ProfilerPanelView _view;
+        ProfilerSlots _slots{*this};
         bool _open = false;
         bool _ringRequested = false;  // what this model asked of Profiler::SetRingEnabled
         bool _pausesAllocCounting = true;

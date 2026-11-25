@@ -85,6 +85,7 @@ namespace BECore {
 
     void ProfilerPanelModel::Initialize() {
         Subscribe<SDLEvents::SDLEventWrapper, &ProfilerPanelModel::OnSDLEvent>(this);
+        _slots.Register();
     }
 
     TypedRef ProfilerPanelModel::GetObject() {

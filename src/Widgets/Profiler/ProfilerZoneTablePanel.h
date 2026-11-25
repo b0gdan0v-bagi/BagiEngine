@@ -22,6 +22,14 @@ namespace BECore {
          */
         [[nodiscard]] const ProfileSite* Draw(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame);
 
+        /**
+         * @brief The table alone, for a caller that owns the window combo and the filter (the asset's controls)
+         * @param windowIndex the value of `Window` (0 the selected frame, 1 the last `kRecentFrames`, 2 every frame of the ring); another value reads as 0
+         * @param filterText rows whose name or `file:line` holds this are shown
+         * @return as @c Draw
+         */
+        [[nodiscard]] const ProfileSite* DrawTable(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame, int windowIndex, StringView filterText);
+
     private:
         enum class Window : int { SelectedFrame, RecentFrames, AllFrames };
 
@@ -43,7 +51,7 @@ namespace BECore {
             bool operator==(const RowsKey&) const = default;
         };
 
-        void RefreshRows(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame);
+        void RefreshRows(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame, Window window, StringView filterText);
 
         Window _window = Window::SelectedFrame;
         ZoneStatColumn _sortColumn = ZoneStatColumn::Total;
