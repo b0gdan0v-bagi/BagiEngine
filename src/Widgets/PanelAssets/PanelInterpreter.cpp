@@ -16,8 +16,6 @@ namespace BECore {
     namespace {
 
         constexpr const char* kSelectableSuffix = "##select";
-        /// The glyph of an icon and the text after it are one label
-        constexpr const char* kGlyphGap = " ";
 
         /// How the text of a binding is parsed: the forms differ in what they accept
         enum class BindingForm : uint8_t { Field, Object };
@@ -248,17 +246,23 @@ namespace BECore {
                     const PanelCheckbox& checkbox = *element->Cast<PanelCheckbox>();
                     prepared.bind = PrepareBinding(checkbox.bind, BindingForm::Field);
                     prepared.label = PrepareBinding(checkbox.labelBind, BindingForm::Field);
+                    prepared.enableWhen = PrepareCondition(checkbox.enableWhen);
+                    prepared.glyph = GlyphOf(checkbox.icon);
                     break;
                 }
                 case PreparedKind::Combo: {
                     const PanelCombo& combo = *element->Cast<PanelCombo>();
                     prepared.bind = PrepareBinding(combo.bind, BindingForm::Field);
                     prepared.items = PrepareBinding(combo.items, BindingForm::Field);
+                    prepared.enableWhen = PrepareCondition(combo.enableWhen);
                     break;
                 }
-                case PreparedKind::Number:
-                    prepared.bind = PrepareBinding(element->Cast<PanelNumber>()->bind, BindingForm::Field);
+                case PreparedKind::Number: {
+                    const PanelNumber& number = *element->Cast<PanelNumber>();
+                    prepared.bind = PrepareBinding(number.bind, BindingForm::Field);
+                    prepared.enableWhen = PrepareCondition(number.enableWhen);
                     break;
+                }
                 case PreparedKind::Button: {
                     const PanelButton& button = *element->Cast<PanelButton>();
                     prepared.enableWhen = PrepareCondition(button.enableWhen);
@@ -739,7 +743,7 @@ namespace BECore {
         return value;
     }
 
-    bool PanelInterpreter::ReadRowSelected(const PanelBinding& list, size_t row, StringView path) {
+    bool PanelInterpreter::ReadRowFlag(const PanelBinding& list, size_t row, StringView path) {
         bool value = false;
         return !path.empty() && _reader.ReadRowBool(*_sources, list, row, path, value) == PanelReadStatus::Ok && value;
     }
@@ -843,7 +847,7 @@ namespace BECore {
         // The label is the text of the cell and a suffix, so an empty cell is still an item
         _label.assign(text.data(), text.size());
         _label.append(kSelectableSuffix);
-        if (ImGui::Selectable(_label.c_str(), ReadRowSelected(list, row, column.selectedField)) && !column.command.empty()) {
+        if (ImGui::Selectable(_label.c_str(), ReadRowFlag(list, row, column.selectedField)) && !column.command.empty()) {
             StringView argument;
             if (ReadArgument(list, row, column.argument, argument)) {
                 NoteClick(column.command, argument);

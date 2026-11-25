@@ -1,3 +1,4 @@
+#include <BECore/Input/ImGuiItemIndex.h>
 #include <BECore/PanelInterpreterProbe.h>
 #include <BECore/Reflection/TypedRef.h>
 #include <BECore/Widgets/PanelAssets/PanelAssetLoader.h>
@@ -404,6 +405,18 @@ namespace BECore::Tests {
         constexpr const char* kLines = R"(
 <PanelAsset id="Lines" title="Lines">
   <elements><element type="PanelText" id="state" bind="probe.filter" mono="true" maxLines="{}"/></elements>
+</PanelAsset>)";
+
+        /// The controls of a toolbar: switched off by `probe.flag`, a combo whose `selected` rows are separators, and typed numbers
+        constexpr const char* kToolbarControls = R"(
+<PanelAsset id="ToolbarControls" title="ToolbarControls">
+  <elements>
+    <element type="PanelCheckbox" id="rotate" bind="probe.hidden" text="Rotate" icon="check" enableWhen="probe.flag"/>
+    <element type="PanelCombo" id="size" bind="probe.pick" items="probe.rows" itemField="name" separatorField="selected" width="10" enableWhen="probe.flag"/>
+    <element type="PanelNumber" id="level" bind="probe.level" min="0" max="5" step="1" width="10" enableWhen="probe.flag"/>
+    <element type="PanelNumber" id="side" bind="probe.level" input="true" min="0" max="50" width="10" commitCommand="probe.commitSide"/>
+    <element type="PanelNumber" id="gain" bind="probe.gain" input="true" min="0" max="1" width="10"/>
+  </elements>
 </PanelAsset>)";
 
         /// A provider with one chord, as the editor's hotkey map would be
@@ -1739,6 +1752,128 @@ namespace BECore::Tests {
                 Frame();
             }
         });
+    }
+
+    TEST_F(PanelInterpreterTest, ACheckboxAComboAndANumberUnderAFalseEnableWhenWriteNothingAndWriteAgainWhenItTurnsTrue) {
+        probe.flag = true;
+        Load(kToolbarControls);
+        const ImVec2 rotate = Locate(Chain(HostId(), {"rotate", "###rotate"}));
+        const ImGuiID size = Chain(HostId(), {"size", "##size"});
+        const ImVec2 sizePoint = Locate(size);
+        const ImVec2 level = Locate(Chain(HostId(), {"level", "##level"}));
+
+        probe.flag = false;
+        Settle();
+        ClickAt(rotate);
+        EXPECT_FALSE(probe.hidden);
+        ClickAt(sizePoint);
+        Settle();
+        EXPECT_FALSE(AnyPopupOpen());
+        DragBy(level, 300.0f);
+        EXPECT_EQ(probe.level, 0);
+
+        probe.flag = true;
+        Settle();
+        ClickAt(rotate);
+        EXPECT_TRUE(probe.hidden);
+        PickFromCombo(size, 2, "gamma");
+        EXPECT_EQ(probe.pick, 2);
+        DragBy(level, 300.0f);
+        EXPECT_EQ(probe.level, 5);
+    }
+
+    TEST_F(PanelInterpreterTest, ACheckboxShowsTheGlyphOfItsIconBeforeItsText) {
+        Load(kToolbarControls);
+        ImGuiItemIndex index;
+        index.Arm(*ImGui::GetCurrentContext());
+        Frame();
+        const ImGuiItemRecord* rotate = index.FindById(Chain(HostId(), {"rotate", "###rotate"}));
+        ASSERT_NE(rotate, nullptr);
+        EXPECT_EQ(rotate->label, ICON_LC_CHECK " Rotate###rotate");
+        index.Disarm();
+    }
+
+    TEST_F(PanelInterpreterTest, AComboRowMarkedAsASeparatorIsNoChoiceAndTheRowsAroundItAre) {
+        probe.flag = true;
+        probe.rows[1].selected = true;
+        Load(kToolbarControls);
+        const ImGuiID size = Chain(HostId(), {"size", "##size"});
+        ClickAt(Locate(size));
+        Settle();
+        const ImGuiWindow* popup = ComboPopup();
+        ASSERT_NE(popup, nullptr);
+        const ImVec2 popupEnd(popup->Pos.x + popup->Size.x, popup->Pos.y + popup->Size.y);
+        EXPECT_FALSE(TryLocateIn(ComboRowId(*popup, 1, "beta"), popup->Pos, popupEnd).has_value());
+        ClickAt(LocateInWindow(ComboRowId(*popup, 2, "gamma"), *popup));
+        Settle();
+        EXPECT_EQ(probe.pick, 2);
+        PickFromCombo(size, 0, "alpha");
+        EXPECT_EQ(probe.pick, 0);
+
+        // A value that names the separator row shows `?`, which draws less than the row's text
+        probe.pick = 1;
+        Settle();
+        const int onSeparator = HostVertices();
+        probe.rows[1].selected = false;
+        Settle();
+        EXPECT_GT(HostVertices(), onSeparator);
+    }
+
+    TEST_F(PanelInterpreterTest, ATypedNumberIsWrittenClampedOnlyWhenLeftOrConfirmedAndNotesItsCommitOnceThen) {
+        Load(kToolbarControls);
+        const ImVec2 side = Locate(Chain(HostId(), {"side", "##side"}));
+        const ImVec2 elsewhere(kHostSize.x - 2.0f, kHostSize.y - 2.0f);
+        ClickAt(side);
+        Type("99");
+        EXPECT_EQ(probe.level, 0) << "typing alone writes nothing";
+        EXPECT_EQ(TimesNoted("probe.commitSide"), 0);
+        ClickAt(elsewhere);
+        Settle();
+        EXPECT_EQ(probe.level, 50);
+        EXPECT_EQ(TimesNoted("probe.commitSide"), 1);
+
+        ClickAt(side);
+        Type("7");
+        EXPECT_EQ(probe.level, 50);
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiKey_Enter, true);
+        Frame();
+        io.AddKeyEvent(ImGuiKey_Enter, false);
+        Settle();
+        EXPECT_EQ(probe.level, 7);
+        EXPECT_EQ(TimesNoted("probe.commitSide"), 2);
+
+        // A float field parses a float and is clamped the same way
+        ClickAt(Locate(Chain(HostId(), {"gain", "##gain"})));
+        Type("2.5");
+        ClickAt(elsewhere);
+        Settle();
+        EXPECT_FLOAT_EQ(probe.gain, 1.0f);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfAnOpenSeparatedComboAndOfAnActiveTypedNumberAllocatesNothing) {
+        probe.flag = true;
+        probe.rows[1].selected = true;
+        Load(kToolbarControls);
+        const auto steady = [&](int warmUpFrames) {
+            for (int i = 0; i < warmUpFrames; ++i) {
+                Frame();
+            }
+            ExpectNoAllocations([&] {
+                for (int i = 0; i < kSteadyFrames; ++i) {
+                    Frame();
+                }
+            });
+        };
+        ClickAt(Locate(Chain(HostId(), {"size", "##size"})));
+        ASSERT_NE(ComboPopup(), nullptr);
+        steady(kWarmUpFrames);
+
+        ClickAt(ImVec2(kHostSize.x - 2.0f, kHostSize.y - 2.0f));
+        ClickAt(Locate(Chain(HostId(), {"side", "##side"})));
+        Type("3");
+        steady(kInputWarmUpFrames);
+        EXPECT_EQ(probe.level, 0);
     }
 
 }  // namespace BECore::Tests

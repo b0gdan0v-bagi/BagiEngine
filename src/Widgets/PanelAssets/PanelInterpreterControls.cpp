@@ -60,10 +60,18 @@ namespace BECore {
             text = read ? bound : (checkbox.text.empty() ? StringView(kUnreadable) : StringView(checkbox.text));
         }
         // The visible text may change from frame to frame, the id after `###` does not
-        _label.assign(text.data(), text.size());
+        _label.clear();
+        if (prepared.glyph != nullptr) {
+            _label.append(prepared.glyph);
+            if (!text.empty()) {
+                _label.append(kGlyphGap);
+            }
+        }
+        _label.append(text.data(), text.size());
         _label.append(kStableIdSuffix);
         _label.append(checkbox.id);
 
+        ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
         bool changed = false;
         bool next = !value;
         if (checkbox.look == PanelCheckLook::Toggle) {
@@ -74,6 +82,7 @@ namespace BECore {
             changed = ImGui::Checkbox(_label.c_str(), &next);
         }
         ItemTooltip(OrNull(checkbox.tooltip));
+        ImGui::EndDisabled();
         if (changed) {
             static_cast<void>(_writer.WriteBool(*_sources, prepared.bind.binding, next));
         }
@@ -88,12 +97,14 @@ namespace BECore {
         _label.assign(kIdSuffix);
         _label.append(combo.id);
         SetWidth(combo.width);
+        ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
         if (prepared.items.state == PreparedBindingState::Empty) {
             DrawEnumCombo(combo, prepared);
         } else {
             DrawListCombo(combo, prepared);
         }
         ItemTooltip(OrNull(combo.tooltip));
+        ImGui::EndDisabled();
     }
 
     void PanelInterpreter::DrawEnumCombo(const PanelCombo& /*combo*/, const PreparedElement& prepared) {
@@ -134,7 +145,9 @@ namespace BECore {
         StringView item;
         if (byIndex) {
             size_t index = 0;
-            if (AsIndex(number, index) && index < count && _reader.ReadRowText(*_sources, prepared.items.binding, index, combo.itemField, _scratch, item) == PanelReadStatus::Ok) {
+            // A separator row is never a choice, so an index that names one shows as a value that cannot be read
+            if (AsIndex(number, index) && index < count && !ReadRowFlag(prepared.items.binding, index, combo.separatorField) &&
+                _reader.ReadRowText(*_sources, prepared.items.binding, index, combo.itemField, _scratch, item) == PanelReadStatus::Ok) {
                 selected = index;
                 _preview.assign(item.data(), item.size());
             } else {
@@ -150,6 +163,10 @@ namespace BECore {
             return;
         }
         for (size_t row = 0; row < count; ++row) {
+            if (ReadRowFlag(prepared.items.binding, row, combo.separatorField)) {
+                ImGui::Separator();
+                continue;
+            }
             if (_reader.ReadRowText(*_sources, prepared.items.binding, row, combo.itemField, _scratch, item) != PanelReadStatus::Ok) {
                 item = kUnreadable;
             }
@@ -177,7 +194,22 @@ namespace BECore {
         _label.assign(kIdSuffix);
         _label.append(number.id);
         SetWidth(number.width);
+        ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
+        if (number.input) {
+            DrawTypedNumber(prepared, value, integer);
+        } else {
+            DrawDraggedNumber(prepared, value, integer);
+        }
+        ItemTooltip(OrNull(number.tooltip));
+        if (!number.text.empty()) {
+            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+            ImGui::TextUnformatted(number.text.c_str(), number.text.c_str() + number.text.size());
+        }
+        ImGui::EndDisabled();
+    }
 
+    void PanelInterpreter::DrawDraggedNumber(const PreparedElement& prepared, double value, bool integer) {
+        const PanelNumber& number = *prepared.element->Cast<PanelNumber>();
         const bool bounded = number.min < number.max;
         const bool slider = number.slider && bounded;
         const ImGuiSliderFlags flags = bounded ? ImGuiSliderFlags_AlwaysClamp : ImGuiSliderFlags_None;
@@ -200,17 +232,50 @@ namespace BECore {
                 written = static_cast<double>(held);
             }
         }
-        const bool released = !number.commitCommand.empty() && ImGui::IsItemDeactivatedAfterEdit();
-        ItemTooltip(OrNull(number.tooltip));
-        if (!number.text.empty()) {
-            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-            ImGui::TextUnformatted(number.text.c_str(), number.text.c_str() + number.text.size());
-        }
         if (changed) {
             static_cast<void>(_writer.WriteNumber(*_sources, prepared.bind.binding, written));
         }
-        if (released) {
+        if (!number.commitCommand.empty() && ImGui::IsItemDeactivatedAfterEdit()) {
             NoteClick(number.commitCommand, StringView{});
+        }
+    }
+
+    void PanelInterpreter::DrawTypedNumber(const PreparedElement& prepared, double value, bool integer) {
+        const PanelNumber& number = *prepared.element->Cast<PanelNumber>();
+        const ImGuiID id = ImGui::GetID(_label.c_str());
+        // While the user types, the field shows its own text; what it last parsed is the value to write when it is left
+        const double shown = _typedId == id ? _typedValue : value;
+        bool changed = false;
+        double typed = shown;
+        {
+            const ScopedMonoFont mono;
+            if (integer) {
+                int64_t held = FieldPresentation::FromDouble<int64_t>(shown);
+                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_S64, &held);
+                typed = static_cast<double>(held);
+            } else {
+                float held = static_cast<float>(shown);
+                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_Float, &held);
+                typed = static_cast<double>(held);
+            }
+        }
+        if (changed) {
+            _typedId = id;
+            _typedValue = typed;
+        }
+        // A field that `enableWhen` turned off while it was being typed in is deactivated by ImGui, and what it held is dropped
+        const bool enabled = (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0;
+        if (enabled && ImGui::IsItemDeactivatedAfterEdit()) {
+            if (number.min < number.max) {
+                typed = eastl::clamp(typed, static_cast<double>(number.min), static_cast<double>(number.max));
+            }
+            static_cast<void>(_writer.WriteNumber(*_sources, prepared.bind.binding, typed));
+            if (!number.commitCommand.empty()) {
+                NoteClick(number.commitCommand, StringView{});
+            }
+        }
+        if (_typedId == id && !ImGui::IsItemActive()) {
+            _typedId = 0;
         }
     }
 

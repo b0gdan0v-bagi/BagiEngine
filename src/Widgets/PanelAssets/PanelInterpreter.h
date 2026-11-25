@@ -125,6 +125,10 @@ namespace BECore {
         void DrawCheckbox(const PreparedElement& prepared);
         void DrawCombo(const PreparedElement& prepared);
         void DrawNumber(const PreparedElement& prepared);
+        /// A number as a drag or a slider, written at every change
+        void DrawDraggedNumber(const PreparedElement& prepared, double value, bool integer);
+        /// A number with `input`: a typed field, written (clamped) and its `commitCommand` noted only when the user confirms or leaves it after an edit
+        void DrawTypedNumber(const PreparedElement& prepared, double value, bool integer);
         /// The combo of an enum with no `items`: its names, the index of the value held
         void DrawEnumCombo(const PanelCombo& combo, const PreparedElement& prepared);
         /// The combo over a list: the value is an index into it or the text of one of its rows
@@ -151,8 +155,8 @@ namespace BECore {
         [[nodiscard]] bool ReadArgument(const PanelBinding& list, size_t row, StringView path, StringView& out);
         /// The bool cell @p path of a row; true when @p path is empty or cannot be read, so a broken binding is seen and not hidden
         [[nodiscard]] bool ReadRowCondition(const PanelBinding& list, size_t row, StringView path);
-        /// Whether the `Selectable` column's `selectedField` of a row reads true; false when it is empty or cannot be read
-        [[nodiscard]] bool ReadRowSelected(const PanelBinding& list, size_t row, StringView path);
+        /// Whether the bool cell @p path of a row reads true (a selected row, a combo's separator row); false when it is empty or cannot be read
+        [[nodiscard]] bool ReadRowFlag(const PanelBinding& list, size_t row, StringView path);
         /// Shows @p current in a text field under @p label; true when the user changed it (with @p enterOnly: pressed Enter), the new text being in `_inputBuffer`
         [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly = false);
         void NoteClick(StringView command, StringView argument);
@@ -176,6 +180,10 @@ namespace BECore {
         String _preview;
         /// What the text field being drawn edits; one field is drawn at a time
         char _inputBuffer[kInputBufferSize] = {};
+        /// The typed number being edited: ImGui reports the value only on the frames the text changed, and it is written when the field is left, so the last value is kept
+        /// here under the field's id until then. One field is active at a time
+        ImGuiID _typedId = 0;
+        double _typedValue = 0.0;
         ImGuiPropertyVisitor _inspector;
         SingleFieldVisitor _single;
         /// Valid only inside `Draw`

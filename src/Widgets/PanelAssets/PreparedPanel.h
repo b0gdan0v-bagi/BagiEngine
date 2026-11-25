@@ -43,7 +43,7 @@ namespace BECore {
         const PanelElement* element = nullptr;
         PreparedKind kind = PreparedKind::Unknown;
         PreparedCondition visible;
-        /// A button's, a menu's or a menu item's `enableWhen`
+        /// The `enableWhen` of a button, a menu, a menu item, a checkbox, a combo or a number
         PreparedCondition enableWhen;
         /// A button's `fillWhen`
         PreparedCondition fillWhen;
@@ -55,7 +55,7 @@ namespace BECore {
         PreparedBinding label;
         /// A combo's `items`
         PreparedBinding items;
-        /// The glyph of a button's, an input's, a menu item's or an empty state's `icon`, null when it names none
+        /// The glyph of a button's, an input's, a checkbox's, a menu item's or an empty state's `icon`, null when it names none
         const char* glyph = nullptr;
         /// The hint of an input with the glyph of its icon in front of it
         String hint;

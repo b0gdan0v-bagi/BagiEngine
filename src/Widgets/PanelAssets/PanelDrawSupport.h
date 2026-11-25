@@ -15,6 +15,8 @@ namespace BECore::PanelDraw {
     inline constexpr const char* kIdSuffix = "##";
     /// Starts the id part of a label whose visible text changes, so the control keeps its id
     inline constexpr const char* kStableIdSuffix = "###";
+    /// The glyph of an icon and the text after it are one label
+    inline constexpr const char* kGlyphGap = " ";
     /// The unlimited width of ImGui: the item ends at the right edge of the window
     inline constexpr float kFillWidth = -FLT_MIN;
 
