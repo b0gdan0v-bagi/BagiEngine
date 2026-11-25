@@ -74,7 +74,7 @@ PANELS = (
     Panel("Sprite Library", "Sprite Library"),
     Panel("Game Panel", "Game"),
     Panel("Console", "Console", contains=True),  # the title counts the errors and warnings
-    Panel("Generate Art", "Generate", contains=True),  # an icon glyph comes first
+    Panel("Generate Art", "Generate", contains=True),  # the window is `Generate###Generate`
     Panel("Profiler", "Profiler"),
 )
 VIEW_MENU_COMMANDS = ("Command Palette...", "Preferences...", "Layouts", "Save Layout As...", "Delete Layout", "Reset to Defaults")  # the items that are no panel
