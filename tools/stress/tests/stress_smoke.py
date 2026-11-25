@@ -6,7 +6,7 @@ the bad values, screenshots that are not flat, `set_language` rewording the `ui`
 on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `rmlui` scenario probes `get_state.scenes`
 and prints a skip line when the build has no `rmlui` (only `ENGINE_UI_RMLUI` builds list it), so the same script passes in every preset; with it the scene's documents, textures,
 `wheel_at` on both axes, `ReloadRmlUiDocuments` and the scene switch are checked. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
-`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; the View menu opens the Game panel, a chord closes it and opens it again, its filter takes typed text, and an action button changes `get_state` and the picture, all through `imgui_find` / `imgui_input`; it also runs with `--content-overlay=<temp folder>`, and `editor_state` must say nothing is dirty, name a `scene:` document whose `file` is inside that folder, and the checkout's `SceneConfig.xml` is unchanged with nothing written into the folder (a build without the editor prints a skip line). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
+`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; the View menu opens the Game panel, a chord closes it and opens it again, its filter takes typed text, and an action button changes `get_state` and the picture, all through `imgui_find` / `imgui_input`; it also runs with `--content-overlay=<temp folder>`, and `editor_state` must say nothing is dirty, name a `scene:` document whose `file` is inside that folder, and the checkout's `SceneConfig.xml` is unchanged with nothing written into the folder (a build without the editor prints a skip line). The `editor cycle` step starts an editor of its own through `GameSession` (the moves of `tools/qa/bagi_qa_editor.py` need its `imgui_*` helpers): a rename makes the scene dirty in `dirty`, `any_dirty` and `editor_state`, the overlay holds no scene file yet, Save clears the flag and writes the overlay's file only, and the checkout's `SceneConfig.xml` keeps its hash. The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
 path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 failed, 77 skipped (the executable is not built).
@@ -26,9 +26,12 @@ from typing import Callable
 ENGINE_DIR = Path(os.environ["BAGI_ENGINE_DIR"]) if "BAGI_ENGINE_DIR" in os.environ else Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ENGINE_DIR / "tools" / "control"))
 sys.path.insert(0, str(ENGINE_DIR / "tools" / "control" / "tests"))
+sys.path.insert(0, str(ENGINE_DIR / "tools" / "qa"))
 sys.path.insert(0, str(ENGINE_DIR / "tools" / "schema"))
 
 from bagi_control_client import BagiControlClient, ConnectionClosed, ControlError  # noqa: E402
+import bagi_qa_editor as editor  # noqa: E402
+from bagi_session import GameSession, SessionError  # noqa: E402
 from game_process import BACKEND_UNAVAILABLE_MARKER, PORT_TAKEN_MARKER, GameLaunchError, GameProcess, build_game_command, free_port, preset_executable  # noqa: E402
 from schema_to_xsd import Binding, check_files, convert_config_dir, find_xmllint  # noqa: E402
 from smoke import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, SmokeFailure, check, check_window_control, expect_error, take_screenshot  # noqa: E402
@@ -51,6 +54,9 @@ RMLUI_STEPS = 30  # RmlUi scrolls a wheel step smoothly over the frames of the g
 RMLUI_PANEL_X = 1700
 RMLUI_PANEL_Y = 920
 EDITOR_WINDOW = (1280, 720)  # window units: room for the docks of the editor
+CYCLE_FLAGS = ["--stress-scene=entities", "--stress-count=1"]  # the scene of the edit charter (tools/stress/qa/editor_charter.py)
+CYCLE_NODE = "Run"
+CYCLE_RENAMED = "RunRenamed"
 EDITOR_FRAMES = 5  # ImGui lays its docks out over more than one frame
 STRESS_SCENE_FILE = ENGINE_DIR / "tools" / "stress" / "config" / "SceneConfig.xml"  # the tracked file the editor's scene document stands for
 EDITOR_SCENE_PATH = "config/SceneConfig.xml"
@@ -433,7 +439,7 @@ def check_editor_state(client: BagiControlClient, overlay: Path) -> None:
     """`editor_state` of a fresh editor run into an overlay: nothing is dirty, the scene document points into the overlay (not yet written), and nothing is written.
 
     BagiStress has no TextureLibrary, so the Sprite Library row is clean with no path, and no config is selected in the Config Editor, so there is no `config` row.
-    Making a document dirty and saving it needs `imgui_input`; the gtests of the save path (ContentOverlay, EditorDocumentsProvider) cover that.
+    Making a document dirty and saving it needs `imgui_input`: `scenario_editor_cycle` does it in an editor of its own.
     """
     state = client.call("editor_state")
     check(state["anyDirty"] is False, f"editor_state: anyDirty is {state['anyDirty']} in a fresh editor")
@@ -527,6 +533,67 @@ def scenario_editor(client: BagiControlClient, exe: Path, overlay: Path) -> None
     check(not (overlay / EDITOR_SCENE_PATH).exists(), "a run that saved nothing wrote the overlay's scene file")
     print("editor: the checkout's SceneConfig.xml is unchanged and the overlay holds no scene file", flush=True)
     drive_editor_panels(client)
+
+
+def editor_session_error(session: GameSession, error: Exception) -> SmokeFailure:
+    return SmokeFailure(f"{error!r}\n--- game log (tail) ---\n{session.game_log()}")
+
+
+def launch_cycle_editor(session: GameSession, exe: Path, overlay: Path) -> dict:
+    """The editor of the cycle step; once more when the free port was lost to another process."""
+    for attempt in range(2):
+        try:
+            return session.launch(exe=str(exe), extra=CYCLE_FLAGS, editor=True, content_overlay=str(overlay))
+        except SessionError as error:
+            if attempt == 0 and PORT_TAKEN_MARKER in str(error):
+                continue
+            raise
+    raise AssertionError("unreachable")
+
+
+def drive_editor_cycle(session: GameSession, overlay: Path, scene_hash: str) -> None:
+    check(editor.dirty(session) is False and editor.any_dirty(session) is False, "a fresh editor reports unsaved changes")
+    session.call("reset", {"scene": "entities", "count": 1})
+    editor.widen_left_dock(session)
+    editor.open_panel(session, editor.SCENE_EDITOR)
+    editor.select_node(session, CYCLE_NODE)
+    editor.rename_selected(session, CYCLE_RENAMED)
+    scene = editor.scene_document(session)
+    check(editor.dirty(session) and editor.any_dirty(session), "after a rename the scene is not dirty")
+    check(scene["id"].startswith("scene:") and scene["dirty"] is True, f"editor_state after the rename: {scene}")
+    scene_file = Path(scene["file"])
+    check(scene_file.resolve().is_relative_to(overlay.resolve()), f"the scene file '{scene_file}' is not inside the overlay {overlay}")
+    check(not scene_file.exists(), "the overlay holds the scene file before Save")
+    check(file_hash(STRESS_SCENE_FILE) == scene_hash, "the checkout's SceneConfig.xml changed before Save")
+    print(f"editor cycle: the rename made {scene['id']} dirty, nothing written yet", flush=True)
+    editor.save(session)
+    check(not editor.dirty(session) and not editor.any_dirty(session), "after Save the editor still reports unsaved changes")
+    check(scene_file.is_file(), f"Save wrote no file at {scene_file}")
+    check(f'name="{CYCLE_RENAMED}"' in scene_file.read_text(encoding="utf-8"), f"the saved file has no node '{CYCLE_RENAMED}'")
+    check(file_hash(STRESS_SCENE_FILE) == scene_hash, f"Save changed {STRESS_SCENE_FILE}")
+    print("editor cycle: Save cleared the flag and wrote the overlay's file only; the checkout's SceneConfig.xml is unchanged", flush=True)
+
+
+def scenario_editor_cycle(exe: Path) -> None:
+    """An edit makes the scene dirty, Save clears it and writes the overlay's copy, the checkout is never written. Its own editor, not `play`: the moves need the helpers of a `GameSession`. A build without the editor skips."""
+    scene_hash = file_hash(STRESS_SCENE_FILE)
+    session = GameSession()
+    try:
+        with temporary_editor_directory(), temporary_folder() as overlay:
+            run_mode = (launch_cycle_editor(session, exe, overlay).get("status") or {}).get("runMode")
+            if run_mode == "Game":
+                print("editor cycle: SKIPPED, status.runMode is Game (the build has no editor)", flush=True)
+                return
+            check(run_mode == "Editor", f"status.runMode is '{run_mode}' with --editor")
+            drive_editor_cycle(session, overlay, scene_hash)
+            code = session.quit().get("exitCode")
+            check(code == 0, f"the game exited with code {code} after quit")
+            problems = session.log_problems()
+            check(not problems, "the game's log has problems:\n" + "\n".join(problems))
+    except (SessionError, ControlError, ConnectionClosed, OSError, KeyError) as error:
+        raise editor_session_error(session, error) from error
+    finally:
+        session.close()
 
 
 @contextlib.contextmanager
@@ -644,6 +711,12 @@ def main() -> int:
         except SmokeFailure as error:
             print(f"FAILED ({name}): {error}")
             return EXIT_FAILED
+    print("editor cycle: running", flush=True)
+    try:
+        scenario_editor_cycle(exe)
+    except SmokeFailure as error:
+        print(f"FAILED (editor cycle): {error}")
+        return EXIT_FAILED
     for name, backend, batching in GPU_SCENARIOS:
         print(f"{name}: running", flush=True)
         flags = ["--stress-scene=sprites", f"--stress-count={GPU_SPRITES_COUNT}", "--hidden-window", f"--backend={backend}"]
