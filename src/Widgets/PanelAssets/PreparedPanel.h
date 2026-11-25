@@ -45,6 +45,8 @@ namespace BECore {
         PreparedCondition visible;
         /// A button's, a menu's or a menu item's `enableWhen`
         PreparedCondition enableWhen;
+        /// A button's `fillWhen`
+        PreparedCondition fillWhen;
         /// A popup's `open`: unlike the others, a condition that cannot be read counts as false
         PreparedCondition open;
         /// The `bind` of a text, field, fields, input, checkbox, combo or number, the `source` of a table or of a `PanelMenuItems`
@@ -65,6 +67,8 @@ namespace BECore {
         /// A menu is drawn only while it is open (and not at all while a parent is closed), so the first open frame after a gap is the opening: `openCommand` runs then.
         /// A new `Prepare` forgets it
         mutable MenuOpenTracker menuOpened;
+        /// The width the children of a centred row took last frame: zero on the first frame, so the row starts at the left once and is centred from the next frame on
+        mutable float rowWidth = 0.0f;
     };
 
 }  // namespace BECore

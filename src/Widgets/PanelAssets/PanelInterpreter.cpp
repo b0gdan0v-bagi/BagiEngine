@@ -262,6 +262,7 @@ namespace BECore {
                 case PreparedKind::Button: {
                     const PanelButton& button = *element->Cast<PanelButton>();
                     prepared.enableWhen = PrepareCondition(button.enableWhen);
+                    prepared.fillWhen = PrepareCondition(button.fillWhen);
                     prepared.glyph = GlyphOf(button.icon);
                     break;
                 }
@@ -416,6 +417,13 @@ namespace BECore {
     }
 
     void PanelInterpreter::DrawRow(const PreparedElement& prepared) {
+        const bool centred = prepared.element->Cast<PanelRow>()->align == PanelRowAlign::Center;
+        if (centred && prepared.rowWidth > 0.0f) {
+            // The group's width is what it took the frame before, so the first frame draws at the start and a width that changes is followed one frame later
+            const float offset = eastl::max(0.0f, (ImGui::GetContentRegionAvail().x - prepared.rowWidth) * 0.5f);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+        }
+        const float left = ImGui::GetCursorScreenPos().x;
         bool first = true;
         for (const PreparedElement& child : prepared.children) {
             if (!IsVisible(child)) {
@@ -426,6 +434,9 @@ namespace BECore {
             }
             first = false;
             DrawElement(child);
+        }
+        if (centred) {
+            prepared.rowWidth = first ? 0.0f : ImGui::GetItemRectMax().x - left;
         }
     }
 
@@ -624,14 +635,19 @@ namespace BECore {
         const char* tooltip = OrNull(button.tooltip);
         ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
         ImGui::PushItemFlag(ImGuiItemFlags_NoNav, !button.navigable);
+        ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, button.repeat);
+        const ScopedButtonFill fill(button.fill, ReadCondition(prepared.fillWhen));
         const float widthPixels = button.width * ImGui::GetFontSize();
         bool clicked = false;
-        if (prepared.glyph != nullptr) {
+        if (prepared.glyph != nullptr && button.text.empty()) {
+            clicked = IconButton(prepared.glyph, tooltip, button.id.c_str());
+        } else if (prepared.glyph != nullptr) {
             clicked = IconTextButton(prepared.glyph, button.text.c_str(), tooltip, widthPixels);
         } else {
             clicked = ImGui::Button(button.text.empty() ? "##button" : button.text.c_str(), ImVec2(widthPixels, 0.0f));
             ItemTooltip(tooltip);
         }
+        ImGui::PopItemFlag();
         ImGui::PopItemFlag();
         ImGui::EndDisabled();
         if (clicked && !button.command.empty()) {

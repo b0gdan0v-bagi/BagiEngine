@@ -263,6 +263,52 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        constexpr const char* kCentredRow = R"(
+<PanelAsset id="Centred" title="Centred">
+  <elements>
+    <element type="PanelRow" id="mid" align="Center">
+      <elements>
+        <element type="PanelButton" id="first" text="Aaaa" command="probe.first"/>
+        <element type="PanelButton" id="second" text="Bbbbbbbb" command="probe.second" visible="!probe.hidden"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kFilledButton = R"(
+<PanelAsset id="Filled" title="Filled">
+  <elements>
+    <element type="PanelButton" id="fill" text="Fill" fill="{}" fillWhen="probe.flag" command="probe.fill"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kRepeatButton = R"(
+<PanelAsset id="Repeat" title="Repeat">
+  <elements>
+    <element type="PanelButton" id="step" text="Step" repeat="{}" command="probe.step"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kIconOnlyButton = R"(
+<PanelAsset id="IconOnly" title="IconOnly">
+  <elements>
+    <element type="PanelButton" id="tool" icon="check" command="probe.tool" tooltip="Tool"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kToolbar = R"(
+<PanelAsset id="Toolbar" title="Toolbar">
+  <elements>
+    <element type="PanelRow" id="mid" align="Center">
+      <elements>
+        <element type="PanelButton" id="play" icon="check" fill="Accent" command="probe.play"/>
+        <element type="PanelButton" id="pause" icon="check" fill="Muted" fillWhen="probe.flag" command="probe.pause"/>
+        <element type="PanelButton" id="step" icon="check" repeat="true" command="probe.step"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
         constexpr const char* kMenus = R"(
 <PanelAsset id="Menus" title="Menus" window="Bar" open="true">
   <elements>
@@ -605,6 +651,24 @@ namespace BECore::Tests {
             size_t count = 0;
             for (const ImDrawVert& vertex : ImGui::FindWindowByName(kHostName)->DrawList->VtxBuffer) {
                 count += vertex.col == selected ? 1 : 0;
+            }
+            return count;
+        }
+
+        /// The right edge of what the host has laid out, in the screen's coordinates
+        static float ContentRight() {
+            return ImGui::FindWindowByName(kHostName)->DC.CursorMaxPos.x;
+        }
+
+        static float ButtonWidth(const char* text) {
+            return ImGui::CalcTextSize(text).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        }
+
+        /// How many vertices the host has drawn in @p color
+        static size_t VerticesOf(ImU32 color) {
+            size_t count = 0;
+            for (const ImDrawVert& vertex : ImGui::FindWindowByName(kHostName)->DrawList->VtxBuffer) {
+                count += vertex.col == color ? 1 : 0;
             }
             return count;
         }
@@ -1577,6 +1641,104 @@ namespace BECore::Tests {
         ASSERT_TRUE(AnyPopupOpen());
         steady();
         EXPECT_TRUE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, ACentredRowSitsInTheMiddleFromTheSecondFrameAndStaysThereAndFollowsAChangedWidth) {
+        // The first frame has no width to centre by and draws at the start
+        const PanelLoadResult loaded = LoadPanelAsset(kCentredRow);
+        ASSERT_TRUE(loaded.asset);
+        interpreter.Prepare(loaded.asset);
+        Frame();
+        const float spacing = ImGui::GetStyle().ItemSpacing.x;
+        const float group = ButtonWidth("Aaaa") + spacing + ButtonWidth("Bbbbbbbb");
+        const float left = ImGui::FindWindowByName(kHostName)->Pos.x + ImGui::GetStyle().WindowPadding.x;
+        EXPECT_NEAR(ContentRight(), left + group, 1.0f);
+
+        const float middle = kHostSize.x * 0.5f;
+        Frame();
+        EXPECT_NEAR(ContentRight() - group * 0.5f, middle, 1.0f);
+
+        const float settled = ContentRight();
+        Frame();
+        EXPECT_FLOAT_EQ(ContentRight(), settled);
+
+        // One child fewer: the group is narrower and is centred again one frame later
+        probe.hidden = true;
+        Settle();
+        EXPECT_NEAR(ContentRight() - ButtonWidth("Aaaa") * 0.5f, middle, 1.0f);
+    }
+
+    TEST_F(PanelInterpreterTest, AFillPaintsTheButtonWithThePalettesColourOnlyWhileFillWhenReadsTrue) {
+        const ImGuiPalette& palette = GetImGuiPalette();
+        struct FillCase {
+            const char* fill;
+            ImVec4 color;
+        };
+        for (const auto& [fill, color] : {FillCase{"Muted", palette.accentMuted}, FillCase{"Accent", palette.accent}}) {
+            Load(Format(kFilledButton, fill));
+            // The previous round's click left the mouse on the button, and a hovered button has its own colour
+            ImGui::GetIO().AddMousePosEvent(kHostSize.x - 1.0f, kHostSize.y - 1.0f);
+            Settle();
+            const ImU32 expected = ImGui::GetColorU32(color);
+            probe.flag = false;
+            Settle();
+            const size_t without = VerticesOf(expected);
+
+            probe.flag = true;
+            Settle();
+            EXPECT_GT(VerticesOf(expected), without) << fill;
+
+            // A click still works on a filled button
+            ClickAt(Locate(Chain(HostId(), {"fill", "Fill"})));
+            EXPECT_EQ(lastCommand, "probe.fill");
+        }
+    }
+
+    TEST_F(PanelInterpreterTest, AHeldRepeatButtonNotesAClickOnEveryRepeatFrameAndAPlainOneDoesNot) {
+        ImGuiIO& io = ImGui::GetIO();
+        io.KeyRepeatDelay = kFrameSeconds;
+        io.KeyRepeatRate = kFrameSeconds;
+        constexpr int kHeldFrames = 6;
+
+        const auto hold = [&](const char* repeat) {
+            Load(Format(kRepeatButton, repeat));
+            const ImVec2 point = Locate(Chain(HostId(), {"step", "Step"}));
+            noted.clear();
+            io.AddMousePosEvent(point.x, point.y);
+            Frame();
+            io.AddMouseButtonEvent(0, true);
+            for (int i = 0; i < kHeldFrames; ++i) {
+                Frame();
+            }
+            const int whileHeld = TimesNoted("probe.step");
+            io.AddMouseButtonEvent(0, false);
+            Frame();
+            return whileHeld;
+        };
+        EXPECT_GE(hold("true"), kHeldFrames - 1);
+        EXPECT_EQ(hold("false"), 0) << "a plain button clicks when it is let go";
+    }
+
+    TEST_F(PanelInterpreterTest, AButtonWithAnIconAndNoTextIsASquareOfTheFrameHeightWithTheElementIdForItsId) {
+        Load(kIconOnlyButton);
+        const float left = ImGui::FindWindowByName(kHostName)->Pos.x + ImGui::GetStyle().WindowPadding.x;
+        EXPECT_NEAR(ContentRight() - left, ImGui::GetFrameHeight(), 0.5f);
+
+        ClickAt(Locate(Chain(HostId(), {"tool", ICON_LC_CHECK "##tool"})));
+        EXPECT_EQ(lastCommand, "probe.tool");
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfACentredRowOfFilledRepeatingIconButtonsAllocatesNothing) {
+        Load(kToolbar);
+        probe.flag = true;
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
     }
 
 }  // namespace BECore::Tests

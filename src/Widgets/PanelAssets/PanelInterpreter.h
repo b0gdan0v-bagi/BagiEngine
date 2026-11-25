@@ -78,6 +78,10 @@ namespace BECore {
      * drawn while it is closed, so a gap in the frame numbers is the edge). An item is `<icon> <text>###<id>` with the chord of its command (`SetChordText`) right-aligned; `PanelMenuItems` is one
      * item per row of its list under `PushID(row)`, the row's text being the label and the argument. A click is noted like a button's.
      *
+     * **A row with `align` `Center`** centres its children as one group on the free width, by the width they took the frame before (a `mutable` float of the prepared row): the first frame draws at
+     * the start and a changed width is followed one frame later. **A button** with a `fill` is painted with the palette's accent or muted accent while its `fillWhen` reads true (hover and active as
+     * the accent's); `repeat` is `ImGuiItemFlags_ButtonRepeat`, so a held button notes a click on every repeat frame; an `icon` with no `text` is the square `IconButton` labelled `<icon>##<id>`.
+     *
      * Main thread only; needs an ImGui frame in progress.
      */
     class PanelInterpreter {

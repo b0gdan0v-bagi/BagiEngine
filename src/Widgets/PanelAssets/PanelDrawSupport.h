@@ -63,6 +63,32 @@ namespace BECore::PanelDraw {
         bool _pushed = false;
     };
 
+    /// Fills the next buttons with the palette's accent (`Accent`) or muted accent (`Muted`) while @p active; the destructor pops the colours. `None` pushes nothing
+    class ScopedButtonFill {
+    public:
+        ScopedButtonFill(PanelButtonFill fill, bool active) {
+            if (fill == PanelButtonFill::None || !active) {
+                return;
+            }
+            const ImGuiPalette& palette = GetImGuiPalette();
+            ImGui::PushStyleColor(ImGuiCol_Button, fill == PanelButtonFill::Accent ? palette.accent : palette.accentMuted);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, palette.accentHover);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, palette.accentActive);
+            _pushed = true;
+        }
+        ~ScopedButtonFill() {
+            if (_pushed) {
+                ImGui::PopStyleColor(kPushedColors);
+            }
+        }
+        ScopedButtonFill(const ScopedButtonFill&) = delete;
+        ScopedButtonFill& operator=(const ScopedButtonFill&) = delete;
+
+    private:
+        static constexpr int kPushedColors = 3;
+        bool _pushed = false;
+    };
+
 }  // namespace BECore::PanelDraw
 
 namespace BECore {
