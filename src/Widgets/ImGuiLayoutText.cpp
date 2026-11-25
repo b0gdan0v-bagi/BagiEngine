@@ -1,6 +1,5 @@
 #include "ImGuiLayoutText.h"
 
-
 namespace BECore {
 
     namespace {
