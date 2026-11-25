@@ -93,6 +93,25 @@ namespace BECore::Fuzz {
                 }
             }
 
+            void ObjectBinding(const String& text) {
+                if (text.empty() || !ParseObjectBinding(text)) {
+                    Fail();
+                }
+            }
+
+            void AtMost(uint32_t value, size_t limit) {
+                if (value > limit) {
+                    Fail();
+                }
+            }
+
+            /// Written as a comparison so a NaN fails it
+            void Extent(float value) {
+                if (!(value >= 0.0f && value <= PanelAssetLimits::kMaxChildExtent)) {
+                    Fail();
+                }
+            }
+
             void Condition(const String& text) {
                 if (!text.empty() && !ParseCondition(text)) {
                     Fail();
@@ -121,7 +140,10 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                     Element(*element);
+                    const bool isPopup = element->Is<PanelPopup>();
+                    _popupDepth += isPopup ? 1 : 0;
                     Elements(element->elements, depth + 1);
+                    _popupDepth -= isPopup ? 1 : 0;
                 }
             }
 
@@ -133,7 +155,7 @@ namespace BECore::Fuzz {
                     Fail();
                 }
                 Condition(element.visible);
-                if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>()) {
+                if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>() && !element.Is<PanelChild>() && !element.Is<PanelPopup>()) {
                     Fail();
                 }
 
@@ -146,13 +168,14 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                     Binding(text->bind, false);
+                    AtMost(text->maxLines, PanelAssetLimits::kMaxScrollLines);
                 } else if (const auto* field = element.Cast<PanelField>()) {
                     Text(field->bind);
                     Text(field->label);
                     Binding(field->bind, true);
                 } else if (const auto* fields = element.Cast<PanelFields>()) {
                     Text(fields->bind);
-                    Binding(fields->bind, true);
+                    ObjectBinding(fields->bind);
                 } else if (const auto* input = element.Cast<PanelInput>()) {
                     Text(input->bind);
                     Text(input->hint);
@@ -175,6 +198,7 @@ namespace BECore::Fuzz {
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Text(table->source);
                     Binding(table->source, true);
+                    AtMost(table->scrollRows, PanelAssetLimits::kMaxScrollRows);
                     Columns(*table);
                 } else if (const auto* separator = element.Cast<PanelSeparator>()) {
                     Text(separator->title);
@@ -184,6 +208,15 @@ namespace BECore::Fuzz {
                 } else if (const auto* slot = element.Cast<PanelSlot>()) {
                     Text(slot->name);
                     if (slot->name.empty()) {
+                        Fail();
+                    }
+                } else if (const auto* child = element.Cast<PanelChild>()) {
+                    Extent(child->width);
+                    Extent(child->height);
+                } else if (const auto* popup = element.Cast<PanelPopup>()) {
+                    Text(popup->title);
+                    Text(popup->open);
+                    if (popup->open.empty() || !ParseCondition(popup->open) || _popupDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
                         Fail();
                     }
                 } else if (!element.Is<PanelRow>()) {
@@ -198,7 +231,8 @@ namespace BECore::Fuzz {
                         Fail();
                         return;
                     }
-                    for (const String* text : {&column.id, &column.title, &column.field, &column.styleField, &column.command, &column.argument, &column.icon, &column.tooltip}) {
+                    for (const String* text : {&column.id, &column.title, &column.field, &column.styleField, &column.enableField, &column.selectedField, &column.hint, &column.command,
+                                               &column.argument, &column.icon, &column.tooltip}) {
                         Text(*text);
                     }
                     if (!IsWellFormedId(column.id) || !ids.insert(column.id).second) {
@@ -208,12 +242,18 @@ namespace BECore::Fuzz {
                         if (column.command.empty()) {
                             Fail();
                         }
+                        RelativePath(column.field);
                     } else if (column.field.empty()) {
                         Fail();
                     } else {
                         RelativePath(column.field);
                     }
                     RelativePath(column.styleField);
+                    RelativePath(column.enableField);
+                    if (column.type != PanelColumnType::Selectable && !column.selectedField.empty()) {
+                        Fail();
+                    }
+                    RelativePath(column.selectedField);
                     RelativePath(column.argument);
                 }
             }
@@ -221,6 +261,8 @@ namespace BECore::Fuzz {
             HashSet<String> _ids;
             size_t _elementCount = 0;
             size_t _columnCount = 0;
+            size_t _popupCount = 0;
+            size_t _popupDepth = 0;
             bool _violated = false;
         };
 

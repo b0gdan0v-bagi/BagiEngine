@@ -1,0 +1,32 @@
+<PanelAsset id="ConfigEditorBad" title="Bad" command="view.bad" open="true">
+  <sources>
+    <source name="editor" model="ConfigEditorPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelChild" id="negative" width="-1" height="1000" border="true"/>
+    <element type="PanelChild" id="notANumber" width="nan" height="inf"/>
+    <element type="PanelPopup" id="noOpen" title="No condition"/>
+    <element type="PanelPopup" id="badOpen" title="Bad condition" open="editor["/>
+    <element type="PanelPopup" id="outer" title="Outer" open="editor.a">
+      <elements>
+        <element type="PanelChild" id="inside">
+          <elements>
+            <element type="PanelPopup" id="inner" title="Inner" open="editor.b"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="p4" open="editor.c"/>
+    <element type="PanelPopup" id="p5" open="editor.c"/>
+    <element type="PanelPopup" id="p6" open="editor.c"/>
+    <element type="PanelPopup" id="p7" open="editor.c"/>
+    <element type="PanelPopup" id="p8" open="editor.c"/>
+    <element type="PanelPopup" id="p9" open="editor.c"/>
+    <element type="PanelTable" id="table" source="editor.configs">
+      <columns>
+        <column type="Text" id="notSelectable" field="name" selectedField="selected"/>
+        <column type="Selectable" id="badPath" field="name" selectedField="selected["/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>

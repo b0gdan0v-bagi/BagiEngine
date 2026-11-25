@@ -18,7 +18,7 @@ namespace BECore {
             return IsSourceStart(c) || (c >= '0' && c <= '9');
         }
 
-        std::expected<PanelBinding, String> Parse(StringView text, bool allowNegation) {
+        std::expected<PanelBinding, String> Parse(StringView text, bool allowNegation, bool allowSourceOnly) {
             if (text.size() > PanelAssetLimits::kMaxTextBytes) {
                 return std::unexpected(String("the binding is too long"));
             }
@@ -34,7 +34,14 @@ namespace BECore {
 
             const size_t separator = text.find(kSourceSeparator);
             if (separator == StringView::npos) {
-                return std::unexpected(String("expected 'source.path'"));
+                if (!allowSourceOnly) {
+                    return std::unexpected(String("expected 'source.path'"));
+                }
+                if (!IsValidSourceName(text)) {
+                    return std::unexpected(String("the source name is empty or has a character other than letters, digits and '_'"));
+                }
+                binding.source = String(text);
+                return binding;
             }
             const StringView source = text.substr(0, separator);
             if (!IsValidSourceName(source)) {
@@ -70,11 +77,15 @@ namespace BECore {
     }
 
     std::expected<PanelBinding, String> ParseBinding(StringView text) {
-        return Parse(text, false);
+        return Parse(text, false, false);
+    }
+
+    std::expected<PanelBinding, String> ParseObjectBinding(StringView text) {
+        return Parse(text, false, true);
     }
 
     std::expected<PanelBinding, String> ParseCondition(StringView text) {
-        return Parse(text, true);
+        return Parse(text, true, false);
     }
 
 }  // namespace BECore

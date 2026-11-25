@@ -14,7 +14,8 @@
         a="255" />
     </widget>
     <widget
-      type="ConfigEditorWidget" />
+      type="AssetPanelWidget"
+      asset="ConfigEditorPanel" />
     <widget
       type="SceneEditorWidget" />
     <widget

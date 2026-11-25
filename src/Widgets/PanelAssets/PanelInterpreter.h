@@ -4,6 +4,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/PanelAssets/PanelAsset.h>
 #include <BECore/Widgets/PanelAssets/PanelBindingReader.h>
+#include <BECore/Widgets/PanelAssets/PanelBindingWriter.h>
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
 #include <BECore/Widgets/PanelAssets/SingleFieldVisitor.h>
 #include <Widgets/PanelAssets/PanelSlots.h>
@@ -41,13 +42,32 @@ namespace BECore {
      * and the column `id` around every cell. A button's own label (`<icon> <text>`, `<icon>##<column id>` in a table) is the last link of the chain.
      *
      * A condition that cannot be read counts as true (`visible`, `enableWhen`): a broken binding must be seen, not hide the element. `PanelField::label`
-     * is not drawn, the inspector draws the field's own name; `PanelFields` is a `PanelField` whose object or list node starts open (an object is reached as a field of its source: `game.fields`);
-     * `PanelInput` and a scrolling table are not drawn yet (a muted `?` / every row).
+     * is not drawn, the inspector draws the field's own name; `PanelFields` is a `PanelField` whose object or list node starts open (an object is reached as a field of its source: `game.fields`),
+     * or the whole object when its `bind` is a source alone.
+     *
+     * **A text input** copies the bound `String` into a buffer of its own and writes it back through `PanelBindingWriter` when ImGui reports a
+     * change, as the inspector does; a text longer than the buffer is cut at a character boundary, and an edit keeps only what the buffer holds.
+     * Its label is `##<id>` (the element's, or the column's in a table), so the control API finds it by that.
+     *
+     * **A table with `scrollRows`** scrolls inside a region of that many rows once it has more, and submits only the rows in view (an
+     * `ImGuiListClipper`): a row outside the window is not a control, so the control API does not find it. The ids of a cell are the same
+     * as in a table that does not scroll.
+     *
+     * **A child region** (`PanelChild`) is an ImGui child window labelled `##<element id>` under the element's `PushID`. A child is a window of its own, so the ids of the controls in it start from
+     * the child's window id, not from the chain of the window around it.
+     *
+     * **A popup** (`PanelPopup`) is a modal window the model opens with a bool: the walk calls `OpenPopup` once when `open` reads true and the popup is
+     * not open in ImGui, and `CloseCurrentPopup` as soon as it reads false (its children are drawn disabled that frame, so nothing can be clicked while it
+     * goes). Unlike every other condition, one that cannot be read counts as closed: a modal opened by a broken file would block the editor. A click inside
+     * is noted like any other, so the command that clears the bool takes effect on the next frame.
      *
      * Main thread only; needs an ImGui frame in progress.
      */
     class PanelInterpreter {
     public:
+        /// The bytes a text field holds, the terminator included (the inspector's size for a `String`)
+        static constexpr size_t kInputBufferSize = 256;
+
         PanelInterpreter();
 
         PanelInterpreter(const PanelInterpreter&) = delete;
@@ -59,7 +79,7 @@ namespace BECore {
         /// Draws the prepared asset. @p slots is where a `PanelSlot` finds its drawer (null: the global `PanelSlots`, when it exists). Clears @p result first
         void Draw(const PanelDataSources& sources, PanelDrawResult& result, PanelSlots* slots = nullptr);
 
-        /// Whether @p element is a kind the interpreter really draws (not an unknown class, and not a `PanelInput` while that draws only a `?`)
+        /// Whether @p element is a kind the interpreter really draws (not an unknown class)
         [[nodiscard]] static bool CanDraw(const PanelElement& element);
 
         [[nodiscard]] bool IsPrepared() const {
@@ -73,25 +93,42 @@ namespace BECore {
         void DrawElement(const PreparedElement& prepared);
         void DrawRow(const PreparedElement& prepared);
         void DrawTextLine(const PreparedElement& prepared);
+        static void DrawLines(bool wrap, StringView shown);
         void DrawButton(const PreparedElement& prepared);
+        void DrawInput(const PreparedElement& prepared);
         void DrawField(const PreparedElement& prepared, bool openCompound);
         void DrawTable(const PreparedElement& prepared);
         void DrawCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
+        void DrawRows(const PreparedElement& prepared, size_t rows, bool clipped);
+        void DrawButtonCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
+        void DrawInputCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
         void DrawSlot(const PreparedElement& prepared);
+        void DrawChild(const PreparedElement& prepared);
+        void DrawPopup(const PreparedElement& prepared);
 
         [[nodiscard]] bool IsVisible(const PreparedElement& prepared);
         [[nodiscard]] bool ReadCondition(const PreparedBinding& condition);
         /// The text of the cell @p path of a row as a command's argument; false when it names a path that cannot be read
         [[nodiscard]] bool ReadArgument(const PanelBinding& list, size_t row, StringView path, StringView& out);
+        /// The bool cell @p path of a row; true when @p path is empty or cannot be read, so a broken binding is seen and not hidden
+        [[nodiscard]] bool ReadRowCondition(const PanelBinding& list, size_t row, StringView path);
+        /// Whether the `Selectable` column's `selectedField` of a row reads true; false when it is empty or cannot be read
+        [[nodiscard]] bool ReadRowSelected(const PanelBinding& list, size_t row, StringView path);
+        /// Shows @p current in a text field under @p label; true when the user changed it, the new text being in `_inputBuffer`
+        [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm);
         void NoteClick(StringView command, StringView argument);
 
         IntrusivePtr<PanelAsset> _asset;
         Vector<PreparedElement> _elements;
         PanelBindingReader _reader;
-        /// Capacity survives frames: the text of a bound value, of a cell's style and of a selectable's label
+        PanelBindingWriter _writer{_reader};
+        /// Capacity survives frames: the text of a bound value, of a cell's style and of a button cell, and of a label
         String _scratch;
         String _styleScratch;
+        String _cellScratch;
         String _label;
+        /// What the text field being drawn edits; one field is drawn at a time
+        char _inputBuffer[kInputBufferSize] = {};
         ImGuiPropertyVisitor _inspector;
         SingleFieldVisitor _single;
         /// Valid only inside `Draw`

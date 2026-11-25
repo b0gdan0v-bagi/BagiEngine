@@ -67,7 +67,7 @@ namespace BECore {
         inline constexpr auto kViewProfiler = "view.profiler"_intern;
         /// Shows and hides the Console panel (the log). ConsoleWidget owns the action
         inline constexpr auto kViewConsole = "view.console"_intern;
-        /// Shows and hides the Game panel (the active game's state, actions, fields and methods). GamePanelWidget owns the action
+        /// Shows and hides the Game panel (the active game's state, actions, fields and methods): the `command` of config/panels/GamePanel.xml
         inline constexpr auto kViewGame = "view.game"_intern;
         /// Shows and hides the Generate panel (art generation). ArtGenWidget owns the action
         inline constexpr auto kViewGenerate = "view.generate"_intern;
@@ -82,6 +82,20 @@ namespace BECore {
         inline constexpr auto kFileChangesRescan = "fileChanges.rescan"_intern;
         inline constexpr auto kFileChangesApplyAll = "fileChanges.applyAll"_intern;
         inline constexpr auto kFileChangesApply = "fileChanges.apply"_intern;
+        /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
+        /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
+        inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;
+        inline constexpr auto kGamePanelPerform = "gamePanel.perform"_intern;
+        inline constexpr auto kGamePanelCall = "gamePanel.call"_intern;
+        inline constexpr auto kGamePanelCopyState = "gamePanel.copyState"_intern;
+        /// The Config Editor's buttons and popups (config/panels/ConfigEditorPanel.xml names them). ConfigEditorPanelModel owns them and runs them only while its
+        /// panel is open; select takes the name of a loaded config as the argument and does nothing for any other text, the rest take none
+        inline constexpr auto kConfigEditorSelect = "configEditor.select"_intern;
+        inline constexpr auto kConfigEditorReload = "configEditor.reload"_intern;
+        inline constexpr auto kConfigEditorReloadDiscard = "configEditor.reloadDiscard"_intern;
+        inline constexpr auto kConfigEditorReloadCancel = "configEditor.reloadCancel"_intern;
+        inline constexpr auto kConfigEditorSwitchDiscard = "configEditor.switchDiscard"_intern;
+        inline constexpr auto kConfigEditorSwitchCancel = "configEditor.switchCancel"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

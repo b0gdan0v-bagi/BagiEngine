@@ -8,6 +8,7 @@
 #include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelBinding.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
+#include <cmath>
 
 namespace BECore {
 
@@ -138,7 +139,10 @@ namespace BECore {
                     const String path = Format("{}[{}]", parentPath, i);
                     const String where = IsValidId(element->id) ? element->id : path;
                     CheckElement(*element, where);
+                    const bool isPopup = element->Is<PanelPopup>();
+                    _popupDepth += isPopup ? 1 : 0;
                     WalkElements(element->elements, Format("{}.elements", path), depth + 1);
+                    _popupDepth -= isPopup ? 1 : 0;
                 }
             }
 
@@ -156,9 +160,9 @@ namespace BECore {
                     _issues.Add(where, "type is required");
                 }
 
-                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>();
+                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>();
                 if (!isContainer && !element.elements.empty()) {
-                    _issues.Add(where, "only a section or a row holds elements");
+                    _issues.Add(where, "only a section, a row, a child or a popup holds elements");
                 }
 
                 if (const auto* text = element.Cast<PanelText>()) {
@@ -166,10 +170,11 @@ namespace BECore {
                         _issues.Add(where, "a text needs 'text' or 'bind'");
                     }
                     Binding(where, "bind", text->bind, false);
+                    ScrollLimit(where, "maxLines", text->maxLines, PanelAssetLimits::kMaxScrollLines);
                 } else if (const auto* field = element.Cast<PanelField>()) {
                     Binding(where, "bind", field->bind, true);
                 } else if (const auto* fields = element.Cast<PanelFields>()) {
-                    Binding(where, "bind", fields->bind, true);
+                    ObjectBinding(where, "bind", fields->bind);
                 } else if (const auto* input = element.Cast<PanelInput>()) {
                     Binding(where, "bind", input->bind, true);
                     if (input->width < 0.0f) {
@@ -181,11 +186,31 @@ namespace BECore {
                     RelativePath(where, "argument", button->argument);
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Binding(where, "source", table->source, true);
+                    ScrollLimit(where, "scrollRows", table->scrollRows, PanelAssetLimits::kMaxScrollRows);
                     CheckColumns(*table, where);
                 } else if (const auto* slot = element.Cast<PanelSlot>()) {
                     if (slot->name.empty()) {
                         _issues.Add(where, "name is required");
                     }
+                } else if (const auto* child = element.Cast<PanelChild>()) {
+                    Extent(where, "width", child->width);
+                    Extent(where, "height", child->height);
+                } else if (const auto* popup = element.Cast<PanelPopup>()) {
+                    CheckPopup(*popup, where);
+                }
+            }
+
+            void CheckPopup(const PanelPopup& popup, StringView where) {
+                if (popup.open.empty()) {
+                    _issues.Add(where, "open is required");
+                } else {
+                    Condition(where, "open", popup.open);
+                }
+                if (_popupDepth > 0) {
+                    _issues.Add(where, "a popup is not nested in a popup");
+                }
+                if (++_popupCount == PanelAssetLimits::kMaxPopups + 1) {
+                    _issues.Add(where, Format("more than {} popups", PanelAssetLimits::kMaxPopups));
                 }
             }
 
@@ -210,12 +235,18 @@ namespace BECore {
                     }
                     if (column.type == PanelColumnType::Button) {
                         Command(where, "command", column.command);
+                        RelativePath(where, "field", column.field);
                     } else if (column.field.empty()) {
                         _issues.Add(where, "field is required");
                     } else {
                         RelativePath(where, "field", column.field);
                     }
                     RelativePath(where, "styleField", column.styleField);
+                    RelativePath(where, "enableField", column.enableField);
+                    if (column.type != PanelColumnType::Selectable && !column.selectedField.empty()) {
+                        _issues.Add(where, "selectedField is for a Selectable column");
+                    }
+                    RelativePath(where, "selectedField", column.selectedField);
                     RelativePath(where, "argument", column.argument);
                 }
             }
@@ -247,6 +278,28 @@ namespace BECore {
                 }
                 if (const auto parsed = ParseBinding(text); !parsed) {
                     _issues.Add(where, Format("{}: {}", field, parsed.error()));
+                }
+            }
+
+            void ObjectBinding(StringView where, StringView field, const String& text) {
+                if (text.empty()) {
+                    _issues.Add(where, Format("{} is required", field));
+                    return;
+                }
+                if (const auto parsed = ParseObjectBinding(text); !parsed) {
+                    _issues.Add(where, Format("{}: {}", field, parsed.error()));
+                }
+            }
+
+            void ScrollLimit(StringView where, StringView field, uint32_t value, size_t limit) {
+                if (value > limit) {
+                    _issues.Add(where, Format("{} must be at most {}", field, limit));
+                }
+            }
+
+            void Extent(StringView where, StringView field, float value) {
+                if (!std::isfinite(value) || value < 0.0f || value > PanelAssetLimits::kMaxChildExtent) {
+                    _issues.Add(where, Format("{} must be from 0 to {}", field, PanelAssetLimits::kMaxChildExtent));
                 }
             }
 
@@ -284,6 +337,8 @@ namespace BECore {
             HashSet<String> _ids;
             size_t _elementCount = 0;
             size_t _columnCount = 0;
+            size_t _popupCount = 0;
+            size_t _popupDepth = 0;
             bool _columnsReported = false;
             bool _stopped = false;
         };

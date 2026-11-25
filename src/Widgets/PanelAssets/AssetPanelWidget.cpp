@@ -97,6 +97,7 @@ namespace BECore {
                     continue;
                 }
                 IPanelModel* model = entry.model.Get();
+                model->Initialize();
                 entry.handle = _sources.Register(source.name, [model] { return model->GetObject(); });
             }
             next.push_back(std::move(entry));
@@ -107,6 +108,8 @@ namespace BECore {
     void AssetPanelWidget::OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event) {
         if (event.name.ToStringView() == StringView(_asset)) {
             _reloadPending = true;
+            // A change after a failure is the newer news: the load decides what the banner says
+            _failurePending = false;
         }
     }
 
@@ -114,12 +117,22 @@ namespace BECore {
         if (_reloadPending) {
             _reloadPending = false;
             LoadAsset();
+            // A failure told after the change and before this load: the load would have cleared it
+            if (_failurePending) {
+                _failurePending = false;
+                _holder.ApplyReloadFailure(_pendingFailure);
+            }
         }
     }
 
     void AssetPanelWidget::OnReloadFailed(const ConfigEvents::ConfigReloadFailedEvent& event) {
         if (event.name.ToStringView() == StringView(_asset)) {
-            _holder.ApplyReloadFailure(event.reason);
+            if (_reloadPending) {
+                _pendingFailure = event.reason;
+                _failurePending = true;
+            } else {
+                _holder.ApplyReloadFailure(event.reason);
+            }
         }
     }
 

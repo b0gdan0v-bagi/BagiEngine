@@ -132,6 +132,106 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        constexpr const char* kInput = R"(
+<PanelAsset id="Input" title="Input">
+  <elements>
+    <element type="PanelInput" id="filter" bind="probe.filter" hint="Filter" icon="check"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kInputColumn = R"(
+<PanelAsset id="Notes" title="Notes">
+  <elements>
+    <element type="PanelTable" id="rows" source="probe.rows" header="false">
+      <columns>
+        <column type="Input" id="note" field="note" enableField="enabled" hint="note"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kWholeObject = R"(
+<PanelAsset id="Whole" title="Whole">
+  <elements><element type="PanelFields" id="all" bind="probe"/></elements>
+</PanelAsset>)";
+
+        constexpr const char* kScrolling = R"(
+<PanelAsset id="Scrolling" title="Scrolling">
+  <elements>
+    <element type="PanelTable" id="rows" source="probe.rows" scrollRows="{}">
+      <columns>
+        <column type="Button" id="act" icon="check" field="name" enableField="enabled" command="probe.act" argument="name"/>
+        <column type="Input" id="note" field="note" hint="note"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kScrollingAndInput = R"(
+<PanelAsset id="Mixed" title="Mixed">
+  <elements>
+    <element type="PanelInput" id="filter" bind="probe.filter" hint="Filter" icon="check"/>
+    <element type="PanelTable" id="rows" source="probe.rows" scrollRows="{}">
+      <columns>
+        <column type="Button" id="act" icon="check" field="name" enableField="enabled" command="probe.act" argument="name"/>
+        <column type="Input" id="note" field="note" hint="note"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kPanes = R"(
+<PanelAsset id="Panes" title="Panes">
+  <elements>
+    <element type="PanelRow" id="panes">
+      <elements>
+        <element type="PanelChild" id="left" width="12" height="6" border="true">
+          <elements><element type="PanelButton" id="a" text="A" command="probe.a"/></elements>
+        </element>
+        <element type="PanelChild" id="right" width="12" height="6">
+          <elements><element type="PanelButton" id="b" text="B" command="probe.b"/></elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kDialog = R"(
+<PanelAsset id="Dialog" title="Dialog">
+  <elements>
+    <element type="PanelButton" id="outside" text="Outside" command="probe.outside"/>
+    <element type="PanelRow" id="panes">
+      <elements>
+        <element type="PanelChild" id="pane" width="12" height="4">
+          <elements><element type="PanelButton" id="inner" text="Inner" command="probe.inner"/></elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="dialog" title="Sure?" open="{}">
+      <elements>
+        <element type="PanelText" id="question" text="Really?"/>
+        <element type="PanelButton" id="yes" text="Yes" command="probe.yes"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kSelectedRows = R"(
+<PanelAsset id="Selected" title="Selected">
+  <elements>
+    <element type="PanelTable" id="rows" source="probe.rows" header="false">
+      <columns>
+        <column type="Selectable" id="name" field="name" selectedField="{}"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kLines = R"(
+<PanelAsset id="Lines" title="Lines">
+  <elements><element type="PanelText" id="state" bind="probe.filter" mono="true" maxLines="{}"/></elements>
+</PanelAsset>)";
+
     }  // namespace
 
     /// The interpreter in an ImGui context of its own with no backend, driven by the mouse like a person; the host window is `##Host`
@@ -217,11 +317,11 @@ namespace BECore::Tests {
             return ImGui::FindWindowByName(kHostName)->ContentSize.y;
         }
 
-        /// A point of the host window where the mouse is over the control @p id, found by moving it over a grid; none when no point is
-        Optional<ImVec2> TryLocate(ImGuiID id, float fromY = 0.0f) {
+        /// A point of the rectangle @p from to @p to where the mouse is over the control @p id, found by moving it over a grid; none when no point is
+        Optional<ImVec2> TryLocateIn(ImGuiID id, ImVec2 from, ImVec2 to) {
             ImGuiIO& io = ImGui::GetIO();
-            for (float y = fromY; y < kHostSize.y; y += kSearchStep) {
-                for (float x = 0.0f; x < kHostSize.x; x += kSearchStep) {
+            for (float y = from.y; y < to.y; y += kSearchStep) {
+                for (float x = from.x; x < to.x; x += kSearchStep) {
                     io.AddMousePosEvent(x, y);
                     Frame();
                     Frame();
@@ -234,9 +334,21 @@ namespace BECore::Tests {
             return std::nullopt;
         }
 
+        /// A point of the host window where the mouse is over the control @p id; none when no point is
+        Optional<ImVec2> TryLocate(ImGuiID id, float fromY = 0.0f) {
+            return TryLocateIn(id, ImVec2(0.0f, fromY), kHostSize);
+        }
+
         ImVec2 Locate(ImGuiID id, float fromY = 0.0f) {
             const Optional<ImVec2> point = TryLocate(id, fromY);
             EXPECT_TRUE(point.has_value()) << "control not found on the screen";
+            return point.value_or(ImVec2(0.0f, 0.0f));
+        }
+
+        /// A point over the control @p id inside the window @p window, which is not the host (a popup is placed on the display, not in the host)
+        ImVec2 LocateInWindow(ImGuiID id, const ImGuiWindow& window) {
+            const Optional<ImVec2> point = TryLocateIn(id, window.Pos, ImVec2(window.Pos.x + window.Size.x, window.Pos.y + window.Size.y));
+            EXPECT_TRUE(point.has_value()) << "control not found in the window";
             return point.value_or(ImVec2(0.0f, 0.0f));
         }
 
@@ -250,6 +362,40 @@ namespace BECore::Tests {
             io.AddMouseButtonEvent(0, false);
             clicks = 0;
             Frame();
+        }
+
+        /// Characters typed into the text field that is active
+        void Type(const char* text) {
+            ImGui::GetIO().AddInputCharactersUTF8(text);
+            Settle();
+        }
+
+        /// The child window of the element @p elementId inside the host: ImGui names it `<parent>/##<label>_<hash>`, and a control in it is
+        /// identified from that window's id, not from the host's chain
+        static const ImGuiWindow* ChildWindow(const char* elementId) {
+            const ImGuiWindow* host = ImGui::FindWindowByName(kHostName);
+            const String marker = Format("##{}_", elementId);
+            for (const ImGuiWindow* window : ImGui::GetCurrentContext()->Windows) {
+                if (window->ParentWindow == host && std::strstr(window->Name, marker.c_str()) != nullptr) {
+                    return window;
+                }
+            }
+            ADD_FAILURE() << "no child window " << elementId;
+            return host;
+        }
+
+        static bool AnyPopupOpen() {
+            return !ImGui::GetCurrentContext()->OpenPopupStack.empty();
+        }
+
+        /// How many vertices of the host drawn so far have the colour of a selected row
+        static size_t SelectedVertices() {
+            const ImU32 selected = ImGui::GetColorU32(ImGuiCol_Header);
+            size_t count = 0;
+            for (const ImDrawVert& vertex : ImGui::FindWindowByName(kHostName)->DrawList->VtxBuffer) {
+                count += vertex.col == selected ? 1 : 0;
+            }
+            return count;
         }
 
         ImGuiFontBuffers buffers;
@@ -426,6 +572,228 @@ namespace BECore::Tests {
                 Frame();
             }
         });
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputHasTheIdOfItsElementAndTypingChangesTheBoundText) {
+        probe.filter = "ab";
+        Load(kInput);
+
+        ClickAt(Locate(Chain(HostId(), {"filter", "##filter"})));
+        Type("cd");
+        EXPECT_EQ(probe.filter.size(), 4u);
+        EXPECT_NE(probe.filter.find("cd"), String::npos);
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputOverATextLongerThanItsBufferShowsACutAtACharacterAndKeepsTheTextValid) {
+        // 'é' is two bytes: the buffer holds 255 bytes, so the cut falls inside the 128th character
+        probe.filter.clear();
+        for (size_t i = 0; i < PanelInterpreter::kInputBufferSize; ++i) {
+            probe.filter.append("\xC3\xA9");
+        }
+        Load(kInput);
+        const String before = probe.filter;
+        Settle();
+        EXPECT_EQ(probe.filter, before) << "drawing alone must not write";
+
+        ClickAt(Locate(Chain(HostId(), {"filter", "##filter"})));
+        Type("x");
+        ASSERT_NE(probe.filter.find('x'), String::npos);
+        EXPECT_EQ(probe.filter.size(), PanelInterpreter::kInputBufferSize - 1);
+        // Every 'é' that is left is whole: two bytes, the second a continuation
+        size_t whole = 0;
+        for (size_t i = 0; i + 1 < probe.filter.size(); ++i) {
+            if (static_cast<uint8_t>(probe.filter[i]) == 0xC3) {
+                EXPECT_EQ(static_cast<uint8_t>(probe.filter[i + 1]), 0xA9);
+                ++whole;
+            }
+        }
+        EXPECT_EQ(whole, (PanelInterpreter::kInputBufferSize - 2) / 2);
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputColumnEditsItsOwnRowAndStaysOffWhenItsEnableFieldIsFalse) {
+        probe.rows[2].enabled = false;
+        Load(kInputColumn);
+
+        ClickAt(Locate(Chain(TableCellChain("rows", 1, "note"), {"##note"})));
+        Type("hi");
+        EXPECT_EQ(probe.rows[1].note, "hi");
+        EXPECT_TRUE(probe.rows[0].note.empty());
+        EXPECT_TRUE(probe.rows[2].note.empty());
+
+        ClickAt(Locate(Chain(TableCellChain("rows", 2, "note"), {"##note"})));
+        Type("no");
+        EXPECT_TRUE(probe.rows[2].note.empty());
+    }
+
+    TEST_F(PanelInterpreterTest, FieldsWithASourceAloneDrawTheWholeObjectAndAnEditChangesItsFirstField) {
+        Load(kWholeObject);
+        ASSERT_FALSE(probe.flag);
+
+        ClickAt(Locate(0));
+        EXPECT_TRUE(probe.flag);
+    }
+
+    TEST_F(PanelInterpreterTest, AScrollingTableDrawsOnlyTheRowsInView) {
+        probe.rows.clear();
+        for (size_t i = 0; i < kManyRows; ++i) {
+            probe.rows.push_back(MakeRow(Format("row {}", i), PanelTextStyle::Normal));
+        }
+        Load(Format(kScrolling, 5));
+
+        EXPECT_TRUE(TryLocate(Chain(TableCellChain("rows", 0, "act"), {ICON_LC_CHECK " row 0##act"})).has_value());
+        EXPECT_FALSE(TryLocate(Chain(TableCellChain("rows", 50, "act"), {ICON_LC_CHECK " row 50##act"})).has_value());
+        EXPECT_FALSE(TryLocate(Chain(TableCellChain("rows", kManyRows - 1, "act"), {ICON_LC_CHECK " row 99##act"})).has_value());
+    }
+
+    TEST_F(PanelInterpreterTest, AScrollRowsTableThatFitsLeavesNoRoomEmptyBelowItsRows) {
+        Load(Format(kScrolling, 50));
+        const float fits = ContentHeight();
+        Load(Format(kScrolling, 0));
+        EXPECT_FLOAT_EQ(fits, ContentHeight());
+    }
+
+    TEST_F(PanelInterpreterTest, ALabelledButtonCellClicksWithItsRowsArgumentAndANotEnabledRowDoesNot) {
+        probe.rows[1].enabled = false;
+        Load(Format(kScrolling, 5));
+
+        ClickAt(Locate(Chain(TableCellChain("rows", 2, "act"), {ICON_LC_CHECK " gamma##act"})));
+        EXPECT_EQ(lastCommand, "probe.act");
+        EXPECT_EQ(lastArgument, "gamma");
+
+        clicks = 0;
+        ClickAt(Locate(Chain(TableCellChain("rows", 1, "act"), {ICON_LC_CHECK " beta##act"})));
+        EXPECT_EQ(clicks, 0);
+    }
+
+    TEST_F(PanelInterpreterTest, ATextWithMaxLinesIsAScrollRegionOfThatHeight) {
+        probe.filter.clear();
+        for (int i = 0; i < 40; ++i) {
+            probe.filter.append("a line of the state\n");
+        }
+        Load(Format(kLines, 0));
+        const float all = ContentHeight();
+        Load(Format(kLines, 3));
+        const float limited = ContentHeight();
+        EXPECT_GT(limited, 0.0f);
+        EXPECT_LT(limited, all);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfAScrollingTableWithAButtonAndAnInputColumnAndAnInputAllocatesNothing) {
+        probe.rows.clear();
+        for (size_t i = 0; i < kManyRows; ++i) {
+            probe.rows.push_back(MakeRow(Format("row {}", i), PanelTextStyle::Normal));
+            probe.rows.back().note = "a note";
+        }
+        probe.filter = "a filter long enough to want its own text scratch";
+        Load(Format(kScrollingAndInput, 10));
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            Frame();
+        }
+
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+    }
+
+    TEST_F(PanelInterpreterTest, AChildDrawsItsChildrenAndTwoChildrenOfARowSitSideBySide) {
+        Load(kPanes);
+        const ImGuiWindow* left = ChildWindow("left");
+        const ImGuiWindow* right = ChildWindow("right");
+        EXPECT_GE(right->Pos.x, left->Pos.x + left->Size.x);
+        EXPECT_FLOAT_EQ(right->Pos.y, left->Pos.y);
+
+        ClickAt(Locate(Chain(left->ID, {"a", "A"})));
+        EXPECT_EQ(lastCommand, "probe.a");
+        ClickAt(Locate(Chain(right->ID, {"b", "B"})));
+        EXPECT_EQ(lastCommand, "probe.b");
+    }
+
+    TEST_F(PanelInterpreterTest, APopupOpensWhenItsBoolTurnsTrueTakesTheClicksAndClosesWhenItTurnsFalse) {
+        Load(Format(kDialog, "probe.dialog"));
+        const ImVec2 outside = Locate(Chain(HostId(), {"outside", "Outside"}));
+        EXPECT_FALSE(AnyPopupOpen());
+        EXPECT_EQ(ImGui::FindWindowByName("Sure?##dialog"), nullptr);
+
+        probe.dialog = true;
+        Settle();
+        ASSERT_TRUE(AnyPopupOpen());
+        const ImGuiWindow* popup = ImGui::FindWindowByName("Sure?##dialog");
+        ASSERT_NE(popup, nullptr);
+
+        ClickAt(outside);
+        EXPECT_EQ(clicks, 0) << "a modal takes every click of the window under it";
+
+        ClickAt(LocateInWindow(Chain(popup->ID, {"yes", "Yes"}), *popup));
+        EXPECT_EQ(lastCommand, "probe.yes");
+        EXPECT_TRUE(lastArgument.empty());
+
+        // The command of the click clears the bool; the popup is gone by the end of the next frame
+        probe.dialog = false;
+        Frame();
+        EXPECT_FALSE(AnyPopupOpen());
+        ClickAt(outside);
+        EXPECT_EQ(lastCommand, "probe.outside");
+    }
+
+    TEST_F(PanelInterpreterTest, APopupOpensAgainWhenItsBoolTurnsTrueAgain) {
+        Load(Format(kDialog, "probe.dialog"));
+        for (int round = 0; round < 2; ++round) {
+            probe.dialog = true;
+            Settle();
+            EXPECT_TRUE(AnyPopupOpen());
+            probe.dialog = false;
+            Settle();
+            EXPECT_FALSE(AnyPopupOpen());
+        }
+    }
+
+    TEST_F(PanelInterpreterTest, APopupWhoseConditionCannotBeReadStaysClosed) {
+        Load(Format(kDialog, "nobody.dialog"));
+        Settle();
+        EXPECT_FALSE(AnyPopupOpen());
+
+        Load(Format(kDialog, "probe.nothing"));
+        Settle();
+        EXPECT_FALSE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, ASelectableRowIsDrawnSelectedOnlyWhereItsFieldIsTrue) {
+        Load(Format(kSelectedRows, "selected"));
+        const size_t none = SelectedVertices();
+
+        probe.rows[1].selected = true;
+        Settle();
+        const size_t one = SelectedVertices();
+        EXPECT_GT(one, none);
+
+        probe.rows[2].selected = true;
+        Settle();
+        EXPECT_EQ(SelectedVertices() - one, one - none);
+
+        // A field that cannot be read selects nothing, unlike a condition
+        Load(Format(kSelectedRows, "nothing"));
+        EXPECT_EQ(SelectedVertices(), none);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameWithAChildAClosedPopupAndAnOpenPopupAllocatesNothing) {
+        Load(Format(kDialog, "probe.dialog"));
+        const auto steady = [&] {
+            for (int i = 0; i < kWarmUpFrames; ++i) {
+                Frame();
+            }
+            ExpectNoAllocations([&] {
+                for (int i = 0; i < kSteadyFrames; ++i) {
+                    Frame();
+                }
+            });
+        };
+        steady();
+
+        probe.dialog = true;
+        steady();
+        EXPECT_TRUE(AnyPopupOpen());
     }
 
 }  // namespace BECore::Tests

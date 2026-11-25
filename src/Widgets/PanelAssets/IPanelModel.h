@@ -22,6 +22,10 @@ namespace BECore {
         /// The reflected object the asset binds to; the model itself unless it keeps its view in a member. Asked at every read, so it is never kept
         [[nodiscard]] virtual TypedRef GetObject();
 
+        /// Once, right after the widget has made the model and before its object is read or a command reaches it. The place for the subscriptions, the
+        /// document source and the slots a model needs; a model kept over a reload of the asset is not initialized again. A test calls it itself
+        virtual void Initialize() {}
+
         /// Once per frame while the panel is open, before it draws. Allocates nothing when nothing changed
         virtual void Update() {}
 

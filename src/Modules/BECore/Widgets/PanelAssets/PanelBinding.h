@@ -25,6 +25,14 @@ namespace BECore {
      */
     [[nodiscard]] std::expected<PanelBinding, String> ParseBinding(StringView text);
 
+    /**
+     * @brief A binding of a whole object: `source` alone (empty `path`) or `source.path`
+     *
+     * The form of `PanelFields.bind`, which draws every field of the object, so `game` is the whole active game. The limits and the
+     * errors are those of ParseBinding; `!` is refused.
+     */
+    [[nodiscard]] std::expected<PanelBinding, String> ParseObjectBinding(StringView text);
+
     /// A binding of a bool field with an optional leading `!`
     [[nodiscard]] std::expected<PanelBinding, String> ParseCondition(StringView text);
 

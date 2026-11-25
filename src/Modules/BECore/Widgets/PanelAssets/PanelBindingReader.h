@@ -72,6 +72,8 @@ namespace BECore {
         static constexpr size_t kMaxCompiledPaths = 4096;
 
     private:
+        friend class PanelBindingWriter;
+
         struct Compiled {
             bool valid = false;
             CompiledPath path;
@@ -84,6 +86,8 @@ namespace BECore {
             const CompiledPath* path = nullptr;
             const uint8_t* address = nullptr;
             const TypeDesc* type = nullptr;
+            /// The object the value sits in is not const: only the writer looks at it
+            bool writable = false;
         };
 
         struct ListView {
@@ -91,6 +95,7 @@ namespace BECore {
             size_t count = 0;
             size_t stride = 0;
             const TypeDesc* element = nullptr;
+            bool writable = false;
         };
 
         const Compiled* Compile(const TypeInfo& type, StringView path);
