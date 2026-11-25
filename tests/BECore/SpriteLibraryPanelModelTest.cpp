@@ -3,6 +3,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/MountedFolderTest.h>
 #include <Common/Printers.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/TextureEditor/SpriteLibraryPanelModel.h>
 #include <gtest/gtest.h>
@@ -63,6 +64,19 @@ namespace BECore::Tests {
             EXPECT_NE(entry, nullptr);
             static const SpriteEntry kMissing;
             return entry != nullptr ? *entry : kMissing;
+        }
+
+        /// One frame in which a slot noted something: the model applies it after the walk
+        void EndFrame() {
+            _model->EndUpdate();
+            _model->Update();
+        }
+
+        static SpriteLibraryDrop DropOf(ArtGenDragKind kind, int row, StringView suggestedName) {
+            SpriteLibraryDrop drop;
+            drop.row = row;
+            drop.payload = MakeArtGenDragPayload(kind, 1, {}, {}, suggestedName);
+            return drop;
         }
 
         /// Makes @p name a packed member of an atlas, as Pack leaves it
@@ -302,6 +316,104 @@ namespace BECore::Tests {
         _model->AppendDocuments(rows);
         ASSERT_EQ(rows.size(), 1U);
         EXPECT_TRUE(rows[0].dirty);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, AClickNotedByTheListSelectsOnlyAfterTheWalk) {
+        _model->NoteListClick(1);
+        EXPECT_EQ(_model->GetSelectedIndex(), -1);
+
+        EndFrame();
+
+        EXPECT_EQ(_model->GetSelectedIndex(), 1);
+        EXPECT_EQ(View().name, "rook");
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ADragNotedByThePreviewWritesTheRectAndTheUnsavedFlag) {
+        SelectAndUpdate("rook");
+        _model->NoteDraggedRect(Rect(2, 3, 10, 20));
+        EXPECT_EQ(Entry("rook").srcRect.x, 1.0f);
+
+        EndFrame();
+
+        EXPECT_EQ(Entry("rook").srcRect.w, 10.0f);
+        EXPECT_EQ(View().rectH, 20.0f);
+        EXPECT_TRUE(View().dirty);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ADragOverAPackedEntryChangesNothing) {
+        Pack("rook");
+        SelectAndUpdate("rook");
+        _model->NoteDraggedRect(Rect(2, 3, 10, 20));
+        EndFrame();
+
+        EXPECT_EQ(Entry("rook").srcRect.x, 1.0f);
+        EXPECT_FALSE(View().dirty);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ADropOnTheFreeAreaOpensTheDialogWithTheSuggestedName) {
+        _model->NoteDrop(DropOf(ArtGenDragKind::Image, -1, "knight"));
+        EndFrame();
+
+        EXPECT_TRUE(View().dropOpen);
+        EXPECT_EQ(View().dropName, "knight");
+        EXPECT_FALSE(View().dropRefused);
+        EXPECT_FALSE(View().dropTaken);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ATakenNameInTheDialogNamesTheFreeOneAndARefusedOneTurnsAcceptOff) {
+        _model->NoteDrop(DropOf(ArtGenDragKind::Image, -1, "knight"));
+        EndFrame();
+
+        View().dropName = "queen";
+        _model->Update();
+        EXPECT_TRUE(View().dropTaken);
+        EXPECT_EQ(View().dropTakenText, "Taken: it will be added as 'queen_2'");
+        EXPECT_FALSE(View().dropRefused);
+
+        View().dropName = "bad name";
+        _model->Update();
+        EXPECT_TRUE(View().dropRefused);
+        EXPECT_FALSE(View().dropReason.empty());
+        EXPECT_FALSE(View().dropTaken);
+
+        Run(EditorCommandIds::kSpriteLibraryDropAccept);
+        EXPECT_TRUE(View().dropOpen) << "a refused name is never accepted";
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, CancelClosesTheDialogAndAddsNothing) {
+        _model->NoteDrop(DropOf(ArtGenDragKind::Image, -1, "knight"));
+        EndFrame();
+
+        EXPECT_TRUE(Run(EditorCommandIds::kSpriteLibraryDropCancel));
+        _model->Update();
+
+        EXPECT_FALSE(View().dropOpen);
+        EXPECT_EQ(_library.GetAll().size(), 2U);
+        EXPECT_FALSE(View().hasDropMessage);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, AcceptClosesTheDialogAndShowsTheAnswerOfTheGeneratePanel) {
+        _model->NoteDrop(DropOf(ArtGenDragKind::Image, -1, "knight"));
+        EndFrame();
+
+        EXPECT_TRUE(Run(EditorCommandIds::kSpriteLibraryDropAccept));
+        _model->Update();
+
+        EXPECT_FALSE(View().dropOpen);
+        EXPECT_TRUE(View().hasDropMessage);
+        EXPECT_TRUE(View().dropFailed) << "no Generate panel answers in this test";
+        EXPECT_EQ(View().dropMessage, ArtGenDropResult{}.message);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ARefusedDropOnARowSetsTheErrorAnswer) {
+        _model->NoteDrop(DropOf(ArtGenDragKind::Audio, 1, "rook"));
+        EndFrame();
+
+        EXPECT_FALSE(View().dropOpen);
+        EXPECT_TRUE(View().hasDropMessage);
+        EXPECT_TRUE(View().dropFailed);
+        EXPECT_EQ(View().dropMessage, kArtGenSoundIsNotASprite);
+        EXPECT_EQ(Entry("rook").texturePath, "assets/rook.png"_intern);
     }
 
     TEST_F(SpriteLibraryPanelModelTest, ASteadyUpdateAllocatesNothing) {

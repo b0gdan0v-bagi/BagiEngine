@@ -33,6 +33,7 @@ namespace BECore {
     void SpriteLibraryPanelModel::Initialize() {
         Subscribe<EditorCommandEvent, &SpriteLibraryPanelModel::OnCommand>(this);
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
+        _slots.Register();
     }
 
     TypedRef SpriteLibraryPanelModel::GetObject() {
@@ -54,7 +55,11 @@ namespace BECore {
         return _library != nullptr ? *_library : CoreManager::GetTextureLibrary();
     }
 
-    const SpriteEntry* SpriteLibraryPanelModel::Selected() const {
+    const TextureLibrary& SpriteLibraryPanelModel::GetLibrary() const {
+        return Library();
+    }
+
+    const SpriteEntry* SpriteLibraryPanelModel::GetSelected() const {
         const Vector<SpriteEntry>& entries = Library().GetAll();
         if (_selectedIndex < 0 || static_cast<size_t>(_selectedIndex) >= entries.size()) {
             return nullptr;
@@ -88,7 +93,7 @@ namespace BECore {
 
     void SpriteLibraryPanelModel::Select(int index) {
         _selectedIndex = index;
-        const SpriteEntry* entry = Selected();
+        const SpriteEntry* entry = GetSelected();
         const StringView name = entry != nullptr ? entry->name.ToStringView() : StringView{};
         _view.name.assign(name.data(), name.size());
         _seenName = _view.name;
@@ -129,7 +134,10 @@ namespace BECore {
             _view.renameRefused = false;
             _view.renameRefusedText.clear();
         }
-        const SpriteEntry* entry = Selected();
+        if (_view.dropOpen && StringView(_view.dropName) != StringView(_plannedDropName)) {
+            PlanDropName();
+        }
+        const SpriteEntry* entry = GetSelected();
         // Edits are taken only against the view they were made in: a library that moved under it wins, and the view is made again
         if (entry != nullptr && _key.built && _key.index == _selectedIndex && _key.name == entry->name && _key.texturePath == entry->texturePath && SameRect(_key.rect, entry->srcRect)) {
             ApplyViewEdits(*entry);
@@ -178,7 +186,7 @@ namespace BECore {
     }
 
     void SpriteLibraryPanelModel::SyncView() {
-        const SpriteEntry* entry = Selected();
+        const SpriteEntry* entry = GetSelected();
         ViewKey key;
         key.built = true;
         key.index = entry != nullptr ? _selectedIndex : -1;
@@ -211,8 +219,107 @@ namespace BECore {
         _view.rectH = key.rect.h;
     }
 
+    void SpriteLibraryPanelModel::NoteListClick(int index) {
+        _notedClick = index;
+    }
+
+    void SpriteLibraryPanelModel::NoteDrop(const SpriteLibraryDrop& drop) {
+        _notedDrop = drop;
+    }
+
+    void SpriteLibraryPanelModel::NoteDraggedRect(const Rect& rect) {
+        _notedRect = rect;
+    }
+
+    void SpriteLibraryPanelModel::NoteSheetSize(int width, int height) {
+        _sheetWidth = width;
+        _sheetHeight = height;
+    }
+
+    void SpriteLibraryPanelModel::EndUpdate() {
+        if (_notedClick >= 0) {
+            Select(std::exchange(_notedClick, -1));
+        }
+        if (_notedRect) {
+            ApplyDraggedRect(*_notedRect);
+            _notedRect.reset();
+        }
+        if (_notedDrop) {
+            const SpriteLibraryDrop drop = *_notedDrop;
+            _notedDrop.reset();
+            ApplyDrop(drop);
+        }
+    }
+
+    void SpriteLibraryPanelModel::ApplyDraggedRect(const Rect& rect) {
+        const SpriteEntry* entry = GetSelected();
+        if (entry == nullptr || IsPackedSprite(*entry)) {
+            return;
+        }
+        SpriteEntry changed = *entry;
+        changed.srcRect = rect;
+        Library().AddOrUpdate(std::move(changed));
+        MarkDirty();
+    }
+
+    void SpriteLibraryPanelModel::ApplyDrop(const SpriteLibraryDrop& drop) {
+        const TextureLibrary& library = Library();
+        const Vector<SpriteEntry>& entries = library.GetAll();
+        if (drop.row < 0) {
+            _pendingDrop = drop.payload;
+            _view.dropName.assign(drop.payload.suggestedName);
+            _view.dropOpen = true;
+            PlanDropName();
+            return;
+        }
+        if (static_cast<size_t>(drop.row) >= entries.size()) {
+            return;
+        }
+        const ArtGenDropPlan plan = PlanArtGenDrop(drop.payload, entries[static_cast<size_t>(drop.row)].name.ToStringView(), library);
+        if (plan.mode == ArtGenDropMode::Refused) {
+            _view.dropMessage = plan.reason;
+            _view.dropFailed = true;
+            _view.hasDropMessage = !_view.dropMessage.empty();
+            return;
+        }
+        AcceptDrop(drop.payload, plan.sprite);
+    }
+
+    void SpriteLibraryPanelModel::AcceptDrop(const ArtGenDragPayload& payload, StringView sprite) {
+        ArtGenDropResult result;
+        ArtGenVariantDropEvent::Emit(payload, sprite, &result);
+        _view.dropFailed = !result.ok;
+        _view.dropMessage = std::move(result.message);
+        _view.hasDropMessage = !_view.dropMessage.empty();
+        // The accept saved the library file itself, so the unsaved flag stays as it is
+        if (result.ok) {
+            _libraryPanel.ResetFilter();
+            SelectByName(PoolString::Intern(sprite));
+        }
+    }
+
+    void SpriteLibraryPanelModel::PlanDropName() {
+        // The payload holds the name in a fixed buffer: a longer one is cut, as the old field could not hold more
+        constexpr size_t kMaxDropName = kArtGenRowNameSize - 1;
+        if (_view.dropName.size() > kMaxDropName) {
+            _view.dropName.resize(kMaxDropName);
+        }
+        _plannedDropName = _view.dropName;
+        const ArtGenDragPayload named = MakeArtGenDragPayload(_pendingDrop.kind, _pendingDrop.seed, _pendingDrop.set, _pendingDrop.job, _view.dropName);
+        _dropPlan = PlanArtGenDrop(named, StringView{}, Library());
+        _view.dropRefused = _dropPlan.mode == ArtGenDropMode::Refused;
+        _view.dropReason = _view.dropRefused ? _dropPlan.reason : String{};
+        _view.dropTaken = !_view.dropRefused && StringView(_dropPlan.sprite) != StringView(_view.dropName);
+        _view.dropTakenText = _view.dropTaken ? Format("Taken: it will be added as '{}'", _dropPlan.sprite) : String{};
+    }
+
+    void SpriteLibraryPanelModel::CloseDropDialog() {
+        _view.dropOpen = false;
+        _plannedDropName.clear();
+    }
+
     void SpriteLibraryPanelModel::Rename() {
-        const SpriteEntry* entry = Selected();
+        const SpriteEntry* entry = GetSelected();
         if (entry == nullptr) {
             return;
         }
@@ -246,7 +353,7 @@ namespace BECore {
     }
 
     void SpriteLibraryPanelModel::DeleteEntry() {
-        const SpriteEntry* entry = Selected();
+        const SpriteEntry* entry = GetSelected();
         if (entry == nullptr) {
             return;
         }
@@ -273,6 +380,17 @@ namespace BECore {
         }
         if (is(EditorCommandIds::kSpriteLibraryDelete)) {
             DeleteEntry();
+            return true;
+        }
+        if (is(EditorCommandIds::kSpriteLibraryDropAccept)) {
+            if (_view.dropOpen && _dropPlan.mode != ArtGenDropMode::Refused) {
+                CloseDropDialog();
+                AcceptDrop(_pendingDrop, _dropPlan.sprite);
+            }
+            return true;
+        }
+        if (is(EditorCommandIds::kSpriteLibraryDropCancel)) {
+            CloseDropDialog();
             return true;
         }
         return false;

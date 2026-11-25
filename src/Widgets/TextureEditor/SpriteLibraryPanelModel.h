@@ -7,9 +7,12 @@
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Widgets/EditorDocuments.h>
 #include <Events/SubscriptionHolder.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <Widgets/TextureEditor/SpriteLibraryPanel.h>
+#include <Widgets/TextureEditor/SpriteLibrarySlots.h>
+#include <Widgets/TextureEditor/SpriteSheetSlicePanel.h>
 #include <Widgets/TextureEditor/SpriteTextureCache.h>
 
 namespace BECore {
@@ -20,8 +23,8 @@ namespace BECore {
     /**
      * @brief What `SpriteLibraryPanel.xml` binds to: the selected entry's form, the Save row and the drop answer
      *
-     * `name`, `texture` and the four `rect*` fields are written by the controls of the panel and read by the model in its next `Update`; the rest is
-     * written by the model.
+     * `name`, `texture`, the four `rect*` fields and `dropName` are written by the controls of the panel and read by the model in its next `Update`; the
+     * rest is written by the model.
      */
     struct SpriteLibraryPanelView {
         BE_CLASS(SpriteLibraryPanelView)
@@ -48,6 +51,16 @@ namespace BECore {
         BE_REFLECT_FIELD String dropMessage;
         BE_REFLECT_FIELD bool dropFailed = false;
         BE_REFLECT_FIELD bool hasDropMessage = false;
+        /// The "Add sprite" dialog of a variant dropped on the free area of the list: open until Accept or Cancel
+        BE_REFLECT_FIELD bool dropOpen = false;
+        /// The name of the new sprite, checked live by the plan of the drop
+        BE_REFLECT_FIELD String dropName;
+        /// The name is refused (`dropReason` says why): Accept is off
+        BE_REFLECT_FIELD bool dropRefused = false;
+        BE_REFLECT_FIELD String dropReason;
+        /// The name is taken: `dropTakenText` names the free one Accept writes
+        BE_REFLECT_FIELD bool dropTaken = false;
+        BE_REFLECT_FIELD String dropTakenText;
     };
 
     /**
@@ -60,7 +73,12 @@ namespace BECore {
      *
      * `texture.save` is taken by a subscription of the model's own, not by `RunCommand`: an asset routes commands only while its panel is open, and the
      * library is saved by the command while the panel is closed too. Commands (`EditorCommandIds`, run only while the panel is open):
-     * `spriteLibrary.rename` (the name field's `commitCommand`), `spriteLibrary.rescan`, `spriteLibrary.add`, `spriteLibrary.delete`.
+     * `spriteLibrary.rename` (the name field's `commitCommand`), `spriteLibrary.rescan`, `spriteLibrary.add`, `spriteLibrary.delete`,
+     * `spriteLibrary.dropAccept` and `spriteLibrary.dropCancel` (the "Add sprite" dialog).
+     *
+     * `Initialize` registers the slots `spriteList` and `spritePreview` (`SpriteLibrarySlots`). They note a clicked row, a drop and a finished drag, and
+     * `EndUpdate` applies them. A drop on a row replaces that sprite at once; a drop on the free area opens the dialog. The accept goes through
+     * `ArtGenVariantDropEvent` (the Generate panel owns the accept), and its answer is the view's drop message.
      */
     class SpriteLibraryPanelModel : public IPanelModel, public SubscriptionHolder {
         BE_CLASS(SpriteLibraryPanelModel)
@@ -74,6 +92,7 @@ namespace BECore {
         void Initialize() override;
         [[nodiscard]] TypedRef GetObject() override;
         void Update() override;
+        void EndUpdate() override;
         bool RunCommand(StringView id, StringView argument) override;
 
         /// Works on @p library and saves it through @p save instead of CoreManager's library and its `Save` (a test over a library of its own; @p library
@@ -90,6 +109,28 @@ namespace BECore {
         [[nodiscard]] int GetSelectedIndex() const {
             return _selectedIndex;
         }
+
+        /// The selected entry, or null; valid until the library changes
+        [[nodiscard]] const SpriteEntry* GetSelected() const;
+        [[nodiscard]] const TextureLibrary& GetLibrary() const;
+
+        /// The list drawer and the textures of its rows, for the slot that draws them
+        [[nodiscard]] SpriteLibraryPanel& GetLibraryPanel() {
+            return _libraryPanel;
+        }
+        [[nodiscard]] SpriteTextureCache& GetTextureCache() {
+            return _textures;
+        }
+        [[nodiscard]] const SpriteSheetSlicePanel& GetSlicePanel() const {
+            return _slicePanel;
+        }
+
+        /// What the slots saw this frame, applied by `EndUpdate`: a clicked row of the list, a variant released on it, a rect dragged on the preview (texture
+        /// pixels) and the size of the loaded preview texture (0 when none is loaded)
+        void NoteListClick(int index);
+        void NoteDrop(const SpriteLibraryDrop& drop);
+        void NoteDraggedRect(const Rect& rect);
+        void NoteSheetSize(int width, int height);
 
         /// The library with its unsaved flag, for `editor_state` (`.claude/rules/control-editor-api.md`); a closed panel reports too
         void AppendDocuments(Vector<EditorDocumentState>& out);
@@ -114,7 +155,6 @@ namespace BECore {
         };
 
         [[nodiscard]] TextureLibrary& Library() const;
-        [[nodiscard]] const SpriteEntry* Selected() const;
         void OnCommand(const EditorCommandEvent& event);
         void MarkDirty();
         void RefreshTextureList();
@@ -124,6 +164,13 @@ namespace BECore {
         void Rename();
         void AddEntry();
         void DeleteEntry();
+        void ApplyDraggedRect(const Rect& rect);
+        void ApplyDrop(const SpriteLibraryDrop& drop);
+        /// Asks the Generate panel to accept the variant as @p sprite and shows its answer
+        void AcceptDrop(const ArtGenDragPayload& payload, StringView sprite);
+        /// The plan of the dialog's name, made again when the typed name changes
+        void PlanDropName();
+        void CloseDropDialog();
 
         SpriteLibraryPanelView _view;
         ViewKey _key;
@@ -137,10 +184,22 @@ namespace BECore {
         /// The text of the name field as the model last saw it: a new typed name clears a refused rename
         String _seenName;
 
+        int _notedClick = -1;
+        Optional<Rect> _notedRect;
+        Optional<SpriteLibraryDrop> _notedDrop;
+        int _sheetWidth = 0;
+        int _sheetHeight = 0;
+
+        ArtGenDragPayload _pendingDrop;  // the variant the dialog names
+        ArtGenDropPlan _dropPlan;
+        String _plannedDropName;  // the dialog's name `_dropPlan` was made for
+
         SpriteTextureCache _textures;
         SpriteLibraryPanel _libraryPanel;
+        SpriteSheetSlicePanel _slicePanel;
 
-        // The registration comes last: it ends first, while the members its callback reads are alive
+        // The registrations come last: they end first, while the members their callbacks read are alive
+        SpriteLibrarySlots _slots{*this};
         EditorDocumentsHandle _documents;
     };
 

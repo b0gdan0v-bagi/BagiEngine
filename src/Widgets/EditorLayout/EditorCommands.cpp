@@ -74,6 +74,8 @@ namespace BECore {
                 {kSpriteLibraryRescan, "Sprite Library: Rescan Textures", std::nullopt, false},
                 {kSpriteLibraryAdd, "Sprite Library: Add Sprite", std::nullopt, false},
                 {kSpriteLibraryDelete, "Sprite Library: Delete Sprite", std::nullopt, false},
+                {kSpriteLibraryDropAccept, "Sprite Library: Accept Dropped Variant", std::nullopt, false},
+                {kSpriteLibraryDropCancel, "Sprite Library: Cancel Dropped Variant", std::nullopt, false},
                 {kPreferencesCommit, "Preferences: Save", std::nullopt, false},
                 {kPreferencesRebind, "Preferences: Rebind Shortcut", std::nullopt, false},
                 {kPreferencesClear, "Preferences: Clear Shortcut", std::nullopt, false},
