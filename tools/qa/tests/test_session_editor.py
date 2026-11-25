@@ -28,6 +28,10 @@ def content_file(tmp_path, monkeypatch):
     return file
 
 
+def overlay_file(session):
+    return session.content_overlay / "config" / "SceneConfig.xml"
+
+
 def start(exe, out_dir, file, **kwargs):
     session = QaSession(out_dir, "an editor charter")
     session.launch(exe=str(exe), editor=True, content_files=[file], **kwargs)
@@ -102,26 +106,89 @@ def test_a_failed_start_releases_the_guard(tmp_path, out_dir, content_file, monk
     assert len(released) == 1 and session.session_errors
 
 
-def test_save_writes_the_file_and_finish_puts_it_back(qa_game_exe, out_dir, content_file):
+def test_save_writes_the_overlay_and_leaves_the_checkout_alone(qa_game_exe, out_dir, content_file):
+    session = start(qa_game_exe, out_dir, content_file)
+    assert session.content_overlay == session.out_dir / "content-overlay"
+    session.imgui_click("Save", window="Scene Editor")
+    assert overlay_file(session).read_text() == SAVED and content_file.read_text() == ORIGINAL
+    finished = session.finish()
+    assert content_file.read_text() == ORIGINAL and overlay_file(session).read_text() == SAVED
+    assert finished.restored == [] and session.findings == []
+    assert session.finish() is finished
+
+
+def test_the_game_gets_the_overlay_flag_and_the_recordings_header_lacks_it(qa_game_exe, out_dir, content_file, tmp_path, monkeypatch):
+    args = tmp_path / "args.txt"
+    monkeypatch.setenv("QA_FAKE_ARGS_OUT", str(args))
+    session = start(qa_game_exe, out_dir, content_file)
+    session.finish()
+    assert f"--content-overlay={session.content_overlay}" in args.read_text().split()
+    assert session.content_overlay.parent == session.out_dir
+    assert not any("overlay" in flag for flag in session.flags)
+    assert not any("overlay" in flag for flag in scenario.load(session.scenario_path)[0].flags)
+
+
+def test_a_game_run_gets_no_overlay(qa_game_exe, out_dir, content_file, tmp_path, monkeypatch):
+    args = tmp_path / "args.txt"
+    monkeypatch.setenv("QA_FAKE_ARGS_OUT", str(args))
+    session = QaSession(out_dir, "a plain charter")
+    session.launch(exe=str(qa_game_exe))
+    session.finish()
+    assert session.content_overlay is None and "overlay" not in args.read_text()
+    with pytest.raises(SessionError, match="content_overlay is for an editor launch"):
+        QaSession(tmp_path / "other", "a charter").launch(exe=str(qa_game_exe), content_overlay=tmp_path / "ov")
+
+
+def test_a_second_session_on_the_same_overlay_starts_on_what_the_first_saved(qa_game_exe, out_dir, content_file, tmp_path, monkeypatch):
+    seen = tmp_path / "seen.txt"
+    monkeypatch.setenv("QA_FAKE_OVERLAY_SEEN_OUT", str(seen))
+    first = start(qa_game_exe, out_dir, content_file)
+    assert seen.read_text().strip() == "no"
+    first.imgui_click("Save", window="Scene Editor")
+    first.finish()
+    second = start(qa_game_exe, tmp_path / "second", content_file, content_overlay=first.content_overlay)
+    assert seen.read_text().strip() == "yes" and second.content_overlay == first.content_overlay
+    second.finish()
+    third = start(qa_game_exe, tmp_path / "third", content_file)
+    assert seen.read_text().strip() == "no"
+    third.finish()
+
+
+def test_editor_state_is_recorded_counted_and_names_the_overlays_file(qa_game_exe, out_dir, content_file, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_DIRTY", "1")
+    session = start(qa_game_exe, out_dir, content_file)
+    before = session.calls
+    state = session.editor_state()
+    assert session.calls == before + 1 and state["anyDirty"]
+    assert state["documents"][0]["file"] == str(overlay_file(session))
+    session.imgui_click("Save", window="Scene Editor")
+    assert not session.editor_state()["anyDirty"]
+    session.finish()
+    steps = scenario.load(session.scenario_path)[1]
+    assert [step.method for step in steps].count("editor_state") == 2 and len(steps) == session.calls
+
+
+def test_a_game_that_writes_the_checkout_anyway_is_the_finding_and_the_file_is_put_back(qa_game_exe, out_dir, content_file, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WRITE_CHECKOUT", "1")
     session = start(qa_game_exe, out_dir, content_file)
     session.imgui_click("Save", window="Scene Editor")
     assert content_file.read_text() == SAVED
     finished = session.finish()
-    assert content_file.read_text() == ORIGINAL
-    assert finished.restored == [content_file.resolve()] and session.findings == []
-    assert "SceneConfig.xml" in finished.report.read_text()
-    assert session.finish() is finished
+    (finding,) = session.findings
+    assert finding.name == "editor.content_file_written" and "overlay" in finding.message and str(session.content_overlay) in finding.message
+    assert content_file.read_text() == ORIGINAL and finished.restored == [content_file.resolve()]
 
 
-def test_a_session_that_must_not_save_finds_the_write(qa_game_exe, out_dir, content_file):
+def test_content_writes_expected_is_ignored(qa_game_exe, out_dir, content_file, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WRITE_CHECKOUT", "1")
     session = start(qa_game_exe, out_dir, content_file)
     session.imgui_click("Save", window="Scene Editor")
-    session.finish(content_writes_expected=False)
-    (finding,) = session.findings
-    assert finding.name == "editor.content_file_written" and content_file.read_text() == ORIGINAL
+    session.finish(content_writes_expected=True)
+    assert [finding.name for finding in session.findings] == ["editor.content_file_written"]
 
 
 def test_a_lost_game_still_gets_the_files_back(qa_game_exe, out_dir, content_file, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WRITE_CHECKOUT", "1")
     monkeypatch.setenv("QA_FAKE_CRASH_AT", "1")
     session = start(qa_game_exe, out_dir, content_file)
     session.imgui_click("Save", window="Scene Editor")
@@ -132,7 +199,8 @@ def test_a_lost_game_still_gets_the_files_back(qa_game_exe, out_dir, content_fil
     assert content_file.read_text() == ORIGINAL
 
 
-def test_a_file_the_session_created_is_removed(qa_game_exe, out_dir, content_file):
+def test_a_file_the_session_created_is_removed(qa_game_exe, out_dir, content_file, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WRITE_CHECKOUT", "1")
     content_file.unlink()
     session = start(qa_game_exe, out_dir, content_file)
     session.imgui_click("Save", window="Scene Editor")
@@ -188,7 +256,8 @@ def invariants(tmp_path):
     return module
 
 
-def test_the_invariants_module_names_the_content_files(qa_game_exe, out_dir, content_file, invariants):
+def test_the_invariants_module_names_the_content_files(qa_game_exe, out_dir, content_file, invariants, monkeypatch):
+    monkeypatch.setenv("QA_FAKE_WRITE_CHECKOUT", "1")
     session = QaSession(out_dir, "a charter", invariants=invariants)
     session.launch(exe=str(qa_game_exe), editor=True)
     session.imgui_click("Save", window="Scene Editor")
@@ -215,24 +284,31 @@ def record_a_save(exe, out_dir, content_file, invariants):
     return session.scenario_path
 
 
-def test_replay_of_a_recorded_editor_session_restores_the_file_again(qa_game_exe, out_dir, tmp_path, content_file, invariants, monkeypatch):
+def test_replay_of_a_recorded_editor_session_runs_on_an_overlay_of_its_own(qa_game_exe, out_dir, tmp_path, content_file, invariants, monkeypatch):
     path = record_a_save(qa_game_exe, out_dir, content_file, invariants)
-    assert "--editor" in scenario.load(path)[0].flags
+    assert "--editor" in scenario.load(path)[0].flags and not any("overlay" in flag for flag in scenario.load(path)[0].flags)
+    args, seen = tmp_path / "args.txt", tmp_path / "seen.txt"
+    monkeypatch.setenv("QA_FAKE_ARGS_OUT", str(args))
+    monkeypatch.setenv("QA_FAKE_OVERLAY_SEEN_OUT", str(seen))
     released = release_calls(monkeypatch)
     header, steps = repro.load_scenario(path)
     run = repro.replay_steps(qa_game_exe, header, steps, checks.load_invariants(invariants))
     assert run.findings == [] and run.played == len(steps)
-    assert [restored for _, restored in released] == [[content_file.resolve()]] and content_file.read_text() == ORIGINAL
+    assert [restored for _, restored in released] == [[]] and content_file.read_text() == ORIGINAL
+    (overlay,) = [arg for arg in args.read_text().split() if arg.startswith("--content-overlay=")]
+    assert not overlay.removeprefix("--content-overlay=").startswith(str(out_dir)) and seen.read_text().strip() == "no"
 
 
-def test_every_probe_of_a_shrink_is_guarded(qa_game_exe, out_dir, content_file, invariants, monkeypatch):
+def test_every_probe_of_a_shrink_is_guarded_and_starts_on_a_clean_overlay(qa_game_exe, out_dir, tmp_path, content_file, invariants, monkeypatch):
     monkeypatch.setenv("QA_FAKE_WARN_AT", "2")
     path = record_a_save(qa_game_exe, out_dir, content_file, invariants)
+    seen = tmp_path / "seen.txt"
+    monkeypatch.setenv("QA_FAKE_OVERLAY_SEEN_OUT", str(seen))
     released = release_calls(monkeypatch)
     result = repro.shrink_finding(qa_game_exe, path, "generic.log_warning", invariants)
     assert [call.method for call in result.calls] == ["perform_action"] * 2
     assert len(released) == result.probes + 2  # the whole scenario, each probe, the last play
-    assert [content_file.resolve()] in [restored for _, restored in released]  # the plays that clicked Save had it restored
+    assert all(restored == [] for _, restored in released) and seen.read_text().strip() == "no"
     assert content_file.read_text() == ORIGINAL
 
 

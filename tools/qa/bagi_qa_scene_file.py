@@ -25,7 +25,8 @@ game's allow list) names it with that value: the writer adds the defaults of a c
 
 `ContentGuard` promises: `arm()` copies the bytes of each existing file into `backup_dir` (never inside a git work tree) before anything can write,
 `release()` writes the bytes back where the file differs (removing a file that did not exist), checks the result byte by byte and answers the files it had to
-restore. Idempotent; it never runs `git`.
+restore. Idempotent; it never runs `git`. The editor runs on a content overlay, so the guard is the second line: it covers what the overlay does not
+promise (the Generate panel's writes under the root, an engine older than the flag), and a restore is a finding.
 """
 
 import copy
