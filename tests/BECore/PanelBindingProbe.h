@@ -10,6 +10,9 @@ namespace BECore::Tests {
 
     CORE_ENUM(PanelProbeMode, uint8_t, Idle, Busy, Failed)
 
+    /// An enum four bytes wide: the writer stores as many bytes as the field has
+    CORE_ENUM(PanelProbeLevel, uint32_t, Low, Mid, High, Max)
+
     /// A row of a bound list
     struct PanelProbeRow {
         BE_CLASS(PanelProbeRow)
@@ -39,6 +42,43 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD Vector<int32_t> numbers;
         BE_REFLECT_FIELD Vector<String> names;
         BE_REFLECT_FIELD Array<int32_t, 3> triple{};
+    };
+
+    /// A cell of the writer tests: embedded in `PanelProbeNumbers` and a row of its list
+    struct PanelProbeCells {
+        BE_CLASS(PanelProbeCells)
+
+        BE_REFLECT_FIELD int16_t before = 0;
+        BE_REFLECT_FIELD bool flag = false;
+        BE_REFLECT_FIELD uint8_t small = 0;
+        BE_REFLECT_FIELD float ratio = 0.0f;
+        BE_REFLECT_FIELD PanelProbeLevel level = PanelProbeLevel::Low;
+        BE_REFLECT_FIELD int16_t after = 0;
+    };
+
+    /// The source object of the writer tests: every integer width, both floats, a bool and enums of 1 and 4 bytes, each between
+    /// neighbours a wrong width would overwrite
+    struct PanelProbeNumbers {
+        BE_CLASS(PanelProbeNumbers)
+
+        BE_REFLECT_FIELD int8_t i8 = 0;
+        BE_REFLECT_FIELD uint8_t u8 = 0;
+        BE_REFLECT_FIELD int16_t i16 = 0;
+        BE_REFLECT_FIELD uint16_t u16 = 0;
+        BE_REFLECT_FIELD int32_t i32 = 0;
+        BE_REFLECT_FIELD uint32_t u32 = 0;
+        BE_REFLECT_FIELD int64_t i64 = 0;
+        BE_REFLECT_FIELD uint64_t u64 = 0;
+        BE_REFLECT_FIELD float f32 = 0.0f;
+        BE_REFLECT_FIELD double f64 = 0.0;
+        BE_REFLECT_FIELD bool flag = false;
+        BE_REFLECT_FIELD PanelProbeMode mode = PanelProbeMode::Idle;
+        BE_REFLECT_FIELD PanelProbeLevel level = PanelProbeLevel::Low;
+        BE_REFLECT_FIELD String text;
+        BE_REFLECT_FIELD PanelProbeCells inner;
+        BE_REFLECT_FIELD Vector<PanelProbeCells> rows;
+        BE_REFLECT_FIELD Vector<int32_t> numbers;
+        BE_REFLECT_FIELD Optional<int32_t> maybe;
     };
 
     /// Has a field of the name `count` like PanelProbe, of another type: a source whose object changes type at run time
