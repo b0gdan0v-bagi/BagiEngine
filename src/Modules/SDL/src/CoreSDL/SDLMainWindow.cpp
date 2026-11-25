@@ -16,6 +16,7 @@ namespace BECore {
     namespace {
 
         constexpr const char* kHeadlessVideoDriver = "dummy";
+        constexpr const char* kHintEnabled = "1";
         constexpr int kOffscreenPosition = -16000;  // beyond any arrangement of displays
 
         bool IsSameRect(const Rect& a, const Rect& b) {
@@ -34,9 +35,15 @@ namespace BECore {
         if (_headless) {
             SDL_SetHint(SDL_HINT_VIDEO_DRIVER, kHeadlessVideoDriver);
         }
+        // Cocoa activates the process and gives it a Dock icon inside SDL_Init, which pulls the owner out of a full-screen Space even
+        // when the window is hidden; the background policy has to be chosen before that. Other platforms ignore the hint.
+        if (_hidden && !_headless) {
+            SDL_SetHint(SDL_HINT_MAC_BACKGROUND_APP, kHintEnabled);
+        }
 
         if (!SDL_Init(SDL_INIT_VIDEO)) {
             LOG_ERROR("[SDLMainWindow] cannot start the video system: {}", SDL_GetError());
+            SDL_ResetHint(SDL_HINT_MAC_BACKGROUND_APP);
             return false;
         }
 
@@ -45,6 +52,7 @@ namespace BECore {
             if (!initialized) {
                 SDL_Quit();
                 SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
+                SDL_ResetHint(SDL_HINT_MAC_BACKGROUND_APP);
             }
         });
 
@@ -130,7 +138,8 @@ namespace BECore {
             _window = nullptr;
         }
         SDL_Quit();
-        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);  // the next window picks its driver again
+        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);  // the next window picks its driver and its app policy again
+        SDL_ResetHint(SDL_HINT_MAC_BACKGROUND_APP);
         _width = 0;
         _height = 0;
         _simulation = WindowSimulation{};
