@@ -61,6 +61,8 @@ namespace BECore {
         /// The name is taken: `dropTakenText` names the free one Accept writes
         BE_REFLECT_FIELD bool dropTaken = false;
         BE_REFLECT_FIELD String dropTakenText;
+        /// The "Slice sheet" section
+        BE_REFLECT_FIELD SpriteSliceView slice;
     };
 
     /**
@@ -74,7 +76,8 @@ namespace BECore {
      * `texture.save` is taken by a subscription of the model's own, not by `RunCommand`: an asset routes commands only while its panel is open, and the
      * library is saved by the command while the panel is closed too. Commands (`EditorCommandIds`, run only while the panel is open):
      * `spriteLibrary.rename` (the name field's `commitCommand`), `spriteLibrary.rescan`, `spriteLibrary.add`, `spriteLibrary.delete`,
-     * `spriteLibrary.dropAccept` and `spriteLibrary.dropCancel` (the "Add sprite" dialog).
+     * `spriteLibrary.dropAccept` and `spriteLibrary.dropCancel` (the "Add sprite" dialog), `spriteLibrary.sliceFindIslands` and
+     * `spriteLibrary.sliceAdd` (the "Slice sheet" section, whose fields `SpriteSheetSlicePanel::Sync` takes while the section can slice).
      *
      * `Initialize` registers the slots `spriteList` and `spritePreview` (`SpriteLibrarySlots`). They note a clicked row, a drop and a finished drag, and
      * `EndUpdate` applies them. A drop on a row replaces that sprite at once; a drop on the free area opens the dialog. The accept goes through
@@ -126,11 +129,12 @@ namespace BECore {
         }
 
         /// What the slots saw this frame, applied by `EndUpdate`: a clicked row of the list, a variant released on it, a rect dragged on the preview (texture
-        /// pixels) and the size of the loaded preview texture (0 when none is loaded)
+        /// pixels). The preview also says which texture it has loaded and its size (an empty path when none), which the next `Update` gives to the slice
+        /// section: the preview is drawn before the section, so the section works on the frame before, as it always did
         void NoteListClick(int index);
         void NoteDrop(const SpriteLibraryDrop& drop);
         void NoteDraggedRect(const Rect& rect);
-        void NoteSheetSize(int width, int height);
+        void NoteSheet(PoolString texturePath, int width, int height);
 
         /// The library with its unsaved flag, for `editor_state` (`.claude/rules/control-editor-api.md`); a closed panel reports too
         void AppendDocuments(Vector<EditorDocumentState>& out);
@@ -171,6 +175,9 @@ namespace BECore {
         /// The plan of the dialog's name, made again when the typed name changes
         void PlanDropName();
         void CloseDropDialog();
+        /// The slice section works on the selected entry's sheet only when the preview has it loaded and the entry is not packed
+        [[nodiscard]] bool CanSlice(const SpriteEntry* entry) const;
+        void SliceAdd();
 
         SpriteLibraryPanelView _view;
         ViewKey _key;
@@ -187,6 +194,7 @@ namespace BECore {
         int _notedClick = -1;
         Optional<Rect> _notedRect;
         Optional<SpriteLibraryDrop> _notedDrop;
+        PoolString _sheetPath;
         int _sheetWidth = 0;
         int _sheetHeight = 0;
 

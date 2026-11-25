@@ -1,5 +1,6 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <Common/AllocCheck.h>
+#include <Common/ArtGenTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/MountedFolderTest.h>
 #include <Common/Printers.h>
@@ -77,6 +78,16 @@ namespace BECore::Tests {
             drop.row = row;
             drop.payload = MakeArtGenDragPayload(kind, 1, {}, {}, suggestedName);
             return drop;
+        }
+
+        /// Selects rook as a sheet of @p width x @p height that the preview has loaded, at @p path
+        void SelectSheet(StringView path, int width, int height) {
+            SpriteEntry rook = Entry("rook");
+            rook.texturePath = PoolString::Intern(path);
+            _library.AddOrUpdate(std::move(rook));
+            SelectAndUpdate("rook");
+            _model->NoteSheet(PoolString::Intern(path), width, height);
+            _model->Update();
         }
 
         /// Makes @p name a packed member of an atlas, as Pack leaves it
@@ -416,8 +427,104 @@ namespace BECore::Tests {
         EXPECT_EQ(Entry("rook").texturePath, "assets/rook.png"_intern);
     }
 
-    TEST_F(SpriteLibraryPanelModelTest, ASteadyUpdateAllocatesNothing) {
+    TEST_F(SpriteLibraryPanelModelTest, TheSliceSectionNeedsTheSheetOfTheSelectedEntryLoaded) {
         SelectAndUpdate("rook");
+        EXPECT_FALSE(View().slice.canSlice);
+
+        _model->NoteSheet("assets/queen.png"_intern, 60, 20);
+        _model->Update();
+        EXPECT_FALSE(View().slice.canSlice) << "the preview's sheet is another entry's";
+
+        _model->NoteSheet("assets/rook.png"_intern, 60, 20);
+        _model->Update();
+        EXPECT_TRUE(View().slice.canSlice);
+
+        Pack("rook");
+        _model->Update();
+        EXPECT_FALSE(View().slice.canSlice);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, TheGridSummarySaysWhatAddSpritesWouldDo) {
+        SelectSheet("assets/rook.png", 60, 20);
+
+        EXPECT_EQ(View().slice.summary, "12 cells: 12 to add, 0 to replace, 0 skipped");
+        EXPECT_FALSE(View().slice.hasError);
+        EXPECT_TRUE(View().slice.canAdd);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, AGridOfCellsSmallerThanAPixelIsAnErrorAndCannotBeAdded) {
+        SelectSheet("assets/rook.png", 60, 20);
+        View().slice.rows = 40;
+        _model->Update();
+
+        EXPECT_TRUE(View().slice.hasError);
+        EXPECT_EQ(View().slice.summary, SheetGridErrorText(SheetGridError::CellTooSmall));
+        EXPECT_FALSE(View().slice.canAdd);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, TheFieldsAreClampedToTheOldRangesInTheView) {
+        SelectSheet("assets/rook.png", 60, 20);
+        View().slice.columns = 0;
+        View().slice.rows = 1000;
+        View().slice.alphaThreshold = 300;
+        View().slice.startIndex = -5;
+        View().slice.prefix = String(100, 'p');
+        _model->Update();
+
+        EXPECT_EQ(View().slice.columns, 1);
+        EXPECT_EQ(View().slice.rows, kMaxSheetGridAxis);
+        EXPECT_EQ(View().slice.alphaThreshold, kMaxIslandAlphaThreshold);
+        EXPECT_EQ(View().slice.startIndex, 0);
+        EXPECT_EQ(View().slice.prefix.size(), 64U);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, AddSpritesAddsTheCellsAndSelectsTheFirst) {
+        SelectSheet("assets/rook.png", 60, 20);
+
+        EXPECT_TRUE(Run(EditorCommandIds::kSpriteLibrarySliceAdd));
+        _model->Update();
+
+        EXPECT_EQ(_library.GetAll().size(), 14U);
+        EXPECT_EQ(View().name, "sprite_00");
+        EXPECT_EQ(Entry("sprite_11").srcRect.x, 50.0f);
+        EXPECT_TRUE(View().dirty);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, TheConflictPolicyDecidesWhatATakenNameDoes) {
+        SelectSheet("assets/rook.png", 60, 20);
+        View().slice.columns = 2;
+        View().slice.rows = 1;
+        View().slice.names = "queen, rook";
+        _model->Update();
+        EXPECT_EQ(View().slice.summary, "2 cells: 0 to add, 2 to replace, 0 skipped");
+
+        View().slice.policy = SheetConflictPolicy::Skip;
+        _model->Update();
+        EXPECT_EQ(View().slice.summary, "2 cells: 0 to add, 0 to replace, 2 skipped");
+        EXPECT_FALSE(View().slice.canAdd);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, TheIslandsAreFoundOnlyByTheCommandAndAnEditedFieldClearsThem) {
+        const RgbaImage sheet = MakeSolid(8, 4, kHigh, 0, 0);
+        ASSERT_TRUE(SaveRgbaPng(_dir / "sheet.png", sheet).has_value());
+        SelectSheet(VirtualPath("sheet.png"), 8, 4);
+        View().slice.mode = SheetSliceMode::Islands;
+        _model->Update();
+        EXPECT_EQ(View().slice.summary, "Press Find islands");
+        EXPECT_FALSE(View().slice.canAdd);
+
+        EXPECT_TRUE(Run(EditorCommandIds::kSpriteLibrarySliceFindIslands));
+        _model->Update();
+        EXPECT_EQ(View().slice.summary, "1 islands: 1 to add, 0 to replace, 0 skipped");
+        EXPECT_TRUE(View().slice.canAdd);
+
+        View().slice.padding = 1;
+        _model->Update();
+        EXPECT_EQ(View().slice.summary, "Press Find islands");
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ASteadyUpdateAllocatesNothing) {
+        SelectSheet("assets/rook.png", 60, 20);
         _model->Update();
         ExpectNoAllocations([&] {
             for (int frame = 0; frame < kSteadyFrames; ++frame) {

@@ -43,7 +43,7 @@ namespace BECore {
     void SpriteLibrarySlots::DrawPreview() {
         const SpriteEntry* entry = _model.GetSelected();
         if (entry == nullptr || entry->texturePath.Empty()) {
-            _model.NoteSheetSize(0, 0);
+            _model.NoteSheet({}, 0, 0);
             return;
         }
         // A file rewritten on disk is evicted from the cache (the Generate panel's Accept and switch do): the handle held here is the old picture
@@ -55,7 +55,7 @@ namespace BECore {
             _isDragging = false;
         }
         if (!_previewTexture || _previewTexture->GetState() != ResourceState::Loaded) {
-            _model.NoteSheetSize(0, 0);
+            _model.NoteSheet({}, 0, 0);
             return;
         }
 
@@ -73,7 +73,7 @@ namespace BECore {
                 displayWidth = kPreviewMaxSize * aspectRatio;
             }
         }
-        _model.NoteSheetSize(static_cast<int>(textureWidth), static_cast<int>(textureHeight));
+        _model.NoteSheet(entry->texturePath, static_cast<int>(textureWidth), static_cast<int>(textureHeight));
         _imageScaleX = textureWidth / displayWidth;
         _imageScaleY = textureHeight / displayHeight;
         const bool packed = IsPackedSprite(*entry);
@@ -87,7 +87,7 @@ namespace BECore {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         const ImTextureID textureId = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(_previewTexture->GetNativeHandle()));
         drawList->AddImage(textureId, _imageOrigin, imageMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
-        if (!packed) {
+        if (!packed && _model.GetView().slice.open) {
             _model.GetSlicePanel().DrawOverlay(drawList, entry->texturePath, _imageOrigin, _imageScaleX, _imageScaleY);
         }
 

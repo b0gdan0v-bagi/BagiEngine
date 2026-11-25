@@ -143,6 +143,26 @@ namespace BECore {
             ApplyViewEdits(*entry);
         }
         SyncView();
+
+        entry = GetSelected();
+        _view.slice.canSlice = CanSlice(entry);
+        if (_view.slice.canSlice) {
+            _slicePanel.Sync(_view.slice, Library(), entry->texturePath, _sheetWidth, _sheetHeight);
+        }
+    }
+
+    bool SpriteLibraryPanelModel::CanSlice(const SpriteEntry* entry) const {
+        return entry != nullptr && !IsPackedSprite(*entry) && !entry->texturePath.Empty() && entry->texturePath == _sheetPath && _sheetWidth > 0 && _sheetHeight > 0;
+    }
+
+    void SpriteLibraryPanelModel::SliceAdd() {
+        const PoolString firstAdded = _slicePanel.AddPlanned(Library());
+        if (firstAdded.Empty()) {
+            return;
+        }
+        _libraryPanel.ResetFilter();
+        SelectByName(firstAdded);
+        MarkDirty();
     }
 
     void SpriteLibraryPanelModel::ApplyViewEdits(const SpriteEntry& entry) {
@@ -231,7 +251,8 @@ namespace BECore {
         _notedRect = rect;
     }
 
-    void SpriteLibraryPanelModel::NoteSheetSize(int width, int height) {
+    void SpriteLibraryPanelModel::NoteSheet(PoolString texturePath, int width, int height) {
+        _sheetPath = texturePath;
         _sheetWidth = width;
         _sheetHeight = height;
     }
@@ -391,6 +412,19 @@ namespace BECore {
         }
         if (is(EditorCommandIds::kSpriteLibraryDropCancel)) {
             CloseDropDialog();
+            return true;
+        }
+        if (is(EditorCommandIds::kSpriteLibrarySliceFindIslands)) {
+            const SpriteEntry* entry = GetSelected();
+            if (CanSlice(entry)) {
+                _slicePanel.FindIslands(entry->texturePath, _sheetWidth, _sheetHeight);
+            }
+            return true;
+        }
+        if (is(EditorCommandIds::kSpriteLibrarySliceAdd)) {
+            if (CanSlice(GetSelected())) {
+                SliceAdd();
+            }
             return true;
         }
         return false;
