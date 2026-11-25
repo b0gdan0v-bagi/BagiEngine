@@ -2450,4 +2450,155 @@ namespace BECore::Tests {
         });
     }
 
+    namespace {
+
+        constexpr const char* kProgress = R"(
+<PanelAsset id="Progress" title="Progress">
+  <elements>
+    <element type="PanelProgress" id="download" bind="probe.gain" textBind="probe.title" width="10"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kTreeSection = R"(
+<PanelAsset id="Tree" title="Tree">
+  <elements>
+    <element type="PanelSection" id="settings" title="Settings" look="Tree" defaultOpen="false" openBind="probe.flag">
+      <elements>
+        <element type="PanelButton" id="inside" text="Inside" command="probe.inside"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kSaveAsDropdown = R"(
+<PanelAsset id="SaveAs" title="Save as">
+  <elements>
+    <element type="PanelRow" id="bar">
+      <elements>
+        <element type="PanelDropdown" id="saveAs" text="Save as" openCommand="probe.opened">
+          <elements>
+            <element type="PanelInput" id="name" bind="probe.filter"/>
+            <element type="PanelButton" id="save" text="Save" command="probe.save" closePopup="true"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+    }  // namespace
+
+    TEST_F(PanelInterpreterTest, AProgressBarFillsItsFractionClampedAndShowsItsOverlayOrAQuestionMark) {
+        EXPECT_TRUE(PanelInterpreter::CanDraw(*New<PanelProgress>()));
+        const auto filledWidth = [] {
+            const ImU32 bar = ImGui::GetColorU32(ImGuiCol_PlotHistogram);
+            float left = FLT_MAX;
+            float right = -FLT_MAX;
+            for (const ImDrawVert& vertex : ImGui::FindWindowByName(kHostName)->DrawList->VtxBuffer) {
+                if (vertex.col == bar) {
+                    left = eastl::min(left, vertex.pos.x);
+                    right = eastl::max(right, vertex.pos.x);
+                }
+            }
+            return right > left ? right - left : 0.0f;
+        };
+        const auto textVertices = [] { return VerticesOf(ImGui::GetColorU32(ImGuiCol_Text)); };
+        probe.gain = 0.25f;
+        probe.title = "WWW";
+        Load(kProgress);
+        // The font size is known once a frame has run
+        const float barWidth = 10.0f * ImGui::GetFontSize() - ImGui::GetStyle().FrameBorderSize * 2.0f;
+        EXPECT_NEAR(filledWidth(), barWidth * 0.25f, 1.0f);
+        EXPECT_EQ(textVertices(), probe.title.size() * kVerticesPerGlyph) << "the bound overlay";
+
+        probe.gain = 2.0f;
+        Settle();
+        EXPECT_NEAR(filledWidth(), barWidth, 1.0f);
+
+        const PanelLoadResult unreadable = LoadPanelAsset(R"(<PanelAsset id="P"><elements><element type="PanelProgress" id="p" bind="probe.nothing" textBind="probe.title"/></elements></PanelAsset>)");
+        interpreter.Prepare(unreadable.asset);
+        Settle();
+        EXPECT_EQ(filledWidth(), 0.0f);
+        EXPECT_EQ(textVertices(), kVerticesPerGlyph) << "a `?` over an empty bar";
+    }
+
+    TEST_F(PanelInterpreterTest, ATreeSectionOpensAndClosesIndentsItsChildrenAndWritesItsOpenBind) {
+        Load(kTreeSection);
+        const ImGuiID node = Chain(HostId(), {"settings", "Settings###settings"});
+        const ImGuiID inside = Chain(HostId(), {"settings", "Settings###settings", "inside", "Inside"});
+        EXPECT_FALSE(RecordOf(inside).has_value()) << "closed by `defaultOpen`";
+
+        ClickAt(Locate(node));
+        Settle();
+        EXPECT_TRUE(probe.flag);
+        const Optional<ImGuiItemRecord> header = RecordOf(node);
+        const Optional<ImGuiItemRecord> child = RecordOf(inside);
+        ASSERT_TRUE(header.has_value());
+        ASSERT_TRUE(child.has_value()) << "an open node draws its children under its own id";
+        EXPECT_NEAR(child->minX - header->minX, ImGui::GetStyle().IndentSpacing, 1.0f);
+
+        ClickAt(Locate(node));
+        Settle();
+        EXPECT_FALSE(probe.flag);
+        EXPECT_FALSE(RecordOf(inside).has_value());
+    }
+
+    TEST_F(PanelInterpreterTest, ADropdownNotesItsOpenCommandOncePerOpeningAndAClosingButtonClosesItAndIsEmitted) {
+        Load(kSaveAsDropdown);
+        const ImGuiID button = DropdownButtonId("bar", "saveAs", "Save as##saveAs");
+        ClickAt(Locate(button));
+        Settle();
+        ASSERT_NE(DropdownPopup("bar", "saveAs"), nullptr);
+        for (int i = 0; i < kSteadyFrames; ++i) {
+            Frame();
+        }
+        EXPECT_EQ(TimesNoted("probe.opened"), 1);
+
+        const ImGuiWindow* popup = DropdownPopup("bar", "saveAs");
+        ASSERT_NE(popup, nullptr);
+        ClickAt(LocateInWindow(Chain(popup->ID, {"save", "Save"}), *popup));
+        Settle();
+        EXPECT_EQ(DropdownPopup("bar", "saveAs"), nullptr);
+        EXPECT_EQ(TimesNoted("probe.save"), 1);
+        EXPECT_EQ(lastCommand, "probe.save");
+
+        ClickAt(Locate(button));
+        Settle();
+        ASSERT_NE(DropdownPopup("bar", "saveAs"), nullptr);
+        EXPECT_EQ(TimesNoted("probe.opened"), 2);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfAProgressAnOpenTreeAndAnOpenDropdownAllocatesNothing) {
+        probe.gain = 0.5f;
+        probe.title = "1 / 2 MB";
+        Load(kProgress);
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+
+        Load(kTreeSection);
+        ClickAt(Locate(Chain(HostId(), {"settings", "Settings###settings"})));
+        ASSERT_TRUE(probe.flag);
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+
+        Load(kSaveAsDropdown);
+        ClickAt(Locate(DropdownButtonId("bar", "saveAs", "Save as##saveAs")));
+        Settle();
+        ASSERT_NE(DropdownPopup("bar", "saveAs"), nullptr);
+        for (int i = 0; i < kInputWarmUpFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+    }
+
 }  // namespace BECore::Tests

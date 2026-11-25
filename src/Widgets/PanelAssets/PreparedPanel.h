@@ -12,7 +12,7 @@ namespace BECore {
 
     /// What `PanelInterpreter::Prepare` makes of an element's class: the walk switches on this and never asks the type again
     CORE_ENUM(PreparedKind, uint8_t, Unknown, Section, Row, Text, Field, Fields, Input, Checkbox, Combo, Number, Button, Table, Separator, EmptyState, Slot, Child, Popup, Tabs, Tab, Menu, MenuItem,
-              MenuItems, Dropdown, Radio)
+              MenuItems, Dropdown, Radio, Progress)
 
     /// Whether a binding text was empty (no condition, no bound text), did not parse, or parsed
     CORE_ENUM(PreparedBindingState, uint8_t, Empty, Bad, Ok)
@@ -51,9 +51,9 @@ namespace BECore {
         PreparedCondition open;
         /// A radio's `bind == value`: selected while it reads true; one that cannot be read shows the radio unselected
         PreparedCondition match;
-        /// The `bind` of a text, field, fields, input, checkbox, combo, number or radio, the `openBind` of a section, the `source` of a table or of a `PanelMenuItems`
+        /// The `bind` of a text, field, fields, input, checkbox, combo, number, radio or progress, the `openBind` of a section, the `source` of a table or of a `PanelMenuItems`
         PreparedBinding bind;
-        /// A checkbox's `labelBind`, a combo's `previewBind`
+        /// A checkbox's `labelBind`, a combo's `previewBind`, a progress's `textBind`
         PreparedBinding label;
         /// The `tooltipBind` of any element: its text replaces `tooltip` when it reads
         PreparedBinding tooltip;
@@ -71,8 +71,8 @@ namespace BECore {
         /// A popup's `open` as the last frame read it: the walk is const over the tree and this is the one thing it remembers, so the modal opens on the rising edge
         /// of `open` and a modal closed by Esc while `open` still reads true does not reopen. A new `Prepare` forgets it
         mutable bool popupWasWanted = false;
-        /// A menu is drawn only while it is open (and not at all while a parent is closed), so the first open frame after a gap is the opening: `openCommand` runs then.
-        /// A new `Prepare` forgets it
+        /// A menu or a dropdown's popup is drawn only while it is open (and not at all while a parent is closed), so the first open frame after a gap is the opening:
+        /// `openCommand` runs then. A new `Prepare` forgets it
         mutable MenuOpenTracker menuOpened;
         /// Where a radio's word `value` is among the names of its enum: looked up at the first click that can read the names, then kept (none: the enum lacks the name,
         /// so a click writes nothing). A new `Prepare` forgets it

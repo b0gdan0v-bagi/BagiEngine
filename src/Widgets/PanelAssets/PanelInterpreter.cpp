@@ -241,6 +241,9 @@ namespace BECore {
             if (element.Is<PanelRadio>()) {
                 return PreparedKind::Radio;
             }
+            if (element.Is<PanelProgress>()) {
+                return PreparedKind::Progress;
+            }
             return PreparedKind::Unknown;
         }
 
@@ -307,6 +310,12 @@ namespace BECore {
                     prepared.open = PrepareCondition(element->Cast<PanelPopup>()->open);
                     PrepareElements(element->elements, prepared.children);
                     break;
+                case PreparedKind::Progress: {
+                    const PanelProgress& progress = *element->Cast<PanelProgress>();
+                    prepared.bind = PrepareBinding(progress.bind, BindingForm::Field);
+                    prepared.label = PrepareBinding(progress.textBind, BindingForm::Field);
+                    break;
+                }
                 case PreparedKind::Dropdown: {
                     const PanelDropdown& dropdown = *element->Cast<PanelDropdown>();
                     prepared.enableWhen = PrepareCondition(dropdown.enableWhen);
@@ -519,6 +528,9 @@ namespace BECore {
             case PreparedKind::Dropdown:
                 DrawDropdown(prepared);
                 break;
+            case PreparedKind::Progress:
+                DrawProgress(prepared);
+                break;
             case PreparedKind::Tabs:
                 DrawTabs(prepared);
                 break;
@@ -556,14 +568,20 @@ namespace BECore {
         _label.append(kStableIdSuffix);
         _label.append(section.id);
         const ImGuiTreeNodeFlags flags = section.defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;
-        const bool open = ImGui::CollapsingHeader(_label.c_str(), flags);
+        const bool tree = section.look == PanelSectionLook::Tree;
+        // An open tree node has pushed its id and indents until `TreePop`; a header does neither
+        const bool open = tree ? ImGui::TreeNodeEx(_label.c_str(), flags) : ImGui::CollapsingHeader(_label.c_str(), flags);
         ElementTooltip(prepared);
         bool held = false;
         if (prepared.bind.state == PreparedBindingState::Ok && _reader.ReadBool(*_sources, prepared.bind.binding, held) == PanelReadStatus::Ok && held != open) {
             static_cast<void>(_writer.WriteBool(*_sources, prepared.bind.binding, open));
         }
-        if (open) {
-            DrawElements(prepared.children);
+        if (!open) {
+            return;
+        }
+        DrawElements(prepared.children);
+        if (tree) {
+            ImGui::TreePop();
         }
     }
 
@@ -663,11 +681,36 @@ namespace BECore {
         if (!ImGui::BeginPopup(kDropdownPopup)) {
             return;
         }
+        if (prepared.menuOpened.Opened(ImGui::GetFrameCount()) && !dropdown.openCommand.empty()) {
+            NoteClick(dropdown.openCommand, StringView{});
+        }
         // A condition that turns false while the popup is open disables what it holds, so nothing in it writes
         ImGui::BeginDisabled(!enabled);
+        _inDropdown = true;
         DrawElements(prepared.children);
+        _inDropdown = false;
         ImGui::EndDisabled();
         ImGui::EndPopup();
+    }
+
+    void PanelInterpreter::DrawProgress(const PreparedElement& prepared) {
+        const PanelProgress& progress = *prepared.element->Cast<PanelProgress>();
+        double value = 0.0;
+        const bool readable = prepared.bind.state == PreparedBindingState::Ok && _reader.ReadNumber(*_sources, prepared.bind.binding, value) == PanelReadStatus::Ok;
+        // Written so a NaN is an empty bar
+        const float fraction = readable && value > 0.0 ? static_cast<float>(eastl::min(value, 1.0)) : 0.0f;
+        const char* overlay = nullptr;
+        StringView text;
+        if (!readable) {
+            overlay = kUnreadable;
+        } else if (prepared.label.state == PreparedBindingState::Ok && _reader.ReadText(*_sources, prepared.label.binding, _scratch, text) == PanelReadStatus::Ok) {
+            // `ProgressBar` wants a C string, which a bound text is not promised to be
+            _label.assign(text.data(), text.size());
+            overlay = _label.c_str();
+        }
+        const float width = progress.width > 0.0f ? progress.width * ImGui::GetFontSize() : kFillWidth;
+        ImGui::ProgressBar(fraction, ImVec2(width, 0.0f), overlay);
+        ElementTooltip(prepared);
     }
 
     void PanelInterpreter::DrawTabs(const PreparedElement& prepared) {
@@ -850,6 +893,9 @@ namespace BECore {
         ImGui::PopItemFlag();
         ImGui::PopItemFlag();
         ImGui::EndDisabled();
+        if (clicked && button.closePopup && _inDropdown) {
+            ImGui::CloseCurrentPopup();
+        }
         if (clicked && !button.command.empty()) {
             NoteClick(button.command, button.argument);
         }

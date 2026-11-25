@@ -159,6 +159,7 @@ namespace BECore {
         void DrawChild(const PreparedElement& prepared);
         void DrawPopup(const PreparedElement& prepared);
         void DrawDropdown(const PreparedElement& prepared);
+        void DrawProgress(const PreparedElement& prepared);
         void DrawTabs(const PreparedElement& prepared);
         void DrawTab(const PreparedElement& prepared);
         void DrawMenu(const PreparedElement& prepared);
@@ -221,6 +222,8 @@ namespace BECore {
         PanelDrawResult* _result = nullptr;
         PanelSlots* _slots = nullptr;
         PanelChordText* _chords = nullptr;
+        /// Whether the walk is inside a dropdown's popup, the one place a button's `closePopup` closes; a file with issues may put one elsewhere
+        bool _inDropdown = false;
     };
 
 }  // namespace BECore
