@@ -85,7 +85,7 @@ namespace BECore {
         inline constexpr auto kConsoleClearOutput = "console.clearOutput"_intern;
         /// Shows and hides the Game panel (the active game's state, actions, fields and methods): the `command` of config/panels/GamePanel.xml
         inline constexpr auto kViewGame = "view.game"_intern;
-        /// Shows and hides the Generate panel (art generation). ArtGenWidget owns the action
+        /// Shows and hides the Generate panel (art generation): the `command` of config/panels/GeneratePanel.xml
         inline constexpr auto kViewGenerate = "view.generate"_intern;
         /// The Generate panel's buttons (config/panels/GeneratePanel.xml names them). ArtGenPanelModel owns them and runs them only while its panel is open.
         /// Each takes a literal argument that names the action (ArtGenPanelArgs in ArtGenPanelModel.h) and does nothing for any other text, except listen

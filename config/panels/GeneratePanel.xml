@@ -1,0 +1,257 @@
+<?xml version="1.0"?>
+<PanelAsset id="Generate" title="Generate" command="view.generate" open="false" width="520" height="700">
+  <sources>
+    <item name="art" model="ArtGenPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelText" id="serviceOff" icon="plug" text="The generation service is not connected" style="Warning" visible="art.service.line == ControlOff or art.service.line == NotConnected"/>
+    <element type="PanelText" id="controlFailed" text="The control API did not start (the Console says why)." style="Error" visible="art.service.line == ControlOff and art.service.controlFailed"/>
+    <element type="PanelText" id="serviceStarting" icon="loader" bind="art.service.statusText" style="Disabled" visible="art.service.line == Starting"/>
+    <element type="PanelButton" id="startService" icon="power" text="Start the service" command="artgen.service" argument="start" tooltipBind="art.service.startTip" visible="art.service.canStart"/>
+    <element type="PanelText" id="byHand" bind="art.service.byHandText" wrap="true" visible="art.service.line == NotConnected"/>
+    <element type="PanelText" id="bridgeError" bind="art.service.bridgeError" style="Error" wrap="true" visible="art.service.line == NotConnected and art.service.hasBridgeError"/>
+    <element type="PanelRow" id="serviceRow" visible="art.service.line == Ready or art.service.line == NotReady">
+      <elements>
+        <element type="PanelText" id="serviceReady" icon="plug" bind="art.service.statusText" style="Success" visible="art.service.line == Ready"/>
+        <element type="PanelText" id="serviceNotReady" icon="circle-alert" bind="art.service.statusText" style="Warning" visible="art.service.line == NotReady"/>
+        <element type="PanelButton" id="disconnect" icon="unplug" text="Disconnect" command="artgen.service" argument="disconnect" tooltip="Stop the generation service (a run or an install in work is cancelled); Start the service runs it again"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="reason" bind="art.service.reason" wrap="true" visible="art.service.line == NotReady and art.service.hasReason"/>
+    <element type="PanelButton" id="stopComfy" icon="square" text="Stop ComfyUI" command="artgen.setup" argument="stop" enableWhen="!art.service.setupBusy and !art.service.runBusy" visible="art.service.line == Ready and art.service.startedHere" tooltip="Stop the generator started from here; frees the GPU"/>
+    <element type="PanelText" id="startedByHand" text="ComfyUI was started by hand: close its window to stop it" style="Disabled" visible="art.service.line == Ready and !art.service.startedHere"/>
+
+    <element type="PanelText" id="setupDoing" icon="loader" bind="art.setup.doing" style="Disabled" visible="art.setup.busy"/>
+    <element type="PanelText" id="setupCurrent" bind="art.setup.current" wrap="true" visible="art.setup.busy and art.setup.hasCurrent"/>
+    <element type="PanelProgress" id="setupProgress" bind="art.setup.progress" textBind="art.setup.progressText" visible="art.setup.busy and art.setup.hasProgress"/>
+    <element type="PanelText" id="setupLog" bind="art.setup.log" style="Disabled" visible="art.setup.busy and art.setup.hasLog"/>
+    <element type="PanelButton" id="setupCancel" icon="x" text="Cancel" command="artgen.setup" argument="cancel" enableWhen="!art.setup.cancelRequested" visible="art.setup.busy and art.setup.cancelShown" tooltip="Stop the install; what is downloaded stays and the next install resumes"/>
+    <element type="PanelText" id="setupFailed" icon="circle-alert" bind="art.setup.error" style="Error" visible="art.setup.failed"/>
+    <element type="PanelText" id="setupDone" bind="art.setup.doneLog" style="Disabled" visible="art.setup.hasDoneLog"/>
+    <element type="PanelText" id="setupError" bind="art.setup.setupError" style="Error" visible="art.setup.hasSetupError"/>
+    <element type="PanelText" id="planMachine" icon="monitor" bind="art.setup.platformText" wrap="true" visible="art.setup.planShown"/>
+    <element type="PanelText" id="planRoot" bind="art.setup.rootText" wrap="true" visible="art.setup.planShown"/>
+    <element type="PanelTable" id="plan" source="art.setup.plan" header="false" visible="art.setup.planShown">
+      <columns>
+        <item type="Text" id="what" field="what" tooltipField="tooltip"/>
+        <item type="Text" id="state" field="state" styleField="stateStyle"/>
+        <item type="Text" id="size" field="size"/>
+      </columns>
+    </element>
+    <element type="PanelText" id="planFromSource" text="Plus PyTorch and ComfyUI's requirements from PyPI (a few GB)." wrap="true" visible="art.setup.planShown and art.setup.fromSource"/>
+    <element type="PanelRow" id="planButtons" visible="art.setup.planShown">
+      <elements>
+        <element type="PanelButton" id="install" icon="download" text="Download and install" command="artgen.setup" argument="install" tooltipBind="art.setup.downloadTip"/>
+        <element type="PanelButton" id="notNow" icon="x" text="Not now" command="artgen.setup" argument="dismiss" tooltip="Download nothing"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="planRemote" icon="cloud" text="Or a generator on another machine: not available yet (comfyui-remote-via-todo)" style="Disabled" visible="art.setup.planShown"/>
+    <element type="PanelButton" id="setUp" icon="download" text="Set up..." command="artgen.setup" argument="plan" enableWhen="art.setup.canAct" visible="art.setup.notInstalled" tooltip="See what installing a local generator (ComfyUI and its models) would download, then decide"/>
+    <element type="PanelText" id="remote" icon="cloud" text="A generator on another machine: not available yet (comfyui-remote-via-todo)" style="Disabled" visible="art.setup.notInstalled"/>
+    <element type="PanelButton" id="startGenerator" icon="play" text="Start" command="artgen.setup" argument="start" enableWhen="art.setup.canAct" visible="art.setup.notRunning" tooltip="Start the local generator in the background (the GPU is busy while it runs)"/>
+
+    <element type="PanelSeparator" id="presetLine" title="Preset: used by Generate and Set"/>
+    <element type="PanelCombo" id="preset" bind="art.preset.index" items="art.preset.rows" itemField="label" enableField="enabled" tooltipField="tooltip" previewBind="art.preset.preview" text="Preset" tooltip="The game's presets (artgen/presets/), then the engine's starters; * marks unsaved changes, which picking another one drops"/>
+    <element type="PanelRow" id="presetBar">
+      <elements>
+        <element type="PanelButton" id="newPreset" icon="file-plus" command="artgen.preset" argument="new" enableWhen="art.preset.canNew" tooltip="New preset on the first workflow"/>
+        <element type="PanelButton" id="duplicatePreset" icon="copy" command="artgen.preset" argument="duplicate" enableWhen="art.preset.hasForm" tooltip="Duplicate: the same settings under a new name, not saved yet"/>
+        <element type="PanelButton" id="savePreset" icon="save" command="artgen.preset" argument="save" enableWhen="art.preset.hasForm and !art.preset.savedHere" tooltip="Save as artgen/presets/&lt;name&gt;.json of the game, which is tracked in git (an engine starter becomes the game's own copy)"/>
+        <element type="PanelDropdown" id="savePresetAs" icon="save-all" openCommand="artgen.saveAsOpened" enableWhen="art.preset.hasForm" tooltip="Save as another name">
+          <elements>
+            <element type="PanelInput" id="saveAsName" bind="art.preset.saveAsName" hint="preset_name" fill="false"/>
+            <element type="PanelButton" id="saveAs" icon="save" text="Save" command="artgen.preset" argument="saveAs" enableWhen="art.preset.saveAsValid" closePopup="true" tooltip="Write artgen/presets/&lt;name&gt;.json of the game (tracked in git)"/>
+            <element type="PanelText" id="saveAsInvalid" text="1 to 64 of A-Z a-z 0-9 _ -" style="Warning" visible="!art.preset.saveAsValid"/>
+          </elements>
+        </element>
+        <element type="PanelButton" id="revertPreset" icon="undo-2" command="artgen.preset" argument="revert" enableWhen="art.preset.canRevert" tooltip="Revert to the saved preset"/>
+        <element type="PanelText" id="presetState" bind="art.preset.stateText" style="Warning" visible="art.preset.dirty"/>
+        <element type="PanelText" id="engineStarter" text="an engine starter: Save makes it the game's own" style="Disabled" visible="art.preset.engineStarter"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="presetSaved" bind="art.preset.message" style="Success" wrap="true" visible="art.preset.hasMessage and art.preset.messageStyle == Success"/>
+    <element type="PanelText" id="presetFailed" bind="art.preset.message" style="Error" wrap="true" visible="art.preset.hasMessage and art.preset.messageStyle == Error"/>
+    <element type="PanelText" id="presetBroken" icon="circle-alert" bind="art.preset.baseError" style="Error" wrap="true" visible="art.preset.hasBaseError"/>
+    <element type="PanelText" id="noList" text="The service has not said which presets and workflows there are yet" style="Disabled" visible="art.preset.noList"/>
+    <element type="PanelInput" id="presetName" bind="art.preset.name" text="Name" visible="art.preset.hasForm" tooltip="The file name: artgen/presets/&lt;name&gt;.json of the game; 1 to 64 of A-Z a-z 0-9 _ -"/>
+    <element type="PanelInput" id="presetTitle" bind="art.preset.title" text="Title" visible="art.preset.hasForm"/>
+    <element type="PanelCombo" id="workflow" bind="art.preset.workflowIndex" items="art.preset.workflows" itemField="label" enableField="enabled" tooltipField="tooltip" previewBind="art.preset.workflowPreview" text="Workflow" visible="art.preset.hasForm" tooltip="The graph: the game's artgen/workflows/ first, then the engine's tools/artgen/workflows/"/>
+    <element type="PanelInput" id="prompt" bind="art.preset.prompt" lines="4" text="Prompt" visible="art.preset.hasForm" tooltip="{subject} is replaced by the subject below; without it the subject goes first"/>
+    <element type="PanelInput" id="negative" bind="art.preset.negative" lines="2" text="Negative" visible="art.preset.hasForm"/>
+    <element type="PanelText" id="unknownWorkflow" bind="art.preset.unknownWorkflowText" style="Warning" visible="art.preset.unknownWorkflow"/>
+    <element type="PanelSection" id="settings" title="Settings" look="Tree" defaultOpen="false" visible="art.preset.knownWorkflow">
+      <elements>
+        <element type="PanelRow" id="sizeRow" visible="art.preset.hasSize">
+          <elements>
+            <element type="PanelNumber" id="width" bind="art.preset.width" input="true" min="1" max="8192" width="6.4"/>
+            <element type="PanelNumber" id="height" bind="art.preset.height" input="true" min="1" max="8192" width="6.4" text="Size"/>
+            <element type="PanelButton" id="resetSize" icon="rotate-ccw" command="artgen.preset" argument="resetSize" visible="art.preset.sizeOverridden" tooltip="Back to the workflow's value"/>
+          </elements>
+        </element>
+        <element type="PanelSlot" id="workflowInputs" name="artgenWorkflowInputs"/>
+        <element type="PanelSection" id="presetAccept" title="Accept (image)" look="Tree" defaultOpen="false" visible="!art.preset.isAudio">
+          <elements>
+            <element type="PanelCheckbox" id="presetTrim" bind="art.preset.accept.trim" text="Trim to the drawn object" tooltip="Cut the file to the box of what is drawn (alpha above the haze). A set is cut to the box of all its pictures together, so a pawn stays smaller than a king"/>
+            <element type="PanelNumber" id="presetPadding" bind="art.preset.accept.padding" slider="true" min="0" max="25" unit="%" width="10" text="Padding" enableWhen="art.preset.accept.trim" tooltip="The margin kept around the drawn box, in percent of its longer side"/>
+            <element type="PanelRow" id="presetMaxSizeRow">
+              <elements>
+                <element type="PanelCombo" id="presetMaxSize" bind="art.preset.accept.maxSizeIndex" items="art.preset.accept.maxSizes" previewBind="art.preset.accept.maxSizeText" width="10" text="Max size" tooltip="The longer side of the file in pixels; a bigger picture is scaled down, a smaller one is never scaled up"/>
+                <element type="PanelButton" id="presetAcceptDefaults" icon="rotate-ccw" text="Defaults" command="artgen.preset" argument="acceptDefaults" visible="art.preset.accept.overridden" tooltip="Back to the defaults of Accept; the preset file then has no accept key"/>
+              </elements>
+            </element>
+          </elements>
+        </element>
+        <element type="PanelSection" id="presetReference" title="Reference" look="Tree" defaultOpen="false" visible="!art.preset.isAudio">
+          <elements>
+            <element type="PanelText" id="presetRefNote" text="The reference saved with this preset. A Generate or Queue with a filled slot above replaces it for that run." style="Disabled" wrap="true"/>
+            <element type="PanelText" id="presetRefUnreadable" text="The preset's reference is not readable (needs a mode and an image, a weight a number); it is kept as it is until it is replaced or removed." style="Warning" wrap="true" visible="art.presetRef.unreadable"/>
+            <element type="PanelCombo" id="presetRefMode" bind="art.presetRef.modeIndex" items="art.presetRef.modes" itemField="label" tooltipField="tooltip" previewBind="art.presetRef.mode" text="Mode" tooltipBind="art.presetRef.modeTip" visible="art.presetRef.has"/>
+            <element type="PanelInput" id="presetRefImage" bind="art.presetRef.image" text="Image" tooltipBind="art.presetRef.imageTip" visible="art.presetRef.has"/>
+            <element type="PanelNumber" id="presetRefInitWeight" bind="art.presetRef.weight" slider="true" min="0.05" max="0.95" decimals="2" text="Weight" visible="art.presetRef.has and art.presetRef.mode != style and art.presetRef.mode != structure" tooltip="How strongly the picture counts: higher keeps more of it (init), applies its style harder (style) or follows its shape more strictly (structure)"/>
+            <element type="PanelNumber" id="presetRefWeight" bind="art.presetRef.weight" slider="true" min="0.1" max="1.5" decimals="2" text="Weight" visible="art.presetRef.has and art.presetRef.mode == style or art.presetRef.has and art.presetRef.mode == structure" tooltip="How strongly the picture counts: higher keeps more of it (init), applies its style harder (style) or follows its shape more strictly (structure)"/>
+            <element type="PanelText" id="presetRefNone" text="No reference" style="Disabled" visible="!art.presetRef.has and !art.presetRef.unreadable"/>
+            <element type="PanelRow" id="presetRefButtons">
+              <elements>
+                <element type="PanelButton" id="takeSlot" icon="image-plus" text="Take the slot" command="artgen.preset" argument="takeSlot" enableWhen="art.presetRef.canTake" tooltip="Copy the picture, mode and weight of the Reference section of the Generate tab into this preset"/>
+                <element type="PanelButton" id="removeReference" icon="x" text="Remove" command="artgen.preset" argument="removeReference" enableWhen="art.presetRef.canRemove" tooltip="The preset's file then has no reference key"/>
+              </elements>
+            </element>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelSeparator" id="tabsLine"/>
+    <element type="PanelTabs" id="tabs">
+      <elements>
+        <element type="PanelTab" id="generateTab" title="Generate" icon="image">
+          <elements>
+            <element type="PanelSeparator" id="referenceLine" title="Reference (optional)" visible="art.run.images"/>
+            <element type="PanelInput" id="referenceFile" bind="art.ref.typedPath" hint="sketch.png" text="File" visible="art.run.images" tooltip="A picture or a sketch of any size: a path inside the game folder is kept relative to it, a pasted path may carry quotes"/>
+            <element type="PanelRow" id="useFileRow" visible="art.run.images">
+              <elements>
+                <element type="PanelButton" id="useFile" icon="file-image" text="Use file" command="artgen.reference" argument="useFile" tooltip="Put this file into the slot: with the slot's mode, or as the shape (structure) when the slot is empty. It must exist"/>
+                <element type="PanelText" id="fileMissing" text="No such file." style="Warning" visible="art.ref.fileMissing"/>
+              </elements>
+            </element>
+            <element type="PanelText" id="referenceEmpty" text="No reference. Type the path of a picture or a sketch above (a sketch's lines are the shape), or use Use as reference or Use as shape on a variant or an accepted sprite; a preset's own reference applies while it is empty." style="Disabled" wrap="true" visible="art.run.images and !art.ref.has"/>
+            <element type="PanelRow" id="referenceRow" visible="art.run.images and art.ref.has">
+              <elements>
+                <element type="PanelSlot" id="referencePicture" name="artgenReferencePicture"/>
+                <element type="PanelText" id="referenceName" bind="art.ref.name"/>
+              </elements>
+            </element>
+            <element type="PanelCombo" id="referenceMode" bind="art.ref.modeIndex" items="art.ref.modes" itemField="label" tooltipField="tooltip" previewBind="art.ref.mode" text="Mode" tooltipBind="art.ref.modeTip" visible="art.run.images and art.ref.has"/>
+            <element type="PanelNumber" id="referenceInitWeight" bind="art.ref.weight" slider="true" min="0.05" max="0.95" decimals="2" text="Weight" visible="art.run.images and art.ref.has and art.ref.mode != style and art.ref.mode != structure" tooltip="How strongly the picture counts: higher keeps more of it (init), applies its style harder (style) or follows its shape more strictly (structure)"/>
+            <element type="PanelNumber" id="referenceWeight" bind="art.ref.weight" slider="true" min="0.1" max="1.5" decimals="2" text="Weight" visible="art.run.images and art.ref.has and art.ref.mode == style or art.run.images and art.ref.has and art.ref.mode == structure" tooltip="How strongly the picture counts: higher keeps more of it (init), applies its style harder (style) or follows its shape more strictly (structure)"/>
+            <element type="PanelButton" id="clearReference" icon="x" text="Clear" command="artgen.reference" argument="clear" visible="art.run.images and art.ref.has" tooltip="Send no reference with the next Generate"/>
+            <element type="PanelText" id="referenceFilled" text="Sent with the next single Generate; it replaces the preset's own reference." style="Disabled" wrap="true" visible="art.run.images and art.ref.has"/>
+
+            <element type="PanelInput" id="subject" bind="art.run.subject" hint="white knight, a red gem, ..." text="Subject"/>
+            <element type="PanelNumber" id="count" bind="art.run.count" stepper="true" min="1" max="16" step="1" stepFast="100" text="Count"/>
+            <element type="PanelRow" id="seedRow">
+              <elements>
+                <element type="PanelCheckbox" id="randomSeed" bind="art.run.randomSeed" text="Random seed"/>
+                <element type="PanelNumber" id="seed" bind="art.run.seed" input="true" visible="!art.run.randomSeed"/>
+              </elements>
+            </element>
+            <element type="PanelCheckbox" id="keepVariants" bind="art.run.keepVariants" text="Keep the variants on screen" tooltip="The new images are added to the ones shown instead of replacing them"/>
+            <element type="PanelRow" id="generateRow">
+              <elements>
+                <element type="PanelButton" id="generate" icon="sparkles" text="Generate" command="artgen.run" argument="generate" enableWhen="art.run.canGenerate" tooltip="Ask the service for the images with the form as it is, saved or not (it may still be starting: the request waits)"/>
+                <element type="PanelButton" id="cancelRun" icon="x" text="Cancel" command="artgen.run" argument="cancel" enableWhen="!art.run.cancelRequested" visible="art.run.singleRunInWork" tooltip="Stop the run; the images already made stay"/>
+              </elements>
+            </element>
+            <element type="PanelText" id="setRunning" text="A set is running (see the Set tab); Generate is off until it ends" style="Disabled" visible="art.run.setRunning"/>
+            <element type="PanelText" id="requestError" bind="art.run.requestError" style="Error" wrap="true" visible="art.run.hasRequestError"/>
+            <element type="PanelText" id="draftNote" text="The variants are drafts in artgen/out/ (git ignores that folder). Accept below copies one into the game." style="Disabled" wrap="true"/>
+
+            <element type="PanelText" id="setJob" bind="art.run.setJobText" style="Disabled" visible="art.run.isSetJob"/>
+            <element type="PanelEmptyState" id="idle" icon="image" text="Pick a preset, write a subject and press Generate" visible="!art.run.isSetJob and art.run.state == Idle"/>
+            <element type="PanelText" id="queued" text="Waiting for the service to take the request..." style="Disabled" visible="!art.run.isSetJob and art.run.state == Queued"/>
+            <element type="PanelProgress" id="runProgress" bind="art.run.progress" textBind="art.run.progressText" visible="!art.run.isSetJob and art.run.state == Running"/>
+            <element type="PanelText" id="cancelling" text="Cancelling..." style="Disabled" visible="!art.run.isSetJob and art.run.state == Running and art.run.cancelRequested"/>
+            <element type="PanelText" id="runDone" bind="art.run.doneText" style="Success" visible="!art.run.isSetJob and art.run.state == Done"/>
+            <element type="PanelText" id="runFailed" icon="circle-alert" bind="art.run.failedText" style="Error" wrap="true" visible="!art.run.isSetJob and art.run.state == Failed"/>
+            <element type="PanelText" id="runCancelled" bind="art.run.cancelledText" style="Disabled" visible="!art.run.isSetJob and art.run.state == Cancelled"/>
+
+            <element type="PanelText" id="pickImage" text="Click an image to accept it into the game" style="Disabled" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and !art.accept.hasPick"/>
+            <element type="PanelSeparator" id="imageAcceptLine" title="Accept" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick"/>
+            <element type="PanelText" id="imageSeed" bind="art.accept.seedText" style="Disabled" mono="true" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick"/>
+            <element type="PanelCheckbox" id="acceptTrim" bind="art.preset.accept.trim" text="Trim to the drawn object" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick" tooltip="Cut the file to the box of what is drawn (alpha above the haze). A set is cut to the box of all its pictures together, so a pawn stays smaller than a king"/>
+            <element type="PanelNumber" id="acceptPadding" bind="art.preset.accept.padding" slider="true" min="0" max="25" unit="%" width="10" text="Padding" enableWhen="art.preset.accept.trim" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick" tooltip="The margin kept around the drawn box, in percent of its longer side"/>
+            <element type="PanelRow" id="acceptMaxSizeRow" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick">
+              <elements>
+                <element type="PanelCombo" id="acceptMaxSize" bind="art.preset.accept.maxSizeIndex" items="art.preset.accept.maxSizes" previewBind="art.preset.accept.maxSizeText" width="10" text="Max size" tooltip="The longer side of the file in pixels; a bigger picture is scaled down, a smaller one is never scaled up"/>
+                <element type="PanelButton" id="acceptDefaults" icon="rotate-ccw" text="Defaults" command="artgen.preset" argument="acceptDefaults" visible="art.preset.accept.overridden" tooltip="Back to the defaults of Accept; the preset file then has no accept key"/>
+              </elements>
+            </element>
+            <element type="PanelText" id="acceptSummary" bind="art.accept.summary" style="Disabled" mono="true" visible="!art.run.isSetJob and !art.run.hasSounds and art.accept.hasPick and art.accept.hasSummary and art.accept.summaryStyle != Error"/>
+            <element type="PanelText" id="acceptSummaryError" bind="art.accept.summary" style="Error" mono="true" visible="!art.run.isSetJob and !art.run.hasSounds and art.accept.hasPick and art.accept.hasSummary and art.accept.summaryStyle == Error"/>
+            <element type="PanelInput" id="sprite" bind="art.accept.sprite" hint="white_knight" text="Sprite" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick" tooltip="The TextureLibrary name; the file goes to assets/artgen/&lt;name&gt;.png with its .artgen.json"/>
+            <element type="PanelCheckbox" id="imageUseOnSelected" bind="art.accept.useOnSelected" text="Use on the selected node" enableWhen="art.accept.haveNode" tooltipBind="art.accept.useOnSelectedTip" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick"/>
+            <element type="PanelRow" id="acceptImageRow" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick">
+              <elements>
+                <element type="PanelButton" id="acceptImage" icon="check" text="Accept" command="artgen.accept" argument="image" enableWhen="art.accept.spriteValid" tooltipBind="art.accept.note"/>
+                <element type="PanelText" id="spriteInvalid" text="1 to 64 of A-Z a-z 0-9 _ -" style="Warning" visible="art.accept.nameWarning"/>
+              </elements>
+            </element>
+            <element type="PanelText" id="acceptNote" bind="art.accept.note" style="Disabled" wrap="true" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick"/>
+            <element type="PanelText" id="imageAccepted" bind="art.accept.message" style="Success" wrap="true" visible="!art.run.isSetJob and !art.run.hasSounds and art.accept.hasPick and art.accept.hasMessage and art.accept.messageStyle != Error"/>
+            <element type="PanelText" id="imageAcceptFailed" bind="art.accept.message" style="Error" wrap="true" visible="!art.run.isSetJob and !art.run.hasSounds and art.accept.hasPick and art.accept.hasMessage and art.accept.messageStyle == Error"/>
+            <element type="PanelRow" id="acceptedRow" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds and art.accept.hasPick and art.accept.hasAccepted">
+              <elements>
+                <element type="PanelButton" id="useAsReference" icon="image-plus" text="Use as reference" command="artgen.reference" argument="useSprite" tooltip="Use this picture as the reference of the next single Generate (the Reference section of the Generate tab)"/>
+                <element type="PanelButton" id="useAsShape" icon="shapes" text="Use as shape" command="artgen.reference" argument="useShape" tooltip="Use this sprite's outline as the shape of the next single Generate (the Reference section of the Generate tab)"/>
+              </elements>
+            </element>
+            <element type="PanelSlot" id="variants" name="artgenVariants" visible="!art.run.isSetJob and art.run.state != Idle and !art.run.hasSounds"/>
+
+            <element type="PanelText" id="pickSound" text="Listen, then click a waveform to accept that sound into the game" style="Disabled" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and !art.soundAccept.hasPick"/>
+            <element type="PanelSeparator" id="soundAcceptLine" title="Accept" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelText" id="soundSeed" bind="art.accept.seedText" style="Disabled" mono="true" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelCheckbox" id="mono" bind="art.sound.mono" text="Mono" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelRow" id="trimRow" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick">
+              <elements>
+                <element type="PanelCheckbox" id="trimSilence" bind="art.sound.trim" text="Trim silence below"/>
+                <element type="PanelNumber" id="trimDb" bind="art.sound.trimDb" slider="true" min="-90" max="-1" unit="dB" width="10" visible="art.sound.trim"/>
+              </elements>
+            </element>
+            <element type="PanelNumber" id="fadeIn" bind="art.sound.fadeIn" slider="true" min="0" max="1000" unit="ms" width="10" text="Fade in" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelNumber" id="fadeOut" bind="art.sound.fadeOut" slider="true" min="0" max="1000" unit="ms" width="10" text="Fade out" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelRow" id="peakRow" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick">
+              <elements>
+                <element type="PanelCheckbox" id="normalise" bind="art.sound.normalise" text="Normalise the peak to"/>
+                <element type="PanelNumber" id="peakDb" bind="art.sound.peakDb" slider="true" min="-24" max="0" decimals="1" unit="dB" width="10" visible="art.sound.normalise"/>
+              </elements>
+            </element>
+            <element type="PanelNumber" id="maxSeconds" bind="art.sound.maxSeconds" slider="true" min="0" max="60" decimals="2" unit="s" width="10" text="Max length (0: no limit)" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelCombo" id="sampleRate" bind="art.sound.rateIndex" items="art.sound.rates" width="10" text="Sample rate" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelRow" id="listenRow" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick">
+              <elements>
+                <element type="PanelButton" id="listen" icon="headphones" text="Listen as accepted" command="artgen.listen" enableWhen="art.soundAccept.canListen" visible="!art.soundAccept.previewPlaying" tooltip="The selected sound after the settings above: what Accept writes"/>
+                <element type="PanelButton" id="stopListening" icon="square" text="Stop" command="artgen.listen" visible="art.soundAccept.previewPlaying" tooltip="The selected sound after the settings above: what Accept writes"/>
+                <element type="PanelText" id="preview" bind="art.soundAccept.previewText" style="Disabled" mono="true" visible="art.soundAccept.hasPreview"/>
+              </elements>
+            </element>
+            <element type="PanelText" id="previewError" bind="art.soundAccept.previewError" style="Error" wrap="true" visible="!art.run.isSetJob and art.run.hasSounds and art.soundAccept.hasPick and art.soundAccept.hasPreviewError"/>
+            <element type="PanelCheckbox" id="replaceClip" bind="art.soundAccept.replaceClip" text="Replace a clip of the game" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick" tooltip="The game plays its sounds by fixed paths (assets/sounds/move.wav): Accept writes over one of them"/>
+            <element type="PanelInput" id="clip" bind="art.soundAccept.clipPath" hint="assets/sounds/move.wav" text="Clip" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick and art.soundAccept.replaceClip"/>
+            <element type="PanelText" id="clipInvalid" text="assets/&lt;folders&gt;/&lt;name&gt;.wav" style="Warning" visible="!art.run.isSetJob and art.run.hasSounds and art.soundAccept.hasPick and art.soundAccept.replaceClip and !art.soundAccept.clipValid"/>
+            <element type="PanelInput" id="soundName" bind="art.accept.sprite" hint="knight_move" text="Name" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick and !art.soundAccept.replaceClip" tooltip="The file goes to assets/artgen/&lt;name&gt;.wav with its .artgen.json"/>
+            <element type="PanelText" id="soundNameInvalid" text="1 to 64 of A-Z a-z 0-9 _ -" style="Warning" visible="!art.run.isSetJob and art.run.hasSounds and art.soundAccept.hasPick and !art.soundAccept.replaceClip and art.accept.nameWarning"/>
+            <element type="PanelCheckbox" id="soundUseOnSelected" bind="art.accept.useOnSelected" text="Use on the selected node" enableWhen="art.accept.haveNode" tooltipBind="art.soundAccept.useOnSelectedTip" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelButton" id="acceptSound" icon="check" text="Accept" command="artgen.accept" argument="sound" enableWhen="art.soundAccept.canAccept" tooltipBind="art.soundAccept.acceptTip" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds and art.soundAccept.hasPick"/>
+            <element type="PanelText" id="soundAccepted" bind="art.accept.message" style="Success" wrap="true" visible="!art.run.isSetJob and art.run.hasSounds and art.soundAccept.hasPick and art.accept.hasMessage and art.accept.messageStyle != Error"/>
+            <element type="PanelText" id="soundAcceptFailed" bind="art.accept.message" style="Error" wrap="true" visible="!art.run.isSetJob and art.run.hasSounds and art.soundAccept.hasPick and art.accept.hasMessage and art.accept.messageStyle == Error"/>
+            <element type="PanelSlot" id="sounds" name="artgenSounds" visible="!art.run.isSetJob and art.run.state != Idle and art.run.hasSounds"/>
+          </elements>
+        </element>
+        <element type="PanelTab" id="setTab" title="Set" icon="list-checks">
+          <elements>
+            <element type="PanelSlot" id="set" name="artgenSetTab"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

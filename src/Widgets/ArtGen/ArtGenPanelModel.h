@@ -93,6 +93,8 @@ namespace BECore {
 
         BE_REFLECT_FIELD String what;
         BE_REFLECT_FIELD String state;
+        /// Always `Disabled`: a table column takes its colour from a field of the row, and the plan's state is muted
+        BE_REFLECT_FIELD PanelTextStyle stateStyle = PanelTextStyle::Disabled;
         BE_REFLECT_FIELD String size;
         BE_REFLECT_FIELD String tooltip;
     };
@@ -389,8 +391,11 @@ namespace BECore {
     };
 
     /**
-     * @brief The model of the Generate panel asset, with no ImGui: the service line, the setup of a local generator, and the session set up for the
-     * control API
+     * @brief The model of the Generate panel (`config/panels/GeneratePanel.xml`), with no ImGui: the service line, the setup of a local generator, the
+     * preset form, the run form, Accept, and the session set up for the control API
+     *
+     * The model is made with its `AssetPanelWidget` whether the window is open or not, so the control methods, the acceptors and the drop answer exist
+     * from the editor's start. Everything else the panel draws is the asset's; what the format cannot say is a slot of `ArtGenPanelSlots`.
      *
      * The state of a run lives in `ArtGenSession`, which outlives the panel; the model makes its view of it again only when a key moved (the session's
      * `Version()`, whether a service polls, the control API's status, the bridge it started, the end of the bridge's start window), so a steady

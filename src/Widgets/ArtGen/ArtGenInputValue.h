@@ -14,7 +14,7 @@ namespace BECore {
      * @brief The value of a workflow input as the Generate form edits it: a default the service reported, a choice of a combo, an override a preset
      * keeps in `params`.
      *
-     * Typed, not a JSON text, because the form reads it every frame (`ArtGenWidget::DrawInputField`) and a frame allocates nothing. A value the form
+     * Typed, not a JSON text, because the form reads it every frame (the slot `artgenWorkflowInputs` of `ArtGenPanelSlots`) and a frame allocates nothing. A value the form
      * has no field for (an array, an object, an integer past 64 bits) is kept as its JSON text in `text`, compact with the keys in byte order, so a
      * preset that holds one is written back as it was.
      */

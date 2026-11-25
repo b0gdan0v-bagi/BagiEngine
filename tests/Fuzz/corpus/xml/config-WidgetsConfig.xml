@@ -58,6 +58,7 @@
       type="AssetPanelWidget"
       asset="GamePanel" />
     <widget
-      type="ArtGenWidget" />
+      type="AssetPanelWidget"
+      asset="GeneratePanel" />
   </widgets>
 </root>
