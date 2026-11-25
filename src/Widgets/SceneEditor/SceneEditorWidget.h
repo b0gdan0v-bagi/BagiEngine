@@ -9,6 +9,7 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
+#include <Widgets/SceneEditor/ISceneEditorHost.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
@@ -25,9 +26,9 @@ namespace BECore {
 
     /**
      * @brief ImGui panel for live scene editing: the hierarchy tree on the left, the inspector of the selected node
-     * and its components on the right. Edits apply at once, without staging.
+     * and its components on the right. Edits apply at once, without staging. It is the `ISceneEditorHost` of the models of its panel assets.
      */
-    class SceneEditorWidget : public IWidget {
+    class SceneEditorWidget : public IWidget, public ISceneEditorHost {
         BE_CLASS(SceneEditorWidget)
     public:
         SceneEditorWidget() = default;
@@ -40,6 +41,10 @@ namespace BECore {
         void AppendDocuments(Vector<EditorDocumentState>& out);
         void Update() override;
         void Draw() override;
+
+        [[nodiscard]] SceneInspectedNode GetInspected() const override;
+        void RenameInspected(StringView name) override;
+        void SetInspectedLayer(int32_t layer) override;
 
     private:
         bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
@@ -119,6 +124,10 @@ namespace BECore {
          */
         void SaveScene();
 
+        /// The primary node when the active scene is the one the selection belongs to and the node is alive in its tree, else null. The models of the
+        /// panel assets are updated before this widget, so its own Update has not yet dropped a node that died or a scene that was replaced
+        [[nodiscard]] SceneNode* FindInspected() const;
+
         HierarchyState _hierarchy;           // the primary node, the rename and the pending tree edit of the hierarchy panel
         SceneSelection _selection;           // every selected node; its primary is `_hierarchy.selected`
         Vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
@@ -138,7 +147,8 @@ namespace BECore {
         const SceneNode* _announcedUINode = nullptr;
         const UIElement* _announcedUIElement = nullptr;
 
-        EditorDocumentsHandle _documents;  // the source of `editor_state`, ends with the widget
+        EditorDocumentsHandle _documents;   // the source of `editor_state`, ends with the widget
+        SceneEditorHostHandle _hostHandle;  // ends with the widget, so a model never reaches a dead one
     };
 
 }  // namespace BECore

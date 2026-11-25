@@ -47,7 +47,51 @@ namespace BECore {
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
+        _hostHandle = SceneEditorHostRegistry::GetInstance().Register(*this);
         return true;
+    }
+
+    SceneNode* SceneEditorWidget::FindInspected() const {
+        SceneManager* const sceneManager = CoreManager::FindSceneManager();
+        Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
+        if (scene == nullptr || scene != _lastScene || _hierarchy.selected == nullptr) {
+            return nullptr;
+        }
+        return HierarchyModel::FindNode(scene->GetRootNode(), _hierarchy.selected);
+    }
+
+    SceneInspectedNode SceneEditorWidget::GetInspected() const {
+        SceneInspectedNode inspected;
+        SceneManager* const sceneManager = CoreManager::FindSceneManager();
+        inspected.hasScene = sceneManager != nullptr && sceneManager->GetActiveScene() != nullptr;
+        inspected.dirty = _isDirty;
+        if (const SceneNode* const node = FindInspected()) {
+            inspected.hasSelection = true;
+            inspected.selectionCount = _selection.Count();
+            inspected.locked = node->HasEditorFlag(EditorFlags::Locked);
+            inspected.name = node->GetName();
+            inspected.layer = node->GetLayer();
+            inspected.sourceRef = node->GetSourceRef();
+        }
+        return inspected;
+    }
+
+    void SceneEditorWidget::RenameInspected(StringView name) {
+        SceneNode* const node = FindInspected();
+        if (node == nullptr || node->HasEditorFlag(EditorFlags::Locked)) {
+            return;
+        }
+        node->SetName(PoolString::Intern(name));
+        _isDirty = true;
+    }
+
+    void SceneEditorWidget::SetInspectedLayer(int32_t layer) {
+        SceneNode* const node = FindInspected();
+        if (node == nullptr || node->HasEditorFlag(EditorFlags::Locked)) {
+            return;
+        }
+        node->SetLayer(layer);
+        _isDirty = true;
     }
 
     void SceneEditorWidget::AppendDocuments(Vector<EditorDocumentState>& out) {
