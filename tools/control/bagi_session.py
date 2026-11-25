@@ -44,6 +44,7 @@ LOG_LEVEL_WARNING = "warning"
 SET_WINDOW_METHOD = "set_window"
 WINDOW_FLAG = "--window="
 DENSITY_FLAG = "--density="
+EDITOR_FLAG = "--editor"
 WINDOW_SIZE_PATTERN = re.compile(r"\d+x\d+")  # "WxH", the form of the engine's --window flag
 SAFE_AREA_SIDES = ("top", "right", "bottom", "left")
 
@@ -112,18 +113,19 @@ class GameSession:
         record_expect: str = scenario.RECORD_MINIMAL,
         window: str | None = None,
         density: float | None = None,
+        editor: bool = False,
     ) -> dict[str, Any]:
         """Starts a game with the control API on a free port and connects to it. A game that this session started earlier is stopped.
 
         The game is given either as `exe` (a path) or as `preset` + `game` (build/<preset>/bin/<game>, see preset_executable); exactly one of the two.
         `window` ("WxH" in window units) and `density` are the start size and pixel density of a headless window (`--window=`, `--density=`), which
-        set_window changes later. `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
+        set_window changes later. `editor` starts the game in the Editor run mode (`--editor`; a build without the editor runs Game: `status.runMode` says which). `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
         """
         by_path = bool(exe)
         by_preset = bool(preset) or bool(game)
         if by_path == by_preset or (by_preset and not (preset and game)):
             raise SessionError("name the game either by `exe` (the path of the built executable) or by `preset` and `game` together (build/<preset>/bin/<game>), not both and not neither")
-        window_flags = self._window_flags(window, density, headless)
+        window_flags = self._window_flags(window, density, headless) + [EDITOR_FLAG] * editor
         self.close()
         if record is not None:
             self._check_record_target(Path(record), record_expect)

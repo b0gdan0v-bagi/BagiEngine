@@ -6,16 +6,19 @@ the bad values, screenshots that are not flat, `set_language` rewording the `ui`
 on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `rmlui` scenario probes `get_state.scenes`
 and prints a skip line when the build has no `rmlui` (only `ENGINE_UI_RMLUI` builds list it), so the same script passes in every preset; with it the scene's documents, textures,
 `wheel_at` on both axes, `ReloadRmlUiDocuments` and the scene switch are checked. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
-`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
+`get_property`, `set_property`, `call_method`) and checks the engine's `config/*.xml` against the XSD made from the live schema (`tools/schema`; printed as skipped when `xmllint` is missing). The `editor` scenario runs `--headless --editor` (a temp `BAGI_EDITOR_DIR`): `status.runMode` is `Editor`, a screenshot is the whole window and differs from the Game mode's of the same game; a build without the editor prints a skip line. The helpers are those of tools/control/tests/smoke.py (the default scenario of `smoke.py` is not touched).
 
 Unlike smoke.py's `run_smoke` this script drives the process through `GameProcess`, because the check of the game's log needs the log's
 path and `smoke.play` keeps it to itself. Exit codes as smoke.py: 0 passed, 1 failed, 77 skipped (the executable is not built).
 """
 
 import argparse
+import contextlib
+import functools
 import os
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Callable
 
@@ -45,6 +48,10 @@ RMLUI_STEPS = 30  # RmlUi scrolls a wheel step smoothly over the frames of the g
 # Inside the scroller of the panel (tools/stress/assets/ui/stress_rmlui.rcss: 360 x 240 dp, 40 dp from the right and bottom of the 1920 x 1080 reference, which is the headless output)
 RMLUI_PANEL_X = 1700
 RMLUI_PANEL_Y = 920
+EDITOR_WINDOW = (1280, 720)  # window units: room for the docks of the editor
+EDITOR_FRAMES = 5  # ImGui lays its docks out over more than one frame
+EDITOR_DIR_VARIABLE = "BAGI_EDITOR_DIR"  # where the editor keeps its per-user files (widgets-module.md): a temp folder, never the real one
+NO_EDITOR_WARNING = "this build has no editor"  # the one Warning a build without the editor logs for --editor
 RUN_NUMBER_MAX = 1000  # the range of the field `runNumber` of StressGame
 ENGINE_CONFIG_DIR = ENGINE_DIR / "config"
 # The engine's config files whose reflected type is not named like their stem (tools/schema/CLAUDE.md, "What the XSD says")
@@ -374,18 +381,65 @@ def scenario_reflection(client: BagiControlClient) -> None:
     check_config_files(check_schema(client))
 
 
-SCENARIOS: list[tuple[str, list[str], Callable[[BagiControlClient], None]]] = [
+def editor_flags(count: int, editor: bool) -> list[str]:
+    width, height = EDITOR_WINDOW
+    return [f"--window={width}x{height}", "--stress-scene=sprites", f"--stress-count={count}", *(["--editor"] if editor else [])]
+
+
+def game_picture(exe: Path) -> object:
+    """A screenshot of the same game and window in the Game run mode, from a fresh process."""
+    pictures: list[object] = []
+
+    def shoot(client: BagiControlClient) -> None:
+        client.call("step", {"frames": SETTLE_FRAMES})
+        pictures.append(take_screenshot(client, {"maxSize": max(EDITOR_WINDOW)}))
+
+    play(exe, editor_flags(SPRITES_COUNT, editor=False), shoot, free_port())
+    return pictures[0]
+
+
+def scenario_editor(client: BagiControlClient, exe: Path) -> None:
+    """The Editor run mode headless: the picture is the whole window, not the game alone. A build without the editor runs Game and the scenario skips itself."""
+    run_mode = client.call("status")["runMode"]
+    if run_mode == "Game":
+        print("editor: SKIPPED, status.runMode is Game (the build has no editor)", flush=True)
+        return
+    check(run_mode == "Editor", f"status.runMode is '{run_mode}' with --editor")
+    client.call("step", {"frames": EDITOR_FRAMES})
+    shot = take_screenshot(client, {"maxSize": max(EDITOR_WINDOW)})
+    check((shot.width, shot.height) == EDITOR_WINDOW, f"the screenshot of the editor is {shot.width}x{shot.height}, the window is {EDITOR_WINDOW[0]}x{EDITOR_WINDOW[1]}")
+    check(len(shot.colors()) >= MIN_SHOT_COLORS, f"the screenshot of the editor has {len(shot.colors())} colours: it is flat")
+    check(shot.rows != game_picture(exe).rows, "the screenshot of the editor is the picture of the Game run mode")
+
+
+@contextlib.contextmanager
+def temporary_editor_directory() -> Iterator[None]:
+    """The editor writes preferences and layouts under $BAGI_EDITOR_DIR; the game started inside inherits the variable."""
+    previous = os.environ.get(EDITOR_DIR_VARIABLE)
+    with tempfile.TemporaryDirectory() as folder:
+        os.environ[EDITOR_DIR_VARIABLE] = folder
+        try:
+            yield
+        finally:
+            if previous is None:
+                del os.environ[EDITOR_DIR_VARIABLE]
+            else:
+                os.environ[EDITOR_DIR_VARIABLE] = previous
+
+
+SCENARIOS: list[tuple[str, list[str], Callable[..., None]]] = [  # `editor` takes the executable too: main binds it
     ("sprites", ["--stress-scene=sprites", f"--stress-count={SPRITES_COUNT}"], scenario_sprites),
     ("entities", ["--stress-scene=entities", f"--stress-count={ENTITIES_COUNT}"], scenario_entities),
     ("ui", ["--stress-scene=ui", f"--stress-count={UI_COUNT}"], scenario_ui),
     ("scenes", ["--stress-scene=sprites", f"--stress-count={SPRITES_COUNT}"], scenario_scenes),
     ("reflection", ["--stress-scene=sprites", f"--stress-count={REFLECTION_COUNT}"], scenario_reflection),
     ("rmlui", ["--stress-scene=sprites", f"--stress-count={RMLUI_COUNT}"], scenario_rmlui),
+    ("editor", editor_flags(SPRITES_COUNT, editor=True), scenario_editor),
 ]
 
 
-def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], port: int) -> None:
-    """One fresh game: the scenario, `quit`, a clean exit and a log with no problems. Raises SmokeFailure (PortTaken text in the message when the port was lost)."""
+def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], port: int, tolerated: tuple[str, ...] = ()) -> None:
+    """One fresh game: the scenario, `quit`, a clean exit and a log with no problems (a line with one of the `tolerated` texts is not one). Raises SmokeFailure (PortTaken text in the message when the port was lost)."""
     process = GameProcess(build_game_command(exe, port, headless=True, manual_clock=True, extra=flags), cwd=exe.parent)
     try:
         process.start()
@@ -401,7 +455,7 @@ def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], No
                     pass
             code = process.stop(SHUTDOWN_TIMEOUT)
             check(code == 0, f"the game exited with code {code} after quit")
-            problems = process.log_problems()
+            problems = [line for line in process.log_problems() if not any(text in line for text in tolerated)]
             check(not problems, "the game's log has problems:\n" + "\n".join(problems))
         except (SmokeFailure, ControlError, ConnectionClosed, GameLaunchError, OSError, KeyError) as error:
             raise SmokeFailure(f"{error!r}\n--- game log (tail) ---\n{process.log_tail()}") from error
@@ -409,15 +463,15 @@ def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], No
         process.stop(0)
 
 
-def play_with_retry(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], port: int, name: str) -> None:
+def play_with_retry(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], port: int, name: str, tolerated: tuple[str, ...] = ()) -> None:
     """play() on `port` (0: a free one); once more on another port when the game says that port was taken (free_port hands it back before the bind)."""
     try:
-        play(exe, flags, scenario, port or free_port())
+        play(exe, flags, scenario, port or free_port(), tolerated)
     except SmokeFailure as error:
         if port or PORT_TAKEN_MARKER not in str(error):
             raise
         print(f"{name}: the port was taken by another process; retrying once on another port", flush=True)
-        play(exe, flags, scenario, free_port())
+        play(exe, flags, scenario, free_port(), tolerated)
 
 
 def main() -> int:
@@ -435,8 +489,10 @@ def main() -> int:
     exe = exe.resolve()
     for name, flags, scenario in SCENARIOS:
         print(f"{name}: running", flush=True)
+        is_editor = scenario is scenario_editor
         try:
-            play_with_retry(exe, flags, scenario, args.port, name)
+            with temporary_editor_directory() if is_editor else contextlib.nullcontext():
+                play_with_retry(exe, flags, functools.partial(scenario, exe=exe) if is_editor else scenario, args.port, name, (NO_EDITOR_WARNING,) if is_editor else ())
         except SmokeFailure as error:
             print(f"FAILED ({name}): {error}")
             return EXIT_FAILED
