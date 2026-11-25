@@ -47,6 +47,26 @@ class Skipped(Exception):
     """A benchmark that cannot run on this machine (its command exited with 77); the message is the reason."""
 
 
+def platform_name() -> str:
+    """The key of a preset object for the running OS."""
+    if sys.platform == "darwin":
+        return "macos"
+    return "windows" if sys.platform == "win32" else "linux"
+
+
+def platform_preset(value, where: str, platform: str | None = None) -> str:
+    """A preset of the set: a string, or an object keyed by platform whose entry for this OS is taken (a game measured on more than
+    one OS names a preset for each; the baseline is per machine anyway)."""
+    platform = platform or platform_name()
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, dict) and all(isinstance(key, str) and isinstance(preset, str) and preset for key, preset in value.items()):
+        if platform not in value:
+            raise PerfError(f"{where} names no preset for {platform} (only {', '.join(sorted(value)) or 'none'})")
+        return value[platform]
+    raise PerfError(f"{where} must be a preset name or an object of preset names keyed by platform (macos, windows, linux)")
+
+
 def load_set(rules: Path) -> dict:
     """The benchmark set of the rules file, checked."""
     if not rules.is_file():
@@ -61,6 +81,9 @@ def load_set(rules: Path) -> dict:
     for key in ("area", "preset", "benchmarks"):
         if key not in bench_set:
             raise PerfError(f"{rules}: the benchmark set has no '{key}'")
+    for key in ("preset", "profilePreset"):
+        if key in bench_set:
+            bench_set[key] = platform_preset(bench_set[key], f"{rules}: '{key}'")
     names = set()
     for bench in bench_set["benchmarks"]:
         name = bench.get("name", "")

@@ -32,8 +32,8 @@ A fenced `json` block under `## Benchmark set` of `.claude/rules/perf-project.md
 | Key | Meaning |
 |-----|---------|
 | `area` | the todo area: names the baseline plan `perf-baseline-<area>-<machine>.md` |
-| `preset`, `targets` | what is built and measured (a Release preset: no profiler, no asserts) |
-| `profilePreset` | the build of `--trace` (default `macos-profile`) |
+| `preset`, `targets` | what is built and measured (a Release preset: no profiler, no asserts). The preset is a name, or an object keyed by platform (`{"macos": ..., "windows": ..., "linux": ...}`) for a set measured on more than one OS: the runner takes the running OS's and stops when it is missing |
+| `profilePreset` | the build of `--trace` (default `macos-profile`); a name or a per-platform object like `preset` |
 | `repetitions`, `thresholdPercent` | runs per benchmark (default 5) and the smallest change that counts (default 3) |
 | `benchmarks[]` | `name`, `about`, `fast` (in the sentinel's subset), `command`, `traceCommand` (optional: the same work writing a trace into `{trace}`), `repetitions`, `warmup` (runs thrown away first, default 1), `timeoutSeconds` (600), `metrics` |
 | `metrics.<name>` | `source`: `regex` (`pattern`, group 1 of the first match, multiline), `json` (`key` of the last stdout line that starts with `{`) or `wall` (the wall seconds of the command); `unit`; `better` `lower` / `higher`; `gate` (default true; false: shown, never a verdict); `thresholdPercent` |
