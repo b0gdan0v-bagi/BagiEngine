@@ -8,6 +8,7 @@
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <BECore/Widgets/PanelAssets/SingleFieldVisitor.h>
+#include <Widgets/PanelAssets/PanelDrawSupport.h>
 #include <Widgets/PanelAssets/PanelSlots.h>
 #include <Widgets/PanelAssets/PreparedPanel.h>
 #include <Widgets/SceneEditor/ImGuiPropertyVisitor.h>
@@ -72,6 +73,11 @@ namespace BECore {
      * (`EnterReturnsTrue`) and the command is noted; `commitCommand` is noted when the user lets go of the field or of a number after an edit. Both are clicks: one command per frame,
      * the last, and the submit comes after the commit so it wins.
      *
+     * **Menus** (`PanelMenu`, `PanelMenuItem`, `PanelMenuItems`) are `BeginMenu` / `MenuItem` and need a window the caller gave a menu bar (`BeginMenuBar` around `Draw`) or a popup; anywhere else
+     * they draw `?`. A menu is `<title>###<id>` and its children are drawn only while it is open; its `openCommand` is noted on the first frame of the opening, not on every open frame (a menu is not
+     * drawn while it is closed, so a gap in the frame numbers is the edge). An item is `<icon> <text>###<id>` with the chord of its command (`SetChordText`) right-aligned; `PanelMenuItems` is one
+     * item per row of its list under `PushID(row)`, the row's text being the label and the argument. A click is noted like a button's.
+     *
      * Main thread only; needs an ImGui frame in progress.
      */
     class PanelInterpreter {
@@ -89,6 +95,11 @@ namespace BECore {
 
         /// Draws the prepared asset. @p slots is where a `PanelSlot` finds its drawer (null: the global `PanelSlots`, when it exists). Clears @p result first
         void Draw(const PanelDataSources& sources, PanelDrawResult& result, PanelSlots* slots = nullptr);
+
+        /// Where the chord of an item's command comes from; null (the default) shows none. Not owned: the caller keeps it alive while it draws
+        void SetChordText(PanelChordText* chords) {
+            _chords = chords;
+        }
 
         /// Whether @p element is a kind the interpreter really draws (not an unknown class)
         [[nodiscard]] static bool CanDraw(const PanelElement& element);
@@ -125,6 +136,9 @@ namespace BECore {
         void DrawPopup(const PreparedElement& prepared);
         void DrawTabs(const PreparedElement& prepared);
         void DrawTab(const PreparedElement& prepared);
+        void DrawMenu(const PreparedElement& prepared);
+        void DrawMenuItem(const PreparedElement& prepared);
+        void DrawMenuItems(const PreparedElement& prepared);
 
         [[nodiscard]] bool IsVisible(const PreparedElement& prepared);
         /// @p whenUnreadable is what a condition that is bad or has a term that cannot be read counts as; an empty one is true
@@ -138,6 +152,8 @@ namespace BECore {
         /// Shows @p current in a text field under @p label; true when the user changed it (with @p enterOnly: pressed Enter), the new text being in `_inputBuffer`
         [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly = false);
         void NoteClick(StringView command, StringView argument);
+        /// The chord text of @p command in `_chordScratch`, null when there is none or no provider
+        [[nodiscard]] const char* ChordOf(StringView command);
 
         IntrusivePtr<PanelAsset> _asset;
         Vector<PreparedElement> _elements;
@@ -150,6 +166,8 @@ namespace BECore {
         String _styleScratch;
         String _cellScratch;
         String _label;
+        /// The chord of the menu item being drawn, copied so `MenuItem` gets a C string whatever the provider returns
+        String _chordScratch;
         /// What a combo shows closed; `BeginCombo` wants it as a C string
         String _preview;
         /// What the text field being drawn edits; one field is drawn at a time
@@ -160,6 +178,7 @@ namespace BECore {
         const PanelDataSources* _sources = nullptr;
         PanelDrawResult* _result = nullptr;
         PanelSlots* _slots = nullptr;
+        PanelChordText* _chords = nullptr;
     };
 
 }  // namespace BECore

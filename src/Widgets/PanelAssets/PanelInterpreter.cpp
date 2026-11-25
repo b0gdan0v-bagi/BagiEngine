@@ -7,6 +7,7 @@
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/PanelAssets/PanelDrawSupport.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace BECore {
 
@@ -101,6 +102,12 @@ namespace BECore {
             ScopedId& operator=(const ScopedId&) = delete;
         };
 
+        /// Whether the window being drawn into can hold a menu or an item: the caller's menu bar between `BeginMenuBar` and `EndMenuBar`, or a popup (a menu's own is one)
+        bool InMenuHost() {
+            const ImGuiWindow* window = ImGui::GetCurrentWindow();
+            return window->DC.MenuBarAppending || (window->Flags & ImGuiWindowFlags_Popup) != 0;
+        }
+
         PreparedKind KindOf(const PanelElement& element) {
             if (element.Is<PanelSection>()) {
                 return PreparedKind::Section;
@@ -156,6 +163,15 @@ namespace BECore {
             if (element.Is<PanelTab>()) {
                 return PreparedKind::Tab;
             }
+            if (element.Is<PanelMenu>()) {
+                return PreparedKind::Menu;
+            }
+            if (element.Is<PanelMenuItem>()) {
+                return PreparedKind::MenuItem;
+            }
+            if (element.Is<PanelMenuItems>()) {
+                return PreparedKind::MenuItems;
+            }
             return PreparedKind::Unknown;
         }
 
@@ -193,6 +209,20 @@ namespace BECore {
                 case PreparedKind::Tabs:
                 case PreparedKind::Tab:
                     PrepareElements(element->elements, prepared.children);
+                    break;
+                case PreparedKind::Menu:
+                    prepared.enableWhen = PrepareCondition(element->Cast<PanelMenu>()->enableWhen);
+                    PrepareElements(element->elements, prepared.children);
+                    break;
+                case PreparedKind::MenuItem: {
+                    const PanelMenuItem& item = *element->Cast<PanelMenuItem>();
+                    prepared.enableWhen = PrepareCondition(item.enableWhen);
+                    prepared.glyph = GlyphOf(item.icon);
+                    break;
+                }
+                case PreparedKind::MenuItems:
+                    prepared.bind = PrepareBinding(element->Cast<PanelMenuItems>()->source, BindingForm::Field);
+                    prepared.glyph = GlyphOf(element->Cast<PanelMenuItems>()->icon);
                     break;
                 case PreparedKind::Popup:
                     prepared.open = PrepareCondition(element->Cast<PanelPopup>()->open);
@@ -365,6 +395,15 @@ namespace BECore {
             case PreparedKind::Tabs:
                 DrawTabs(prepared);
                 break;
+            case PreparedKind::Menu:
+                DrawMenu(prepared);
+                break;
+            case PreparedKind::MenuItem:
+                DrawMenuItem(prepared);
+                break;
+            case PreparedKind::MenuItems:
+                DrawMenuItems(prepared);
+                break;
             case PreparedKind::Tab:
                 // ImGui draws a tab only inside a bar; the bar draws its own tabs, so this one is outside any
                 DrawUnreadable();
@@ -457,6 +496,89 @@ namespace BECore {
             DrawElements(prepared.children);
             ImGui::EndTabItem();
         }
+    }
+
+    void PanelInterpreter::DrawMenu(const PreparedElement& prepared) {
+        if (!InMenuHost()) {
+            DrawUnreadable();
+            return;
+        }
+        const PanelMenu& menu = *prepared.element->Cast<PanelMenu>();
+        _label.assign(menu.title.c_str(), menu.title.size());
+        _label.append(kStableIdSuffix);
+        _label.append(menu.id);
+        if (!ImGui::BeginMenu(_label.c_str(), ReadCondition(prepared.enableWhen))) {
+            return;
+        }
+        if (prepared.menuOpened.Opened(ImGui::GetFrameCount()) && !menu.openCommand.empty()) {
+            NoteClick(menu.openCommand, StringView{});
+        }
+        DrawElements(prepared.children);
+        ImGui::EndMenu();
+    }
+
+    void PanelInterpreter::DrawMenuItem(const PreparedElement& prepared) {
+        if (!InMenuHost()) {
+            DrawUnreadable();
+            return;
+        }
+        const PanelMenuItem& item = *prepared.element->Cast<PanelMenuItem>();
+        _label.clear();
+        if (prepared.glyph != nullptr) {
+            _label.append(prepared.glyph);
+            _label.append(kGlyphGap);
+        }
+        _label.append(item.text.c_str(), item.text.size());
+        _label.append(kStableIdSuffix);
+        _label.append(item.id);
+        const bool clicked = ImGui::MenuItem(_label.c_str(), ChordOf(item.command), false, ReadCondition(prepared.enableWhen));
+        ItemTooltip(OrNull(item.tooltip));
+        if (clicked && !item.command.empty()) {
+            NoteClick(item.command, item.argument);
+        }
+    }
+
+    void PanelInterpreter::DrawMenuItems(const PreparedElement& prepared) {
+        if (!InMenuHost()) {
+            DrawUnreadable();
+            return;
+        }
+        const PanelMenuItems& items = *prepared.element->Cast<PanelMenuItems>();
+        size_t count = 0;
+        if (prepared.bind.state != PreparedBindingState::Ok || _reader.ListCount(*_sources, prepared.bind.binding, count) != PanelReadStatus::Ok) {
+            DrawUnreadable();
+            return;
+        }
+        const char* chord = ChordOf(items.command);
+        for (size_t row = 0; row < count; ++row) {
+            const ScopedId rowId(static_cast<int>(row));
+            StringView text;
+            const bool readable = _reader.ReadRowText(*_sources, prepared.bind.binding, row, items.itemField, _cellScratch, text) == PanelReadStatus::Ok;
+            if (!readable) {
+                text = kUnreadable;
+            }
+            _label.clear();
+            if (prepared.glyph != nullptr) {
+                _label.append(prepared.glyph);
+                _label.append(kGlyphGap);
+            }
+            _label.append(text.data(), text.size());
+            _label.append(kStableIdSuffix);
+            _label.append(items.id);
+            // A row whose text cannot be read would run the command on nothing
+            if (ImGui::MenuItem(_label.c_str(), chord, false, readable) && !items.command.empty()) {
+                NoteClick(items.command, text);
+            }
+        }
+    }
+
+    const char* PanelInterpreter::ChordOf(StringView command) {
+        _chordScratch.clear();
+        if (_chords != nullptr && !command.empty()) {
+            const StringView chord = _chords->ChordOf(command);
+            _chordScratch.append(chord.data(), chord.size());
+        }
+        return _chordScratch.empty() ? nullptr : _chordScratch.c_str();
     }
 
     void PanelInterpreter::DrawTextLine(const PreparedElement& prepared) {

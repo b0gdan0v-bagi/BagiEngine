@@ -64,3 +64,17 @@ namespace BECore::PanelDraw {
     };
 
 }  // namespace BECore::PanelDraw
+
+namespace BECore {
+
+    /// Where a menu item gets the text of its command's chord from: the host of the interpreter knows the hotkey map, the format does not
+    class PanelChordText {
+    public:
+        virtual ~PanelChordText() = default;
+
+        /// The chord of the editor command @p command as text, empty for none. The view is valid until the next call; the interpreter calls it for every item of an open menu
+        /// every frame, so an implementation caches and allocates nothing in a steady frame
+        [[nodiscard]] virtual StringView ChordOf(StringView command) = 0;
+    };
+
+}  // namespace BECore

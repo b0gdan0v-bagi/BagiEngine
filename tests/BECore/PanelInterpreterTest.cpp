@@ -263,6 +263,38 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        constexpr const char* kMenus = R"(
+<PanelAsset id="Menus" title="Menus" window="Bar" open="true">
+  <elements>
+    <element type="PanelMenu" id="file" title="File" openCommand="probe.opened">
+      <elements>
+        <element type="PanelMenuItem" id="open" text="Open" command="probe.open" argument="a.xml"/>
+        <element type="PanelMenuItem" id="save" text="Save" icon="check" command="probe.save" enableWhen="probe.flag"/>
+        <element type="PanelSeparator" id="line"/>
+        <element type="PanelMenu" id="recent" title="Recent" openCommand="probe.recentOpened">
+          <elements><element type="PanelMenuItem" id="last" text="Last" command="probe.last"/></elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelMenu" id="edit" title="Edit" enableWhen="probe.flag">
+      <elements>
+        <element type="PanelMenuItems" id="names" source="probe.options" command="probe.pickName"/>
+        <element type="PanelMenuItems" id="rowNames" source="probe.rows" itemField="name" command="probe.pickRow"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kMenuOutsideABar = R"(
+<PanelAsset id="Loose" title="Loose">
+  <elements>
+    <element type="PanelMenu" id="file" title="File">
+      <elements><element type="PanelMenuItem" id="open" text="Open" command="probe.open"/></elements>
+    </element>
+    <element type="PanelMenuItem" id="stray" text="Stray" command="probe.stray"/>
+  </elements>
+</PanelAsset>)";
+
         constexpr const char* kClosingDialog = R"(
 <PanelAsset id="Closing" title="Closing">
   <elements>
@@ -328,6 +360,16 @@ namespace BECore::Tests {
   <elements><element type="PanelText" id="state" bind="probe.filter" mono="true" maxLines="{}"/></elements>
 </PanelAsset>)";
 
+        /// A provider with one chord, as the editor's hotkey map would be
+        class FakeChords : public PanelChordText {
+        public:
+            StringView ChordOf(StringView command) override {
+                return command == "probe.open" ? StringView(kChord) : StringView{};
+            }
+
+            static constexpr const char* kChord = "Ctrl+Shift+O";
+        };
+
     }  // namespace
 
     /// The interpreter in an ImGui context of its own with no backend, driven by the mouse like a person; the host window is `##Host`
@@ -387,13 +429,19 @@ namespace BECore::Tests {
             ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
             ImGui::SetNextWindowSize(kHostSize);
             constexpr ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground;
-            ImGui::Begin(kHostName, nullptr, hostFlags);
+            ImGui::Begin(kHostName, nullptr, menuBar ? (hostFlags | ImGuiWindowFlags_MenuBar) : hostFlags);
+            // The caller of a `Bar` asset provides the menu bar, as the editor's host does
+            const bool inMenuBar = menuBar && ImGui::BeginMenuBar();
             interpreter.Draw(sources, result, &slots);
+            if (inMenuBar) {
+                ImGui::EndMenuBar();
+            }
             ImGui::End();
             ImGui::Render();
             if (result.clicked) {
                 lastCommand = result.command;
                 lastArgument = result.argument;
+                noted.push_back(result.command);
                 ++clicks;
             }
         }
@@ -561,6 +609,41 @@ namespace BECore::Tests {
             return count;
         }
 
+        /// How many frames of the run noted @p command
+        [[nodiscard]] int TimesNoted(StringView command) const {
+            int count = 0;
+            for (const String& name : noted) {
+                count += name == command ? 1 : 0;
+            }
+            return count;
+        }
+
+        /// The id of the menu @p elementId of the host's menu bar, which ImGui's `BeginMenuBar` puts under its own id
+        static ImGuiID MenuId(const char* elementId, const char* title) {
+            const String label = Format("{}###{}", title, elementId);
+            return Chain(HostId(), {"##MenuBar", elementId, label.c_str()});
+        }
+
+        /// The popup of the menu that is open at @p depth (0: one of the bar); ImGui names it `<title>###Menu_<depth>`, and the window is found by the part after the marks
+        static const ImGuiWindow* MenuPopup(int depth = 0) {
+            const String name = Format("###Menu_{:02}", depth);
+            const ImGuiWindow* popup = ImGui::FindWindowByName(name.c_str());
+            EXPECT_NE(popup, nullptr) << "no menu is open at depth " << depth;
+            return popup;
+        }
+
+        /// The id of an item of a menu's popup: the popup starts the id chain, then the element id and the label
+        static ImGuiID ItemId(const ImGuiWindow& popup, const char* elementId, const char* label) {
+            return Chain(popup.ID, {elementId, label});
+        }
+
+        /// Clicks the title of the menu @p elementId and lets the popup settle
+        void OpenMenu(const char* elementId, const char* title) {
+            ClickAt(Locate(MenuId(elementId, title)));
+            Settle();
+        }
+
+        bool menuBar = false;
         ImGuiFontBuffers buffers;
         ImGuiFonts fonts;
         InterpreterProbe probe;
@@ -569,6 +652,7 @@ namespace BECore::Tests {
         PanelSlots slots;
         PanelInterpreter interpreter;
         PanelDrawResult result;
+        Vector<String> noted;
         String lastCommand;
         String lastArgument;
         int clicks = 0;
@@ -1330,6 +1414,168 @@ namespace BECore::Tests {
                 Frame();
             }
         });
+        EXPECT_TRUE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, AClickOnAMenuItemNotesItsCommandAndArgument) {
+        menuBar = true;
+        probe.flag = true;
+        Load(kMenus);
+        OpenMenu("file", "File");
+        const ImGuiWindow* popup = MenuPopup();
+        ASSERT_NE(popup, nullptr);
+
+        ClickAt(LocateInWindow(ItemId(*popup, "open", "Open###open"), *popup));
+        EXPECT_EQ(lastCommand, "probe.open");
+        EXPECT_EQ(lastArgument, "a.xml");
+        EXPECT_EQ(TimesNoted("probe.open"), 1);
+    }
+
+    TEST_F(PanelInterpreterTest, AMenuNotesItsOpenCommandOnTheFirstOpenFrameOnlyAndAgainAfterAClose) {
+        menuBar = true;
+        Load(kMenus);
+        EXPECT_EQ(TimesNoted("probe.opened"), 0);
+
+        OpenMenu("file", "File");
+        ASSERT_TRUE(AnyPopupOpen());
+        for (int i = 0; i < kSteadyFrames; ++i) {
+            Frame();
+        }
+        EXPECT_EQ(TimesNoted("probe.opened"), 1) << "the command is the opening, not every open frame";
+
+        // A click on the title of an open menu closes it
+        ClickAt(Locate(MenuId("file", "File")));
+        Settle();
+        ASSERT_FALSE(AnyPopupOpen());
+        EXPECT_EQ(TimesNoted("probe.opened"), 1);
+
+        OpenMenu("file", "File");
+        EXPECT_EQ(TimesNoted("probe.opened"), 2);
+    }
+
+    TEST_F(PanelInterpreterTest, ASubmenuNotesItsOwnOpenCommandWhenItOpens) {
+        menuBar = true;
+        Load(kMenus);
+        OpenMenu("file", "File");
+        const ImGuiWindow* popup = MenuPopup();
+        ASSERT_NE(popup, nullptr);
+        EXPECT_EQ(TimesNoted("probe.recentOpened"), 0) << "a closed submenu is not drawn";
+
+        ClickAt(LocateInWindow(ItemId(*popup, "recent", "Recent###recent"), *popup));
+        Settle();
+        EXPECT_EQ(TimesNoted("probe.recentOpened"), 1);
+        EXPECT_NE(MenuPopup(1), nullptr);
+    }
+
+    TEST_F(PanelInterpreterTest, ADisabledItemIsNotClicked) {
+        menuBar = true;
+        probe.flag = true;
+        Load(kMenus);
+        OpenMenu("file", "File");
+        const ImGuiWindow* popup = MenuPopup();
+        ASSERT_NE(popup, nullptr);
+        const ImVec2 save = LocateInWindow(ItemId(*popup, "save", ICON_LC_CHECK " Save###save"), *popup);
+
+        probe.flag = false;
+        Settle();
+        ClickAt(save);
+        EXPECT_EQ(TimesNoted("probe.save"), 0);
+    }
+
+    TEST_F(PanelInterpreterTest, ADisabledMenuDoesNotOpen) {
+        menuBar = true;
+        probe.flag = true;
+        Load(kMenus);
+        const ImVec2 title = Locate(MenuId("edit", "Edit"));
+
+        probe.flag = false;
+        Settle();
+        ClickAt(title);
+        Settle();
+        EXPECT_FALSE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, AMenuItemsElementDrawsOneItemPerRowWithTheRowAsLabelAndArgument) {
+        menuBar = true;
+        probe.flag = true;
+        Load(kMenus);
+        OpenMenu("edit", "Edit");
+        const ImGuiWindow* popup = MenuPopup();
+        ASSERT_NE(popup, nullptr);
+
+        const ImGuiID names = Chain(popup->ID, {"names"});
+        const auto rowId = [&](int row, const char* label) { return Chain(ImHashData(&row, sizeof(row), names), {label}); };
+        ClickAt(LocateInWindow(rowId(2, "gamma###names"), *popup));
+        EXPECT_EQ(lastCommand, "probe.pickName");
+        EXPECT_EQ(lastArgument, "gamma");
+
+        // The list changes under the open menu: the items follow it
+        OpenMenu("edit", "Edit");
+        probe.options = {"one"};
+        Settle();
+        EXPECT_TRUE(TryLocateIn(rowId(0, "one###names"), popup->Pos, ImVec2(popup->Pos.x + popup->Size.x, popup->Pos.y + popup->Size.y)).has_value());
+    }
+
+    TEST_F(PanelInterpreterTest, AMenuItemsElementOverRowsReadsTheItemFieldOfEachRow) {
+        menuBar = true;
+        probe.flag = true;
+        Load(kMenus);
+        OpenMenu("edit", "Edit");
+        const ImGuiWindow* popup = MenuPopup();
+        ASSERT_NE(popup, nullptr);
+
+        const ImGuiID rows = Chain(popup->ID, {"rowNames"});
+        const int row = 1;
+        ClickAt(LocateInWindow(Chain(ImHashData(&row, sizeof(row), rows), {"beta###rowNames"}), *popup));
+        EXPECT_EQ(lastCommand, "probe.pickRow");
+        EXPECT_EQ(lastArgument, "beta");
+    }
+
+    TEST_F(PanelInterpreterTest, TheChordOfAnItemCommandWidensItsMenuWhereAProviderIsSet) {
+        menuBar = true;
+        Load(kMenus);
+        OpenMenu("file", "File");
+        const ImGuiWindow* popup = MenuPopup();
+        ASSERT_NE(popup, nullptr);
+        const float plain = popup->Size.x;
+
+        FakeChords chords;
+        interpreter.SetChordText(&chords);
+        Settle();
+        // ImGui keeps the widest column a menu has had, so the order is plain first
+        EXPECT_GT(popup->Size.x, plain + ImGui::CalcTextSize(FakeChords::kChord).x * 0.9f);
+    }
+
+    TEST_F(PanelInterpreterTest, AMenuOrItemOutsideAMenuBarOrPopupIsAQuestionMarkAndOpensNothing) {
+        LoadWithIssues(kMenuOutsideABar);
+        EXPECT_GT(ContentHeight(), 0.0f);
+        EXPECT_FALSE(TryLocate(Chain(HostId(), {"file", "File###file"})).has_value());
+        EXPECT_FALSE(TryLocate(Chain(HostId(), {"stray", "Stray###stray"})).has_value());
+        EXPECT_EQ(clicks, 0);
+        EXPECT_FALSE(AnyPopupOpen());
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfAMenuBarAllocatesNothingClosedOrOpenWithAChordProvider) {
+        menuBar = true;
+        probe.flag = true;
+        FakeChords chords;
+        interpreter.SetChordText(&chords);
+        Load(kMenus);
+        const auto steady = [&] {
+            for (int i = 0; i < kWarmUpFrames; ++i) {
+                Frame();
+            }
+            ExpectNoAllocations([&] {
+                for (int i = 0; i < kSteadyFrames; ++i) {
+                    Frame();
+                }
+            });
+        };
+        steady();
+
+        OpenMenu("file", "File");
+        ASSERT_TRUE(AnyPopupOpen());
+        steady();
         EXPECT_TRUE(AnyPopupOpen());
     }
 
