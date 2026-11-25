@@ -212,7 +212,12 @@ namespace BECore::Fuzz {
                     Text(input->bind);
                     Text(input->hint);
                     Text(input->icon);
+                    Text(input->submitCommand);
+                    Text(input->commitCommand);
                     Binding(input->bind, true);
+                    if (input->focus && _popupDepth == 0) {
+                        Fail();
+                    }
                     if (input->width < 0.0f) {
                         Fail();
                     }
@@ -239,6 +244,7 @@ namespace BECore::Fuzz {
                 } else if (const auto* number = element.Cast<PanelNumber>()) {
                     Text(number->bind);
                     Text(number->text);
+                    Text(number->commitCommand);
                     Binding(number->bind, true);
                     Extent(number->width);
                     Number(*number);
@@ -275,6 +281,7 @@ namespace BECore::Fuzz {
                 } else if (const auto* popup = element.Cast<PanelPopup>()) {
                     Text(popup->title);
                     Text(popup->open);
+                    Text(popup->closeCommand);
                     if (popup->open.empty() || !ParsePanelCondition(popup->open) || _popupDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
                         Fail();
                     }

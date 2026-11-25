@@ -23,10 +23,10 @@ namespace BECore::Tests {
         <element type="PanelRow" id="toolbar">
           <elements>
             <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" argument="all files" width="9" enableWhen="files.hasPending"/>
-            <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
+            <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5" focus="true" submitCommand="files.apply" commitCommand="files.save"/>
             <element type="PanelCheckbox" id="errors" bind="files.showErrors" text="Errors" labelBind="files.errorsText" look="Toggle" style="Error"/>
             <element type="PanelCombo" id="category" bind="files.category" items="files.categories" itemField="name" width="11"/>
-            <element type="PanelNumber" id="budget" bind="files.budget" text="ms" min="-1.5" max="100" step="0.25" slider="true" width="8"/>
+            <element type="PanelNumber" id="budget" bind="files.budget" text="ms" min="-1.5" max="100" step="0.25" slider="true" width="8" commitCommand="files.save"/>
           </elements>
         </element>
         <element type="PanelText" id="status" bind="files.status" style="Warning" wrap="true" mono="true" maxLines="12"/>
@@ -52,7 +52,7 @@ namespace BECore::Tests {
         <element type="PanelTab" id="second" title="Second"/>
       </elements>
     </element>
-    <element type="PanelPopup" id="confirm" title="Confirm" open="!files.running">
+    <element type="PanelPopup" id="confirm" title="Confirm" open="!files.running" closeCommand="files.closeConfirm">
       <elements>
         <element type="PanelText" id="inPopup" text="Sure?"/>
       </elements>
@@ -124,6 +124,9 @@ namespace BECore::Tests {
         const auto* input = ElementAs<PanelInput>(row->elements[1]);
         ASSERT_NE(input, nullptr);
         EXPECT_FLOAT_EQ(input->width, 12.5f);
+        EXPECT_TRUE(input->focus);
+        EXPECT_EQ(input->submitCommand, "files.apply");
+        EXPECT_EQ(input->commitCommand, "files.save");
         const auto* checkbox = ElementAs<PanelCheckbox>(row->elements[2]);
         ASSERT_NE(checkbox, nullptr);
         EXPECT_EQ(checkbox->bind, "files.showErrors");
@@ -144,6 +147,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(number->step, 0.25f);
         EXPECT_TRUE(number->slider);
         EXPECT_FLOAT_EQ(number->width, 8.0f);
+        EXPECT_EQ(number->commitCommand, "files.save");
         const auto* status = ElementAs<PanelText>(section->elements[1]);
         ASSERT_NE(status, nullptr);
         EXPECT_EQ(status->style, PanelTextStyle::Warning);
@@ -170,6 +174,7 @@ namespace BECore::Tests {
         ASSERT_NE(popup, nullptr);
         EXPECT_EQ(popup->title, "Confirm");
         EXPECT_EQ(popup->open, "!files.running");
+        EXPECT_EQ(popup->closeCommand, "files.closeConfirm");
         ASSERT_EQ(popup->elements.size(), 1u);
 
         const auto* table = ElementAs<PanelTable>(again->elements[4]);

@@ -186,6 +186,11 @@ namespace BECore {
                     if (input->width < 0.0f) {
                         _issues.Add(where, "width must not be negative");
                     }
+                    OptionalCommand(where, "submitCommand", input->submitCommand);
+                    OptionalCommand(where, "commitCommand", input->commitCommand);
+                    if (input->focus && _popupDepth == 0) {
+                        _issues.Add(where, "focus is for an input inside a popup");
+                    }
                 } else if (const auto* checkbox = element.Cast<PanelCheckbox>()) {
                     Binding(where, "bind", checkbox->bind, true);
                     Binding(where, "labelBind", checkbox->labelBind, false);
@@ -261,6 +266,7 @@ namespace BECore {
             void CheckNumber(const PanelNumber& number, StringView where) {
                 Binding(where, "bind", number.bind, true);
                 Extent(where, "width", number.width);
+                OptionalCommand(where, "commitCommand", number.commitCommand);
                 // Every limit is written as a comparison that a NaN fails
                 const auto inRange = [](float value, float lowest) { return value >= lowest && value <= PanelAssetLimits::kMaxNumberExtent; };
                 const bool minOk = inRange(number.min, -PanelAssetLimits::kMaxNumberExtent);
@@ -283,6 +289,7 @@ namespace BECore {
                 } else {
                     Condition(where, "open", popup.open);
                 }
+                OptionalCommand(where, "closeCommand", popup.closeCommand);
                 if (_popupDepth > 0) {
                     _issues.Add(where, "a popup is not nested in a popup");
                 }
@@ -417,6 +424,12 @@ namespace BECore {
                     _issues.Add(where, Format("{} is required", field));
                 } else if (_context.isKnownCommand && !(*_context.isKnownCommand)(command)) {
                     _issues.Add(where, Format("{}: unknown command '{}'", field, command));
+                }
+            }
+
+            void OptionalCommand(StringView where, StringView field, const String& command) {
+                if (!command.empty()) {
+                    Command(where, field, command);
                 }
             }
 

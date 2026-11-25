@@ -47,12 +47,14 @@ namespace BECore {
         BE_REFLECT_FIELD String title;
     };
 
-    /// A modal window over its `elements`, shown while the condition `open` reads true (required: with none it could never open)
+    /// A modal window over its `elements`, shown while the condition `open` reads true (required: with none it could never open). When ImGui closes it itself (Esc) while `open` still
+    /// reads true, the editor command `closeCommand` runs so the model can clear what `open` reads; empty: none. Without it the popup would never open again, since it opens on a rising edge
     class PanelPopup : public PanelElement {
         BE_CLASS(PanelPopup)
     public:
         BE_REFLECT_FIELD String title;
         BE_REFLECT_FIELD String open;
+        BE_REFLECT_FIELD String closeCommand;
     };
 
     /// A literal `text` or the text of the field `bind`; `maxLines` > 0 shows that many lines and scrolls, also sideways (0: not in a scroll region)
@@ -82,7 +84,8 @@ namespace BECore {
         BE_REFLECT_FIELD String bind;
     };
 
-    /// A text field bound to a `String` field; `width` is in em, 0 fills the line
+    /// A text field bound to a `String` field; `width` is in em, 0 fills the line. The field is written at every change. `focus` takes the keyboard focus on the frame the surrounding
+    /// popup appears (so it is only for an input inside a popup); `submitCommand` runs when Enter is pressed in it, `commitCommand` when the user lets go of it after an edit; empty: none
     class PanelInput : public PanelElement {
         BE_CLASS(PanelInput)
     public:
@@ -90,6 +93,9 @@ namespace BECore {
         BE_REFLECT_FIELD String hint;
         BE_REFLECT_FIELD String icon;
         BE_REFLECT_FIELD float width = 0.0f;
+        BE_REFLECT_FIELD bool focus = false;
+        BE_REFLECT_FIELD String submitCommand;
+        BE_REFLECT_FIELD String commitCommand;
     };
 
     /// A bool field `bind` as a check box or, as `Toggle`, a button filled with the accent while on; the label is `text`, or the text of `labelBind` when that is set; `style` colours it.
@@ -116,7 +122,8 @@ namespace BECore {
     };
 
     /// A number field `bind` as a drag, or as a slider when `slider` is set (it needs `min` < `max`); `min` equal to `max` (the default) leaves a drag unbounded; `step` is the drag speed,
-    /// 0 picks one; `text` is the label after the control. It writes the field itself and runs no command; `width` is in em, 0 is ImGui's default item width, which leaves room for the label
+    /// 0 picks one; `text` is the label after the control. It writes the field itself and runs no command but `commitCommand`; `width` is in em, 0 is ImGui's default item width, which leaves room for
+    /// the label. `commitCommand` runs when the user lets go of the control after an edit (a slider is saved on release, not at every drag frame); empty: none
     class PanelNumber : public PanelElement {
         BE_CLASS(PanelNumber)
     public:
@@ -127,6 +134,7 @@ namespace BECore {
         BE_REFLECT_FIELD float step = 0.0f;
         BE_REFLECT_FIELD bool slider = false;
         BE_REFLECT_FIELD float width = 0.0f;
+        BE_REFLECT_FIELD String commitCommand;
     };
 
     /// Runs the editor command `command` with `argument` as a literal text (a button has no row to read a path from; a column of a table has its own `argument`, a path relative to the row).

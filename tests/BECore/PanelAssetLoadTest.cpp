@@ -447,6 +447,45 @@ namespace BECore::Tests {
         EXPECT_FALSE(unknown.issues.empty());
     }
 
+    TEST(PanelAssetLoadTest, TheDialogCommandsAreCheckedLikeAButtonsCommand) {
+        const String xml = R"(<PanelAsset id="T"><elements>
+            <element type="PanelPopup" id="p" open="a.b" closeCommand="no.close"><elements>
+              <element type="PanelInput" id="name" bind="a.name" focus="true" submitCommand="no.submit" commitCommand="no.commit"/>
+            </elements></element>
+            <element type="PanelNumber" id="n" bind="a.n" commitCommand="no.number"/>
+          </elements></PanelAsset>)";
+        EXPECT_TRUE(LoadPanelAsset(StringView(xml)).issues.empty());
+
+        const auto knownCommand = [](StringView) { return false; };
+        PanelValidationContext context;
+        context.isKnownCommand = FunctionRef<bool(StringView)>(knownCommand);
+        const PanelLoadResult result = LoadPanelAsset(StringView(xml), context);
+
+        EXPECT_EQ(result.issues.size(), 4u) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "p", "closeCommand: unknown command 'no.close'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "name", "submitCommand: unknown command 'no.submit'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "name", "commitCommand: unknown command 'no.commit'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "n", "commitCommand: unknown command 'no.number'")) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, FocusBelongsToAnInputInAPopup) {
+        ExpectSingleIssue(R"(<element type="PanelInput" id="name" bind="a.name" focus="true"/>)", "name", "focus is for an input inside a popup");
+        ExpectSingleIssue(R"(<element type="PanelRow" id="r"><elements><element type="PanelInput" id="name" bind="a.name" focus="true"/></elements></element>)", "name",
+                          "focus is for an input inside a popup");
+
+        // A row between the popup and the input does not matter: any enclosing popup counts
+        const PanelLoadResult inside = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelPopup" id="p" open="a.b"><elements><element type="PanelRow" id="r"><elements>
+                 <element type="PanelInput" id="name" bind="a.name" focus="true"/></elements></element></elements></element>)")));
+        EXPECT_TRUE(inside.issues.empty()) << Joined(inside.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ALongDialogCommandIsAnIssue) {
+        const String longText(PanelAssetLimits::kMaxTextBytes + 1, 'x');
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelNumber" id="n" bind="a.n" commitCommand="{}"/>)", longText)), "n", "commitCommand is longer than 512 bytes");
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelPopup" id="p" open="a.b" closeCommand="{}"/>)", longText)), "p", "closeCommand is longer than 512 bytes");
+    }
+
     TEST(PanelAssetLoadTest, SelectedFieldIsARelativePathOfASelectableColumn) {
         const auto load = [](StringView column) { return LoadPanelAsset(StringView(Wrap(Format(R"(<element type="PanelTable" id="t" source="a.b"><columns>{}</columns></element>)", column)))); };
 
