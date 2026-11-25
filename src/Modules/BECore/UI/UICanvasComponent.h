@@ -28,6 +28,7 @@ namespace BECore {
      * `OnDraw()` runs in the scene's draw order (node layer, then scene order), sets the canvas's own view transform for its elements and restores the scene's afterwards.
      * It draws from a flat list of the visible elements (`UIDrawList`), made again when the layout ran since: **after an edit of the tree or of the `components` of an element, call
      * `Invalidate()`** (an edit with no call leaves the old list, which draws a removed element once more but never a dangling one). `OnDraw()` itself adds or removes no nodes or components.
+     * A theme switch and `UIElement::ResetTheme()` need no call: the draw reads the theme version once and resolves an element whose stamp is behind it.
      *
      * **Input** (the rules: `UI/CLAUDE.md`, "Canvases"). The canvas registers as a UIInput handler, with the draw rank of its node as the order, uses the layout of its
      * last draw, and follows a press that it consumed to the release. The press of an element that `IsInteractive()` and the motion while it is held reach the element
