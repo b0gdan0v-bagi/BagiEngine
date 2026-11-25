@@ -5,6 +5,7 @@
 #include <BECore/Renderer/IRenderTarget.h>
 #include <BECore/Renderer/ITexture.h>
 #include <CoreSDL/SDLMainWindow.h>
+#include <CoreSDL/SDLRenderTarget.h>
 #include <CoreSDL/SDLTexture.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
@@ -23,6 +24,7 @@ namespace BECore {
         constexpr float kChannelMax = 255.0f;
         constexpr size_t kIndicesPerTriangle = 3;
         constexpr int kFloatsPerColor = 4;
+        constexpr Color kOpaqueBlack{0, 0, 0, 255};  // the colour of a target pass that no Clear() named
 
         // The SDL blend mode of an IRenderer blend mode: straight alpha, additive, and `src * dst + dst * (1 - a)`
         SDL_BlendMode ToSDLBlendMode(BlendMode mode) {
@@ -88,8 +90,21 @@ namespace BECore {
         return _software ? GeometryDetail::Reduced : GeometryDetail::Full;
     }
 
+    SDLRendererBackend::~SDLRendererBackend() {
+        ReleaseTargets();
+    }
+
+    void SDLRendererBackend::ReleaseTargets() {
+        _currentTarget = nullptr;
+        for (SDLRenderTarget* target : _targets) {
+            target->OnRendererDestroyed();
+        }
+        _targets.clear();
+    }
+
     void SDLRendererBackend::Destroy() {
         _captureCallback = nullptr;  // nothing will be presented any more
+        ReleaseTargets();            // before the renderer: SDL frees a texture with its renderer, and a target must not free it a second time
         if (_renderer) {
             SDL_DestroyRenderer(_renderer);
             _renderer = nullptr;
@@ -102,6 +117,7 @@ namespace BECore {
     void SDLRendererBackend::EndFrame() {}
 
     void SDLRendererBackend::Clear(const Color& color) {
+        _nextTargetClear = color;
         if (_renderer) {
             SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
             SDL_RenderClear(_renderer);
@@ -285,14 +301,64 @@ namespace BECore {
         SDL_SetRenderClipRect(_renderer, &rect);
     }
 
-    IntrusivePtr<IRenderTarget> SDLRendererBackend::CreateRenderTarget(uint32_t /*width*/, uint32_t /*height*/) {
-        // Not yet implemented for the SDL backend.
-        return {};
+    IntrusivePtr<IRenderTarget> SDLRendererBackend::CreateRenderTarget(uint32_t width, uint32_t height) {
+        BE_PROFILE_SCOPE("SDLRenderer::CreateRenderTarget");
+        if (!_renderer || width == 0 || height == 0) {
+            return {};
+        }
+        SDL_Texture* handle = SDL_CreateTexture(_renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, static_cast<int>(width), static_cast<int>(height));
+        if (!handle) {
+            LOG_ERROR("SDLRendererBackend: cannot create a {}x{} render target: {}", width, height, SDL_GetError());
+            return {};
+        }
+        // ImGui draws the target as an image with alpha; the explicit mode does not depend on SDL's default for a target texture
+        SDL_SetTextureBlendMode(handle, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(handle, SDL_SCALEMODE_LINEAR);
+
+        auto target = New<SDLRenderTarget>(*this, handle, width, height);
+        _targets.push_back(target.Get());
+        return target;
     }
 
-    void SDLRendererBackend::SetRenderTarget(IRenderTarget* /*target*/) {}
+    void SDLRendererBackend::SetRenderTarget(IRenderTarget* target) {
+        if (!target) {
+            UnsetRenderTarget();
+            return;
+        }
+        auto* sdlTarget = dynamic_cast<SDLRenderTarget*>(target);
+        if (!_renderer || !sdlTarget || !sdlTarget->GetSDLTexture()) {
+            if (!_foreignTargetWarned) {
+                _foreignTargetWarned = true;
+                LOG_ERROR("SDLRendererBackend: SetRenderTarget got a target that is not a live target of this renderer, so the back buffer stays");
+            }
+            return;
+        }
+        if (!SDL_SetRenderTarget(_renderer, sdlTarget->GetSDLTexture())) {
+            LOG_ERROR("SDLRendererBackend: cannot set the render target: {}", SDL_GetError());
+            return;
+        }
+        _currentTarget = sdlTarget;
+        SDL_SetRenderDrawColor(_renderer, _nextTargetClear.r, _nextTargetClear.g, _nextTargetClear.b, _nextTargetClear.a);
+        SDL_RenderClear(_renderer);
+        _nextTargetClear = kOpaqueBlack;
+    }
 
-    void SDLRendererBackend::UnsetRenderTarget() {}
+    void SDLRendererBackend::UnsetRenderTarget() {
+        if (_renderer && _currentTarget) {
+            SDL_SetRenderTarget(_renderer, nullptr);
+        }
+        _currentTarget = nullptr;
+    }
+
+    void SDLRendererBackend::OnTargetDestroyed(SDLRenderTarget& target) {
+        if (_currentTarget == &target) {
+            UnsetRenderTarget();
+        }
+        const auto found = std::find(_targets.begin(), _targets.end(), &target);
+        if (found != _targets.end()) {
+            _targets.erase_unsorted(found);
+        }
+    }
 
     String SDLRendererBackend::GetNoGpuDeviceReason() const {
         return String("the SDL 2D renderer has no depth buffer and no shaders (use a renderer with a GPU device)");
@@ -329,6 +395,8 @@ namespace BECore {
     void SDLRendererBackend::PresentFrame() {
         BE_PROFILE_SCOPE("SDLRenderer::PresentFrame");
         if (_renderer) {
+            // The window is what is presented and what a capture reads: a pass left open on a target ends here
+            UnsetRenderTarget();
             ServeCapture();  // the pixels have to be read before the present: after it the back buffer is undefined
             SDL_RenderPresent(_renderer);
         }

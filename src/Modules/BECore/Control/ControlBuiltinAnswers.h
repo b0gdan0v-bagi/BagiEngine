@@ -28,13 +28,14 @@ namespace BECore {
         BE_REFLECT_FIELD uint64_t warnings = 0;
     };
 
-    /// `status`: the clock, the log totals, whether the clock is manual, whether the game is paused and the window
+    /// `status`: the clock, the log totals, whether the clock is manual, whether the game is paused, the window and the run mode that runs (`runMode`: `Editor` or `Game`)
     struct ControlStatusAnswer : ControlClock {
         BE_CLASS(ControlStatusAnswer)
 
         BE_REFLECT_FIELD ControlLogTotals log;
         BE_REFLECT_FIELD bool manualClock = false;
         BE_REFLECT_FIELD bool paused = false;
+        BE_REFLECT_FIELD PoolString runMode;
         BE_REFLECT_FIELD ControlWindowStatus window;
     };
 

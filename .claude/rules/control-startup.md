@@ -15,7 +15,7 @@ The API is off by default: a game has to be asked for it. `Application::Initiali
 |--------------|----------------------------------------|---------|
 | `--control`, `--control=false` | `control="true"` (or `false`, `1`, `0`) | start the WebSocket server; the value form of any boolean flag below can also switch off what the file turned on |
 | `--control-port=N` | `controlPort="N"` | port 0 to 65535; 0 asks the system for a free one; default `kDefaultControlPort` (8765) |
-| `--headless` | `headless="true"` (or `false`, `1`, `0`) | no window: the SDL software renderer on the dummy video driver, a screenshot is the way to see the game (`SDL/CLAUDE.md`, "Headless and screenshots"); needs the API and the Game run mode |
+| `--headless` | `headless="true"` (or `false`, `1`, `0`) | no window: the SDL software renderer on the dummy video driver, a screenshot is the way to see the game (`SDL/CLAUDE.md`, "Headless and screenshots"); needs the API; with `--editor` the editor runs in the memory window (`status.runMode` says which mode runs) |
 | `--window=WxH`, `--density=D` | none (flags only: `ControlFlags`) | the start size (window units) and pixel density of a headless window, within `WindowLimits`; need `--headless` (`.claude/rules/control-window-api.md`) |
 | `--manual-clock` | `manualClock="true"` (or `false`, `1`, `0`) | frames run only on `step` (see "Manual clock and `step`"); needs the API |
 | `--replay=FILE`, `--replay-exit` | none | plays a replay file once the game is up; exit code 0 or 1, and `--replay-exit` also quits; both need the API and the manual clock (`Games/CLAUDE.md`, "Record and replay") |
