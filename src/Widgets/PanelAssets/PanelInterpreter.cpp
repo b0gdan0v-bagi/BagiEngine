@@ -606,7 +606,7 @@ namespace BECore {
             if (_reader.ReadRowText(*_sources, list, row, column.field, _cellScratch, text) != PanelReadStatus::Ok) {
                 text = kUnreadable;
             }
-            // The id part of the label is the column's, so the row's own text may repeat or change without moving the id
+            // `##<column id>` only keeps the column id out of sight; the row's ScopedId is what separates equal texts
             _label.clear();
             if (prepared.glyph != nullptr) {
                 _label.append(prepared.glyph);
