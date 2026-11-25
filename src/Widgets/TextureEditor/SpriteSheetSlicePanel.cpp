@@ -4,6 +4,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Math/NumberUtils.h>
 #include <BECore/Resource/TextureLibrary.h>
+#include <Generated/SpriteSheetSlicePanel.gen.hpp>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
@@ -21,10 +22,6 @@ namespace BECore {
         constexpr int kCountStepFast = 4;
         constexpr int kPixelStep = 1;
         constexpr int kPixelStepFast = 8;
-        /// A margin or spacing beyond this is a typo: no texture is that big
-        constexpr int kMaxInsetPixels = 16384;
-        constexpr int kMaxStartIndex = 100000;
-        constexpr int kMaxIslandMinSize = 16384;
         constexpr int kAlphaStep = 1;
         constexpr int kAlphaStepFast = 16;
         const char* const kPressFindIslands = "Press Find islands";
@@ -36,6 +33,44 @@ namespace BECore {
                 HashCombine(print, entry.name.HashValue());
             }
             return print;
+        }
+
+        constexpr unsigned char kUtf8ContinuationMask = 0xC0;
+        constexpr unsigned char kUtf8Continuation = 0x80;
+
+        /// Cuts @p text to at most @p limit bytes, never inside a UTF-8 sequence; true when it was cut
+        bool CutToBytes(String& text, size_t limit) {
+            if (text.size() <= limit) {
+                return false;
+            }
+            size_t end = limit;
+            while (end > 0 && (static_cast<unsigned char>(text[end]) & kUtf8ContinuationMask) == kUtf8Continuation) {
+                --end;
+            }
+            text.resize(end);
+            return true;
+        }
+
+        /// Clamps @p value to the range in place; true when it differs from @p current afterwards
+        bool TakeNumber(int32_t& value, int minimum, int maximum, int& current) {
+            value = std::clamp(value, minimum, maximum);
+            if (value == current) {
+                return false;
+            }
+            current = value;
+            return true;
+        }
+
+        /// Copies @p text into the buffer @p target when it differs; true when it did
+        template <size_t TSize>
+        bool TakeText(const String& text, char (&target)[TSize]) {
+            if (StringView(text) == StringView(target)) {
+                return false;
+            }
+            const size_t length = std::min(text.size(), TSize - 1);
+            memcpy(target, text.data(), length);
+            target[length] = '\0';
+            return true;
         }
 
         /// A number field in the mono font with its name before it; true when the value was edited (and is clamped to the range)
@@ -154,11 +189,66 @@ namespace BECore {
         PoolString firstAdded;
         ImGui::BeginDisabled(!_hasPlan || _plan.entries.empty());
         if (IconTextButton(ICON_LC_GRID_2X2_PLUS, "Add sprites", "Add one sprite per cell or island to the library; Save writes the file")) {
-            firstAdded = _plan.entries.front().name;
-            ApplyGridSlice(library, _plan);
-            _inputsChanged = true;
+            firstAdded = AddPlanned(library);
         }
         ImGui::EndDisabled();
+        return firstAdded;
+    }
+
+    void SpriteSheetSlicePanel::Sync(SpriteSliceView& view, const TextureLibrary& library, PoolString texturePath, int sheetWidth, int sheetHeight) {
+        _isOpen = view.open;
+        const PlanKey key{texturePath, sheetWidth, sheetHeight, NamesFingerprint(library)};
+        if (key.texturePath != _key.texturePath || key.width != _key.width || key.height != _key.height) {
+            ClearIslands();
+        }
+
+        bool changed = false;
+        if (view.mode != _mode) {
+            _mode = view.mode;
+            ClearIslands();
+            changed = true;
+        }
+        changed |= TakeNumber(view.columns, 1, kMaxSheetGridAxis, _spec.columns);
+        changed |= TakeNumber(view.rows, 1, kMaxSheetGridAxis, _spec.rows);
+        changed |= TakeNumber(view.margin, 0, kMaxInsetPixels, _spec.margin);
+        changed |= TakeNumber(view.spacing, 0, kMaxInsetPixels, _spec.spacing);
+        bool islandsEdited = false;
+        islandsEdited |= TakeNumber(view.alphaThreshold, 0, kMaxIslandAlphaThreshold, _island.alphaThreshold);
+        islandsEdited |= TakeNumber(view.minSize, 1, kMaxIslandMinSize, _island.minSize);
+        islandsEdited |= TakeNumber(view.padding, 0, kMaxIslandPadding, _island.padding);
+        islandsEdited |= TakeNumber(view.mergeGap, 0, kMaxIslandMergeGap, _island.mergeGap);
+        if (islandsEdited) {
+            ClearIslands();
+            changed = true;
+        }
+        changed |= TakeNumber(view.startIndex, 0, kMaxStartIndex, _startIndex);
+        CutToBytes(view.prefix, kPrefixSize - 1);
+        changed |= TakeText(view.prefix, _prefix);
+        CutToBytes(view.names, kNamesSize - 1);
+        changed |= TakeText(view.names, _names);
+        if (view.policy != _policy) {
+            _policy = view.policy;
+            changed = true;
+        }
+
+        if (!changed && !_inputsChanged && key == _key) {
+            return;
+        }
+        _key = key;
+        _inputsChanged = false;
+        MakePlan(library);
+        view.summary.assign(_summary);
+        view.hasError = _hasError;
+        view.canAdd = _hasPlan && !_plan.entries.empty();
+    }
+
+    PoolString SpriteSheetSlicePanel::AddPlanned(TextureLibrary& library) {
+        if (!_hasPlan || _plan.entries.empty()) {
+            return {};
+        }
+        const PoolString firstAdded = _plan.entries.front().name;
+        ApplyGridSlice(library, _plan);
+        _inputsChanged = true;
         return firstAdded;
     }
 
@@ -185,6 +275,7 @@ namespace BECore {
     void SpriteSheetSlicePanel::FindIslands(PoolString texturePath, int width, int height) {
         _cells.clear();
         _islandError.clear();
+        _inputsChanged = true;
 
         const Path file = CoreManager::GetFileSystem().ResolvePath(texturePath.ToStringView());
         // The pixels live only in this call: the panel keeps the rects, never the image

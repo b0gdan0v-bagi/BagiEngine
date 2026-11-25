@@ -1,5 +1,6 @@
 #include "SpriteAtlasPreviewPanel.h"
 
+#include <Generated/SpriteAtlasPreviewPanel.gen.hpp>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
@@ -46,8 +47,6 @@ namespace BECore {
             ImGui::TextDisabled("No atlas: name a group in the Atlas section to preview it");
             return {};
         }
-        BindGroup(group);
-
         // Without a packed member there is no current atlas to show, so the plan is what is left
         const bool anyPacked = AtlasSummary(library, group.ToStringView()).packed > 0;
         AtlasPreviewMode mode = anyPacked ? _mode : AtlasPreviewMode::Plan;
@@ -64,7 +63,11 @@ namespace BECore {
             mode = _mode;
         }
         ItemTooltip("What Pack would make with the settings above, from the sprites' sources; nothing is written");
+        return DrawBody(library, group, mode, settings, textures);
+    }
 
+    PoolString SpriteAtlasPreviewPanel::DrawBody(const TextureLibrary& library, PoolString group, AtlasPreviewMode mode, const PackSettings& settings, SpriteTextureCache& textures) {
+        BindGroup(group);
         EnsureBuilt(library, mode, settings, textures);
 
         if (_hasError) {

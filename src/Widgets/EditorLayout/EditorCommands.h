@@ -110,6 +110,21 @@ namespace BECore {
         inline constexpr auto kConfigEditorReloadCancel = "configEditor.reloadCancel"_intern;
         inline constexpr auto kConfigEditorSwitchDiscard = "configEditor.switchDiscard"_intern;
         inline constexpr auto kConfigEditorSwitchCancel = "configEditor.switchCancel"_intern;
+        /// The Sprite Library's buttons and fields (config/panels/SpriteLibraryPanel.xml names them). SpriteLibraryPanelModel owns them and runs them only while its
+        /// panel is open; none takes an argument. rename is the name field's `commitCommand`, dropAccept and dropCancel the buttons of the "Add sprite" dialog,
+        /// sliceFindIslands and sliceAdd the buttons of the Slice sheet section, atlasName the group field's `commitCommand`, pack and unpack the buttons of the
+        /// Atlas section; `texture.save` is not one of them (the model takes it while closed too)
+        inline constexpr auto kSpriteLibraryRename = "spriteLibrary.rename"_intern;
+        inline constexpr auto kSpriteLibraryRescan = "spriteLibrary.rescan"_intern;
+        inline constexpr auto kSpriteLibraryAdd = "spriteLibrary.add"_intern;
+        inline constexpr auto kSpriteLibraryDelete = "spriteLibrary.delete"_intern;
+        inline constexpr auto kSpriteLibraryDropAccept = "spriteLibrary.dropAccept"_intern;
+        inline constexpr auto kSpriteLibraryDropCancel = "spriteLibrary.dropCancel"_intern;
+        inline constexpr auto kSpriteLibrarySliceFindIslands = "spriteLibrary.sliceFindIslands"_intern;
+        inline constexpr auto kSpriteLibrarySliceAdd = "spriteLibrary.sliceAdd"_intern;
+        inline constexpr auto kSpriteLibraryAtlasName = "spriteLibrary.atlasName"_intern;
+        inline constexpr auto kSpriteLibraryPack = "spriteLibrary.pack"_intern;
+        inline constexpr auto kSpriteLibraryUnpack = "spriteLibrary.unpack"_intern;
         /// The Preferences window's "save now": the `commitCommand` of its controls (config/panels/PreferencesPanel.xml). PreferencesPanelModel owns it and runs it
         /// only while its panel is open; it takes no argument
         inline constexpr auto kPreferencesCommit = "preferences.commit"_intern;
