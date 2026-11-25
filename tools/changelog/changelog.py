@@ -48,7 +48,11 @@ KEY_ENTRY = "Entry"
 KEY_DATE = "Date"
 KEY_BUMP = "Bump"
 KEY_CONTENT_VERSION = "Content version"
-KEYS = (KEY_VERSION, KEY_ENTRY, KEY_DATE, KEY_BUMP, KEY_CONTENT_VERSION)
+KEY_MERGE = "Merge"
+KEYS = (KEY_VERSION, KEY_ENTRY, KEY_MERGE, KEY_DATE, KEY_BUMP, KEY_CONTENT_VERSION)
+# The n-th merge of an entry merged in slices is `<entry>@<n>`: the fragment's file name and the key of the store's counter
+MERGE_SEPARATOR = "@"
+FIRST_LATER_MERGE = 2
 
 BULLET = "- "
 CONTINUATION = "  "
@@ -99,10 +103,16 @@ class Fragment:
     date: str = ""
     bump: str = ""
     content_version: int | None = None
+    merge: int | None = None
     sections: dict[str, list[str]] = field(default_factory=dict)
 
     def bullets(self, section: str) -> list[str]:
         return self.sections.get(section, [])
+
+    @property
+    def key(self) -> str:
+        """The file name without `.md` and the key of the counter: the entry, or `<entry>@<n>` for its n-th merge."""
+        return self.entry if self.merge is None else f"{self.entry}{MERGE_SEPARATOR}{self.merge}"
 
 
 def version_text(version: Version) -> str:
@@ -172,6 +182,11 @@ def apply_meta(fragment: Fragment, meta: dict[str, str]) -> None:
     fragment.entry = meta.get(KEY_ENTRY, "")
     if fragment.entry and not ENTRY_RE.match(fragment.entry):
         raise ChangelogError(f"Entry `{fragment.entry}` is not a todo id (letters, digits and `-`)")
+    if KEY_MERGE in meta:
+        text = meta[KEY_MERGE]
+        if not text.isdigit() or text.startswith("0") or int(text) < FIRST_LATER_MERGE:
+            raise ChangelogError(f"Merge `{text}` is not a whole number from {FIRST_LATER_MERGE} (the first merge has no `Merge` line)")
+        fragment.merge = int(text)
     fragment.date = meta.get(KEY_DATE, "")
     if fragment.date:
         try:
@@ -196,7 +211,10 @@ def format_bullet(bullet: str) -> str:
 
 def format_fragment(fragment: Fragment) -> str:
     """The file text; parse_fragment of it gives the same fragment."""
-    meta = [(KEY_VERSION, version_text(fragment.version) if fragment.version else ""), (KEY_ENTRY, fragment.entry), (KEY_DATE, fragment.date), (KEY_BUMP, fragment.bump)]
+    meta = [(KEY_VERSION, version_text(fragment.version) if fragment.version else ""), (KEY_ENTRY, fragment.entry)]
+    if fragment.merge is not None:
+        meta.append((KEY_MERGE, str(fragment.merge)))
+    meta += [(KEY_DATE, fragment.date), (KEY_BUMP, fragment.bump)]
     if fragment.content_version is not None:
         meta.append((KEY_CONTENT_VERSION, str(fragment.content_version)))
     parts = [f"# {fragment.title}\n\n" + "\n".join(f"- {key}: {value}" for key, value in meta if value) + "\n"]
@@ -233,6 +251,8 @@ def render_changelog(fragments: list[Fragment]) -> str:
     out = [CHANGELOG_PREAMBLE]
     for fragment in sorted(fragments, key=lambda f: f.version or (0, 0, 0), reverse=True):
         facts = [f"Entry: `{fragment.entry}`", f"Bump: {fragment.bump}"]
+        if fragment.merge is not None:
+            facts.insert(1, f"Merge: {fragment.merge}")
         if fragment.content_version is not None:
             facts.append(f"Content version: {fragment.content_version}")
         block = [f"## {version_text(fragment.version)} - {fragment.date} - {fragment.title}\n\n{'. '.join(facts)}.\n"]
@@ -299,8 +319,8 @@ def load_fragments(root: Path) -> tuple[list[tuple[Path, Fragment]], list[str]]:
             problems.append(f"{shown}: {error}")
             continue
         found = validate_fragment(fragment, complete=True)
-        if fragment.entry and path.stem != fragment.entry:
-            found.append(f"the file must be named `{fragment.entry}.md` after its Entry")
+        if fragment.entry and path.stem != fragment.key:
+            found.append(f"the file must be named `{fragment.key}.md` after its Entry and Merge")
         problems.extend(f"{shown}: {problem}" for problem in found)
         loaded.append((path, fragment))
     return loaded, problems
@@ -375,8 +395,12 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_versi
     if tree_problems:
         raise ChangelogError("the existing log is broken, `check` says how: " + tree_problems[0])
     existing = [fragment for _, fragment in loaded]
-    if any(fragment.entry == draft.entry for fragment in existing) or (root / FRAGMENT_DIR / f"{draft.entry}.md").exists():
-        raise ChangelogError(f"entry `{draft.entry}` already has a fragment")
+    expected = next_merge(existing, draft.entry)
+    if any(fragment.key == draft.key for fragment in existing) or (root / FRAGMENT_DIR / f"{draft.key}.md").exists():
+        hint = f": a later merge of the entry says `- {KEY_MERGE}: {expected}`" if expected is not None else ""
+        raise ChangelogError(f"`{draft.key}` already has a fragment{hint}")
+    if draft.merge != expected:
+        raise ChangelogError(f"`{draft.key}` is not the next merge of `{draft.entry}`: that is `{Fragment(title='', entry=draft.entry, merge=expected).key}` (`changelog.py key`)")
     header = read_version_header(root)
     if existing:
         highest = max(fragment.version for fragment in existing)
@@ -401,13 +425,33 @@ def prepare_add(root: Path, draft: Fragment, bump: str, date: str, content_versi
     return draft, new_version
 
 
+def next_merge(fragments: list[Fragment], entry: str) -> int | None:
+    """The `Merge` of the next fragment of `entry`: None for its first merge, else one above its highest (the first counts as 1)."""
+    merges = [fragment.merge or 1 for fragment in fragments if fragment.entry == entry]
+    return max(merges) + 1 if merges else None
+
+
+def next_key(root: Path, entry: str) -> str:
+    if not ENTRY_RE.match(entry):
+        raise ChangelogError(f"`{entry}` is not a todo id (letters, digits and `-`)")
+    loaded, problems = load_fragments(root)
+    if problems:
+        raise ChangelogError("the existing log is broken, `check` says how: " + problems[0])
+    return Fragment(title="", entry=entry, merge=next_merge([fragment for _, fragment in loaded], entry)).key
+
+
+def command_key(root: Path, args: argparse.Namespace) -> int:
+    print(next_key(root, args.entry))
+    return EXIT_OK
+
+
 def command_add(root: Path, args: argparse.Namespace) -> int:
     draft = parse_fragment(read_draft(args.draft))
     given = parse_version(args.version) if args.version else None
     fragment, version = prepare_add(root, draft, args.bump, args.date or datetime.date.today().isoformat(), args.content_version, given)
     loaded, _ = load_fragments(root)
     rendered = render_changelog([*(f for _, f in loaded), fragment])
-    target = root / FRAGMENT_DIR / f"{fragment.entry}.md"
+    target = root / FRAGMENT_DIR / f"{fragment.key}.md"
     text = format_fragment(fragment)
     if args.dry_run:
         print(f"would write {FRAGMENT_DIR}/{target.name}, set {VERSION_HEADER.as_posix()} to {version_text(version)} and regenerate {CHANGELOG_FILE}:\n")
@@ -528,6 +572,7 @@ def entry_record(fragment: Fragment) -> dict:
         "version": version_text(fragment.version),
         "title": fragment.title,
         "entry": fragment.entry,
+        "merge": fragment.merge,
         "date": fragment.date,
         "bump": fragment.bump,
         "content_version": fragment.content_version,
@@ -768,14 +813,14 @@ def apply_renumber(root: Path, plan: list[Renumbered], floor: Version) -> Versio
     if problems:
         raise ChangelogError("the log is broken, `check` says how: " + problems[0])
     new = {item.entry: item.new for item in plan}
-    missing = [fragment.entry for _, fragment in loaded if fragment.entry not in new and fragment.version > floor]
+    missing = [fragment.key for _, fragment in loaded if fragment.key not in new and fragment.version > floor]
     if missing:
         raise ChangelogError(f"not on any branch of the plan: {', '.join(sorted(missing))} (commit them on `main` or a `games/*` branch first)")
     for path, fragment in loaded:
-        if fragment.entry not in new:
+        if fragment.key not in new:
             continue
         text = path.read_bytes().decode("utf-8")
-        text, count = re.subn(rf"^- {KEY_VERSION}: [^\r\n]+", f"- {KEY_VERSION}: {version_text(new[fragment.entry])}", text, count=1, flags=re.MULTILINE)
+        text, count = re.subn(rf"^- {KEY_VERSION}: [^\r\n]+", f"- {KEY_VERSION}: {version_text(new[fragment.key])}", text, count=1, flags=re.MULTILINE)
         if count != 1:
             raise ChangelogError(f"{path}: no `- {KEY_VERSION}:` line")
         path.write_bytes(text.encode("utf-8"))
@@ -816,6 +861,8 @@ def build_parser() -> argparse.ArgumentParser:
     command("current", "print the version of the header")
     propose = command("propose", "print the bump a draft needs: minor with a non-empty Breaking, else patch")
     propose.add_argument("--draft", required=True)
+    key = command("key", "print the key of the next merge of an entry: `<id>` for its first, `<id>@<n>` after (`todo.py version next --entry` takes it)")
+    key.add_argument("--entry", required=True)
     add = command("add", "write the fragment of a draft, bump the header, regenerate CHANGELOG.md")
     add.add_argument("--draft", required=True)
     add.add_argument("--bump", required=True, choices=[MINOR, PATCH, AUTO])
@@ -849,6 +896,7 @@ def build_parser() -> argparse.ArgumentParser:
 HANDLERS = {
     "current": command_current,
     "propose": command_propose,
+    "key": command_key,
     "add": command_add,
     "render": command_render,
     "check": command_check,

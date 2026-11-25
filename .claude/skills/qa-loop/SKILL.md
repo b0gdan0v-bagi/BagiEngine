@@ -28,6 +28,6 @@ The skill needs a checkout of its own, so it runs in an idle worker (`worker.py 
 
 ## Rules
 
-- Never edit code, tests or content, never commit, never write inside a repository: the log, the sweeps and the scratch files are outside (`QaSession` refuses an out folder in a git work tree). The writes besides them are the entries and plans of steps 6 and 7 (none with `dry`) and, in the editor charter, the Save of the editor into a content file that the library puts back (`qa-project.md`, "The editor").
+- Never edit code, tests or content, never commit, never write inside a repository: the log, the sweeps and the scratch files are outside (`QaSession` refuses an out folder in a git work tree). The writes besides them are the entries and plans of steps 6 and 7 (none with `dry`) and, in the editor charter, the Save of the editor, which goes into an overlay outside the repository (`qa-project.md`, "The editor"); `git status --short` stays empty.
 - The manual clock only, headless only: `sweep` starts the game itself. Never file without a reproduction that recurred, never hide a finding behind a deviation without a reason in the rules file; one bug, one entry.
 - A session that cannot start (no executable, the port taken, the game exits at once, exit 2 of a sweep) is a report with the error, not a retry loop. Never touch `.env`, a token or the entries of others beyond the paragraph of step 6.

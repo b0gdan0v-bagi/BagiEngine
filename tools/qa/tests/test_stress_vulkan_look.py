@@ -1,4 +1,4 @@
-"""The pure parts of tools/stress/qa/vulkan_look.py: the environment and the command, the PPM header, the split of validation lines.
+"""The pure parts of tools/stress/qa/vulkan_look.py: the environment and the command, the PPM header, the validation lines.
 
 The run itself needs a window and a display and is not tested here.
 """
@@ -17,10 +17,6 @@ def look():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-KNOWN = "Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af"
-KNOWN_SPEC = "The Vulkan spec states: Each binary semaphore ... (https://vulkan.lunarg.com/doc/view/1.4.363.0/mac/antora/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)"
 
 
 def test_the_environment_names_both_layers_and_the_screenshot_settings(look, tmp_path):
@@ -62,21 +58,18 @@ def test_a_missing_ppm_is_refused(look, tmp_path):
         look.read_ppm_size(tmp_path / "none.ppm")
 
 
-def test_the_known_finding_is_split_from_a_new_one(look):
-    new = "Validation Error: [ VUID-vkCmdDraw-None-02699 ] | MessageID = 0x1"
-    lines = ["[Info] [12:00:00.000] started", KNOWN, KNOWN_SPEC, new, "[Info] done"]
-    known, found = look.split_validation_lines(lines)
-    assert known == [KNOWN, KNOWN_SPEC]
-    assert found == [new]
+def test_every_validation_line_is_a_finding_even_the_old_semaphore_one(look):
+    semaphore = "Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af"
+    other = "Validation Error: [ VUID-vkCmdDraw-None-02699 ] | MessageID = 0x1"
+    assert look.validation_lines(["[Info] [12:00:00.000] started", semaphore, other, "[Info] done"]) == [semaphore, other]
 
 
-def test_a_validation_warning_without_an_id_is_new(look):
-    known, found = look.split_validation_lines(["Validation Warning: [ UNASSIGNED-x ] something"])
-    assert known == [] and len(found) == 1
+def test_a_validation_warning_without_an_id_is_a_finding(look):
+    assert len(look.validation_lines(["Validation Warning: [ UNASSIGNED-x ] something"])) == 1
 
 
 def test_a_log_without_validation_lines_has_none(look):
-    assert look.split_validation_lines(["[Info] a", "[Warning] b"]) == ([], [])
+    assert look.validation_lines(["[Info] a", "[Warning] b"]) == []
 
 
 def test_the_pictures_are_listed_in_order_and_only_ppm(look, tmp_path):

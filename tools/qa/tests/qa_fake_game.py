@@ -21,7 +21,13 @@ Knobs (the number is the 1-based count of `perform_action` calls):
   QA_FAKE_WINDOW=1           the game serves `set_window {width, height}` (a size of 0 is `invalid_params`) and `status` shows `window`
   QA_FAKE_EDITOR=1           an editor build: `status.runMode` is `Editor` (else `Game`); `imgui_find` lists the windows `Scene Editor` and `Game Panel` and
                              the items `Save` (Scene Editor) and `Close` (in both windows, so a click on it is ambiguous); `imgui_input` answers like the real one,
-                             and a click on `Save` writes the text QA_FAKE_SAVE_TEXT into the file QA_FAKE_CONTENT_FILE
+                             and a click on `Save` clears the dirty flag and writes the text QA_FAKE_SAVE_TEXT: into `config/SceneConfig.xml` of the
+                             `--content-overlay=<dir>` it was given, else (no overlay, or QA_FAKE_WRITE_CHECKOUT) into the file QA_FAKE_CONTENT_FILE;
+                             `editor_state` serves one `scene` document whose `file` is that target
+  QA_FAKE_DIRTY=1            the scene document starts dirty (an edit was made)
+  QA_FAKE_WRITE_CHECKOUT=1   Save writes QA_FAKE_CONTENT_FILE even when an overlay was given (an engine that ignores the flag)
+  QA_FAKE_ARGS_OUT=F         the game writes its command line arguments into the file F, one per line
+  QA_FAKE_OVERLAY_SEEN_OUT=F the game writes `yes` or `no` into F: whether the overlay's `config/SceneConfig.xml` existed when it started
   QA_FAKE_EDITOR_DIR_OUT=F   the game writes the BAGI_EDITOR_DIR it was started with into the file F (an empty line when it was not set)
 `bad` (not listed) is always refused with `illegal_action`. `reset` takes {"count"}.
 """
@@ -42,6 +48,8 @@ from fake_game import png_2x1  # noqa: E402
 WATCHDOG_SECONDS = 60.0
 
 
+OVERLAY_FLAG = "--content-overlay="
+SCENE_PATH = "config/SceneConfig.xml"
 SAVE_RECT = {"x": 100.0, "y": 50.0, "width": 40.0, "height": 20.0}
 EDITOR_WINDOWS = ("Scene Editor", "Game Panel")
 EDITOR_ITEMS = [
@@ -63,6 +71,15 @@ def main() -> int:
     late: list[str] = []
     editor = bool(os.environ.get("QA_FAKE_EDITOR"))
     editor_dir_out = os.environ.get("QA_FAKE_EDITOR_DIR_OUT")
+    args_out = os.environ.get("QA_FAKE_ARGS_OUT")
+    if args_out:
+        Path(args_out).write_text("\n".join(args) + "\n", encoding="utf-8")
+    overlay = next((Path(arg.split("=", 1)[1]) for arg in args if arg.startswith(OVERLAY_FLAG)), None)
+    overlay_file = None if overlay is None else overlay / SCENE_PATH
+    overlay_seen_out = os.environ.get("QA_FAKE_OVERLAY_SEEN_OUT")
+    if overlay_seen_out:
+        Path(overlay_seen_out).write_text(("yes" if overlay_file is not None and overlay_file.exists() else "no") + "\n", encoding="utf-8")
+    dirty = [bool(os.environ.get("QA_FAKE_DIRTY"))]
     if editor_dir_out:
         Path(editor_dir_out).write_text(os.environ.get("BAGI_EDITOR_DIR", "") + "\n", encoding="utf-8")
 
@@ -109,7 +126,18 @@ def main() -> int:
     if window_served:
         served.append("set_window")
     if editor:
-        served += ["imgui_find", "imgui_input"]
+        served += ["editor_state", "imgui_find", "imgui_input"]
+
+    def save_target() -> Path | None:
+        checkout = os.environ.get("QA_FAKE_CONTENT_FILE")
+        if overlay_file is not None and not os.environ.get("QA_FAKE_WRITE_CHECKOUT"):
+            return overlay_file
+        return Path(checkout) if checkout else None
+
+    def editor_state() -> dict:
+        target = save_target()
+        document = {"id": "scene:Main", "kind": "scene", "name": "Main", "dirty": dirty[0], "path": SCENE_PATH, "file": "" if target is None else str(target)}
+        return {"anyDirty": dirty[0], "documents": [document]}
 
     def imgui_find(params: dict) -> dict:
         windows = [{"kind": "window", "label": label, "id": index, "x": 0.0, "y": 0.0, "width": 400.0, "height": 300.0, "visible": True, "hovered": False} for index, label in enumerate(EDITOR_WINDOWS)]
@@ -117,6 +145,8 @@ def main() -> int:
         wanted = [match for match in windows + items if (params.get("kind") is None or match["kind"] == params["kind"]) and (params.get("window") is None or match.get("window") == params["window"])]
         if params.get("label") is not None:
             wanted = [match for match in wanted if match["label"] == params["label"]]
+        elif params.get("labelContains") is not None:
+            wanted = [match for match in wanted if params["labelContains"] in match["label"]]
         elif params.get("kind") is None and "label" not in params:
             wanted = windows
         return {"frame": state["frame"], "display": [1920, 1080], "wantCaptureMouse": False, "wantCaptureKeyboard": False, "matches": wanted}
@@ -124,9 +154,11 @@ def main() -> int:
     def imgui_input(params: dict) -> dict:
         for event in params.get("events", []):
             if event.get("type") == "click" and SAVE_RECT["x"] <= event.get("x", -1) <= SAVE_RECT["x"] + SAVE_RECT["width"] and SAVE_RECT["y"] <= event.get("y", -1) <= SAVE_RECT["y"] + SAVE_RECT["height"]:
-                target = os.environ.get("QA_FAKE_CONTENT_FILE")
-                if target:
-                    Path(target).write_text(os.environ.get("QA_FAKE_SAVE_TEXT", "saved"), encoding="utf-8")
+                dirty[0] = False
+                target = save_target()
+                if target is not None:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(os.environ.get("QA_FAKE_SAVE_TEXT", "saved"), encoding="utf-8")
         return {"events": len(params.get("events", [])), "frames": 1, "wantCaptureMouse": False, "wantCaptureKeyboard": False, "wantTextInput": False}
 
     def handle(method: str, params: dict | None):
@@ -183,6 +215,8 @@ def main() -> int:
             return {"scene": "Main", "canvases": [canvas]}
         if method == "ui_click":
             return ui_click(params)
+        if editor and method == "editor_state":
+            return editor_state()
         if editor and method == "imgui_find":
             return imgui_find(params)
         if editor and method == "imgui_input":

@@ -76,6 +76,14 @@ def test_a_default_the_writer_adds_is_tolerated_only_with_the_allowed_value():
     assert "@rotation" in violation.message and "'9'" in violation.message
 
 
+def test_a_default_the_writer_leaves_out_is_tolerated_only_with_the_allowed_value():
+    plain = '<component type="TransformComponent" x="0" y="0" />'
+    written = base().replace(plain, '<component type="TransformComponent" y="0" />', 1)
+    assert names(compare(written)) == ["editor.saved_scene_changed"]
+    assert compare(written, added_defaults={"TransformComponent": {"x": "0"}}) == []
+    assert names(compare(written, added_defaults={"TransformComponent": {"x": "1"}})) == ["editor.saved_scene_changed"]
+
+
 def test_a_lost_component_is_a_scene_change():
     after = base().replace('        <component type="StressComponent" />\n', "", 1)
     (violation,) = compare(after)

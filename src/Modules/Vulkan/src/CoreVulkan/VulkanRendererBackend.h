@@ -122,6 +122,8 @@ namespace BECore {
         bool CreateCommandPool();
         bool CreateCommandBuffers();
         bool CreateSyncObjects();
+        /// Makes one render-finished semaphore per image of the current swapchain; the old ones go only after the new ones exist
+        bool RemakeRenderFinishedSemaphores();
         // A fresh image-available semaphore and a signaled fence for one frame slot (see AbandonFrame())
         bool RemakeSlotSyncObjects(uint32_t frameIdx);
 
@@ -201,10 +203,12 @@ namespace BECore {
         VkCommandPool _commandPool = VK_NULL_HANDLE;
         Vector<VkCommandBuffer> _commandBuffers;
 
-        // One set of sync objects per in-flight frame
+        // Per in-flight frame
         Vector<VkSemaphore> _imageAvailableSemaphores;
-        Vector<VkSemaphore> _renderFinishedSemaphores;
         Vector<VkFence> _inFlightFences;
+        // Per swapchain image, indexed by _currentImageIndex: the presentation engine holds the wait semaphore of a
+        // present until the image is acquired again, so a semaphore per frame slot may be signaled while still pending
+        Vector<VkSemaphore> _renderFinishedSemaphores;
 
         uint32_t _currentFrame = 0;
         uint32_t _currentImageIndex = 0;
@@ -222,6 +226,8 @@ namespace BECore {
         VkResult _lastLoggedFailure = VK_SUCCESS;
         // true when inside an offscreen render pass (between SetRenderTarget/UnsetRenderTarget)
         bool _inOffscreenPass = false;
+        // Present() found an offscreen pass open and said so: the caller's mistake repeats every frame, the log line must not
+        bool _loggedOpenPassAtPresent = false;
 
         // Current render extent — offscreen target size or swapchain extent depending on active pass
         VkExtent2D _currentExtent = {};
