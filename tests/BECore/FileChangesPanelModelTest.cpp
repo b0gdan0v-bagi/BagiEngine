@@ -54,7 +54,6 @@ namespace BECore::Tests {
 
     TEST_F(FileChangesPanelModelTest, BeforeAnyRescanThePanelAsksForOne) {
         EXPECT_TRUE(View().running);
-        EXPECT_FALSE(View().notRunning);
         EXPECT_TRUE(View().showPressRescan);
         EXPECT_FALSE(View().showNothingChanged);
         EXPECT_FALSE(View().showPending);
@@ -155,7 +154,6 @@ namespace BECore::Tests {
         _model.Update();
 
         EXPECT_FALSE(View().running);
-        EXPECT_TRUE(View().notRunning);
         EXPECT_FALSE(View().showPressRescan);
         EXPECT_FALSE(View().canApplyAll);
         EXPECT_TRUE(_model.RunCommand("fileChanges.rescan", ""));
@@ -183,7 +181,7 @@ namespace BECore::Tests {
         _model.Update();
 
         EXPECT_FALSE(View().showNothingChanged);
-        EXPECT_TRUE(View().notRunning);
+        EXPECT_FALSE(View().running);
     }
 
     TEST_F(FileChangesPanelModelTest, TheViewIsReadableThroughABindingOfTheAsset) {

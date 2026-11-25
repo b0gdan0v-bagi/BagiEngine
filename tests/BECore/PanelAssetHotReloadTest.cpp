@@ -66,6 +66,7 @@ namespace BECore::Tests {
 
         void SetUp() override {
             CountingPanelModel::Reset();
+            ReloadingPanelModel::Reset();
             _dir = TestTempDirectory("panel_hot");
             MakeEmptyDirectory(_dir);
             ImGui::CreateContext();
@@ -250,6 +251,23 @@ namespace BECore::Tests {
 
         ASSERT_NO_FATAL_FAILURE(Edit(Asset("Two", "Go", "ProbePanelModel", "renamed")));
         EXPECT_EQ(CountingPanelModel::alive, 0);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AReloadThatDropsTheModelDuringItsCommandDoesNotDestroyItWhileItRuns) {
+        ASSERT_NO_FATAL_FAILURE(Start(Asset("One", "Go", "ReloadingPanelModel")));
+        ASSERT_EQ(ReloadingPanelModel::alive, 1);
+        // What applying the panel's own file does from a command: the file changes and the manager announces it from inside the command
+        ReloadingPanelModel::hook = [this] {
+            WriteFile(_dir / "HotPanel.xml", Asset("Two", "Go", "CountingPanelModel", "renamed"));
+            EXPECT_TRUE(_manager.ReloadConfig(kConfig));
+        };
+
+        Command(EditorCommandIds::kFileChangesRescan);
+
+        EXPECT_EQ(ReloadingPanelModel::commandsFinished, 1);
+        EXPECT_EQ(ReloadingPanelModel::destroyedInCommand, 0) << "the model was destroyed while its command ran";
+        EXPECT_EQ(ReloadingPanelModel::alive, 0) << "the reload was not applied after the command";
+        EXPECT_EQ(CountingPanelModel::alive, 1);
     }
 
     TEST_F(PanelAssetHotReloadTest, ClosedDrawsNothingAndNoCommandReachesAModelButTheOpenCommandOpens) {

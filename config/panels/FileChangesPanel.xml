@@ -4,7 +4,7 @@
     <item name="files" model="FileChangesPanelModel"/>
   </sources>
   <elements>
-    <element type="PanelEmptyState" id="notRunning" icon="file-diff" text="The file watcher is not running: set fileWatch to On or Auto in ApplicationConfig.xml" visible="files.notRunning"/>
+    <element type="PanelEmptyState" id="notRunning" icon="file-diff" text="The file watcher is not running: set fileWatch to On or Auto in ApplicationConfig.xml" visible="!files.running"/>
     <element type="PanelRow" id="toolbar" visible="files.running">
       <elements>
         <element type="PanelButton" id="rescan" icon="refresh-cw" text="Rescan" command="fileChanges.rescan" tooltip="Look at the disk now and list the files that changed since the engine last knew them"/>
@@ -25,7 +25,7 @@
     <element type="PanelTable" id="applied" source="files.applied" header="false" visible="files.showApplied">
       <columns>
         <item type="Text" id="path" field="path" styleField="style"/>
-        <item type="Text" id="error" field="error" styleField="style"/>
+        <item type="Text" id="error" field="error"/>
       </columns>
     </element>
   </elements>

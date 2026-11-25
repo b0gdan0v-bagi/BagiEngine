@@ -25,6 +25,9 @@ namespace BECore {
      * global one stands behind it), so two panels may both name a source `files`. A reload keeps the instance of a source whose name and model did not change.
      * While the panel is closed nothing is drawn and no command reaches a model (the open command apart), as with the panels it replaces.
      *
+     * A change of the asset's config is only noted by the event and applied at the next `Update` or at the end of the command being run: the event can
+     * come from inside a model's own command (applying the panel's file), and a reload may drop that very model.
+     *
      * A click is emitted as `EditorCommandEvent` after the window is closed, never inside the walk (`PanelInterpreter`). Editor only.
      */
     class AssetPanelWidget : public IWidget {
@@ -63,6 +66,8 @@ namespace BECore {
         void OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event);
         void OnReloadFailed(const ConfigEvents::ConfigReloadFailedEvent& event);
 
+        bool RunModelCommand(StringView id, StringView argument) const;
+        void ApplyPendingReload();
         void LoadAsset();
         void OnAssetChanged();
         void SyncModels();
@@ -80,6 +85,7 @@ namespace BECore {
         uint32_t _preparedVersion = 0;
         bool _open = false;
         bool _openDecided = false;
+        bool _reloadPending = false;
     };
 
 }  // namespace BECore

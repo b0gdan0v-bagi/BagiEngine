@@ -35,7 +35,6 @@ namespace BECore {
         BE_CLASS(FileChangesView)
 
         BE_REFLECT_FIELD bool running = false;
-        BE_REFLECT_FIELD bool notRunning = true;
         BE_REFLECT_FIELD bool canApplyAll = false;
         BE_REFLECT_FIELD bool showPressRescan = false;
         BE_REFLECT_FIELD bool showNothingChanged = false;

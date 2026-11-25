@@ -106,6 +106,13 @@ namespace BECore {
 
     void AssetPanelWidget::OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event) {
         if (event.name.ToStringView() == StringView(_asset)) {
+            _reloadPending = true;
+        }
+    }
+
+    void AssetPanelWidget::ApplyPendingReload() {
+        if (_reloadPending) {
+            _reloadPending = false;
             LoadAsset();
         }
     }
@@ -126,16 +133,23 @@ namespace BECore {
         if (!_open) {
             return;
         }
+        RunModelCommand(id, event.argument);
+        ApplyPendingReload();
+    }
+
+    bool AssetPanelWidget::RunModelCommand(StringView id, StringView argument) const {
         for (const ModelEntry& entry : _models) {
-            if (entry.model->RunCommand(id, event.argument)) {
-                return;
+            if (entry.model->RunCommand(id, argument)) {
+                return true;
             }
         }
+        return false;
     }
 
     void AssetPanelWidget::Draw() {}
 
     void AssetPanelWidget::Update() {
+        ApplyPendingReload();
         if (!_open) {
             return;
         }

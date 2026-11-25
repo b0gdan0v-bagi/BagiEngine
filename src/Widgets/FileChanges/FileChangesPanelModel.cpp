@@ -70,7 +70,6 @@ namespace BECore {
         const bool running = Watcher().IsRunning();
         const bool hasPending = !_model.GetPending().empty();
         _view.running = running;
-        _view.notRunning = !running;
         _view.canApplyAll = running && hasPending;
         _view.showPressRescan = running && !_model.HasScanned();
         _view.showNothingChanged = running && _model.HasScanned() && !hasPending;
