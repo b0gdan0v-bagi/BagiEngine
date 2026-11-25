@@ -21,6 +21,9 @@ namespace BECore::Tests {
             _parent = _scene->CreateNode("Parent"_intern, nullptr);
             _child = _scene->CreateNode("Child"_intern, _parent.Get());
             _child->AddComponent(BECore::New<TransformComponent>());
+            // Stand for nodes the editor made: a generated node is not copied by DuplicateNode
+            _parent->SetGenerated(false);
+            _child->SetGenerated(false);
         }
 
         IntrusivePtr<Scene> _scene;

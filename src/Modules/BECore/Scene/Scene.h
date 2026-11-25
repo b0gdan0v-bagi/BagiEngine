@@ -143,13 +143,16 @@ namespace BECore {
 
         /**
          * @brief Sync the runtime hierarchy back into the serializable _nodes field.
-         *        Call before saving so that nodes added at runtime are included.
+         *        Call before saving so that nodes the editor added at runtime are included.
+         *
+         * A top-level node that is generated (SceneNode::IsGenerated()) is left out, with its subtree: the code that made it makes it again.
          */
         void PrepareForSave();
 
         SceneNode& GetRootNode();
         PoolString GetName() const;
 
+        /// Makes a node under @p parent (the root when null). It is generated (SceneNode::IsGenerated()), so it is not saved unless SetGenerated(false) says an editor made it
         IntrusivePtr<SceneNode> CreateNode(PoolString name, SceneNode* parent = nullptr);
 
         /// The @p index of InstantiateNode() that means "after the last child"
@@ -161,7 +164,8 @@ namespace BECore {
          * @p reference is a `<node ref=".." name=".." layer="..">` element with the overrides of ApplyNodeOverrides, which a game writes as
          * XML text and loads with XmlDocument. It is expanded by ExpandNodeReference with the source mark, so the new node answers
          * SceneNode::GetSourceRef(), wired as a loaded node is (IComponent::OnAttached of every component) and inserted into
-         * the children of @p parent at @p index; its draw and input order follow from the tree. It has no children of its own.
+         * the children of @p parent at @p index; its draw and input order follow from the tree. It has no children of its own. The new
+         * node is generated (SceneNode::IsGenerated()): a game spawns it, so Save does not write it.
          *
          * A reference that cannot be used, a scene that is not initialized and a @p parent that is not a live node of this scene are one
          * LOG_ERROR that names the scene and the reference; an empty pointer is returned and the scene is not changed.
@@ -196,7 +200,9 @@ namespace BECore {
          *
          * The copy is read from the node's inline XML (AppendNodeElement, DeserializeNode) and wired as InstantiateNode wires a node (`OnAttached` of every
          * component), so it shares nothing with the original. Its name is `Name (copy)`, or `Name (copy 2)` and up while
-         * a sibling has it. The top node keeps SceneNode::GetSourceRef(), so a copied instance is an instance.
+         * a sibling has it. The top node keeps SceneNode::GetSourceRef(), so a copied instance is an instance. The copy is authored
+         * (not generated, whatever the original is) and leaves out the generated descendants of the original: a component that makes its
+         * own children makes them again in the copy's `OnAttached`, so copying them would double them.
          *
          * @return The copy, empty for the root and for a node that is not in this scene (nothing changed)
          */
