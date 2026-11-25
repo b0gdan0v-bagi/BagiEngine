@@ -196,13 +196,28 @@ namespace BECore {
         // Called after the clip changes (push or pop)
         virtual void OnClipRectChanged() {}
 
-        // A backend calls it once per primitive it submits: @p texture is null for an untextured draw
+        // A backend calls it once per primitive it submits and does not batch: @p texture is null for an untextured draw
         void CountDraw(const ITexture* texture, uint64_t triangles) {
+            CountPrimitive(triangles);
+            CountSubmission(texture);
+        }
+
+        // One primitive was asked of the renderer: a primitive and its triangles, not a submission
+        void CountPrimitive(uint64_t triangles) {
+            if (_countersPaused > 0) {
+                return;
+            }
+            ++_counters.primitives;
+            _counters.triangles += triangles;
+        }
+
+        // One submission reached the backend: a draw call, and a texture switch when @p texture (null for an untextured one) is not the
+        // textured one submitted before
+        void CountSubmission(const ITexture* texture) {
             if (_countersPaused > 0) {
                 return;
             }
             ++_counters.drawCalls;
-            _counters.triangles += triangles;
             if (texture != nullptr && texture != _lastCountedTexture) {
                 ++_counters.textureSwitches;
                 _lastCountedTexture = texture;

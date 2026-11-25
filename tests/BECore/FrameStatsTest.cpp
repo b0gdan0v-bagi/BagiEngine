@@ -59,6 +59,7 @@ namespace BECore::Tests {
 
         const RenderCounters counters = renderer->TakeRenderCounters();
         EXPECT_EQ(counters.drawCalls, 5u);
+        EXPECT_EQ(counters.primitives, counters.drawCalls);  // nothing batches here: a primitive is a submission
         EXPECT_EQ(counters.triangles, 10u);
         EXPECT_EQ(counters.textureSwitches, 2u);
     }
@@ -82,6 +83,7 @@ namespace BECore::Tests {
             renderer->DrawFilledRect(0, 0, 1, 1, Color{});
         }
         EXPECT_EQ(renderer->PeekRenderCounters().drawCalls, 0u);
+        EXPECT_EQ(renderer->PeekRenderCounters().primitives, 0u);
 
         renderer->DrawTexture(*a, nullptr, 0, 0, 1, 1);
         EXPECT_EQ(renderer->TakeRenderCounters().textureSwitches, 1u);
