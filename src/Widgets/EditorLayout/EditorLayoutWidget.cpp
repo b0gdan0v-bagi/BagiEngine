@@ -61,6 +61,8 @@ namespace BECore {
         _statusBar.SetBranch(ReadGitBranch(BranchSearchStart()));
         _statusBar.StartHardwareMonitor();
 
+        _hostHandle = EditorLayoutHostRegistry::GetInstance().Register(*this);
+
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
         Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);
         Subscribe<ViewportInputModeChangedEvent, &EditorLayoutWidget::OnViewportInputModeChanged>(this);
@@ -208,7 +210,9 @@ namespace BECore {
         // The panels' Initialize ran before the first Update, so they hear the stored preferences now
         bool preferencesChanged = !_preferencesAnnounced;
         _preferencesAnnounced = true;
-        if (_preferencesWindow.Draw(*_settings)) {
+        const bool windowChanged = _preferencesWindow.Draw(*_settings);
+        if (windowChanged || _preferencesNotified) {
+            _preferencesNotified = false;
             ApplyPreferences(_settings->GetPreferences());
             preferencesChanged = true;
         }
@@ -218,6 +222,22 @@ namespace BECore {
     }
 
     void EditorLayoutWidget::Draw() {}
+
+    EditorSettings* EditorLayoutWidget::GetSettings() {
+        return _settings ? &*_settings : nullptr;
+    }
+
+    LayoutStore* EditorLayoutWidget::GetLayouts() {
+        return _layouts ? &*_layouts : nullptr;
+    }
+
+    void EditorLayoutWidget::NotifyPreferencesChanged() {
+        _preferencesNotified = true;
+    }
+
+    void EditorLayoutWidget::NotifyLayoutsChanged() {
+        _layoutNames.Invalidate();
+    }
 
     void EditorLayoutWidget::DrawMenuBar() {
         using namespace EditorCommandIds;
@@ -368,7 +388,7 @@ namespace BECore {
 
         // Enter saves a new name; replacing a layout needs a click on "Overwrite"
         if (savePressed || (enterPressed && isValid && !exists)) {
-            if (const auto result = SaveCurrentLayout(name); result) {
+            if (const auto result = SaveCurrentLayoutAs(name); result) {
                 ImGui::CloseCurrentPopup();
             } else {
                 _saveLayoutError = result.error();
@@ -405,7 +425,7 @@ namespace BECore {
         _pendingLayoutText = *text;
     }
 
-    std::expected<void, String> EditorLayoutWidget::SaveCurrentLayout(StringView name) {
+    std::expected<void, String> EditorLayoutWidget::SaveCurrentLayoutAs(StringView name) {
         size_t size = 0;
         const char* text = ImGui::SaveIniSettingsToMemory(&size);
         // SaveIniSettingsToMemory cancels the pending write of imgui.ini

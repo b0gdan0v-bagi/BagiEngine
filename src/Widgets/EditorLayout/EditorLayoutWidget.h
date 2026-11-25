@@ -8,6 +8,7 @@
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorPlayModel.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
+#include <Widgets/EditorLayout/IEditorLayoutHost.h>
 #include <Widgets/EditorLayout/LayoutStore.h>
 #include <Widgets/EditorLayout/MainToolbar.h>
 #include <Widgets/EditorLayout/PreferencesWindow.h>
@@ -28,7 +29,10 @@ namespace BECore {
     // (EditorCommandEvent): quit, switch mode, reset and save the layout, open the palette and the preferences. It also turns the chords
     // of the hotkey map into those events. The toolbar's Pause and Step and the commands game.pause and game.step drive the engine's
     // GamePause, which is the single truth: the model copies its flag every frame.
-    class EditorLayoutWidget : public IWidget {
+    //
+    // It is the IEditorLayoutHost of the editor (registered in Initialize, for its lifetime): the models of the panel assets reach the
+    // settings and the layouts through it. A NotifyPreferencesChanged is applied and announced in the next Update.
+    class EditorLayoutWidget : public IWidget, public IEditorLayoutHost {
         BE_CLASS(EditorLayoutWidget)
     public:
         EditorLayoutWidget() = default;
@@ -38,6 +42,13 @@ namespace BECore {
         bool Initialize(IDeserializer& deserializer) override;
         void Update() override;
         void Draw() override;
+
+        [[nodiscard]] EditorSettings* GetSettings() override;
+        [[nodiscard]] LayoutStore* GetLayouts() override;
+        /// Needs an ImGui context: the text is ImGui's ini of the moment
+        std::expected<void, String> SaveCurrentLayoutAs(StringView name) override;
+        void NotifyPreferencesChanged() override;
+        void NotifyLayoutsChanged() override;
 
     private:
         void BuildDefaultLayout(ImGuiID dockspaceId, ImVec2 size);
@@ -73,8 +84,6 @@ namespace BECore {
 
         /// Reads the layout @p name and keeps its text until the next ImGuiNewFrameEvent
         void QueueLayout(const String& name);
-        /// Writes the current dock layout under @p name; the error is a sentence for the popup
-        std::expected<void, String> SaveCurrentLayout(StringView name);
 
         Optional<EditorSettings> _settings;
         Optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
@@ -94,6 +103,8 @@ namespace BECore {
         String _saveLayoutError;
         bool _openSaveLayoutPopup = false;
 
+        EditorLayoutHostHandle _hostHandle;
+        bool _preferencesNotified = false;  // NotifyPreferencesChanged waits here for the next Update
         bool _preferencesAnnounced = false;
         bool _layoutInitialized = false;
         bool _forceResetLayout = false;
