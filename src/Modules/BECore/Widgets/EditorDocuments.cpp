@@ -1,5 +1,6 @@
 #include "EditorDocuments.h"
 
+#include <BECore/FileSystem/MountPoints.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 
@@ -10,7 +11,8 @@ namespace BECore {
         struct KindNames {
             static constexpr auto scene = "scene"_intern;
             static constexpr auto nodeFile = "nodeFile"_intern;
-            static constexpr auto config = "config"_intern;
+            // The wire name of a config document is the word of its mount point
+            static constexpr auto config = MountPoints::config;
             static constexpr auto library = "library"_intern;
         };
 

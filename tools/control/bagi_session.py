@@ -129,7 +129,7 @@ class GameSession:
         The game is given either as `exe` (a path) or as `preset` + `game` (build/<preset>/bin/<game>, see preset_executable); exactly one of the two.
         `window` ("WxH" in window units) and `density` are the start size and pixel density of a headless window (`--window=`, `--density=`), which
         set_window changes later. `editor` starts the game in the Editor run mode (`--editor`; a build without the editor runs Game: `status.runMode` says which). `content_overlay` is a folder (made when missing) that
-        every write of the editor panels goes into instead of the content files (`--content-overlay=`); it has to lie outside every git work tree, so that a QA session never leaves a change
+        every write through the config save, the node-file save and the mounted paths goes into instead of the content files, in either run mode (`--content-overlay=`; the Generate panel's presets and sets and imgui.ini are not redirected); it has to lie outside every git work tree, so that a QA session never leaves a change
         in a repository, and it is not part of a recording's header (a path of this machine). `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
         """
         by_path = bool(exe)

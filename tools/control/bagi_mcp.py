@@ -87,8 +87,8 @@ def launch_game(
     window: "WxH" in window units (64 to 4096 each), the start size of the headless window instead of the one in the game's config, e.g. "390x844".
     density: the start pixel density (0.5 to 4, default 1): the pictures are round(size * density) pixels. Both need headless; set_window changes them later.
     editor: start in the editor run mode (--editor), headless too: a screenshot is the whole editor window; status.runMode says which mode runs (Game in a build without the editor).
-    content_overlay: a folder (made when missing, outside every git repository) that every write of the editor panels goes into instead of the content files, so a session that
-    saves never changes a tracked file; editor_state names the copy in `file`. Needs editor.
+    content_overlay: a folder (made when missing, outside every git repository) that every write through the config save, the node-file save and the mounted paths goes into instead of the content
+    files, in either mode; the Generate panel's presets and sets and imgui.ini are not redirected. editor_state names the copy in `file` (needs editor).
     Answers the port, the clock status and the games the executable has.
     """
     return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None, window=window or None, density=density, editor=editor, content_overlay=content_overlay or None)

@@ -1,6 +1,7 @@
 #include "SceneEditorWidget.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
@@ -28,10 +29,6 @@
 namespace BECore {
 
     namespace {
-        struct Ids {
-            static constexpr auto sceneConfig = "SceneConfig"_intern;
-        };
-
         constexpr float kUITreeHeight = 160.0f;
         constexpr size_t kComponentLabelSize = 96;
         constexpr float kPopupButtonWidth = 120.0f;
@@ -575,7 +572,7 @@ namespace BECore {
         _uiFileSession.Save(*scene);
 
         auto& configManager = CoreManager::GetConfigManager();
-        auto xmlRoot = configManager.GetConfig(Ids::sceneConfig);
+        auto xmlRoot = configManager.GetConfig(ConfigNames::scene);
         if (!xmlRoot) {
             return;
         }
@@ -590,7 +587,7 @@ namespace BECore {
             LOG_WARNING("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note);
         }
 
-        if (configManager.SaveConfig(Ids::sceneConfig)) {
+        if (configManager.SaveConfig(ConfigNames::scene)) {
             _isDirty = false;
         }
     }

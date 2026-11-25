@@ -1,6 +1,7 @@
 #include "TextureEditorWidget.h"
 
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -27,10 +28,6 @@ namespace BECore {
         const char* const kAddSpritePopup = "Add sprite";
         constexpr StringView kSpriteLibraryName = "sprites";
 
-        struct Ids {
-            static constexpr auto textureLibraryConfig = "TextureLibrary"_intern;  // the config `TextureLibrary::Save` writes
-        };
-
     }  // namespace
 
     bool TextureEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
@@ -40,7 +37,7 @@ namespace BECore {
     }
 
     void TextureEditorWidget::AppendDocuments(Vector<EditorDocumentState>& out) {
-        out.push_back(MakeConfigDocument(CoreManager::GetConfigManager(), EditorDocumentKind::Library, kSpriteLibraryName, _isDirty, Ids::textureLibraryConfig));
+        out.push_back(MakeConfigDocument(CoreManager::GetConfigManager(), EditorDocumentKind::Library, kSpriteLibraryName, _isDirty, ConfigNames::textureLibrary));
     }
 
     void TextureEditorWidget::OnCommand(const EditorCommandEvent& event) {
