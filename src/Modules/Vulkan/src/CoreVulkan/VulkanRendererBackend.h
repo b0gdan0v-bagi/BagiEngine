@@ -213,7 +213,7 @@ namespace BECore {
         bool _frameAcquired = false;
         // true when the command buffer of the frame was submitted and the image waits to be presented
         bool _frameSubmitted = false;
-        // true when inside the swapchain render pass (between OnRenderClear and OnRenderPresent)
+        // true when inside the swapchain render pass (until Present)
         bool _inSwapchainPass = false;
         // The device is lost, or the sync objects of a slot could not be made again: AcquireFrame() skips every frame
         // (sleeping, so the loop does not spin) and only Destroy() is left to do
