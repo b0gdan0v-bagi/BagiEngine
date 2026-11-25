@@ -7,6 +7,8 @@
 #include <BECore/Renderer/BlendMode.h>
 #include <BECore/Renderer/DrawTransform.h>
 #include <BECore/Renderer/GeometryDetail.h>
+#include <BECore/Renderer/GeometryVertex.h>
+#include <BECore/Renderer/RenderBatch.h>
 #include <BECore/Renderer/RenderCounters.h>
 #include <BECore/Renderer/ViewTransform.h>
 #include <BECore/Types/Types.h>
@@ -28,15 +30,6 @@ namespace BECore {
         uint32_t width = 0;
         uint32_t height = 0;
         Vector<uint8_t> rgba;
-    };
-
-    /// One corner of a triangle for IRenderer::DrawGeometry()
-    struct GeometryVertex {
-        float x = 0.0f;  ///< the position, in the units of DrawFilledRect() (the translation and the view transform are applied to it)
-        float y = 0.0f;
-        Color color;     ///< straight alpha; it multiplies the texel of a textured draw, or is the color itself of an untextured one
-        float u = 0.0f;  ///< the position in the texture, 0 to 1 over the whole texture
-        float v = 0.0f;
     };
 
     /// The image, or why it could not be taken
@@ -184,13 +177,23 @@ namespace BECore {
         [[nodiscard]] const RenderCounters& PeekRenderCounters() const {
             return _counters;
         }
-        // While any pause is alive the draws are not counted (the profiler's own overlay, ScopedRenderCountersPause)
-        void PauseCounters() {
-            ++_countersPaused;
+        // While any pause is alive the draws are not counted (the profiler's own overlay, ScopedRenderCountersPause). Both calls submit the open
+        // batch first, so a draw is counted inside the pause it was made in or outside it, never half and half.
+        void PauseCounters();
+        void ResumeCounters();
+
+        /// Whether the quads of DrawFilledRect(), DrawTexture() and the transformed draws are gathered into batches (off by default, a backend
+        /// that implements SubmitBatch() turns it on where its result is exact). Turning it off submits the open batch. The look of the
+        /// output does not change, only the number of submissions (RenderCounters::drawCalls against primitives).
+        void SetBatchingEnabled(bool enabled);
+        [[nodiscard]] bool IsBatchingEnabled() const {
+            return _batchingEnabled;
         }
-        void ResumeCounters() {
-            --_countersPaused;
-        }
+
+        /// Submits the open batch, if any, so every draw made so far has reached the backend. The scene calls it at the end of its pass; the
+        /// renderer calls it itself wherever the order or the state would otherwise be lost (a clip change, another texture or blend mode, a
+        /// draw that is not batched, the frame and target boundaries of a backend, which calls it too).
+        void Flush();
 
     protected:
         // Called after the clip changes (push or pop)
@@ -225,6 +228,31 @@ namespace BECore {
         }
         static constexpr uint64_t kQuadTriangles = 2;
 
+        /// Carries out one batch: the backend draws the quads as a single submission under the clip in effect (GetClipRect()). Called by Flush(),
+        /// which has counted the submission; @p batch is emptied after the call.
+        virtual void SubmitBatch(const RenderBatch& /*batch*/) {}
+
+        /// Whether @p texture is one this backend can draw (made by it). Asked when a quad opens a batch for a texture; a quad of a texture that
+        /// is refused is dropped, neither appended nor counted, as an unbatched draw of it would be.
+        [[nodiscard]] virtual bool CanDrawTexture(const ITexture& /*texture*/) const {
+            return true;
+        }
+
+        /// Drops the open batch unsubmitted (the backend is being destroyed and its target is gone)
+        void DiscardBatch() {
+            _batch.Reset();
+        }
+
+        // The append helpers of a backend that batches, called instead of its immediate draw when IsBatchingEnabled(), after its own checks
+        // (a pass is open, the texture is its own). They do what the call asks of the renderer: the view transform and the opacity are applied
+        // once, here, an empty clip draws nothing, a quad is counted as a primitive, and a batch is submitted first when the quad does not
+        // belong to it (another texture or blend mode, the cap). The units are those of DrawFilledRect() and DrawTexture().
+        void BatchRect(float x, float y, float w, float h, const Color& color);
+        void BatchTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint);
+        void BatchTransformedRect(float x, float y, float w, float h, const Color& color, const DrawTransform& transform);
+        /// A texture without size draws nothing
+        void BatchTransformedTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint, const DrawTransform& transform);
+
         /// The one place the opacity rule is written: @p color with its alpha times GetOpacity(), rounded. A backend calls it once per primitive;
         /// at opacity 1 the color comes back untouched.
         [[nodiscard]] Color ApplyOpacity(const Color& color) const {
@@ -237,6 +265,9 @@ namespace BECore {
         }
 
     private:
+        // @p corners are in output pixels, @p uvs per corner, both in the order of MakeTransformedQuad()
+        void AppendQuad(ITexture* texture, const Array<Vec2, 4>& corners, const Array<Vec2, 4>& uvs, const Color& color);
+
         static constexpr float kOpacityRounding = 0.5f;
         static constexpr Color kWhite{255, 255, 255, 255};
 
@@ -250,6 +281,8 @@ namespace BECore {
         RenderCounters _counters;
         const ITexture* _lastCountedTexture = nullptr;  // compared only, never dereferenced
         int _countersPaused = 0;
+        bool _batchingEnabled = false;
+        RenderBatch _batch;  // a member so a steady frame reuses its storage
     };
 
     /// The GPU device of @p renderer, or the renderer's name and why it has none, for the caller to log once instead of drawing a blank screen
