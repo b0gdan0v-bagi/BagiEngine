@@ -101,6 +101,7 @@ namespace BECore::Stress {
             CheckBareFlag(commandLine, StressFlags::kRamp),
             ReadChoice(commandLine, StressFlags::kMeasure, kMeasureNames, settings.measure),
             CheckBareFlag(commandLine, StressFlags::kInterleave),
+            CheckBareFlag(commandLine, StressFlags::kNoBatching),
             ReadNumber(commandLine, StressFlags::kAtlases, kMinAtlases, kMaxAtlases, settings.atlases),
             ReadChoice(commandLine, StressFlags::kLanguage, kLanguageNames, settings.language),
         };
@@ -113,6 +114,7 @@ namespace BECore::Stress {
         settings.framesGiven = commandLine.FindValue(StressFlags::kFrames).has_value();
         settings.ramp = commandLine.HasFlag(StressFlags::kRamp);
         settings.interleave = commandLine.HasFlag(StressFlags::kInterleave);
+        settings.noBatching = commandLine.HasFlag(StressFlags::kNoBatching);
         return settings;
     }
 

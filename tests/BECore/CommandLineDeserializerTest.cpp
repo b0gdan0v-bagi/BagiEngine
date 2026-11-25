@@ -402,11 +402,13 @@ namespace BECore::Tests {
     }
 
     TEST(CommandLineDeserializerTest, ControlFlagsAreReadFromTheirFlags) {
-        Reading<ControlFlags> reading({"--window=480x360", "--density=2", "--replay=a.jsonl", "--replay-exit"});
+        Reading<ControlFlags> reading({"--window=480x360", "--density=2", "--replay=a.jsonl", "--replay-exit", "--backend=sdl-gpu", "--hidden-window"});
         reading.Load();
         EXPECT_FALSE(reading.Reader().HasErrors());
         const ControlFlags& flags = reading.Value();
         EXPECT_EQ(flags._replay, "a.jsonl");
+        EXPECT_EQ(flags._backend, "sdl-gpu");
+        EXPECT_TRUE(flags._hiddenWindow);
         EXPECT_TRUE(flags._replayExit);
         ASSERT_TRUE(flags._window.has_value());
         EXPECT_EQ(flags._window->width, 480);
@@ -423,6 +425,8 @@ namespace BECore::Tests {
         EXPECT_FALSE(reading.Value()._replayExit);
         EXPECT_FALSE(reading.Value()._window.has_value());
         EXPECT_FALSE(reading.Value()._density.has_value());
+        EXPECT_TRUE(reading.Value()._backend.empty());
+        EXPECT_FALSE(reading.Value()._hiddenWindow);
     }
 
     TEST(CommandLineDeserializerTest, ABadWindowSizeIsAnErrorNamedByTheFlag) {

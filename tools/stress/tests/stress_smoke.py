@@ -28,7 +28,7 @@ sys.path.insert(0, str(ENGINE_DIR / "tools" / "control" / "tests"))
 sys.path.insert(0, str(ENGINE_DIR / "tools" / "schema"))
 
 from bagi_control_client import BagiControlClient, ConnectionClosed, ControlError  # noqa: E402
-from game_process import PORT_TAKEN_MARKER, GameLaunchError, GameProcess, build_game_command, free_port, preset_executable  # noqa: E402
+from game_process import BACKEND_UNAVAILABLE_MARKER, PORT_TAKEN_MARKER, GameLaunchError, GameProcess, build_game_command, free_port, preset_executable  # noqa: E402
 from schema_to_xsd import Binding, check_files, convert_config_dir, find_xmllint  # noqa: E402
 from smoke import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, SmokeFailure, check, check_window_control, expect_error, take_screenshot  # noqa: E402
 
@@ -43,6 +43,7 @@ ENTITIES_COUNT = 500
 UI_COUNT = 200
 REFLECTION_COUNT = 50
 RMLUI_COUNT = 20
+GPU_SPRITES_COUNT = 500
 RMLUI_COUNTER_PREFIX = "Stress rmlui "
 RMLUI_STEPS = 30  # RmlUi scrolls a wheel step smoothly over the frames of the game clock that follow
 # Inside the scroller of the panel (tools/stress/assets/ui/stress_rmlui.rcss: 360 x 240 dp, 40 dp from the right and bottom of the 1920 x 1080 reference, which is the headless output)
@@ -130,6 +131,17 @@ def scenario_sprites(client: BagiControlClient) -> None:
     check_bad_counts(client)
     check_not_flat(client, "sprites")
     expect_error("invalid_params", lambda: client.call("perform_action", {"type": "set_scene", "scene": "nowhere"}), "a scene that does not exist")
+
+
+def scenario_gpu_batching(client: BagiControlClient, batching: bool) -> None:
+    """A settled frame of the sprites scene on a GPU backend: batched, far fewer submissions than sprites; with `--stress-no-batching`, one each."""
+    check_state(client, "sprites", GPU_SPRITES_COUNT)
+    frame = settle(client)
+    check(frame["primitives"] == GPU_SPRITES_COUNT, f"{GPU_SPRITES_COUNT} sprites made {frame['primitives']} primitives")
+    if batching:
+        check(frame["drawCalls"] < GPU_SPRITES_COUNT, f"batched, {GPU_SPRITES_COUNT} sprites still made {frame['drawCalls']} draw calls")
+    else:
+        check(frame["drawCalls"] == GPU_SPRITES_COUNT, f"unbatched, {GPU_SPRITES_COUNT} sprites made {frame['drawCalls']} draw calls")
 
 
 def scenario_entities(client: BagiControlClient) -> None:
@@ -427,6 +439,21 @@ def temporary_editor_directory() -> Iterator[None]:
                 os.environ[EDITOR_DIR_VARIABLE] = previous
 
 
+# (name, backend, batching): a fresh game on a hidden window of the GPU; a machine without the backend skips them (never a failure)
+GPU_SCENARIOS: list[tuple[str, str, bool]] = [
+    ("sdl-gpu batched", "sdl-gpu", True),
+    ("sdl-gpu unbatched", "sdl-gpu", False),
+    ("vulkan batched", "vulkan", True),
+    ("vulkan unbatched", "vulkan", False),
+]
+# The Vulkan backend has no blend modes and says so once, the first time the sprites scene asks for one
+GPU_TOLERATED = ("the blend mode Add is not implemented",)
+
+
+class BackendUnavailable(Exception):
+    """The game said it cannot start the backend asked for (no display, no loader, not in this build)."""
+
+
 SCENARIOS: list[tuple[str, list[str], Callable[..., None]]] = [  # `editor` takes the executable too: main binds it
     ("sprites", ["--stress-scene=sprites", f"--stress-count={SPRITES_COUNT}"], scenario_sprites),
     ("entities", ["--stress-scene=entities", f"--stress-count={ENTITIES_COUNT}"], scenario_entities),
@@ -438,13 +465,18 @@ SCENARIOS: list[tuple[str, list[str], Callable[..., None]]] = [  # `editor` take
 ]
 
 
-def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], port: int, tolerated: tuple[str, ...] = ()) -> None:
-    """One fresh game: the scenario, `quit`, a clean exit and a log with no problems (a line with one of the `tolerated` texts is not one). Raises SmokeFailure (PortTaken text in the message when the port was lost)."""
-    process = GameProcess(build_game_command(exe, port, headless=True, manual_clock=True, extra=flags), cwd=exe.parent)
+def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], port: int, tolerated: tuple[str, ...] = (), headless: bool = True) -> None:
+    """One fresh game: the scenario, `quit`, a clean exit and a log with no problems (a line with one of the `tolerated` texts is not one). Raises SmokeFailure (PortTaken text in the message when the port was lost) and BackendUnavailable (the game logged that the backend of `flags` cannot start)."""
+    process = GameProcess(build_game_command(exe, port, headless=headless, manual_clock=True, extra=flags), cwd=exe.parent)
     try:
         process.start()
         try:
-            client = process.connect(port, STATUS_STARTUP_TIMEOUT)
+            try:
+                client = process.connect(port, STATUS_STARTUP_TIMEOUT)
+            except GameLaunchError as error:
+                if BACKEND_UNAVAILABLE_MARKER in str(error):
+                    raise BackendUnavailable(next(line for line in str(error).splitlines() if BACKEND_UNAVAILABLE_MARKER in line)) from error
+                raise
             try:
                 scenario(client)
                 client.call("quit")
@@ -463,15 +495,15 @@ def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], No
         process.stop(0)
 
 
-def play_with_retry(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], port: int, name: str, tolerated: tuple[str, ...] = ()) -> None:
+def play_with_retry(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], port: int, name: str, tolerated: tuple[str, ...] = (), headless: bool = True) -> None:
     """play() on `port` (0: a free one); once more on another port when the game says that port was taken (free_port hands it back before the bind)."""
     try:
-        play(exe, flags, scenario, port or free_port(), tolerated)
+        play(exe, flags, scenario, port or free_port(), tolerated, headless)
     except SmokeFailure as error:
         if port or PORT_TAKEN_MARKER not in str(error):
             raise
         print(f"{name}: the port was taken by another process; retrying once on another port", flush=True)
-        play(exe, flags, scenario, free_port(), tolerated)
+        play(exe, flags, scenario, free_port(), tolerated, headless)
 
 
 def main() -> int:
@@ -493,6 +525,18 @@ def main() -> int:
         try:
             with temporary_editor_directory() if is_editor else contextlib.nullcontext():
                 play_with_retry(exe, flags, functools.partial(scenario, exe=exe) if is_editor else scenario, args.port, name, (NO_EDITOR_WARNING,) if is_editor else ())
+        except SmokeFailure as error:
+            print(f"FAILED ({name}): {error}")
+            return EXIT_FAILED
+    for name, backend, batching in GPU_SCENARIOS:
+        print(f"{name}: running", flush=True)
+        flags = ["--stress-scene=sprites", f"--stress-count={GPU_SPRITES_COUNT}", "--hidden-window", f"--backend={backend}"]
+        if not batching:
+            flags.append("--stress-no-batching")
+        try:
+            play_with_retry(exe, flags, functools.partial(scenario_gpu_batching, batching=batching), args.port, name, GPU_TOLERATED, headless=False)
+        except BackendUnavailable as error:
+            print(f"SKIPPED ({name}): {error}")
         except SmokeFailure as error:
             print(f"FAILED ({name}): {error}")
             return EXIT_FAILED

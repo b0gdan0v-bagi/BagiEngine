@@ -170,6 +170,31 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetParamBool(parsed.Root(), "manualClock"), Optional(false));
     }
 
+    TEST_F(StressRunTest, NoBatchingTurnsTheBatcherOffAtTheFirstUpdateAndTheLineSaysSo) {
+        StartRun({"--stress-no-batching"});
+        _renderer->SetBatchingEnabled(true);  // as a backend does in Initialize()
+        Frame(kFastMs);
+        EXPECT_FALSE(_renderer->IsBatchingEnabled());
+        while (_lines.empty()) {
+            Frame(kFastMs);
+        }
+
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamInt(parsed.Root(), "batching").value_or(-1), 0);
+    }
+
+    TEST_F(StressRunTest, WithoutTheFlagTheBatcherStaysAsTheBackendLeftIt) {
+        StartRun();
+        _renderer->SetBatchingEnabled(true);
+        FramesUntilDone(kFastMs);
+
+        EXPECT_TRUE(_renderer->IsBatchingEnabled());
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed());
+        EXPECT_EQ(GetParamInt(parsed.Root(), "batching").value_or(-1), 1);
+    }
+
     TEST_F(StressRunTest, TheWorkTimeLeavesOutThePresent) {
         StartRun();
 

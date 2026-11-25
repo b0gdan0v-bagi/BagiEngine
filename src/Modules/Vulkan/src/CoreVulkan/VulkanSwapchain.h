@@ -25,6 +25,9 @@ namespace BECore {
         VulkanSwapchain() = default;
         ~VulkanSwapchain() = default;
 
+        /// Do not wait for the display (IMMEDIATE when the surface offers it); read by the next Initialize() and Recreate()
+        void SetUncapped(bool uncapped) { _uncapped = uncapped; }
+
         bool Initialize(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
         void Destroy(VulkanDevice& device);
 
@@ -71,6 +74,7 @@ namespace BECore {
                                                               Optional<VkFormat> keepFormat) const;
         VkPresentModeKHR                  ChoosePresentMode(VulkanDevice& device, VkSurfaceKHR surface) const;
 
+        bool         _uncapped   = false;
         VkRenderPass _renderPass = VK_NULL_HANDLE;
         Chain        _chain;
     };

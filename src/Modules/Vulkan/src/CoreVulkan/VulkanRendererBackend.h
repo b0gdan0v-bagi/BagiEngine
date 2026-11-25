@@ -45,6 +45,9 @@ namespace BECore {
         ~VulkanRendererBackend() override = default;
 
         bool Initialize(IMainWindow& window) override;
+        void SetUncapped(bool uncapped) override {
+            _swapchain.SetUncapped(uncapped);
+        }
         void Destroy() override;
         void WaitIdle() override;
         void BeginFrame() override;

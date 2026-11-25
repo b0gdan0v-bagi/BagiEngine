@@ -16,6 +16,7 @@ namespace BECore {
     namespace {
 
         constexpr const char* kHeadlessVideoDriver = "dummy";
+        constexpr int kOffscreenPosition = -16000;  // beyond any arrangement of displays
 
         bool IsSameRect(const Rect& a, const Rect& b) {
             return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
@@ -35,6 +36,7 @@ namespace BECore {
         }
 
         if (!SDL_Init(SDL_INIT_VIDEO)) {
+            LOG_ERROR("[SDLMainWindow] cannot start the video system: {}", SDL_GetError());
             return false;
         }
 
@@ -67,9 +69,8 @@ namespace BECore {
         if (!windowConfig._windowFlags.empty()) {
             flags = SDLUtils::ParseWindowFlags(StringView(windowConfig._windowFlags));
         }
-        if (_headless) {
-            flags &= ~SDL_WINDOW_VULKAN;  // the dummy driver has no Vulkan surface; the software renderer draws instead
-        }
+        // A headless window loses SDL_WINDOW_VULKAN: the dummy driver has no Vulkan surface, the software renderer draws instead
+        flags = SDLUtils::ApplyStartOptions(flags, {.headless = _headless, .hidden = _hidden && !_headless, .backend = _backend});
 #ifdef __EMSCRIPTEN__
         // The browser renderer is SDL's GLES2 one, which recreates a window that lacks SDL_WINDOW_OPENGL. The recreation unregisters
         // every page handler of resize, fullscreenchange and orientationchange (Emscripten removes them by type, not by owner),
@@ -97,7 +98,15 @@ namespace BECore {
         const int createHeight = _headless ? SimulatedOutputPixels(_simulation.height, _simulation.density) : windowConfig._height;
         _window = SDL_CreateWindow(firstTitle.c_str(), createWidth, createHeight, flags);
         if (!_window) {
+            LOG_ERROR("[SDLMainWindow] cannot create the window: {}", SDL_GetError());  // before the guard quits SDL, which clears the error
             return false;
+        }
+
+        if (_hidden && !_headless) {
+            // A window the OS considers hidden gets its drawables at the refresh rate of the display (Metal, MoltenVK), whatever the present
+            // mode: a shown window that no display covers is composited like any other but never seen, and its present is not paced
+            SDL_SetWindowPosition(_window, kOffscreenPosition, kOffscreenPosition);
+            SDL_ShowWindow(_window);
         }
 
         _width = _simulation.width;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Application/RenderBackendChoice.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/MainWindow/WindowSimulation.h>
 #include <BECore/Math/Rect.h>
@@ -52,6 +53,21 @@ namespace BECore {
             _startDensity = density;
         }
 
+        /**
+         * @brief What `--hidden-window` and `--backend` ask of a real window: call it before Initialize().
+         *
+         * The flags of the config are changed by SDLUtils::ApplyStartOptions. The renderer reads the backend back (GetBackend()), so the
+         * choice has one owner. A headless window ignores @p hidden.
+         */
+        void SetStartOptions(bool hidden, RenderBackendChoice backend) {
+            _hidden = hidden;
+            _backend = backend;
+        }
+
+        [[nodiscard]] RenderBackendChoice GetBackend() const {
+            return _backend;
+        }
+
         SDL_Window* GetSDLWindow() const {
             return _window;
         }
@@ -70,6 +86,8 @@ namespace BECore {
         int _height = 0;
         String _configuredTitle;
         bool _headless = false;
+        bool _hidden = false;
+        RenderBackendChoice _backend = RenderBackendChoice::Auto;
         /// What SetHeadlessSimulation() asked for; kept over Destroy(), like _headless
         Optional<WindowSize> _startSize;
         Optional<float> _startDensity;

@@ -15,11 +15,13 @@ namespace BECore {
         inline constexpr StringView kReplayExit = "replayExit";
         inline constexpr StringView kWindow = "window";
         inline constexpr StringView kDensity = "density";
+        inline constexpr StringView kBackend = "backend";
+        inline constexpr StringView kHiddenWindow = "hiddenWindow";
     }  // namespace ControlFlagFields
 
     /**
      * @brief The control settings that exist only as command-line flags (`--replay=FILE`, `--replay-exit`, `--window=WxH`,
-     *        `--density=D`), read by a CommandLineDeserializer in ResolveControlSettings.
+     *        `--density=D`, `--backend=NAME`, `--hidden-window`), read by a CommandLineDeserializer in ResolveControlSettings.
      *
      * They are not attributes of ApplicationConfig.xml: a new attribute would change a public format. Every field has the value of
      * "not given"; the combination rules and the limits are ResolveControlSettings's.
@@ -31,6 +33,9 @@ namespace BECore {
         BE_REFLECT_FIELD bool _replayExit = false;
         BE_REFLECT_FIELD Optional<WindowSize> _window;
         BE_REFLECT_FIELD Optional<float> _density;
+        /// The spelling of a RenderBackendChoice: a flag cannot hold `sdl-gpu` as an enum identifier, ResolveControlSettings parses it
+        BE_REFLECT_FIELD String _backend;
+        BE_REFLECT_FIELD bool _hiddenWindow = false;
     };
 
     namespace Ser {

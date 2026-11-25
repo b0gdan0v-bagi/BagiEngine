@@ -68,6 +68,9 @@ namespace BECore::Stress {
     private:
         void OnUpdate(const SceneEvents::SceneUpdateEvent& event);
 
+        /// `--stress-no-batching`: turns the batcher of the renderer off once, as soon as there is a renderer
+        void ApplyBatchingChoice(const StressSettings& settings);
+
         /// The last finished frame when it is one this component has not looked at yet and the game did advance in it, else null
         const FrameStats* TakeNewFrame();
         void UpdateFixed(const StressGame& game);
@@ -85,6 +88,7 @@ namespace BECore::Stress {
         uint64_t _seenVersion = 0;    // the StressState version of the last update; 0 is never a version
         uint64_t _firstMeasured = 0;  // the first frame id a sample is taken of
         uint64_t _lastTaken = 0;      // the frame id of the last sample seen (taken or skipped), so a frame is judged once
+        bool _batchingOff = false;    // ApplyBatchingChoice has switched the batcher off
         bool _done = false;
     };
 
