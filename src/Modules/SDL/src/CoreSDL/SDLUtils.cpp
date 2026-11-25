@@ -75,7 +75,7 @@ namespace BECore {
             flags |= SDL_WINDOW_VULKAN;
         }
         if (options.hidden) {
-            flags |= SDL_WINDOW_HIDDEN;
+            flags |= SDL_WINDOW_HIDDEN | SDL_WINDOW_BORDERLESS | SDL_WINDOW_NOT_FOCUSABLE | SDL_WINDOW_UTILITY;
             flags &= ~(SDL_WINDOW_MAXIMIZED | SDL_WINDOW_HIGH_PIXEL_DENSITY);
         }
         if (options.headless) {

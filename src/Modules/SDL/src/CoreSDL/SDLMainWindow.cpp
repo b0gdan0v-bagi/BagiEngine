@@ -16,6 +16,7 @@ namespace BECore {
     namespace {
 
         constexpr const char* kHeadlessVideoDriver = "dummy";
+        constexpr int kOffscreenPosition = -16000;  // beyond any arrangement of displays
 
         bool IsSameRect(const Rect& a, const Rect& b) {
             return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
@@ -99,6 +100,13 @@ namespace BECore {
         if (!_window) {
             LOG_ERROR("[SDLMainWindow] cannot create the window: {}", SDL_GetError());  // before the guard quits SDL, which clears the error
             return false;
+        }
+
+        if (_hidden && !_headless) {
+            // A window the OS considers hidden gets its drawables at the refresh rate of the display (Metal, MoltenVK), whatever the present
+            // mode: a shown window that no display covers is composited like any other but never seen, and its present is not paced
+            SDL_SetWindowPosition(_window, kOffscreenPosition, kOffscreenPosition);
+            SDL_ShowWindow(_window);
         }
 
         _width = _simulation.width;

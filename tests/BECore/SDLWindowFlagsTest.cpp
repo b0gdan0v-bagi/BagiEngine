@@ -28,6 +28,10 @@ namespace BECore::Tests {
     TEST(SDLWindowFlagsTest, HiddenHidesAndFixesTheOutputSize) {
         const SDL_WindowFlags flags = SDLUtils::ApplyStartOptions(kShippedFlags, {.hidden = true});
         EXPECT_TRUE(Has(flags, SDL_WINDOW_HIDDEN));
+        // Nothing for the user to see or to take the focus from
+        EXPECT_TRUE(Has(flags, SDL_WINDOW_BORDERLESS));
+        EXPECT_TRUE(Has(flags, SDL_WINDOW_NOT_FOCUSABLE));
+        EXPECT_TRUE(Has(flags, SDL_WINDOW_UTILITY));
         EXPECT_FALSE(Has(flags, SDL_WINDOW_MAXIMIZED));
         EXPECT_FALSE(Has(flags, SDL_WINDOW_HIGH_PIXEL_DENSITY));
         EXPECT_TRUE(Has(flags, SDL_WINDOW_RESIZABLE));
@@ -50,7 +54,7 @@ namespace BECore::Tests {
 
     TEST(SDLWindowFlagsTest, HiddenWithAGpuBackendCombines) {
         const SDL_WindowFlags flags = SDLUtils::ApplyStartOptions(kShippedFlags, {.hidden = true, .backend = RenderBackendChoice::SdlGpu});
-        EXPECT_EQ(flags, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
+        EXPECT_EQ(flags, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_BORDERLESS | SDL_WINDOW_NOT_FOCUSABLE | SDL_WINDOW_UTILITY);
     }
 
 }  // namespace BECore::Tests
