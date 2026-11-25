@@ -17,7 +17,8 @@ namespace BECore {
      *
      * An `Input` cell is a text field on the `String` at `field` of the row, with `hint` as its hint. A `Button` cell with a `field` is
      * labelled with that text (after its `icon`). `enableField` is a bool path relative to the row: a `Button` or `Input` cell is disabled
-     * while it reads false (empty: always enabled).
+     * while it reads false (empty: always enabled). `selectedField` is a bool path relative to the row: a `Selectable` cell is drawn
+     * selected while it reads true (empty: never selected); no other column type may name it.
      */
     struct PanelColumn {
         BE_CLASS(PanelColumn)
@@ -28,6 +29,7 @@ namespace BECore {
         BE_REFLECT_FIELD String field;
         BE_REFLECT_FIELD String styleField;
         BE_REFLECT_FIELD String enableField;
+        BE_REFLECT_FIELD String selectedField;
         BE_REFLECT_FIELD String hint;
         BE_REFLECT_FIELD String command;
         BE_REFLECT_FIELD String argument;

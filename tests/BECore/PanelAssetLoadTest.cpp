@@ -3,6 +3,7 @@
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
+#include <limits>
 
 namespace BECore::Tests {
 
@@ -230,7 +231,80 @@ namespace BECore::Tests {
     }
 
     TEST(PanelAssetLoadTest, OnlyContainersHoldElements) {
-        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x"><elements><element type="PanelRow" id="r"/></elements></element>)", "t", "only a section or a row holds elements");
+        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x"><elements><element type="PanelRow" id="r"/></elements></element>)", "t",
+                          "only a section, a row, a child or a popup holds elements");
+    }
+
+    TEST(PanelAssetLoadTest, ChildAndPopupHoldElements) {
+        const PanelLoadResult clean = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelChild" id="left" width="14" height="6.5" border="true"><elements><element type="PanelText" id="a" text="x"/></elements></element>
+               <element type="PanelPopup" id="p" title="T" open="!a.b"><elements><element type="PanelChild" id="inside"/></elements></element>
+               <element type="PanelRow" id="r"><elements><element type="PanelChild" id="second"/></elements></element>)")));
+        EXPECT_TRUE(clean.issues.empty()) << Joined(clean.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ChildExtentIsBounded) {
+        const auto child = [](StringView attributes) { return Format(R"(<element type="PanelChild" id="c" {}/>)", attributes); };
+
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(child(Format(R"(width="{}" height="0")", PanelAssetLimits::kMaxChildExtent)))));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        ExpectSingleIssue(child(R"(width="-1")"), "c", "width must be from 0");
+        ExpectSingleIssue(child(Format(R"(height="{}")", PanelAssetLimits::kMaxChildExtent + 1.0f)), "c", "height must be from 0");
+
+        // The reader refuses a text such as "nan", but an asset made in code goes through the validator alone
+        auto asset = New<PanelAsset>();
+        asset->id = "Test";
+        const auto made = New<PanelChild>();
+        made->id = "c";
+        made->width = std::numeric_limits<float>::quiet_NaN();
+        made->height = std::numeric_limits<float>::infinity();
+        asset->elements.push_back(made);
+        Vector<PanelIssue> issues;
+        ValidatePanelAsset(*asset, {}, issues);
+        EXPECT_TRUE(HasIssue(issues, "c", "width must be from 0")) << Joined(issues);
+        EXPECT_TRUE(HasIssue(issues, "c", "height must be from 0")) << Joined(issues);
+    }
+
+    TEST(PanelAssetLoadTest, APopupNeedsAConditionAndNeverNests) {
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p"/>)", "p", "open is required");
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="a"/>)", "p", "open: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="a.b"><elements><element type="PanelRow" id="r"><elements>
+                                <element type="PanelPopup" id="q" open="a.c"/></elements></element></elements></element>)",
+                          "q", "a popup is not nested in a popup");
+
+        const PanelLoadResult siblings = LoadPanelAsset(
+            StringView(Wrap(R"(<element type="PanelPopup" id="p" open="a.b"/><element type="PanelChild" id="c"><elements><element type="PanelPopup" id="q" open="a.c"/></elements></element>)")));
+        EXPECT_TRUE(siblings.issues.empty()) << Joined(siblings.issues);
+    }
+
+    TEST(PanelAssetLoadTest, PopupsAreCounted) {
+        String popups;
+        for (size_t i = 0; i < PanelAssetLimits::kMaxPopups; ++i) {
+            popups += Format(R"(<element type="PanelPopup" id="p{}" open="a.b"/>)", i);
+        }
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(popups)));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        popups += R"(<element type="PanelPopup" id="extra" open="a.b"/><element type="PanelPopup" id="extra2" open="a.b"/>)";
+        const PanelLoadResult over = LoadPanelAsset(StringView(Wrap(popups)));
+        EXPECT_EQ(over.issues.size(), 1u) << Joined(over.issues);
+        EXPECT_TRUE(HasIssue(over.issues, "extra", "more than 8 popups")) << Joined(over.issues);
+    }
+
+    TEST(PanelAssetLoadTest, SelectedFieldIsARelativePathOfASelectableColumn) {
+        const auto load = [](StringView column) { return LoadPanelAsset(StringView(Wrap(Format(R"(<element type="PanelTable" id="t" source="a.b"><columns>{}</columns></element>)", column)))); };
+
+        const PanelLoadResult good = load(R"(<column id="x" type="Selectable" field="name" selectedField="state.chosen"/>)");
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        const PanelLoadResult badPath = load(R"(<column id="x" type="Selectable" field="name" selectedField="chosen["/>)");
+        EXPECT_EQ(badPath.issues.size(), 1u) << Joined(badPath.issues);
+        EXPECT_TRUE(HasIssue(badPath.issues, "t.x", "selectedField: bad path")) << Joined(badPath.issues);
+
+        const PanelLoadResult wrongType = load(R"(<column id="x" type="Text" field="name" selectedField="chosen"/>)");
+        EXPECT_EQ(wrongType.issues.size(), 1u) << Joined(wrongType.issues);
+        EXPECT_TRUE(HasIssue(wrongType.issues, "t.x", "selectedField is for a Selectable column")) << Joined(wrongType.issues);
     }
 
     TEST(PanelAssetLoadTest, ATextOverTheLimitIsAnIssue) {

@@ -24,6 +24,12 @@ namespace BECore::PanelAssetLimits {
     inline constexpr size_t kMaxScrollLines = 64;
     inline constexpr size_t kMaxScrollRows = 64;
 
+    /// em of a child region's `width` and `height`: what a file may ask for
+    inline constexpr float kMaxChildExtent = 256.0f;
+
+    /// Popups of one asset; a popup is modal and none holds another
+    inline constexpr size_t kMaxPopups = 8;
+
     /// Bytes of one text field (a title, a text, a binding, a command)
     inline constexpr size_t kMaxTextBytes = 512;
 

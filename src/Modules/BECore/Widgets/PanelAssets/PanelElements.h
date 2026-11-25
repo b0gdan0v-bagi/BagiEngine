@@ -24,6 +24,23 @@ namespace BECore {
         BE_CLASS(PanelRow)
     };
 
+    /// A bordered or plain region with its own scroll, holding its `elements`; `width` and `height` are in em, 0 fills what is left
+    class PanelChild : public PanelElement {
+        BE_CLASS(PanelChild)
+    public:
+        BE_REFLECT_FIELD float width = 0.0f;
+        BE_REFLECT_FIELD float height = 0.0f;
+        BE_REFLECT_FIELD bool border = false;
+    };
+
+    /// A modal window over its `elements`, shown while the condition `open` reads true (required: with none it could never open)
+    class PanelPopup : public PanelElement {
+        BE_CLASS(PanelPopup)
+    public:
+        BE_REFLECT_FIELD String title;
+        BE_REFLECT_FIELD String open;
+    };
+
     /// A literal `text` or the text of the field `bind`; `maxLines` > 0 shows that many lines and scrolls, also sideways (0: not in a scroll region)
     class PanelText : public PanelElement {
         BE_CLASS(PanelText)

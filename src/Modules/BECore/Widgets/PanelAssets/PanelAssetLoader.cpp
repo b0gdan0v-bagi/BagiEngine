@@ -8,6 +8,7 @@
 #include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelBinding.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
+#include <cmath>
 
 namespace BECore {
 
@@ -138,7 +139,10 @@ namespace BECore {
                     const String path = Format("{}[{}]", parentPath, i);
                     const String where = IsValidId(element->id) ? element->id : path;
                     CheckElement(*element, where);
+                    const bool isPopup = element->Is<PanelPopup>();
+                    _popupDepth += isPopup ? 1 : 0;
                     WalkElements(element->elements, Format("{}.elements", path), depth + 1);
+                    _popupDepth -= isPopup ? 1 : 0;
                 }
             }
 
@@ -156,9 +160,9 @@ namespace BECore {
                     _issues.Add(where, "type is required");
                 }
 
-                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>();
+                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>();
                 if (!isContainer && !element.elements.empty()) {
-                    _issues.Add(where, "only a section or a row holds elements");
+                    _issues.Add(where, "only a section, a row, a child or a popup holds elements");
                 }
 
                 if (const auto* text = element.Cast<PanelText>()) {
@@ -188,6 +192,25 @@ namespace BECore {
                     if (slot->name.empty()) {
                         _issues.Add(where, "name is required");
                     }
+                } else if (const auto* child = element.Cast<PanelChild>()) {
+                    Extent(where, "width", child->width);
+                    Extent(where, "height", child->height);
+                } else if (const auto* popup = element.Cast<PanelPopup>()) {
+                    CheckPopup(*popup, where);
+                }
+            }
+
+            void CheckPopup(const PanelPopup& popup, StringView where) {
+                if (popup.open.empty()) {
+                    _issues.Add(where, "open is required");
+                } else {
+                    Condition(where, "open", popup.open);
+                }
+                if (_popupDepth > 0) {
+                    _issues.Add(where, "a popup is not nested in a popup");
+                }
+                if (++_popupCount == PanelAssetLimits::kMaxPopups + 1) {
+                    _issues.Add(where, Format("more than {} popups", PanelAssetLimits::kMaxPopups));
                 }
             }
 
@@ -220,6 +243,10 @@ namespace BECore {
                     }
                     RelativePath(where, "styleField", column.styleField);
                     RelativePath(where, "enableField", column.enableField);
+                    if (column.type != PanelColumnType::Selectable && !column.selectedField.empty()) {
+                        _issues.Add(where, "selectedField is for a Selectable column");
+                    }
+                    RelativePath(where, "selectedField", column.selectedField);
                     RelativePath(where, "argument", column.argument);
                 }
             }
@@ -270,6 +297,12 @@ namespace BECore {
                 }
             }
 
+            void Extent(StringView where, StringView field, float value) {
+                if (!std::isfinite(value) || value < 0.0f || value > PanelAssetLimits::kMaxChildExtent) {
+                    _issues.Add(where, Format("{} must be from 0 to {}", field, PanelAssetLimits::kMaxChildExtent));
+                }
+            }
+
             void Condition(StringView where, StringView field, const String& text) {
                 if (text.empty()) {
                     return;
@@ -304,6 +337,8 @@ namespace BECore {
             HashSet<String> _ids;
             size_t _elementCount = 0;
             size_t _columnCount = 0;
+            size_t _popupCount = 0;
+            size_t _popupDepth = 0;
             bool _columnsReported = false;
             bool _stopped = false;
         };
