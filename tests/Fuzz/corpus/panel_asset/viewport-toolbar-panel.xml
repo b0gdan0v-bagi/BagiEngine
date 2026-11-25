@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<PanelAsset id="ViewportToolbarSeed" title="Viewport toolbar" window="Bar" open="true">
+  <sources>
+    <source name="view" model="ViewportToolbarModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="row">
+      <elements>
+        <element type="PanelCombo" id="size" bind="view.sizeIndex" items="view.sizes" itemField="name" separatorField="isLine" width="11" tooltip="Preview size"/>
+        <element type="PanelNumber" id="width" bind="view.customWidth" text="W" min="64" max="4096" input="true" width="5" enableWhen="view.custom" visible="view.custom"/>
+        <element type="PanelCheckbox" id="rotate" bind="view.rotated" text="Rotate" icon="rotate-cw" enableWhen="view.shape != Free"/>
+        <element type="PanelDropdown" id="overlays" text="Overlays" icon="layers" enableWhen="view.ready">
+          <elements>
+            <element type="PanelCheckbox" id="bounds" bind="view.bounds" text="Bounds"/>
+            <element type="PanelSeparator" id="canvasesLine" title="Canvases"/>
+            <element type="PanelTable" id="canvases" source="view.canvases" header="false">
+              <columns>
+                <column id="shown" type="Checkbox" field="shown" labelField="name" enableField="available"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+        <element type="PanelDropdown" id="snap" icon="magnet">
+          <elements>
+            <element type="PanelCheckbox" id="snapMove" bind="view.snapMove" text="Move"/>
+            <element type="PanelNumber" id="moveStep" bind="view.moveStep" text="units" min="0.01" max="1000" enableWhen="view.snapMove"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

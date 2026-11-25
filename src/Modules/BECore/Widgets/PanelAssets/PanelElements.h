@@ -65,6 +65,16 @@ namespace BECore {
         BE_REFLECT_FIELD String closeCommand;
     };
 
+    /// A button (`text` after the glyph `icon`, at least one of them) that opens a non-modal popup of its `elements` under it; a click outside or Esc closes it, so no model state
+    /// says it is open. `enableWhen` is a condition that disables the button while false. Never inside another dropdown or a `PanelPopup`, and it holds no `PanelPopup`
+    class PanelDropdown : public PanelElement {
+        BE_CLASS(PanelDropdown)
+    public:
+        BE_REFLECT_FIELD String text;
+        BE_REFLECT_FIELD String icon;
+        BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
+    };
+
     /// A menu of a `Bar` asset: `title` is its label. Its `elements` are menus (submenus), `PanelMenuItem`s, `PanelMenuItems`, separators and texts, and the loader reports any other
     /// child. `enableWhen` is a condition that disables the whole menu while false; `openCommand` is the editor command that runs once when the menu opens (a model refreshes what the
     /// menu lists there)
@@ -138,8 +148,8 @@ namespace BECore {
         BE_REFLECT_FIELD String commitCommand;
     };
 
-    /// A bool field `bind` as a check box or, as `Toggle`, a button filled with the accent while on; the label is `text`, or the text of `labelBind` when that is set; `style` colours it.
-    /// It writes the field itself and runs no command
+    /// A bool field `bind` as a check box or, as `Toggle`, a button filled with the accent while on; the label is `text`, or the text of `labelBind` when that is set, after the glyph
+    /// `icon`; `style` colours it. It writes the field itself and runs no command, and writes nothing while the condition `enableWhen` reads false
     class PanelCheckbox : public PanelElement {
         BE_CLASS(PanelCheckbox)
     public:
@@ -148,10 +158,13 @@ namespace BECore {
         BE_REFLECT_FIELD String labelBind;
         BE_REFLECT_FIELD PanelCheckLook look = PanelCheckLook::Check;
         BE_REFLECT_FIELD PanelTextStyle style = PanelTextStyle::Normal;
+        BE_REFLECT_FIELD String icon;
+        BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
     };
 
     /// A combo over the enum, the index or the `String` field `bind`; the items are the texts of the list `items` (`itemField`, a path relative to a row, empty for a list of scalars)
-    /// or, with no `items`, the names of an enum. It writes the field itself and runs no command; `width` is in em, 0 is ImGui's default item width
+    /// or, with no `items`, the names of an enum. `separatorField` is a bool path relative to a row of `items`: a row that reads true is a line, never a choice. It writes the field
+    /// itself and runs no command, and writes nothing while the condition `enableWhen` reads false; `width` is in em, 0 is ImGui's default item width
     class PanelCombo : public PanelElement {
         BE_CLASS(PanelCombo)
     public:
@@ -159,11 +172,15 @@ namespace BECore {
         BE_REFLECT_FIELD String items;
         BE_REFLECT_FIELD String itemField;
         BE_REFLECT_FIELD float width = 0.0f;
+        BE_REFLECT_FIELD String separatorField;
+        BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
     };
 
     /// A number field `bind` as a drag, or as a slider when `slider` is set (it needs `min` < `max`); `min` equal to `max` (the default) leaves a drag unbounded; `step` is the drag speed,
     /// 0 picks one; `text` is the label after the control. It writes the field itself and runs no command but `commitCommand`; `width` is in em, 0 is ImGui's default item width, which leaves room for
-    /// the label. `commitCommand` runs when the user lets go of the control after an edit (a slider is saved on release, not at every drag frame); empty: none
+    /// the label. `commitCommand` runs when the user lets go of the control after an edit (a slider is saved on release, not at every drag frame); empty: none. `input` makes it a
+    /// typed field instead of a drag (not with `slider`): the field is written, clamped to `min` / `max` when they differ, only when the user confirms or leaves it after an edit.
+    /// Nothing is written while the condition `enableWhen` reads false
     class PanelNumber : public PanelElement {
         BE_CLASS(PanelNumber)
     public:
@@ -175,6 +192,8 @@ namespace BECore {
         BE_REFLECT_FIELD bool slider = false;
         BE_REFLECT_FIELD float width = 0.0f;
         BE_REFLECT_FIELD String commitCommand;
+        BE_REFLECT_FIELD bool input = false;
+        BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
     };
 
     /// Runs the editor command `command` with `argument` as a literal text (a button has no row to read a path from; a column of a table has its own `argument`, a path relative to the row).

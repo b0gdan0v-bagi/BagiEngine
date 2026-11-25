@@ -174,11 +174,14 @@ namespace BECore::Fuzz {
                     Element(*element, parent);
                     const bool isPopup = element->Is<PanelPopup>();
                     const bool isMenu = element->Is<PanelMenu>();
+                    const bool isDropdown = element->Is<PanelDropdown>();
                     _popupDepth += isPopup ? 1 : 0;
                     _menuDepth += isMenu ? 1 : 0;
+                    _dropdownDepth += isDropdown ? 1 : 0;
                     Elements(element->elements, depth + 1, element.Get());
                     _popupDepth -= isPopup ? 1 : 0;
                     _menuDepth -= isMenu ? 1 : 0;
+                    _dropdownDepth -= isDropdown ? 1 : 0;
                 }
             }
 
@@ -190,8 +193,8 @@ namespace BECore::Fuzz {
                     Fail();
                 }
                 Condition(element.visible);
-                if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>() && !element.Is<PanelChild>() && !element.Is<PanelPopup>() && !element.Is<PanelTabs>() &&
-                    !element.Is<PanelTab>() && !element.Is<PanelMenu>()) {
+                if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>() && !element.Is<PanelChild>() && !element.Is<PanelPopup>() && !element.Is<PanelDropdown>() &&
+                    !element.Is<PanelTabs>() && !element.Is<PanelTab>() && !element.Is<PanelMenu>()) {
                     Fail();
                 }
 
@@ -229,29 +232,41 @@ namespace BECore::Fuzz {
                     Text(checkbox->bind);
                     Text(checkbox->text);
                     Text(checkbox->labelBind);
+                    Text(checkbox->icon);
+                    Text(checkbox->enableWhen);
                     Binding(checkbox->bind, true);
                     Binding(checkbox->labelBind, false);
                     if (checkbox->text.empty() && checkbox->labelBind.empty()) {
                         Fail();
                     }
+                    Condition(checkbox->enableWhen);
                 } else if (const auto* combo = element.Cast<PanelCombo>()) {
                     Text(combo->bind);
                     Text(combo->items);
                     Text(combo->itemField);
+                    Text(combo->separatorField);
+                    Text(combo->enableWhen);
                     Binding(combo->bind, true);
                     Binding(combo->items, false);
-                    if (combo->items.empty() && !combo->itemField.empty()) {
+                    if (combo->items.empty() && (!combo->itemField.empty() || !combo->separatorField.empty())) {
                         Fail();
                     }
                     RelativePath(combo->itemField);
+                    RelativePath(combo->separatorField);
                     Extent(combo->width);
+                    Condition(combo->enableWhen);
                 } else if (const auto* number = element.Cast<PanelNumber>()) {
                     Text(number->bind);
                     Text(number->text);
                     Text(number->commitCommand);
+                    Text(number->enableWhen);
                     Binding(number->bind, true);
                     Extent(number->width);
                     Number(*number);
+                    Condition(number->enableWhen);
+                    if (number->input && number->slider) {
+                        Fail();
+                    }
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Text(button->text);
                     Text(button->icon);
@@ -314,9 +329,17 @@ namespace BECore::Fuzz {
                     Text(popup->title);
                     Text(popup->open);
                     Text(popup->closeCommand);
-                    if (popup->open.empty() || !ParsePanelCondition(popup->open) || _popupDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
+                    if (popup->open.empty() || !ParsePanelCondition(popup->open) || _popupDepth > 0 || _dropdownDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
                         Fail();
                     }
+                } else if (const auto* dropdown = element.Cast<PanelDropdown>()) {
+                    Text(dropdown->text);
+                    Text(dropdown->icon);
+                    Text(dropdown->enableWhen);
+                    if ((dropdown->text.empty() && dropdown->icon.empty()) || _dropdownDepth > 0 || _popupDepth > 0 || ++_dropdownCount > PanelAssetLimits::kMaxDropdowns) {
+                        Fail();
+                    }
+                    Condition(dropdown->enableWhen);
                 } else if (const auto* tabs = element.Cast<PanelTabs>()) {
                     Tabs(*tabs);
                 } else if (const auto* tab = element.Cast<PanelTab>()) {
@@ -362,8 +385,8 @@ namespace BECore::Fuzz {
                         Fail();
                         return;
                     }
-                    for (const String* text : {&column.id, &column.title, &column.field, &column.styleField, &column.enableField, &column.selectedField, &column.hint, &column.command,
-                                               &column.argument, &column.icon, &column.tooltip}) {
+                    for (const String* text : {&column.id, &column.title, &column.field, &column.styleField, &column.enableField, &column.selectedField, &column.labelField, &column.hint,
+                                               &column.command, &column.argument, &column.icon, &column.tooltip}) {
                         Text(*text);
                     }
                     if (!IsWellFormedId(column.id) || !ids.insert(column.id).second) {
@@ -385,6 +408,10 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                     RelativePath(column.selectedField);
+                    if (column.type != PanelColumnType::Checkbox && !column.labelField.empty()) {
+                        Fail();
+                    }
+                    RelativePath(column.labelField);
                     RelativePath(column.argument);
                 }
             }
@@ -397,6 +424,8 @@ namespace BECore::Fuzz {
             size_t _tabCount = 0;
             size_t _menuCount = 0;
             size_t _menuDepth = 0;
+            size_t _dropdownCount = 0;
+            size_t _dropdownDepth = 0;
             PanelWindowKind _window = PanelWindowKind::Docked;
             bool _violated = false;
         };

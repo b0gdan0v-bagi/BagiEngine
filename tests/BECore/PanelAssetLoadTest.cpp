@@ -275,7 +275,7 @@ namespace BECore::Tests {
 
     TEST(PanelAssetLoadTest, OnlyContainersHoldElements) {
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x"><elements><element type="PanelRow" id="r"/></elements></element>)", "t",
-                          "only a section, a row, a child, a popup, a tab bar, a tab or a menu holds elements");
+                          "only a section, a row, a child, a popup, a dropdown, a tab bar, a tab or a menu holds elements");
     }
 
     TEST(PanelAssetLoadTest, ChildAndPopupHoldElements) {
@@ -636,6 +636,81 @@ namespace BECore::Tests {
         const PanelLoadResult wrongType = load(R"(<column id="x" type="Text" field="name" selectedField="chosen"/>)");
         EXPECT_EQ(wrongType.issues.size(), 1u) << Joined(wrongType.issues);
         EXPECT_TRUE(HasIssue(wrongType.issues, "t.x", "selectedField is for a Selectable column")) << Joined(wrongType.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AGoodToolbarWithDropdownsSeparatorsTypedNumbersAndCheckboxColumnsLoadsWithNoIssue) {
+        const PanelLoadResult result = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelRow" id="row"><elements>
+                 <element type="PanelCombo" id="size" bind="v.size" items="v.sizes" itemField="name" separatorField="flags.isLine" enableWhen="v.ready"/>
+                 <element type="PanelNumber" id="w" bind="v.w" min="64" max="4096" input="true" enableWhen="v.custom and v.ready"/>
+                 <element type="PanelCheckbox" id="rotate" bind="v.rotated" text="Rotate" icon="rotate-cw" enableWhen="v.shape != Free"/>
+                 <element type="PanelDropdown" id="overlays" text="Overlays" icon="layers" enableWhen="v.ready"><elements>
+                   <element type="PanelCheckbox" id="grid" bind="v.grid" text="Grid"/>
+                   <element type="PanelTable" id="canvases" source="v.canvases"><columns>
+                     <column id="on" type="Checkbox" field="shown" labelField="name" enableField="available"/>
+                     <column id="bare" type="Checkbox" field="shown"/>
+                   </columns></element>
+                 </elements></element>
+                 <element type="PanelDropdown" id="snap" icon="magnet"/>
+               </elements></element>)")));
+        EXPECT_TRUE(result.issues.empty()) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, TheConditionsSeparatorsAndTypedNumbersOfControlsAreChecked) {
+        ExpectSingleIssue(R"(<element type="PanelCheckbox" id="k" bind="s.on" text="x" enableWhen="s.a and"/>)", "k", "enableWhen: ");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" enableWhen="a"/>)", "k", "enableWhen: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" enableWhen="s.a &lt; word"/>)", "k", "enableWhen: ");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" separatorField="line"/>)", "k", "separatorField needs items");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="s.rows" separatorField="line["/>)", "k", "separatorField: bad path");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" min="0" max="1" slider="true" input="true"/>)", "k", "a slider or an input, not both");
+    }
+
+    TEST(PanelAssetLoadTest, ADropdownNeedsALabelAndNeitherNestsNorHoldsAPopup) {
+        ExpectSingleIssue(R"(<element type="PanelDropdown" id="d"/>)", "d", "a dropdown needs 'text' or 'icon'");
+        ExpectSingleIssue(R"(<element type="PanelDropdown" id="d" text="D" enableWhen="d"/>)", "d", "enableWhen: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelDropdown" id="d" text="D"><elements><element type="PanelRow" id="r"><elements>
+                                <element type="PanelDropdown" id="inner" text="I"/></elements></element></elements></element>)",
+                          "inner", "a dropdown is not nested in a dropdown");
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="a.b"><elements><element type="PanelDropdown" id="d" text="D"/></elements></element>)", "d", "a dropdown is not nested in a popup");
+        ExpectSingleIssue(R"(<element type="PanelDropdown" id="d" text="D"><elements><element type="PanelPopup" id="p" open="a.b"/></elements></element>)", "p", "a popup is not nested in a dropdown");
+
+        const PanelLoadResult siblings =
+            LoadPanelAsset(StringView(Wrap(R"(<element type="PanelDropdown" id="a" text="A"/><element type="PanelPopup" id="p" open="a.b"/><element type="PanelDropdown" id="b" icon="layers"/>)")));
+        EXPECT_TRUE(siblings.issues.empty()) << Joined(siblings.issues);
+    }
+
+    TEST(PanelAssetLoadTest, DropdownsAreCounted) {
+        String dropdowns;
+        for (size_t i = 0; i < PanelAssetLimits::kMaxDropdowns; ++i) {
+            dropdowns += Format(R"(<element type="PanelDropdown" id="d{}" text="D"/>)", i);
+        }
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(dropdowns)));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        dropdowns += R"(<element type="PanelDropdown" id="extra" text="D"/><element type="PanelDropdown" id="extra2" text="D"/>)";
+        const PanelLoadResult over = LoadPanelAsset(StringView(Wrap(dropdowns)));
+        EXPECT_EQ(over.issues.size(), 1u) << Joined(over.issues);
+        EXPECT_TRUE(HasIssue(over.issues, "extra", Format("more than {} dropdowns", PanelAssetLimits::kMaxDropdowns))) << Joined(over.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ACheckboxColumnNeedsAFieldAndOnlyItNamesALabelField) {
+        const auto load = [](StringView column) { return LoadPanelAsset(StringView(Wrap(Format(R"(<element type="PanelTable" id="t" source="a.b"><columns>{}</columns></element>)", column)))); };
+
+        const PanelLoadResult noField = load(R"(<column id="x" type="Checkbox" labelField="name"/>)");
+        EXPECT_EQ(noField.issues.size(), 1u) << Joined(noField.issues);
+        EXPECT_TRUE(HasIssue(noField.issues, "t.x", "field is required")) << Joined(noField.issues);
+
+        const PanelLoadResult badPath = load(R"(<column id="x" type="Checkbox" field="on" labelField="name["/>)");
+        EXPECT_EQ(badPath.issues.size(), 1u) << Joined(badPath.issues);
+        EXPECT_TRUE(HasIssue(badPath.issues, "t.x", "labelField: bad path")) << Joined(badPath.issues);
+
+        const PanelLoadResult wrongType = load(R"(<column id="x" type="Text" field="name" labelField="name"/>)");
+        EXPECT_EQ(wrongType.issues.size(), 1u) << Joined(wrongType.issues);
+        EXPECT_TRUE(HasIssue(wrongType.issues, "t.x", "labelField is for a Checkbox column")) << Joined(wrongType.issues);
+
+        const PanelLoadResult selected = load(R"(<column id="x" type="Checkbox" field="on" selectedField="chosen"/>)");
+        EXPECT_EQ(selected.issues.size(), 1u) << Joined(selected.issues);
+        EXPECT_TRUE(HasIssue(selected.issues, "t.x", "selectedField is for a Selectable column")) << Joined(selected.issues);
     }
 
     TEST(PanelAssetLoadTest, ATextOverTheLimitIsAnIssue) {

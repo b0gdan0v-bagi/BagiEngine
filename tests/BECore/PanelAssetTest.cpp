@@ -248,6 +248,68 @@ namespace BECore::Tests {
         EXPECT_NE(ElementAs<PanelMenu>(menu->elements[3]), nullptr);
     }
 
+    TEST(PanelAssetTest, ToolbarKindsRoundTrip) {
+        constexpr const char* xml = R"(
+<PanelAsset id="Toolbar" title="Toolbar" window="Bar" open="true">
+  <elements>
+    <element type="PanelRow" id="row">
+      <elements>
+        <element type="PanelCheckbox" id="rotate" bind="view.rotated" text="Rotate" icon="rotate-cw" enableWhen="view.shape != Free"/>
+        <element type="PanelCombo" id="size" bind="view.size" items="view.sizes" itemField="name" separatorField="isLine" enableWhen="view.canResize"/>
+        <element type="PanelNumber" id="width" bind="view.width" min="64" max="4096" input="true" enableWhen="view.custom" commitCommand="view.commit"/>
+        <element type="PanelDropdown" id="overlays" text="Overlays" icon="layers" enableWhen="view.ready">
+          <elements>
+            <element type="PanelTable" id="devices" source="view.devices" header="false">
+              <columns>
+                <column id="on" type="Checkbox" field="shown" labelField="name" enableField="available"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        XmlDeserializer first;
+        const auto asset = Read(xml, first);
+        ASSERT_FALSE(first.HasErrors());
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+
+        ASSERT_EQ(again->elements.size(), 1u);
+        const auto* row = ElementAs<PanelRow>(again->elements[0]);
+        ASSERT_NE(row, nullptr);
+        ASSERT_EQ(row->elements.size(), 4u);
+        const auto* checkbox = ElementAs<PanelCheckbox>(row->elements[0]);
+        ASSERT_NE(checkbox, nullptr);
+        EXPECT_EQ(checkbox->icon, "rotate-cw");
+        EXPECT_EQ(checkbox->enableWhen, "view.shape != Free");
+        const auto* combo = ElementAs<PanelCombo>(row->elements[1]);
+        ASSERT_NE(combo, nullptr);
+        EXPECT_EQ(combo->separatorField, "isLine");
+        EXPECT_EQ(combo->enableWhen, "view.canResize");
+        const auto* number = ElementAs<PanelNumber>(row->elements[2]);
+        ASSERT_NE(number, nullptr);
+        EXPECT_TRUE(number->input);
+        EXPECT_EQ(number->enableWhen, "view.custom");
+        const auto* dropdown = ElementAs<PanelDropdown>(row->elements[3]);
+        ASSERT_NE(dropdown, nullptr);
+        EXPECT_EQ(dropdown->text, "Overlays");
+        EXPECT_EQ(dropdown->icon, "layers");
+        EXPECT_EQ(dropdown->enableWhen, "view.ready");
+        ASSERT_EQ(dropdown->elements.size(), 1u);
+        const auto* table = ElementAs<PanelTable>(dropdown->elements[0]);
+        ASSERT_NE(table, nullptr);
+        ASSERT_EQ(table->columns.size(), 1u);
+        EXPECT_EQ(table->columns[0].type, PanelColumnType::Checkbox);
+        EXPECT_EQ(table->columns[0].field, "shown");
+        EXPECT_EQ(table->columns[0].labelField, "name");
+        EXPECT_EQ(table->columns[0].enableField, "available");
+    }
+
     TEST(PanelAssetTest, RowAlignAndButtonFillDefaultToTheOldLook) {
         XmlDeserializer deserializer;
         const auto asset = Read(R"(<PanelAsset id="A"><elements>
@@ -268,8 +330,8 @@ namespace BECore::Tests {
 
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {
         for (const char* name :
-             {"PanelSection",   "PanelRow",        "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelCheckbox", "PanelCombo", "PanelNumber",   "PanelButton",   "PanelTable",
-              "PanelSeparator", "PanelEmptyState", "PanelSlot", "PanelChild", "PanelPopup",  "PanelTabs",  "PanelTab",      "PanelMenu",  "PanelMenuItem", "PanelMenuItems"}) {
+             {"PanelSection",   "PanelRow",        "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelCheckbox", "PanelCombo", "PanelNumber",   "PanelButton",    "PanelTable",
+              "PanelSeparator", "PanelEmptyState", "PanelSlot", "PanelChild", "PanelPopup",  "PanelTabs",  "PanelTab",      "PanelMenu",  "PanelMenuItem", "PanelMenuItems", "PanelDropdown"}) {
             const IntrusivePtr<PanelElement> element = AbstractFactory<PanelElement>::GetInstance().Create(StringView{name});
             ASSERT_NE(element, nullptr) << name;
             EXPECT_EQ(element->GetTypeMeta().typeName, StringView{name});

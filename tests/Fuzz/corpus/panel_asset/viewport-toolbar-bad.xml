@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<PanelAsset id="ViewportToolbarBad" title="Bad" window="Bar" open="true">
+  <elements>
+    <element type="PanelRow" id="row">
+      <elements>
+        <element type="PanelCombo" id="noItems" bind="view.size" separatorField="isLine"/>
+        <element type="PanelCombo" id="badSeparator" bind="view.size" items="view.sizes" separatorField="isLine[" enableWhen="view"/>
+        <element type="PanelNumber" id="both" bind="view.width" min="0" max="1" slider="true" input="true" enableWhen="view.a and"/>
+        <element type="PanelCheckbox" id="badCheck" bind="view.on" text="On" icon="x" enableWhen="!view.a == 1"/>
+        <element type="PanelDropdown" id="unlabelled"/>
+        <element type="PanelDropdown" id="outer" text="Outer" enableWhen="view.a &lt; word">
+          <elements>
+            <element type="PanelDropdown" id="inner" text="Inner"/>
+            <element type="PanelPopup" id="held" open="view.open"/>
+            <element type="PanelTable" id="rows" source="view.rows">
+              <columns>
+                <column id="noField" type="Checkbox" labelField="name"/>
+                <column id="badLabel" type="Checkbox" field="on" labelField="name["/>
+                <column id="wrongType" type="Text" field="name" labelField="name"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="modal" open="view.open">
+      <elements>
+        <element type="PanelDropdown" id="inPopup" text="In a popup"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

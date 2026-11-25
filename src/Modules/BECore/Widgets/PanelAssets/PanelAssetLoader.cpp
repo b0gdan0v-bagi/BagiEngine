@@ -147,11 +147,14 @@ namespace BECore {
                     CheckElement(*element, where, parent);
                     const bool isPopup = element->Is<PanelPopup>();
                     const bool isMenu = element->Is<PanelMenu>();
+                    const bool isDropdown = element->Is<PanelDropdown>();
                     _popupDepth += isPopup ? 1 : 0;
                     _menuDepth += isMenu ? 1 : 0;
+                    _dropdownDepth += isDropdown ? 1 : 0;
                     WalkElements(element->elements, Format("{}.elements", path), depth + 1, element);
                     _popupDepth -= isPopup ? 1 : 0;
                     _menuDepth -= isMenu ? 1 : 0;
+                    _dropdownDepth -= isDropdown ? 1 : 0;
                 }
             }
 
@@ -169,10 +172,10 @@ namespace BECore {
                     _issues.Add(where, "type is required");
                 }
 
-                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>() || element.Is<PanelTabs>() ||
-                                         element.Is<PanelTab>() || element.Is<PanelMenu>();
+                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>() || element.Is<PanelDropdown>() ||
+                                         element.Is<PanelTabs>() || element.Is<PanelTab>() || element.Is<PanelMenu>();
                 if (!isContainer && !element.elements.empty()) {
-                    _issues.Add(where, "only a section, a row, a child, a popup, a tab bar, a tab or a menu holds elements");
+                    _issues.Add(where, "only a section, a row, a child, a popup, a dropdown, a tab bar, a tab or a menu holds elements");
                 }
 
                 if (const auto* text = element.Cast<PanelText>()) {
@@ -201,6 +204,7 @@ namespace BECore {
                     if (checkbox->text.empty() && checkbox->labelBind.empty()) {
                         _issues.Add(where, "a checkbox needs 'text' or 'labelBind'");
                     }
+                    Condition(where, "enableWhen", checkbox->enableWhen);
                 } else if (const auto* combo = element.Cast<PanelCombo>()) {
                     CheckCombo(*combo, where);
                 } else if (const auto* number = element.Cast<PanelNumber>()) {
@@ -233,6 +237,8 @@ namespace BECore {
                     Extent(where, "height", child->height);
                 } else if (const auto* popup = element.Cast<PanelPopup>()) {
                     CheckPopup(*popup, where);
+                } else if (const auto* dropdown = element.Cast<PanelDropdown>()) {
+                    CheckDropdown(*dropdown, where);
                 } else if (const auto* tabs = element.Cast<PanelTabs>()) {
                     CheckTabs(*tabs, where);
                 } else if (const auto* tab = element.Cast<PanelTab>()) {
@@ -323,13 +329,22 @@ namespace BECore {
                     _issues.Add(where, "itemField needs items");
                 }
                 RelativePath(where, "itemField", combo.itemField);
+                if (combo.items.empty() && !combo.separatorField.empty()) {
+                    _issues.Add(where, "separatorField needs items");
+                }
+                RelativePath(where, "separatorField", combo.separatorField);
                 Extent(where, "width", combo.width);
+                Condition(where, "enableWhen", combo.enableWhen);
             }
 
             void CheckNumber(const PanelNumber& number, StringView where) {
                 Binding(where, "bind", number.bind, true);
                 Extent(where, "width", number.width);
                 OptionalCommand(where, "commitCommand", number.commitCommand);
+                Condition(where, "enableWhen", number.enableWhen);
+                if (number.input && number.slider) {
+                    _issues.Add(where, "a number is a slider or an input, not both");
+                }
                 // Every limit is written as a comparison that a NaN fails
                 const auto inRange = [](float value, float lowest) { return value >= lowest && value <= PanelAssetLimits::kMaxNumberExtent; };
                 const bool minOk = inRange(number.min, -PanelAssetLimits::kMaxNumberExtent);
@@ -356,8 +371,27 @@ namespace BECore {
                 if (_popupDepth > 0) {
                     _issues.Add(where, "a popup is not nested in a popup");
                 }
+                if (_dropdownDepth > 0) {
+                    _issues.Add(where, "a popup is not nested in a dropdown");
+                }
                 if (++_popupCount == PanelAssetLimits::kMaxPopups + 1) {
                     _issues.Add(where, Format("more than {} popups", PanelAssetLimits::kMaxPopups));
+                }
+            }
+
+            void CheckDropdown(const PanelDropdown& dropdown, StringView where) {
+                if (dropdown.text.empty() && dropdown.icon.empty()) {
+                    _issues.Add(where, "a dropdown needs 'text' or 'icon'");
+                }
+                Condition(where, "enableWhen", dropdown.enableWhen);
+                if (_dropdownDepth > 0) {
+                    _issues.Add(where, "a dropdown is not nested in a dropdown");
+                }
+                if (_popupDepth > 0) {
+                    _issues.Add(where, "a dropdown is not nested in a popup");
+                }
+                if (++_dropdownCount == PanelAssetLimits::kMaxDropdowns + 1) {
+                    _issues.Add(where, Format("more than {} dropdowns", PanelAssetLimits::kMaxDropdowns));
                 }
             }
 
@@ -394,6 +428,10 @@ namespace BECore {
                         _issues.Add(where, "selectedField is for a Selectable column");
                     }
                     RelativePath(where, "selectedField", column.selectedField);
+                    if (column.type != PanelColumnType::Checkbox && !column.labelField.empty()) {
+                        _issues.Add(where, "labelField is for a Checkbox column");
+                    }
+                    RelativePath(where, "labelField", column.labelField);
                     RelativePath(where, "argument", column.argument);
                 }
             }
@@ -506,6 +544,8 @@ namespace BECore {
             size_t _tabCount = 0;
             size_t _menuCount = 0;
             size_t _menuDepth = 0;
+            size_t _dropdownCount = 0;
+            size_t _dropdownDepth = 0;
             PanelWindowKind _window = PanelWindowKind::Docked;
             bool _columnsReported = false;
             bool _stopped = false;
