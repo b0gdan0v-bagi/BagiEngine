@@ -29,6 +29,7 @@ restore. Idempotent; it never runs `git`.
 """
 
 import copy
+import re
 import sys
 import xml.etree.ElementTree as ElementTree
 from collections import Counter
@@ -42,6 +43,8 @@ sys.path.insert(0, str(QA_DIR))
 
 import png_ops  # noqa: E402
 from bagi_qa_checks import Violation  # noqa: E402
+
+COMMENT = re.compile(rb"<!--.*?-->", re.DOTALL)
 
 NAME_FILE_UNREADABLE = "editor.saved_file_unreadable"
 NAME_EDIT_MISSING = "editor.saved_edit_missing"
@@ -111,8 +114,9 @@ def read_scene_file(path: str | Path) -> SceneFile:
 
 
 def parse_scene_file(data: bytes, origin: str = "<bytes>") -> SceneFile:
+    """The comments are cut out first: the engine's reader (pugixml) accepts a `--` inside one, which the shipped BagiStress file has and expat refuses."""
     try:
-        root = ElementTree.fromstring(data)
+        root = ElementTree.fromstring(COMMENT.sub(b"", data))
     except ElementTree.ParseError as error:
         raise SceneFileError(f"{origin} is not well-formed XML: {error}") from error
     scenes_element = root.find(SCENES_TAG)

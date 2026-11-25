@@ -28,6 +28,7 @@ SPLITTER_X = 211.0
 WIDE_DOCK = 400.0
 PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console": "Console (1 errors)###Console", "Game Panel": "Game###GamePanel", "Profiler": "Profiler"}
 MENU_ITEMS = ["Command Palette...", "Preferences...", "Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Layouts", "Reset to Defaults"]
+PALETTE_COMMANDS = ["Game Panel", "Switch Game and Editor", "Console", "Save Scene"]
 TRANSFORM_FIELDS = 7
 HIERARCHY = "Scene Editor/##hierarchy_8D0B9DE4"
 INSPECTOR = "Scene Editor/##inspector_828F5624"
@@ -61,6 +62,8 @@ class FakeEditor:
         self.focus = None
         self.pointer = (0.0, 0.0)
         self.hover_target = None
+        self.palette = False
+        self.query = ""
         self.keys = []
         self.typed = []
         self.steps = 0
@@ -76,6 +79,11 @@ class FakeEditor:
         if self.menu_open:
             for index, label in enumerate(self.menu_items):
                 found.append(item(label, "View###Menu_00", 94.0, 155.0 + index * MENU_ROW_HEIGHT, 217.0, MENU_ROW_HEIGHT))
+        if self.palette:
+            found.append(item("##query", "##Popup_c0f026a4", 730.0, 224.0, 459.0, 24.0))
+            commands = [command for command in PALETTE_COMMANDS if self.query in command.lower()]
+            for index, command in enumerate(commands):
+                found.append(item(command, "##Popup_c0f026a4/##list_9F383DB3", 730.0, 251.0 + index * MENU_ROW_HEIGHT, 459.0, MENU_ROW_HEIGHT))
         if "Scene Editor" in self.open_panels:
             found.append(item(" Save", "Scene Editor", **SAVE))
             found.append(item("##search", HIERARCHY, 20.0, 166.0, 248.0, 24.0))
@@ -154,6 +162,8 @@ class FakeEditor:
                 self.typed.append(event["text"])
                 if self.focus == "##search":
                     self.search = event["text"]
+                if self.focus == "##query":
+                    self.query = event["text"]
         return {"events": len(events), "frames": 3, "wantCaptureKeyboard": True, "wantCaptureMouse": True, "wantTextInput": self.focus is not None}
 
     def imgui_click(self, label=None, x=None, y=None, mods=(), count=1, **ignored):
@@ -217,6 +227,14 @@ class FakeEditor:
         self.open_panels ^= {label}
 
     def key(self, event):
+        if event["key"] == "P" and "ctrl" in event.get("mods", []) and not self.palette:
+            self.palette, self.focus, self.query = True, "##query", ""
+        if event["key"] == "Escape" and self.palette:
+            if self.focus == "##query":
+                self.focus = None
+            else:
+                self.palette = False
+            return
         if event["key"] == "Enter" and self.focus is not None:
             if self.focus == "##node_name" and self.typed:
                 self.names[self.selected] = self.typed[-1]
@@ -353,3 +371,26 @@ def test_the_view_menu_lists_known_panels_and_names_what_it_does_not_know():
 def test_an_item_that_is_not_there_names_the_labels_the_window_shows(ed):
     with pytest.raises(SessionError, match=r"0 visible items match .*'Scene Editor'.*Save"):
         editor.find_item(ed, "Scene Editor", label="Open")
+
+
+def test_rows_matching_gives_the_rows_the_search_leaves_and_clears_it(ed):
+    editor.widen_left_dock(ed)
+    assert editor.rows_matching(ed, "run") == ["Root", "Run"] or editor.rows_matching(ed, "run") == ["Run"]
+    assert ed.search == "" and editor.hierarchy_names(ed) == ["Root"]
+
+
+def test_the_palette_opens_by_its_chord_filters_and_takes_two_escapes_to_close(ed):
+    editor.open_palette(ed)
+    ed.imgui_type("game")
+    assert editor.palette_rows(ed) == ["Game Panel", "Switch Game and Editor"]
+    ed.imgui_type("zzzz")
+    assert editor.palette_rows(ed) == []
+    editor.close_palette(ed)
+    assert not editor.palette_open(ed) and ed.keys.count(("Escape", ())) == 2
+
+
+def test_a_palette_that_does_not_open_is_an_error(ed):
+    ed.palette = False
+    ed.key = lambda event: None
+    with pytest.raises(SessionError, match="did not open"):
+        editor.open_palette(ed)

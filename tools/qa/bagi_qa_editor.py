@@ -45,8 +45,10 @@ ADD_NODE_BUTTON = "Add Node"
 NAME_FIELD = "##node_name"
 LAYER_FIELD = "##node_layer"
 PALETTE_QUERY_FIELD = "##query"
+PALETTE_LIST_CHILD = "##list"
 PALETTE_CHORD = ("P", ("ctrl",))  # `view.commandPalette`, rebindable
-PREFERENCES_CHORD = ("Comma", ("ctrl",))  # `view.preferences`, rebindable
+GAME_PANEL_CHORD = ("G", ("ctrl", "shift"))  # `view.game`, rebindable
+PALETTE_ESCAPES = 2  # the first Escape leaves the focused query field, the second closes the popup
 FIELD_LABEL_FORMAT = "##{}"
 ICON_ROW = re.compile("^[-] (?P<name>[^#]+)$")  # a hierarchy row is a Lucide glyph, a space and the node's name
 FIELD_LABEL = re.compile(r"^##\d+$")
@@ -210,22 +212,39 @@ def select_node(session: Any, name: str) -> None:
     """Selects the node called `name` by a click on its hierarchy row. A node under a collapsed one is found through the search field, which opens the way
     to its matches (and is cleared afterwards). SessionError when no row, or more than one, has the name, or when no inspector shows after the click."""
     rows = _visible_rows(session, name)
-    filtered = False
-    if not rows:
-        _type_into(session, find_item(session, CHILD_WINDOWS, HIERARCHY_CHILD, label_contains=SEARCH_FIELD), name)
-        filtered = True
+    filtered = not rows
+    if filtered:
+        _filter_hierarchy(session, name)
         rows = _visible_rows(session, name)
     try:
         if len(rows) != 1:
             raise SessionError(f"{len(rows)} hierarchy rows are called '{name}'; the rows drawn are {hierarchy_names(session)}")
         item = rows[0].item
-        session.imgui_input([{"type": "move", "x": item["x"] + min(item["width"] / 2, ROW_CLICK_OFFSET), "y": item["y"] + item["height"] / 2}])
-        session.imgui_click(x=item["x"] + min(item["width"] / 2, ROW_CLICK_OFFSET), y=item["y"] + item["height"] / 2)
+        x, y = item["x"] + min(item["width"] / 2, ROW_CLICK_OFFSET), item["y"] + item["height"] / 2
+        session.imgui_input([{"type": "move", "x": x, "y": y}])
+        session.imgui_click(x=x, y=y)
     finally:
         if filtered:
-            click_item(session, find_item(session, CHILD_WINDOWS, HIERARCHY_CHILD, label_contains=CLEAR_SEARCH_BUTTON))
+            _clear_hierarchy_filter(session)
     if not find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD, label_contains=NAME_FIELD):
         raise SessionError(f"the inspector shows no node after the click on '{name}': widen the dock (`widen_left_dock`) or the node is not selectable")
+
+
+def rows_matching(session: Any, text: str) -> list[str]:
+    """The names of the rows the hierarchy's search field leaves for `text` (the way to each match is opened); the field is cleared afterwards."""
+    _filter_hierarchy(session, text)
+    try:
+        return hierarchy_names(session)
+    finally:
+        _clear_hierarchy_filter(session)
+
+
+def _filter_hierarchy(session: Any, text: str) -> None:
+    _type_into(session, find_item(session, CHILD_WINDOWS, HIERARCHY_CHILD, label_contains=SEARCH_FIELD), text)
+
+
+def _clear_hierarchy_filter(session: Any) -> None:
+    click_item(session, find_item(session, CHILD_WINDOWS, HIERARCHY_CHILD, label_contains=CLEAR_SEARCH_BUTTON))
 
 
 def _visible_rows(session: Any, name: str) -> list[HierarchyRow]:
@@ -342,3 +361,28 @@ def save(session: Any) -> None:
 def press_chord(session: Any, chord: tuple[str, Sequence[str]]) -> None:
     key, mods = chord
     session.imgui_key(key, mods)
+
+
+def palette_open(session: Any) -> bool:
+    return bool(session.imgui_find(label_contains=PALETTE_QUERY_FIELD, kind="item")["matches"])
+
+
+def open_palette(session: Any) -> None:
+    """Opens the command palette by its chord; its query field has the focus, so `imgui_type` filters it."""
+    press_chord(session, PALETTE_CHORD)
+    if not palette_open(session):
+        raise SessionError("the command palette did not open after its chord")
+
+
+def palette_rows(session: Any) -> list[str]:
+    """The commands the open palette lists, in order."""
+    return [item["label"] for item in find_items(session, child=PALETTE_LIST_CHILD) if item["label"] and item["visible"]]
+
+
+def close_palette(session: Any) -> None:
+    for _ in range(PALETTE_ESCAPES):
+        if not palette_open(session):
+            return
+        session.imgui_key("Escape")
+    if palette_open(session):
+        raise SessionError("the command palette is still open after Escape")

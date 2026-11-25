@@ -45,6 +45,11 @@ def test_a_file_equals_itself():
     assert compare(base()) == []
 
 
+def test_a_comment_with_double_dashes_does_not_make_a_file_unreadable():
+    shipped = base().replace("<!-- a comment -->", "<!-- chosen by --stress-scene -->")
+    assert compare(shipped.replace("--stress-scene", "- -stress-scene"), before=shipped) == []
+
+
 def test_comments_and_layout_are_not_changes():
     spaced = base().replace("\n  <scenes>", "\n\n\n<scenes>").replace("<!-- a comment -->", "<!-- another one -->")
     assert compare(spaced) == []

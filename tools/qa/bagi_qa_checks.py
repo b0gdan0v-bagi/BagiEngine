@@ -47,6 +47,8 @@ SET_WINDOW_METHOD = "set_window"
 UI_TREE_METHOD = "ui_tree"
 KNOWN_MEMBER = "KNOWN_DEVIATIONS"
 EDITOR_FILES_MEMBER = "EDITOR_CONTENT_FILES"
+EDITOR_GENERATED_MEMBER = "EDITOR_GENERATED"
+EDITOR_DEFAULTS_MEMBER = "EDITOR_ADDED_DEFAULTS"
 QUIT_METHOD = "quit"  # the call that ends a session is not a line of its recording
 
 
@@ -119,6 +121,8 @@ class Invariants:
     monkey_moves: Callable[..., Any] | None = None
     known_deviations: frozenset[str] = frozenset()
     editor_content_files: tuple[str, ...] = ()  # the files the editor's Save writes, relative to the folder holding `.claude/rules/qa-project.md`
+    editor_generated: dict[str, tuple[str, ...]] = field(default_factory=dict)  # scene name to the nodes whose children a component makes at run time (Save writes them)
+    editor_added_defaults: dict[str, dict[str, str]] = field(default_factory=dict)  # component type to the defaults Save adds: attribute and value
 
 
 def check_log(problem_lines: Sequence[str], seen: int) -> list[Finding]:
@@ -234,6 +238,8 @@ def load_invariants(path: str | Path) -> Invariants:
         _callable_member(module, MONKEY_MOVES, file),
         _known_member(module, file),
         _editor_files_member(module, file),
+        _generated_member(module, file),
+        _defaults_member(module, file),
     )
 
 
@@ -319,6 +325,20 @@ def _editor_files_member(module: types.ModuleType, file: Path) -> tuple[str, ...
     if isinstance(member, (str, bytes)) or not isinstance(member, (list, tuple)) or not all(isinstance(name, str) for name in member):
         raise InvariantsError(f"{EDITOR_FILES_MEMBER} of {file} has to be a list of paths (strings)")
     return tuple(member)
+
+
+def _generated_member(module: types.ModuleType, file: Path) -> dict[str, tuple[str, ...]]:
+    member = getattr(module, EDITOR_GENERATED_MEMBER, {})
+    if not isinstance(member, dict) or not all(isinstance(scene, str) and isinstance(nodes, (list, tuple)) and all(isinstance(node, str) for node in nodes) for scene, nodes in member.items()):
+        raise InvariantsError(f"{EDITOR_GENERATED_MEMBER} of {file} has to be a dict of a scene name to a list of node names")
+    return {scene: tuple(nodes) for scene, nodes in member.items()}
+
+
+def _defaults_member(module: types.ModuleType, file: Path) -> dict[str, dict[str, str]]:
+    member = getattr(module, EDITOR_DEFAULTS_MEMBER, {})
+    if not isinstance(member, dict) or not all(isinstance(component, str) and isinstance(attributes, dict) and all(isinstance(name, str) and isinstance(value, str) for name, value in attributes.items()) for component, attributes in member.items()):
+        raise InvariantsError(f"{EDITOR_DEFAULTS_MEMBER} of {file} has to be a dict of a component type to a dict of attribute name and value (strings)")
+    return {component: dict(attributes) for component, attributes in member.items()}
 
 
 def _issue_text(issue: Any) -> str:
