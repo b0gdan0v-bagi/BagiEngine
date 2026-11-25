@@ -19,6 +19,16 @@ The steps, in order:
      /healthz) come from the game's Railway IaC file, not from the upload: tools/web/CLAUDE.md).
 --target NAME takes the game, preset and service from <source>/web/targets.json (deploy_targets.py) and refuses every free option of
 the command line (REFUSED_WITH_TARGET); only --deploy, --dry-run, --source-dir, --status-file and --checkout-dir go with it.
+--fetch (implied by --target) builds in a checkout of its own instead of the working copy (deploy_checkout.py): a detached worktree of
+the project's repository at origin/<base> under ~/.cache/bagi-web-deploy (BAGI_WEB_DEPLOY_HOME moves it, --checkout-dir names another),
+made with a fetch of that one branch and never a push, pull, merge, reset or branch switch. Its package.py, serve.py and Dockerfile are
+the ones that travel with the page, a missing SDK is installed there, and with --deploy a commit without a green full test run gets
+tools/alltests/alltests.py started here (a hand run without --fetch only says how). --alltests-results does not go with --fetch: that
+run records into the default results file.
+--status-file FILE is rewritten at every stage (fetch, tests, build, package, deploy) with the state, the commits and the error
+(deploy_status.py); `done` at deploy means railway accepted the upload, not that the page is live. A dry run writes nothing.
+package.py gets --commit engine=<sha> --commit game=<sha> when git answers, so the deployed manifest.json names its commits.
+tools/web/DEPLOY.md has the whole story.
 Standard library only. Nothing here reads or writes a secret.
 """
 
