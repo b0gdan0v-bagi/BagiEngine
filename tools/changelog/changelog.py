@@ -73,6 +73,7 @@ KIND_COMMIT = "commit"
 KIND_VERSION = "version"
 GIT_TIMEOUT_SECONDS = 60
 MERGE_DRIVER = "bagi-changelog"
+DRIVER_INTERPRETER = "python3"  # a name, not sys.executable: a path into a versioned Homebrew folder breaks on the next upgrade
 DRIVER_SCRIPT = "tools/changelog/changelog.py"  # relative: git runs a merge driver in the top folder of the checkout that merges
 DERIVED_PATHS = (VERSION_HEADER.as_posix(), CHANGELOG_FILE)  # the two files the fragments determine
 LOG_BLOCK_START = re.compile(r"(?m)^(?=## )")
@@ -662,7 +663,10 @@ def stage_text(root: Path, stage: int, path: str) -> str | None:
 
 def command_settle(root: Path, args: argparse.Namespace) -> int:
     """Finishes a merge in the working tree of `root`: the header and CHANGELOG.md are derived from the fragments, then `check` must pass.
-    Touches nothing and exits 1 when any path other than those two is conflicted."""
+    Touches nothing and exits 1 when any path other than those two is conflicted, or when no merge is in progress."""
+    if subprocess.run(["git", "-C", str(root), "rev-parse", "-q", "--verify", "MERGE_HEAD"], capture_output=True, timeout=GIT_TIMEOUT_SECONDS).returncode != 0:
+        print("settle: no merge in progress (no MERGE_HEAD); run it between `git merge --no-commit` and `git commit`", file=sys.stderr)
+        return EXIT_REFUSED
     unmerged = git(root, "diff", "--name-only", "--diff-filter=U").splitlines()
     foreign = [path for path in unmerged if path not in DERIVED_PATHS]
     if foreign:
@@ -698,9 +702,8 @@ def command_settle(root: Path, args: argparse.Namespace) -> int:
 
 def command_install_driver(root: Path, args: argparse.Namespace) -> int:
     """Registers the merge driver in the local git config of the clone (shared by its worktrees); `.gitattributes` names the two files."""
-    interpreter = Path(sys.executable).as_posix()
     git(root, "config", "--local", f"merge.{MERGE_DRIVER}.name", "the version header and CHANGELOG.md of the engine")
-    git(root, "config", "--local", f"merge.{MERGE_DRIVER}.driver", f'"{interpreter}" {DRIVER_SCRIPT} merge-driver %O %A %B %P')
+    git(root, "config", "--local", f"merge.{MERGE_DRIVER}.driver", f"{DRIVER_INTERPRETER} {DRIVER_SCRIPT} merge-driver %O %A %B %P")
     print(f"merge driver {MERGE_DRIVER} installed in the config of {root}")
     return EXIT_OK
 
@@ -825,7 +828,7 @@ def build_parser() -> argparse.ArgumentParser:
     command("check", "exit 1 naming the file when the fragments, the header and CHANGELOG.md disagree")
     command("settle", "finish a merge in progress: derive the header and CHANGELOG.md from the fragments, check; exit 1 on any other conflicted path")
     command("install-driver", "register the git merge driver of the header and CHANGELOG.md in the local config of the clone")
-    driver = command("merge-driver", "the git merge driver (%O %A %B %P): merged text of the header or CHANGELOG.md into the file of our side")
+    driver = command("merge-driver", "the git merge driver (%%O %%A %%B %%P): merged text of the header or CHANGELOG.md into the file of our side")
     for name in ("base", "ours", "theirs", "path"):
         driver.add_argument(name)
     breaking = commands.add_parser("breaking", help="what the entries merged after a point change for a game: Breaking and Migration (read-only, no fetch)")

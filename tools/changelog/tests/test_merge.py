@@ -1,5 +1,6 @@
 """The merge driver and `settle` over real git repositories in a temp folder: two branches that each add a fragment, then merge."""
 
+import argparse
 import shutil
 import subprocess
 from pathlib import Path
@@ -134,6 +135,27 @@ def test_settle_refuses_a_version_two_fragments_share(tmp_path):
     repo.add_entry("on-main", "0.1.4")
     assert repo.merge("games/x", "--no-commit").returncode == 0
     assert repo.settle() == changelog.EXIT_REFUSED
+
+
+def test_settle_refuses_outside_a_merge(tmp_path):
+    repo = two_sides(tmp_path, driver=True)
+    assert repo.settle() == changelog.EXIT_REFUSED
+
+
+def test_install_driver_registers_the_interpreter_by_name(tmp_path):
+    repo = Repo(tmp_path / "engine", driver=True)
+    command = run_git(repo.root, "config", "--local", f"merge.{changelog.MERGE_DRIVER}.driver").stdout.strip()
+    assert command == f"python3 {changelog.DRIVER_SCRIPT} merge-driver %O %A %B %P"
+
+
+def test_every_command_renders_its_help():
+    """argparse %-formats help strings: an unescaped `%O` fails on newer Pythons for the whole tool."""
+    parser = changelog.build_parser()
+    (subparsers,) = (action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    assert subparsers.choices
+    assert parser.format_help()
+    for sub in subparsers.choices.values():
+        assert sub.format_help()
 
 
 def test_header_merge_takes_the_highest_version_and_keeps_other_edits():
