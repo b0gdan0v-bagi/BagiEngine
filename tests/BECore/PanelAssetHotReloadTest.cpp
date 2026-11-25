@@ -60,6 +60,14 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        /// `{}` slots: the title and the `open` attribute; the source `a` is a `HookPanelModel`
+        constexpr const char* kHookAsset = R"(<PanelAsset id="Hot" title="{}" command="view.fileChanges" open="{}" width="300" height="200">
+  <sources><source name="a" model="HookPanelModel"/></sources>
+  <elements>
+    <element type="PanelButton" id="go" text="Go" command="fileChanges.rescan"/>
+  </elements>
+</PanelAsset>)";
+
         constexpr int kSteadyFrames = 8;
 
         String Asset(StringView title, StringView button, StringView model = "CountingPanelModel", StringView source = "a") {
@@ -315,6 +323,69 @@ namespace BECore::Tests {
         EXPECT_FALSE(_widget->IsOpen());
         Command(EditorCommandIds::kFileChangesRescan);
         EXPECT_EQ(CountingPanelModel::commands, 1);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, TheModelsAreToldEveryChangeOfTheOpenFlagAndEveryDrawnFrameEnds) {
+        HookPanelModel::log.clear();
+        ASSERT_NO_FATAL_FAILURE(Start(String(Format(kHookAsset, "Hook", "false"))));
+        Settle();
+        EXPECT_EQ(HookPanelModel::log, "") << "a closed panel is neither updated nor told anything";
+
+        Command(EditorCommandIds::kViewFileChanges);
+        Settle();
+        EXPECT_EQ(HookPanelModel::log, "+UEUE");
+
+        HookPanelModel::log.clear();
+        Command(EditorCommandIds::kViewFileChanges);
+        Settle();
+        EXPECT_EQ(HookPanelModel::log, "-");
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AnAssetThatOpensAtStartTellsTheModelOnTheFirstFrame) {
+        HookPanelModel::log.clear();
+        ASSERT_NO_FATAL_FAILURE(Start(String(Format(kHookAsset, "Hook", "true"))));
+        EXPECT_EQ(HookPanelModel::log, "+UEUE");
+    }
+
+    TEST_F(PanelAssetHotReloadTest, TheCloseButtonOfTheWindowIsToldOnceAndStopsTheUpdates) {
+        HookPanelModel::log.clear();
+        ASSERT_NO_FATAL_FAILURE(Start(String(Format(kHookAsset, "Hook", "true"))));
+        ImGuiWindow* window = Window();
+        ASSERT_NE(window, nullptr);
+
+        const Optional<ImVec2> point = TryLocate(window->GetID("#CLOSE"));
+        ASSERT_TRUE(point.has_value()) << "the close button was not found";
+        HookPanelModel::log.clear();
+        ClickAt(*point);
+        EXPECT_FALSE(_widget->IsOpen());
+        EXPECT_EQ(HookPanelModel::log.find('-'), HookPanelModel::log.rfind('-')) << "told twice: " << HookPanelModel::log;
+        EXPECT_NE(HookPanelModel::log.find('-'), String::npos);
+
+        HookPanelModel::log.clear();
+        Settle();
+        EXPECT_EQ(HookPanelModel::log, "") << "the panel went on after its close button";
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AReloadThatKeepsTheModelDoesNotTellItAgainAndOneThatDropsOrAddsOneTellsIt) {
+        HookPanelModel::log.clear();
+        ASSERT_NO_FATAL_FAILURE(Start(String(Format(kHookAsset, "Hook", "true"))));
+        HookPanelModel::log.clear();
+
+        ASSERT_NO_FATAL_FAILURE(Edit(String(Format(kHookAsset, "Reloaded", "true"))));
+        EXPECT_EQ(HookPanelModel::log, "UEUE");
+
+        HookPanelModel::log.clear();
+        ASSERT_NO_FATAL_FAILURE(Edit(Asset("Other", "Go", "CountingPanelModel", "other")));
+        EXPECT_EQ(HookPanelModel::log, "-");
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AWidgetThatDiesOpenTellsItsModelsItClosed) {
+        HookPanelModel::log.clear();
+        ASSERT_NO_FATAL_FAILURE(Start(String(Format(kHookAsset, "Hook", "true"))));
+        HookPanelModel::log.clear();
+
+        _widget.Reset();
+        EXPECT_EQ(HookPanelModel::log, "-");
     }
 
     TEST_F(PanelAssetHotReloadTest, ABoundTitleFollowsTheTextAndKeepsTheIdAfterTheMarker) {

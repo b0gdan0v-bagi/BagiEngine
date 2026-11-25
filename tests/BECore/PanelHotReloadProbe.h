@@ -42,6 +42,29 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD bool flag = false;
     };
 
+    /// A model that writes one letter per call of the lifecycle hooks into a static log the test reads: `+` / `-` open and close, `U` Update, `E` EndUpdate
+    class HookPanelModel : public IPanelModel {
+        BE_CLASS(HookPanelModel)
+    public:
+        void Update() override {
+            log += 'U';
+        }
+
+        void EndUpdate() override {
+            log += 'E';
+        }
+
+        void OnOpenChanged(bool open) override {
+            log += open ? '+' : '-';
+        }
+
+        bool RunCommand(StringView /*id*/, StringView /*argument*/) override {
+            return false;
+        }
+
+        inline static String log;
+    };
+
     /// A model whose command runs a test-set hook (the test rewrites the panel's own file in it) and notes whether it was destroyed while the command ran
     class ReloadingPanelModel : public IPanelModel {
         BE_CLASS(ReloadingPanelModel)

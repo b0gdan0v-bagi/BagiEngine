@@ -29,6 +29,16 @@ namespace BECore {
         /// Once per frame while the panel is open, before it draws. Allocates nothing when nothing changed
         virtual void Update() {}
 
+        /// After the panel's window of this frame is drawn, paired with the `Update` of the same frame (a frame without an `Update` has none). A model that
+        /// holds something across the draw, such as a paused counter, lets go of it here. It follows the `OnOpenChanged` that the frame's close button caused
+        virtual void EndUpdate() {}
+
+        /// The panel's open flag changed, however it changed: the open command, the window's close button, the asset's `open` at start. Told once per change,
+        /// at the start of `Update` (or after the window when its close button was the cause), and `false` when the widget or the model's source goes away
+        /// while open, so a model that switches a global thing on while open always gets the call that switches it off. A model is not updated while closed
+        /// and could not see a close button by itself. A model made while the panel is open gets `true` right after `Initialize`
+        virtual void OnOpenChanged(bool /*open*/) {}
+
         /// Runs @p id when this model owns it and returns true. @p argument is the text of the clicked button's `argument`, empty when it has none
         virtual bool RunCommand(StringView id, StringView argument) = 0;
     };

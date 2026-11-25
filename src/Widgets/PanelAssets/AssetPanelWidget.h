@@ -26,7 +26,8 @@ namespace BECore {
      *
      * **Models.** Each `<source>` with a `model` is one `IPanelModel` made by `CreatePanelModel` and registered in the widget's own `PanelDataSources` (the
      * global one stands behind it), so two panels may both name a source `files`. A reload keeps the instance of a source whose name and model did not change.
-     * While the panel is closed nothing is drawn and no command reaches a model (the open command apart), as with the panels it replaces.
+     * While the panel is closed nothing is drawn and no command reaches a model (the open command apart), as with the panels it replaces. The models are
+     * told every change of the open flag (`IPanelModel::OnOpenChanged`) and the end of each drawn frame (`EndUpdate`).
      *
      * A change of the asset's config is only noted by the event and applied at the next `Update` or at the end of the command being run: the event can
      * come from inside a model's own command (applying the panel's file), and a reload may drop that very model.
@@ -37,6 +38,8 @@ namespace BECore {
         BE_CLASS(AssetPanelWidget)
     public:
         AssetPanelWidget() = default;
+        /// Tells the models of an open panel that it closed, so a mode switch leaves none of them with global state on
+        ~AssetPanelWidget() override;
 
         bool Initialize(IDeserializer& deserializer) override;
         void Update() override;
@@ -79,6 +82,7 @@ namespace BECore {
         void LoadAsset();
         void OnAssetChanged();
         void SyncModels();
+        void NotifyOpenChanged();
         void DrawBanner() const;
         void SyncTitle();
         [[nodiscard]] const ConfigManager& Configs() const;
@@ -100,6 +104,8 @@ namespace BECore {
         uint32_t _preparedVersion = 0;
         bool _open = false;
         bool _openDecided = false;
+        /// The open flag the models were last told
+        bool _notifiedOpen = false;
         bool _reloadPending = false;
         /// A reload failure told while a reload is pending: shown after that load, which clears the failure
         bool _failurePending = false;

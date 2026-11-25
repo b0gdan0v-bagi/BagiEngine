@@ -366,7 +366,7 @@ namespace BECore {
                 }
             }
 
-            /// A text that goes to the model as it is: the length is `CheckTexts`', here only what would break a log line or a command
+            /// A text that goes to the model as it is: `CheckTexts` checks its length, this only what would break a log line or a command
             void Literal(StringView where, StringView field, const String& text) {
                 for (const char c : text) {
                     const auto byte = static_cast<uint8_t>(c);

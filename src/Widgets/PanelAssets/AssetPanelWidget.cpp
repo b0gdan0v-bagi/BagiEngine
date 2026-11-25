@@ -21,6 +21,12 @@ namespace BECore {
 
     }  // namespace
 
+    AssetPanelWidget::~AssetPanelWidget() {
+        // The members are destroyed after this body, so the models can still be told
+        _open = false;
+        NotifyOpenChanged();
+    }
+
     bool AssetPanelWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &AssetPanelWidget::OnCommand>(this);
         Subscribe<ConfigEvents::ConfigChangedEvent, &AssetPanelWidget::OnConfigChanged>(this);
@@ -109,10 +115,31 @@ namespace BECore {
                 IPanelModel* model = entry.model.Get();
                 model->Initialize();
                 entry.handle = _sources.Register(source.name, [model] { return model->GetObject(); });
+                if (_notifiedOpen) {
+                    model->OnOpenChanged(true);
+                }
             }
             next.push_back(std::move(entry));
         }
+        // What is left in the old list was dropped by this asset
+        if (_notifiedOpen) {
+            for (const ModelEntry& dropped : _models) {
+                if (dropped.model != nullptr) {
+                    dropped.model->OnOpenChanged(false);
+                }
+            }
+        }
         _models = std::move(next);
+    }
+
+    void AssetPanelWidget::NotifyOpenChanged() {
+        if (_open == _notifiedOpen) {
+            return;
+        }
+        _notifiedOpen = _open;
+        for (const ModelEntry& entry : _models) {
+            entry.model->OnOpenChanged(_open);
+        }
     }
 
     void AssetPanelWidget::OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event) {
@@ -173,6 +200,7 @@ namespace BECore {
 
     void AssetPanelWidget::Update() {
         ApplyPendingReload();
+        NotifyOpenChanged();
         if (!_open) {
             return;
         }
@@ -192,6 +220,11 @@ namespace BECore {
             }
         }
         ImGui::End();
+        // The close button wrote `_open` inside `Begin`
+        NotifyOpenChanged();
+        for (const ModelEntry& entry : _models) {
+            entry.model->EndUpdate();
+        }
         if (_result.clicked) {
             // The walk is over: a command may change the list it walked, or the asset itself
             if (const EditorCommand* command = FindEditorCommand(StringView(_result.command))) {
