@@ -84,24 +84,21 @@ namespace BECore {
     public:
         BE_POOLED_SINGLE_THREAD(TweenHandle)
 
-        [[nodiscard]] TweenState GetState() const {
-            return _state;
-        }
+        /// Out of line: a running tween keeps its state in the manager's slot, a finished one in the handle
+        [[nodiscard]] TweenState GetState() const;
 
-        /// Completed or Cancelled: no more callbacks will run
+        /// Completed or Cancelled: no more callbacks will run. Every finish clears `_manager` before its callbacks run, so this is a pointer test
         [[nodiscard]] bool IsFinished() const {
-            return _state == TweenState::Completed || _state == TweenState::Cancelled;
+            return _manager == nullptr;
         }
 
         [[nodiscard]] bool IsCancelled() const {
-            return _state == TweenState::Cancelled;
+            return _manager == nullptr && _state == TweenState::Cancelled;
         }
 
         /// 0..1 of the raw time (not eased) since the end of the delay: 0 while waiting, 1 once completed, where it stopped when cancelled.
         /// Always 0 for the handle of an endless timeline (`TweenManager::Play`): it has no end to measure against
-        [[nodiscard]] float GetProgress() const {
-            return _progress;
-        }
+        [[nodiscard]] float GetProgress() const;
 
         /// The frame class of the tween: `FiniteEffect` for `Start` and `Delay`, the class of the timeline for `Play`
         [[nodiscard]] AnimationFrameClass GetFrameClass() const {
@@ -144,14 +141,13 @@ namespace BECore {
 
         friend class TweenManager;
 
-        TweenManager* _manager = nullptr;  // null once the tween is finished
-        TweenState _state = TweenState::Waiting;
+        // The identity and the cold part of a tween. The state that every frame touches (time, setter) is a slot of the manager, found
+        // by `_id` while `_manager` is set; a finish copies the terminal state and progress here and clears `_manager`.
+        TweenManager* _manager = nullptr;           // null once the tween is finished
+        uint32_t _id = 0;                           // the slot's id in `_manager`; stale once finished
+        TweenState _state = TweenState::Cancelled;  // terminal: valid while `_manager` is null
         AnimationFrameClass _frameClass = AnimationFrameClass::FiniteEffect;
-        bool _endless = false;  // set by `Play` of an endless timeline: no completion, the setter gets seconds instead of a progress
-        float _progress = 0.0f;
-        float _elapsed = 0.0f;  // raw time since Start, the delay included
-        TweenSettings _settings;
-        TweenApply _apply;  // the setter of the typed Start
+        float _progress = 0.0f;  // terminal, like `_state`
         MoveOnlyFunction<void()> _onComplete;
         MoveOnlyFunction<void()> _onCancel;
         // In registration order; resumed (and removed one by one) by the manager when the tween finishes. One inline: the usual waiter is

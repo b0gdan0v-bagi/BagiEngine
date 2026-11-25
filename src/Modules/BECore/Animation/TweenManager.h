@@ -8,6 +8,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 
 namespace BECore {
@@ -83,20 +84,71 @@ namespace BECore {
     private:
         friend class TweenHandle;
 
-        IntrusivePtr<TweenHandle> StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel);
-        void CancelTween(TweenHandle& tween);
-        void Step(TweenHandle& tween, float dt);
-        void StepEndless(TweenHandle& tween, float dt);
-        void CallSetter(TweenHandle& tween, float value);
-        void ReleaseCallbacks(TweenHandle& tween);
-        void ResumeWaiters(TweenHandle& tween);
-        void CancelAllIn(const Vector<IntrusivePtr<TweenHandle>>& list);
-        void EndWalk();
+        /// What every frame reads and writes of one tween, by value: the walk touches no handle and no reference count. A finished tween
+        /// leaves a tombstone (`state` Completed or Cancelled) until a compaction
+        struct Slot {
+            float elapsed = 0.0f;   // raw time since Start, the delay included
+            float duration = 0.0f;  // finite, see `StartErased`
+            float delay = 0.0f;     // finite
+            float progress = 0.0f;
+            uint32_t id = 0;
+            EaseType ease = EaseType::Linear;
+            TweenState state = TweenState::Waiting;
+            AnimationFrameClass frameClass = AnimationFrameClass::FiniteEffect;
+            bool endless = false;  // `Play` of an endless timeline: no completion, the setter gets seconds instead of a progress
+            TweenApply apply;
+        };
 
-        Vector<IntrusivePtr<TweenHandle>> _tweens;   // in start order; a finished one stays until the walk ends
-        Vector<IntrusivePtr<TweenHandle>> _pending;  // started while a walk is on: merged when it ends
-        TweenHandle* _stepping = nullptr;            // the tween whose setter runs now: its callback must not be destroyed under it
-        bool _walking = false;                       // Advance or CancelAll runs: the lists must not move
+        static constexpr size_t kCacheLineBytes = 64;
+        static_assert(sizeof(Slot) <= 2 * kCacheLineBytes, "a slot is walked every frame: keep it within two cache lines");
+
+        /// A finished tween taken out of the lists: the owner keeps its handle alive across the callbacks, the setter is destroyed by the caller
+        /// after the bookkeeping (its capture may call back into the manager)
+        struct Retired {
+            IntrusivePtr<TweenHandle> owner;
+            TweenApply apply;
+        };
+
+        [[nodiscard]] static bool IsLive(TweenState state) {
+            return state == TweenState::Waiting || state == TweenState::Running;
+        }
+
+        [[nodiscard]] Slot& SlotOf(uint32_t id);
+        [[nodiscard]] const Slot& SlotOf(uint32_t id) const;
+        [[nodiscard]] uint32_t AcquireId();
+        IntrusivePtr<TweenHandle> StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel, bool endless = false,
+                                              AnimationFrameClass frameClass = AnimationFrameClass::FiniteEffect);
+        void CancelTween(uint32_t id);
+        void Step(Slot& slot, float dt);
+        void StepEndless(Slot& slot, float dt);
+        void CallSetter(Slot& slot, float value);
+        [[nodiscard]] Retired Retire(Slot& slot, TweenState terminal);
+        void Complete(Slot& slot);
+        void ResumeWaiters(TweenHandle& tween, uint32_t clearCount);
+        void EndWalk();
+        void Compact();
+        void MergePending();
+
+        // `Advance` walks `_slots` in start order and a setter or callback runs with a reference into it. So `_slots` is never resized while
+        // `_walking` (a finish leaves a tombstone, a start goes to `_pending`, merged by `EndWalk`), and nothing keeps a slot reference
+        // across a point where `_walking` is off
+        Vector<Slot> _slots;
+        Vector<Slot> _pending;
+        // Indexed by id, not by position, so a compaction rewrites `_indexOfId` and never touches a handle. An id is reserved from its start
+        // until the slot that held it is compacted away, so a tombstone and a new tween never share one
+        Vector<IntrusivePtr<TweenHandle>> _owners;  // null for a finished tween and a free id
+        Vector<uint32_t> _indexOfId;                // a position in `_slots`, or in `_pending` with `kPendingBit`
+        Vector<uint32_t> _freeIds;
+        size_t _tombstones = 0;                    // in `_slots`
+        uint32_t _stepping = kNoId;                // the tween whose setter runs now: its setter must not be destroyed under it
+        IntrusivePtr<TweenHandle> _steppingOwner;  // a tween finished by its own setter: the handle lives until the setter returns
+        uint32_t _clearCount = 0;                  // counts `Clear()` calls: a tween's waiters are dropped, not resumed, when one ran since it finished
+        bool _walking = false;                     // Advance or CancelAll runs: the lists must not move
+
+        static constexpr uint32_t kNoId = UINT32_MAX;
+        static constexpr uint32_t kPendingBit = 1u << 31;
+        static constexpr size_t kMinTombstones = 64;  // fewer than this and a walk never compacts
+        static constexpr size_t kTombstoneShare = 8;  // a walk compacts once a share of 1 / this of the slots are tombstones
     };
 
 }  // namespace BECore
