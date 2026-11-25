@@ -21,6 +21,9 @@ namespace BECore {
         ~SDLRendererBackend() override;
 
         bool Initialize(IMainWindow& window) override;
+        void SetUncapped(bool uncapped) override {
+            _uncapped = uncapped;
+        }
         void Destroy() override;
         void BeginFrame() override;
         void EndFrame() override;
@@ -94,6 +97,7 @@ namespace BECore {
         bool QueueGeometry(SDL_Texture* handle, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY, const ViewTransform& view, bool fade,
                            BlendMode blend);
 
+        bool _uncapped = false;  // SetUncapped(): vsync stays off
         bool _software = false;  // SDL's own software renderer: every blended triangle costs a surface and a blit
         bool _batchOnlyExact = true;
 

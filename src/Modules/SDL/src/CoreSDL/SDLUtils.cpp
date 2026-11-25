@@ -68,6 +68,22 @@ namespace BECore {
         return names;
     }
 
+    SDL_WindowFlags SDLUtils::ApplyStartOptions(SDL_WindowFlags flags, const WindowStartOptions& options) {
+        if (options.backend == RenderBackendChoice::SdlGpu) {
+            flags &= ~SDL_WINDOW_VULKAN;
+        } else if (options.backend == RenderBackendChoice::Vulkan) {
+            flags |= SDL_WINDOW_VULKAN;
+        }
+        if (options.hidden) {
+            flags |= SDL_WINDOW_HIDDEN;
+            flags &= ~(SDL_WINDOW_MAXIMIZED | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+        }
+        if (options.headless) {
+            flags &= ~SDL_WINDOW_VULKAN;
+        }
+        return flags;
+    }
+
     SDL_WindowFlags SDLUtils::GetWindowFlagValue(StringView flagName) {
         auto it = std::ranges::lower_bound(kFlagTable, flagName, {}, &FlagEntry::name);
 

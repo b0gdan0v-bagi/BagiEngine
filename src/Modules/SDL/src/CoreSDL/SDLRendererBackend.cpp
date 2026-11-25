@@ -65,6 +65,15 @@ namespace BECore {
 
         const char* rendererName = SDL_GetRendererName(_renderer);
         _software = rendererName && std::strcmp(rendererName, kSoftwareRenderer) == 0;
+        if (_software && sdlWindow->GetBackend() == RenderBackendChoice::SdlGpu) {
+            // SDL falls back to its software renderer when no GPU one starts; a silent fallback would give a benchmark of the wrong thing
+            LOG_ERROR("SDLRendererBackend: the hardware renderer was asked for and SDL made the software one");
+            SDL_DestroyRenderer(_renderer);
+            _renderer = nullptr;
+            _software = false;
+            return false;
+        }
+        LOG_INFO("SDLRendererBackend: renderer '{}'", rendererName ? rendererName : "?");
         SetBatchingEnabled(true);
 
 #ifdef __EMSCRIPTEN__
@@ -73,6 +82,10 @@ namespace BECore {
         // (emscripten warns "rendering without using requestAnimationFrame" in a Debug build). Interval 1 keeps the loop on rAF.
         if (!SDL_SetRenderVSync(_renderer, 1)) {
             LOG_WARNING("SDLRendererBackend: cannot turn vsync on: {}", SDL_GetError());
+        }
+#else
+        if (_uncapped && !SDL_SetRenderVSync(_renderer, 0)) {
+            LOG_WARNING("SDLRendererBackend: cannot turn vsync off: {}", SDL_GetError());
         }
 #endif
 

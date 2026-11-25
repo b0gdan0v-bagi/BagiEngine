@@ -67,6 +67,10 @@ namespace BECore {
             return GeometryDetail::Full;
         }
 
+        // Do not wait for the display when presenting (no vsync): benchmarks only. Called before Initialize(); the default does nothing
+        // (a backend that has a present to pace implements it).
+        virtual void SetUncapped(bool /*uncapped*/) {}
+
         BE_FUNCTION virtual bool Initialize(IMainWindow& window) = 0;
         BE_FUNCTION virtual void Destroy() = 0;
         BE_FUNCTION virtual void BeginFrame() = 0;
