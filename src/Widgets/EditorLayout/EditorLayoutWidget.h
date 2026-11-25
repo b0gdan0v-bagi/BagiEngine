@@ -22,13 +22,13 @@ namespace BECore {
 
     // Full-screen DockSpace host that provides the unified editor layout, with the main toolbar under the menu bar and the status bar
     // at the bottom (both children of the host, so the dock layout and imgui.ini do not know them).
-    // Must be registered immediately after ImGuiWidget so all other editor
-    // windows dock into this space.
+    // Must be registered after ImGuiWidget and the `Bar` assets it draws (`MainToolbarPanel`, `MainMenuPanel`: their models update before
+    // this widget draws them) and before the other editor windows, so they dock into this space.
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
     // (EditorCommandEvent): quit, switch mode, reset the layout and open the palette (`view.preferences` is the Preferences asset's own command, `view.saveLayout` is run by `EditorDialogsModel`). It
-    // also turns the chords of the hotkey map into those events. The toolbar's buttons are the asset `MainToolbarPanel`; its commands game.play, game.pause and game.step drive the engine's GamePause,
-    // which is the single truth: the model copies its flag every frame.
+    // also turns the chords of the hotkey map into those events. The menu bar is the asset `MainMenuPanel` and the toolbar's buttons the asset `MainToolbarPanel`, both drawn through
+    // `PanelBarsRegistry`; the commands game.play, game.pause and game.step drive the engine's GamePause, which is the single truth: the model copies its flag every frame.
     //
     // It is the IEditorLayoutHost of the editor (registered in Initialize, for its lifetime): the models of the panel assets reach the
     // settings and the layouts through it. A NotifyPreferencesChanged is applied and announced in the next Update.
