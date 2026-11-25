@@ -237,7 +237,7 @@ namespace BECore {
         /// False when the next draw pass has to rebuild the draw list: a node, a component, a layer or the editor flags changed since the last build
         bool IsDrawListValid() const;
 
-        /// Called by SceneDrawSystem::Run() only, once it has written SceneDrawItem::rank of every node
+        /// Called by SceneDrawSystem::Run() only, once the draw items are sorted: writes the rank of every node (its index in SceneDrawList::items)
         void DrawRanksWritten(PassKey<SceneDrawSystem>);
 
         /// How many times SceneDrawSystem rebuilt the draw list; a steady frame leaves it as it is
@@ -245,6 +245,9 @@ namespace BECore {
 
         /// SceneDrawSystem::Run() only: the list it fills and walks
         SceneDrawList& GetDrawList(PassKey<SceneDrawSystem>);
+
+        /// The list of the last draw pass; its `items` are the draw order, one per node
+        const SceneDrawList& GetDrawList() const;
 
         /// Called by SceneDrawSystem::Run() only, once it has filled the draw list: the list holds until the next change
         void DrawListBuilt(PassKey<SceneDrawSystem>);
@@ -276,7 +279,7 @@ namespace BECore {
         Optional<int32_t> _viewOverride;     // a tool's forced view, see SetViewOverride(); never saved
         bool _active = false;
         uint32_t _drawPass = 0;
-        bool _drawRanksValid = false;  // SceneDrawItem::rank is what the tree says: set by the draw system, cleared by every edit of the tree
+        bool _drawRanksValid = false;  // SceneNode::_drawRank is what the tree says: set by the draw system, cleared by every edit of the tree
         bool _drawing = false;         // a draw pass is running: the hooks that make the list stale must not be called
         uint32_t _drawListBuilds = 0;
         SceneDrawList _drawList;

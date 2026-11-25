@@ -80,14 +80,14 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a 
 - Only the active scene draws, so `OnDraw()` needs no `IsSceneActive()` check. `RemoveChild()` destroys the entities of the removed subtree.
 - **Override `OnDraw()`, never subscribe to draw.** `OnDraw()` only reads state and issues renderer calls: it must not add or remove nodes or components, call `SetLayer()` or change the editor flags: the list holds raw pointers and is stale after such a change (Debug asserts).
 - **A node's layer changes only through `SceneNode::SetLayer()`**, which makes the list and the ranks stale: a direct write to the reflected `_layer` (reflection, a field visitor) shows in the order only after the next rebuild, which nothing triggers.
-- `Scene::GetDrawRank(node)` is a node's position in this order (a `SceneDrawItem` in the registry, written with the list, so O(1) after any pass); `GetInputOrder(component)` = rank times `kMaxComponentsPerNode` plus the component's index, the key of every `UIInput` handler; `GetDrawPass()` counts the `Draw()` calls, so a target takes input only for a node that drew; the clip of a `ClipRectComponent` is pushed around the entries that name its node as clip owner (`SceneDrawList::clips`).
+- `Scene::GetDrawRank(node)` is a node's position in this order (its `SceneDrawItem` is in `SceneDrawList::items`, sorted, and the index is written into the node with the list, so O(1) after any pass); `GetInputOrder(component)` = rank times `kMaxComponentsPerNode` plus the component's index, the key of every `UIInput` handler; `GetDrawPass()` counts the `Draw()` calls, so a target takes input only for a node that drew; the clip of a `ClipRectComponent` is pushed around the entries that name its node as clip owner (`SceneDrawList::clips`).
 - **Editor flags** (`SceneNode::GetEditorFlags()`: `Hidden`, `Locked`) are a plain member: no file, `Serialize` or `DuplicateNode` sees it, `Scene::ClearEditorFlags()` resets a tree, `SceneManager::ClearEditorFlags()` every loaded scene (the scene editor calls it when it dies). A hidden node and its subtree have no entry but keep item and rank and still update.
 
 **Rotation, flip and blend** (renderer side: `.claude/rules/rendering-module.md`): `TransformComponent::_rotation` (degrees, clockwise) about `_pivotX` / `_pivotY`, **normalized in the node's rect** (0.5 = center), also for a `Contain` sprite; `_flipX` / `_flipY` mirror the UVs. `_blend` (`Alpha`, `Add`, `Multiply`) is scoped to that one draw. Not rotated: the hit rect of a pointer target, `TextComponent`, UI canvases.
 
 ## Why EnTT
 
-The object model stays `SceneNode` + `IComponent` (reflection, the XML and the inspector build on it). The `entt::registry` of a `Scene` holds one entity per node and the `SceneDrawItem` (order, rank) written with the draw list ("Draw order"); the components stay the truth.
+The object model stays `SceneNode` + `IComponent` (reflection, the XML and the inspector build on it). The `entt::registry` of a `Scene` holds one entity per node; the components stay the truth.
 
 - It is **not** a pure ECS: the components are not stored in EnTT pools. Component fields have no setter hooks, so a pool copy would be refreshed every frame, which costs the read it was meant to save.
 - One `IRenderer` call per quad or sprite, nothing batched (`.claude/rules/rendering-module.md`).

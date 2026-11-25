@@ -111,11 +111,14 @@ namespace BECore {
         if (!_rootNode) {
             return 0;
         }
-        if (_drawRanksValid && node._scene == this && _registry->valid(node._entity)) {
+        if (_drawRanksValid && node._scene == this) {
             // The layer is the one thing a node's item could hold that differs from the node itself (a field written without SetLayer())
-            const SceneDrawItem* item = _registry->try_get<SceneDrawItem>(node._entity);
-            if (item && item->node == &node && item->layer == node.GetLayer()) {
-                return item->rank;
+            const int32_t rank = node._drawRank;
+            if (rank >= 0 && static_cast<size_t>(rank) < _drawList.items.size()) {
+                const SceneDrawItem& item = _drawList.items[static_cast<size_t>(rank)];
+                if (item.node == &node && item.layer == node.GetLayer()) {
+                    return rank;
+                }
             }
         }
         RankWalk walk;
@@ -162,6 +165,9 @@ namespace BECore {
     }
 
     void Scene::DrawRanksWritten(PassKey<SceneDrawSystem>) {
+        for (size_t rank = 0; rank < _drawList.items.size(); ++rank) {
+            _drawList.items[rank].node->_drawRank = static_cast<int32_t>(rank);
+        }
         _drawRanksValid = true;
     }
 
@@ -170,6 +176,10 @@ namespace BECore {
     }
 
     SceneDrawList& Scene::GetDrawList(PassKey<SceneDrawSystem>) {
+        return _drawList;
+    }
+
+    const SceneDrawList& Scene::GetDrawList() const {
         return _drawList;
     }
 

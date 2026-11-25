@@ -9,7 +9,6 @@
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
-#include <entt/entt.hpp>
 
 namespace BECore {
 
@@ -86,9 +85,10 @@ namespace BECore {
             }
         }
 
-        // Depth-first, a parent before its children: the traversal index is the scene order. emplace_or_replace does not allocate once
-        // the node has its item. A hidden node hides its whole subtree but keeps its rank. A node that clips appends its owner to @p clips.
-        void WriteDrawItems(entt::registry& registry, SceneNode& node, uint32_t& order, bool ancestorHidden, const SceneNode* ancestorClip, int32_t ancestorClipIndex, Vector<SceneClipOwner>& clips) {
+        // Depth-first, a parent before its children: the traversal index is the scene order. The push_back does not allocate once the
+        // vector has its capacity. A hidden node hides its whole subtree but keeps its rank. A node that clips appends its owner to @p clips.
+        void WriteDrawItems(Vector<SceneDrawItem>& items, SceneNode& node, uint32_t& order, bool ancestorHidden, const SceneNode* ancestorClip, int32_t ancestorClipIndex,
+                            Vector<SceneClipOwner>& clips) {
             const bool hidden = ancestorHidden || node.HasEditorFlag(EditorFlags::Hidden);
             const NodeParts parts = FindParts(node);
             const SceneNode* clip = ancestorClip;
@@ -98,16 +98,16 @@ namespace BECore {
                 clipIndex = static_cast<int32_t>(clips.size());
                 clips.push_back(SceneClipOwner{parts.transform, ancestorClipIndex});
             }
-            registry.emplace_or_replace<SceneDrawItem>(node.GetEntity(), node.GetLayer(), order++, &node, 0, hidden, clip, clipIndex);
+            items.push_back(SceneDrawItem{node.GetLayer(), order++, &node, hidden, clip, clipIndex});
             for (const auto& child : node.GetChildren()) {
-                WriteDrawItems(registry, *child, order, hidden, clip, clipIndex, clips);
+                WriteDrawItems(items, *child, order, hidden, clip, clipIndex, clips);
             }
         }
 
-        // One entry per drawing component of every visible node, in the order of the sorted storage and, inside a node, of its components:
+        // One entry per drawing component of every visible node, in the order of the sorted items and, inside a node, of its components:
         // the order of the entries is the draw order. The first quad and the first sprite of a node draw when the node has a transform.
-        void FillEntries(entt::registry& registry, SceneDrawList& list) {
-            for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
+        void FillEntries(SceneDrawList& list) {
+            for (const SceneDrawItem& item : list.items) {
                 if (item.hidden) {
                     continue;
                 }
@@ -175,7 +175,6 @@ namespace BECore {
 
     void SceneDrawSystem::Run(Scene& scene) {
         BE_PROFILE_SCOPE("SceneDrawSystem::Run");
-        entt::registry& registry = scene.GetRegistry();
         SceneDrawList& list = scene.GetDrawList({});
         scene.SetDrawing(true, {});
 
@@ -184,29 +183,24 @@ namespace BECore {
             BE_PROFILE_SCOPE("Rebuild draw list");
             list.entries.clear();
             list.clips.clear();
+            list.items.clear();
             {
                 BE_PROFILE_SCOPE("Sync draw items");
                 uint32_t order = 0;
-                WriteDrawItems(registry, scene.GetRootNode(), order, false, nullptr, -1, list.clips);
+                WriteDrawItems(list.items, scene.GetRootNode(), order, false, nullptr, -1, list.clips);
             }
 
-            // The keys are unique (order is the traversal index), so the result does not depend on the sort being stable.
-            // EnTT sorts so that a view iterates in the order of the comparator: the first item of the view is the lowest (layer, order).
+            // The keys are unique (order is the traversal index), so the result does not depend on the sort being stable, and an unstable
+            // sort needs no scratch buffer to allocate.
             {
                 BE_PROFILE_SCOPE("Sort draw items");
-                registry.sort<SceneDrawItem>([](const SceneDrawItem& a, const SceneDrawItem& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
+                eastl::sort(list.items.begin(), list.items.end(), [](const SceneDrawItem& a, const SceneDrawItem& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
             }
 
-            // The rank is the index in the sorted storage; written before the first OnDraw() because a component may ask for it there.
-            {
-                int32_t rank = 0;
-                for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
-                    item.rank = rank++;
-                }
-                scene.DrawRanksWritten({});
-            }
+            // The rank is the index in the sorted items; written before the first OnDraw() because a component may ask for it there.
+            scene.DrawRanksWritten({});
 
-            FillEntries(registry, list);
+            FillEntries(list);
             scene.DrawListBuilt({});
         }
 
