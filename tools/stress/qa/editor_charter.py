@@ -12,8 +12,8 @@ session's and `tools/qa/bagi_qa_scene_file.py`'s):
   hierarchy must show the renamed node. Sessions `<out>/edit` and `<out>/reload`.
 - **panels**: open every panel of the View menu, a rebindable chord closes and opens the Game panel, the command palette opens, filters and closes, the
   `ui` scene is shown in the editor; a picture of each. Nothing is saved, so a write of the content file is the finding `editor.content_file_written`.
-  The `ui` scene's `ui_tree` is not checked: the canvas of the `Screen` space takes the shape of the viewport panel (a 1436 x 1444 canvas in the default
-  layout), the stress grid fills a 1920 x 1080 view, and the labels of the second column are then `OutsideCanvas`: a property of the scene, not of the editor.
+  The `ui` scene's `ui_tree` is not checked: the canvas of the `Screen` space takes the shape of the viewport panel while the stress grid
+  fills a view of its own size, so the labels of the second column are `OutsideCanvas`: a property of the scene, not of the editor.
   Session `<out>/panels`.
 
 Save writes the tracked `tools/stress/config/SceneConfig.xml` (the content roots are compiled into the executable, which therefore has to be this
@@ -26,6 +26,7 @@ git work tree, 77 no executable or a build without the editor (`status.runMode` 
 """
 
 import argparse
+import contextlib
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -119,6 +120,12 @@ def finish(name: str, session: QaSession, content_writes_expected: bool) -> Play
     return Played(name, session, finished.drafts)
 
 
+def abandon(session: QaSession, content_writes_expected: bool) -> None:
+    """Ends a session whose charter died on an unexpected exception: the game is stopped and the content file put back, then the exception goes on."""
+    with contextlib.suppress(SessionError):
+        session.finish(content_writes_expected=content_writes_expected)
+
+
 def move_failed(session: QaSession, error: SessionError) -> None:
     """A move that could not be made is the editor not showing what a person sees, or a game that is gone: a finding, and the charter ends."""
     session.flag(NAME_MOVE_FAILED, str(error), {"error": str(error)})
@@ -155,6 +162,9 @@ def play_edit(exe: Path, out: Path, content_file: Path, invariants: checks.Invar
         move_failed(session, error)
     except scene_file.SceneFileError as error:
         session.flag(NAME_MOVE_FAILED, f"the charter's own edits do not fit the file before: {error}")
+    except BaseException:
+        abandon(session, content_writes_expected=True)
+        raise
     return finish(SESSION_EDIT, session, content_writes_expected=True), saved
 
 
@@ -181,6 +191,9 @@ def play_reload(exe: Path, out: Path, content_file: Path, saved: bytes) -> Playe
         session.shot("reloaded", EDITOR_SHOT_SIZE)
     except SessionError as error:
         move_failed(session, error)
+    except BaseException:
+        abandon(session, content_writes_expected=False)
+        raise
     return finish(SESSION_RELOAD, session, content_writes_expected=False)
 
 
@@ -204,6 +217,9 @@ def play_panels(exe: Path, out: Path) -> Played:
         session.note("the ui scene shown in the editor; its ui_tree is not checked (the canvas takes the shape of the viewport panel, see qa-project.md)")
     except SessionError as error:
         move_failed(session, error)
+    except BaseException:
+        abandon(session, content_writes_expected=False)
+        raise
     return finish(SESSION_PANELS, session, content_writes_expected=False)
 
 

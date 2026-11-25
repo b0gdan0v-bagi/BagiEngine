@@ -50,7 +50,7 @@ PALETTE_CHORD = ("P", ("ctrl",))  # `view.commandPalette`, rebindable
 GAME_PANEL_CHORD = ("G", ("ctrl", "shift"))  # `view.game`, rebindable
 PALETTE_ESCAPES = 2  # the first Escape leaves the focused query field, the second closes the popup
 FIELD_LABEL_FORMAT = "##{}"
-ICON_ROW = re.compile("^[-] (?P<name>[^#]+)$")  # a hierarchy row is a Lucide glyph, a space and the node's name
+ICON_ROW = re.compile("^[\ue000-\uf8ff] (?P<name>[^#]+)$")  # a hierarchy row is a Lucide glyph, a space and the node's name
 FIELD_LABEL = re.compile(r"^##\d+$")
 COMPONENT_TYPE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 

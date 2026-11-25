@@ -85,7 +85,7 @@ What is not a bug. The module's `KNOWN_DEVIATIONS` holds the names; the reason f
 
 Engine, `BagiStress`: none today. These are not names but properties the editor charters meet, so they are no findings:
 
-- The `ui` scene in the editor: its `Screen` canvas takes the shape of the viewport panel (1436 x 1444 in the default layout), while the stress grid fills a 1920 x 1080 view, so its labels are `OutsideCanvas` there. The panels charter shows the scene and leaves its `ui_tree` unchecked; a name in `KNOWN_DEVIATIONS` would hide the same finding in Game mode.
+- The `ui` scene in the editor: its `Screen` canvas takes the shape of the viewport panel (not the stress grid's view size), while the stress grid fills a view of its own size, so its labels are `OutsideCanvas` there. The panels charter shows the scene and leaves its `ui_tree` unchecked; a name in `KNOWN_DEVIATIONS` would hide the same finding in Game mode.
 - A saved stress scene holds the nodes its component made (`EDITOR_GENERATED`) and the defaults the writer adds to a transform (`EDITOR_ADDED_DEFAULTS`); the second start then shows the generated nodes twice (the file's and the component's).
 
 ## The editor
@@ -96,7 +96,7 @@ How `/qa` and `/qa-loop` use the editor (`tools/qa/CLAUDE.md`, "The session"; th
 - **Save writes the checkout's content file** (the content roots are compiled into the executable, so a copy cannot be edited instead): the executable must be this checkout's, the library puts the file back after every session (also a lost game, `replay` and every `shrink` probe), and `git status --short` is checked at the end of the run.
 - **A saved file holds more than the edits** (the live tree, the writer's defaults, a comment with `--` rewritten): `compare_scene_files` takes the game's allow lists, never a loose comparison.
 - **A build without the editor** answers `status.runMode` Game: the charter is skipped (exit 77), not a finding.
-- **A reproduction with `--editor` in its header never goes into the `Scenario folder`**: `be_add_game_scenario_tests` plays every `*.jsonl` there in Game mode, and one that clicks Save would write the content file of the checkout. The regression test of a fix is a gtest (`SceneEditorSaveTest` is the pattern) and the plan `bug-<short>-repro.md` keeps the scenario and the command of the charter.
+- **A reproduction with `--editor` in its header never goes into the `Scenario folder`**: `be_add_game_scenario_tests` runs every `*.jsonl` there through `bagi_play.py`, which starts the game with the header's flags, so `--editor` reaches the game and `bagi_play.py` has no guard for the content file: one that clicks Save would write the checkout. The pytest `test_no_scenario_of_the_stress_folder_starts_the_editor` of `tools/qa/tests/test_stress_editor.py` fails for such a file. The regression test of a fix is a gtest (`SceneEditorSaveTest` is the pattern) and the plan `bug-<short>-repro.md` keeps the scenario and the command of the charter.
 
 ## Screenshots
 

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import bagi_qa_scene_file as scene_file
+import scenario
 from bagi_qa_checks import InvariantsError, load_invariants
 
 ENGINE = Path(__file__).resolve().parents[3]
@@ -118,3 +119,11 @@ def test_an_executable_of_another_checkout_is_refused_and_the_content_file_is_le
     assert charter.main(["--exe", str(qa_game_exe), "--out", str(tmp_path / "out"), "--charter", "panels"]) == charter.EXIT_USAGE
     assert "not in the checkout" in capsys.readouterr().out
     assert content.read_bytes() == before
+
+
+def test_no_scenario_of_the_stress_folder_starts_the_editor():
+    # be_add_game_scenario_tests plays these through bagi_play.py, which has no guard for the content file an editor's Save writes
+    folder = ENGINE / "tools" / "stress" / "tests" / "scenarios"
+    files = sorted(folder.glob("*.jsonl"))
+    assert files
+    assert [file.name for file in files if "--editor" in scenario.load(file)[0].flags] == []

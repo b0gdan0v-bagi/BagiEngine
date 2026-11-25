@@ -3,6 +3,7 @@ import subprocess
 
 import pytest
 
+import bagi_qa
 import bagi_qa_checks as checks
 import bagi_qa_repro as repro
 import bagi_qa_scene_file as scene_file
@@ -232,4 +233,26 @@ def test_every_probe_of_a_shrink_is_guarded(qa_game_exe, out_dir, content_file, 
     assert [call.method for call in result.calls] == ["perform_action"] * 2
     assert len(released) == result.probes + 2  # the whole scenario, each probe, the last play
     assert [content_file.resolve()] in [restored for _, restored in released]  # the plays that clicked Save had it restored
+    assert content_file.read_text() == ORIGINAL
+
+
+def test_an_editor_start_with_unknown_content_files_is_refused_before_the_game_starts(qa_game_exe, out_dir, content_file, monkeypatch):
+    started = []
+    session = QaSession(out_dir, "no content files")
+    original = session._game.launch
+    monkeypatch.setattr(session._game, "launch", lambda **kwargs: started.append(kwargs) or original(**kwargs))
+    with pytest.raises(SessionError, match="content_files"):
+        session.launch(exe=str(qa_game_exe), editor=True)
+    assert started == []
+    session.launch(exe=str(qa_game_exe), editor=True, content_files=[])  # the explicit opt-out
+    session.finish()
+
+
+def test_a_replay_of_an_editor_scenario_with_unknown_content_files_is_a_repro_error_and_exit_2(qa_game_exe, out_dir, content_file, invariants, capsys):
+    path = record_a_save(qa_game_exe, out_dir, content_file, invariants)
+    header, steps = repro.load_scenario(path)
+    with pytest.raises(repro.ReproError, match="content_files"):
+        repro.replay_steps(qa_game_exe, header, steps, None)
+    assert bagi_qa.main(["replay", "--exe", str(qa_game_exe), str(path)]) == repro.EXIT_USAGE
+    assert "content_files" in capsys.readouterr().out
     assert content_file.read_text() == ORIGINAL

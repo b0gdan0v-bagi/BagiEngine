@@ -214,7 +214,7 @@ class QaSession:
         for the start only, and needs `status.runMode` to be `Editor`: a build without the editor is stopped and raises `NoEditorError`. The editor's Save
         writes into the checkout, so `content_files` (default: `EDITOR_CONTENT_FILES` of the invariants module, relative to the folder that holds
         `.claude/rules/qa-project.md` above it) are backed up before the game starts and put back by `finish()`, also when the game is lost or does not
-        start. The executable must belong to the checkout of those files (the content roots are compiled into it). Without the editor nothing changes.
+        start; an editor launch that has neither is refused with `SessionError` before the process starts. The executable must belong to the checkout of those files (the content roots are compiled into it). Without the editor nothing changes.
         """
         if self._launched:
             raise SessionError("this session already launched a game; make another QaSession")
@@ -415,6 +415,10 @@ class QaSession:
     def _arm_guard(self, exe: str | None, preset: str | None, game: str | None, content_files: Sequence[str | Path] | None) -> None:
         files = self._content_file_paths(content_files)
         if not files:
+            if content_files is None:
+                raise SessionError(
+                    "an editor start needs to know which content files its Save writes: pass `content_files` (an empty list opts out) or an invariants module with EDITOR_CONTENT_FILES"
+                )
             return
         exe_path = Path(exe).expanduser().resolve() if exe else preset_executable(preset or "", game or "").resolve()
         top = _git_toplevel(files[0].parent)
