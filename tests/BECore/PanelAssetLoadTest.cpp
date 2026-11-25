@@ -172,7 +172,16 @@ namespace BECore::Tests {
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files.x["/>)", "t", "visible: bad path");
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="1a.x"/>)", "t", "source name");
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files."/>)", "t", "path after the source is empty");
-        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" argument="a["/>)", "b", "argument: bad path");
+    }
+
+    TEST(PanelAssetLoadTest, AButtonArgumentIsALiteralAndItsWidthAnExtent) {
+        // `a[` is no path, and a button has no row to read one from: it is only text
+        const PanelLoadResult literal = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelButton" id="b" command="c.d" argument="a[" width="9"/>)")));
+        EXPECT_TRUE(literal.issues.empty()) << Joined(literal.issues);
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" argument="a&#10;b"/>)", "b", "argument must not hold a control character");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" width="-1"/>)", "b", "width must be from 0 to");
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelButton" id="b" command="c.d" argument="{}"/>)", String(PanelAssetLimits::kMaxTextBytes + 1, 'a'))), "b", "argument is longer than");
+        ExpectSingleIssue(R"(<element type="PanelTable" id="t" source="a.b"><columns><column id="c" type="Button" command="c.d" argument="a["/></columns></element>)", "t.c", "argument: bad path");
     }
 
     TEST(PanelAssetLoadTest, ConditionExpressionsAreChecked) {

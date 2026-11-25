@@ -22,7 +22,7 @@ namespace BECore::Tests {
       <elements>
         <element type="PanelRow" id="toolbar">
           <elements>
-            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" enableWhen="files.hasPending"/>
+            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" argument="all files" width="9" enableWhen="files.hasPending"/>
             <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
             <element type="PanelCheckbox" id="errors" bind="files.showErrors" text="Errors" labelBind="files.errorsText" look="Toggle" style="Error"/>
             <element type="PanelCombo" id="category" bind="files.category" items="files.categories" itemField="name" width="11"/>
@@ -106,6 +106,10 @@ namespace BECore::Tests {
         const auto* row = ElementAs<PanelRow>(section->elements[0]);
         ASSERT_NE(row, nullptr);
         ASSERT_EQ(row->elements.size(), 5u);
+        const auto* rescan = ElementAs<PanelButton>(row->elements[0]);
+        ASSERT_NE(rescan, nullptr);
+        EXPECT_EQ(rescan->argument, "all files");
+        EXPECT_FLOAT_EQ(rescan->width, 9.0f);
         const auto* input = ElementAs<PanelInput>(row->elements[1]);
         ASSERT_NE(input, nullptr);
         EXPECT_FLOAT_EQ(input->width, 12.5f);

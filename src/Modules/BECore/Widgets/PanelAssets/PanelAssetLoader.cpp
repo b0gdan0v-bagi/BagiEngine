@@ -195,7 +195,8 @@ namespace BECore {
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Command(where, "command", button->command);
                     Condition(where, "enableWhen", button->enableWhen);
-                    RelativePath(where, "argument", button->argument);
+                    Literal(where, "argument", button->argument);
+                    Extent(where, "width", button->width);
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Binding(where, "source", table->source, true);
                     ScrollLimit(where, "scrollRows", table->scrollRows, PanelAssetLimits::kMaxScrollRows);
@@ -362,6 +363,17 @@ namespace BECore {
                 }
                 if (const auto parsed = ParsePropertyPath(text); !parsed) {
                     _issues.Add(where, Format("{}: bad path: {}", field, parsed.error().message));
+                }
+            }
+
+            /// A text that goes to the model as it is: the length is `CheckTexts`', here only what would break a log line or a command
+            void Literal(StringView where, StringView field, const String& text) {
+                for (const char c : text) {
+                    const auto byte = static_cast<uint8_t>(c);
+                    if (byte < kFirstPrintable || byte == kDelete) {
+                        _issues.Add(where, Format("{} must not hold a control character", field));
+                        return;
+                    }
                 }
             }
 

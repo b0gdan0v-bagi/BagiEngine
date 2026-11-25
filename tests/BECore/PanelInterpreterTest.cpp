@@ -62,6 +62,19 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        constexpr float kWideButtonEm = 9.0f;
+        constexpr const char* kLiteralButton = R"(
+<PanelAsset id="Literal" title="Literal">
+  <elements>
+    <element type="PanelButton" id="record" text="Record" command="probe.record" argument="start now" width="9"/>
+    <element type="PanelRow" id="line">
+      <elements>
+        <element type="PanelButton" id="iconic" text="Icon" icon="check" command="probe.icon" argument="icon arg"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
         constexpr const char* kSelectable = R"(
 <PanelAsset id="Pick" title="Pick">
   <elements>
@@ -533,6 +546,19 @@ namespace BECore::Tests {
         ClickAt(Locate(plain));
         EXPECT_EQ(lastCommand, "probe.plain");
         EXPECT_TRUE(lastArgument.empty());
+    }
+
+    TEST_F(PanelInterpreterTest, AButtonPassesItsLiteralArgumentAndHasTheWidthItWasGiven) {
+        Load(kLiteralButton);
+
+        ClickAt(Locate(Chain(HostId(), {"record", "Record"})));
+        EXPECT_EQ(lastCommand, "probe.record");
+        EXPECT_EQ(lastArgument, "start now");
+        ClickAt(Locate(Chain(HostId(), {"line", "iconic", ICON_LC_CHECK " Icon"})));
+        EXPECT_EQ(lastArgument, "icon arg");
+
+        const float width = ImGui::FindWindowByName(kHostName)->ContentSize.x;
+        EXPECT_NEAR(width, kWideButtonEm * ImGui::GetFontSize(), 1.0f);
     }
 
     TEST_F(PanelInterpreterTest, ARowsButtonHasTheIdOfItsTableRowAndColumnAndClicksWithItsOwnRow) {

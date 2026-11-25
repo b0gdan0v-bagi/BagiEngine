@@ -14,6 +14,8 @@ namespace BECore::Fuzz {
     namespace {
 
         constexpr StringView kMoreIssuesPart = "more issues";
+        constexpr uint8_t kFirstPrintable = 0x20;
+        constexpr uint8_t kDelete = 0x7F;
 
         bool IsIdCharacter(char c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-';
@@ -141,6 +143,15 @@ namespace BECore::Fuzz {
                 }
             }
 
+            void Literal(const String& text) {
+                for (const char c : text) {
+                    const auto byte = static_cast<uint8_t>(c);
+                    if (byte < kFirstPrintable || byte == kDelete) {
+                        Fail();
+                    }
+                }
+            }
+
             void Elements(const Vector<IntrusivePtr<PanelElement>>& list, size_t depth) {
                 if (list.empty()) {
                     return;
@@ -237,7 +248,8 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                     Condition(button->enableWhen);
-                    RelativePath(button->argument);
+                    Literal(button->argument);
+                    Extent(button->width);
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Text(table->source);
                     Binding(table->source, true);

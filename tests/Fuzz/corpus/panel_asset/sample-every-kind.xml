@@ -8,7 +8,7 @@
       <elements>
         <element type="PanelRow" id="toolbar">
           <elements>
-            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" enableWhen="files.hasPending"/>
+            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" argument="all files" width="9" enableWhen="files.hasPending"/>
             <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
             <element type="PanelCheckbox" id="errors" bind="files.showErrors" text="Errors" labelBind="files.errorsText" look="Toggle" style="Error"/>
             <element type="PanelCombo" id="category" bind="files.category" items="files.categories" itemField="name" width="11"/>

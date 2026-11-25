@@ -451,17 +451,17 @@ namespace BECore {
         const PanelButton& button = *prepared.element->Cast<PanelButton>();
         const char* tooltip = OrNull(button.tooltip);
         ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
+        const float widthPixels = button.width * ImGui::GetFontSize();
         bool clicked = false;
         if (prepared.glyph != nullptr) {
-            clicked = IconTextButton(prepared.glyph, button.text.c_str(), tooltip);
+            clicked = IconTextButton(prepared.glyph, button.text.c_str(), tooltip, widthPixels);
         } else {
-            clicked = ImGui::Button(button.text.empty() ? "##button" : button.text.c_str());
+            clicked = ImGui::Button(button.text.empty() ? "##button" : button.text.c_str(), ImVec2(widthPixels, 0.0f));
             ItemTooltip(tooltip);
         }
         ImGui::EndDisabled();
-        // A button of its own has no row to read an argument from
         if (clicked && !button.command.empty()) {
-            NoteClick(button.command, StringView{});
+            NoteClick(button.command, button.argument);
         }
     }
 
