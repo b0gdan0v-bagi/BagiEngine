@@ -1,6 +1,7 @@
 #include "ImGuiWidget.h"
 
 #include <BECore/Control/ControlService.h>
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
@@ -13,11 +14,40 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/ImGuiWidget.gen.hpp>
+#include <Widgets/ImGuiLayoutText.h>
 #include <Widgets/ImGuiTheme.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace BECore {
+
+    namespace {
+
+        /// A dock layout of a few dozen windows is some KB; a larger file is not ours and is left to ImGui
+        constexpr size_t kMaxIniBytes = size_t{1} << 20;
+
+        /// Settings are keyed by the hash of a window's name, and the Config Editor became `Config Editor###ConfigEditor` when it turned into a panel asset: an
+        /// ini of the old build would float it (and keep it floating, ImGui writes the new section back). So the ini is renamed in memory before ImGui reads it.
+        void MigrateLegacyIniWindowNames(const Path& iniPath) {
+            if (!GetFileInfo(iniPath)) {
+                return;
+            }
+            const std::expected<String, String> text = ReadTextFile(iniPath, kMaxIniBytes);
+            if (!text) {
+                LOG_WARNING("ImGui: cannot read '{}': {}; the layout is left as it is", iniPath.View(), text.error());
+                return;
+            }
+            const String migrated = MigrateLegacyWindowNames(*text);
+            if (migrated == *text) {
+                return;
+            }
+            // NewFrame loads the file itself only while SettingsLoaded is false, and asserts if settings were loaded by hand without the flag
+            ImGui::LoadIniSettingsFromMemory(migrated.c_str(), migrated.size());
+            ImGui::GetCurrentContext()->SettingsLoaded = true;
+        }
+
+    }  // namespace
 
     float ImGuiFrameSeconds(bool manualClock, double clockDelta, float backendDelta) {
         if (!manualClock) {
@@ -51,6 +81,7 @@ namespace BECore {
         // Store imgui.ini in config/ (project root), so it survives clean builds.
         _iniFilePath = CoreManager::GetFileSystem().GetRootPath() / "config" / "imgui.ini";
         io.IniFilename = _iniFilePath.CStr();
+        MigrateLegacyIniWindowNames(_iniFilePath);
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
