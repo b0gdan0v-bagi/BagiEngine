@@ -8,7 +8,7 @@ The benchmark runner of the skills `perf` and `perf-investigate` (`.claude/skill
 | `perf_stats.py` | mean, t interval, Welch comparison, the verdicts |
 | `perf_baseline.py` | the machine fingerprint, the baseline plan (read, merge, append), the todo store through `tools/todo/todo.py` |
 | `headless_frames.py` | a game's benchmark command (the engine's own set uses `stress_frames.py`): a game `--headless --manual-clock`, N frames stepped over the control API, one JSON line of `frame_stats` means |
-| `stress_frames.py` | a benchmark command: `BagiStress` `--headless --control --manual-clock` with the `--stress-*` flags, stepped in chunks until the game quits by itself, then the game's own JSON line (fixed run or `--ramp`) printed unchanged; no line, a non-zero exit code, the step bound or the time limit is an error with the game's log tail |
+| `stress_frames.py` | a benchmark command: `BagiStress` `--headless --control --manual-clock` with the `--stress-*` flags, stepped in chunks until the game quits by itself, then the game's own JSON line (fixed run or `--ramp`) printed unchanged; no line, a non-zero exit code, the step bound or the time limit is an error with the game's log tail. `--backend sdl-gpu|vulkan` runs in a hidden window instead of `--headless` (`--no-batching` turns the batcher off); a machine without the backend ends in `skip: <reason>` and exit code 77 |
 | `trace_summary.py` | a Chrome trace of the profiler: zones by self / total time and allocations (with `otherData.allocNames` and `allocSizes`: by name, by size bucket), the frame-time distribution, the counters; a window of the ring (`WriteRingTraceJson`: `Frame` instants, `otherData.ringFrames`) reads the same way |
 | `tests/` | pytest of all of it (a whole run over a fake benchmark and a fake store; no build) |
 
@@ -18,12 +18,12 @@ python3 <engine>/tools/perf/perf.py [--fast] [--only a,b] [--repetitions N] [--n
 python3 <engine>/tools/perf/perf.py --update-baseline [--env-file F]  # the owner's word only (the skill asks): measures, then writes
 python3 <engine>/tools/perf/perf.py --update-baseline --from-report FILE   # the owner's word only: writes the run of a --json report
 python3 <engine>/tools/perf/perf.py --trace NAME [--trace-file F]   # the profile preset, one run with a trace (build/perf/), its summary
-python3 <engine>/tools/perf/stress_frames.py --exe build/macos-release/bin/BagiStress --scene sprites --count 5000 --frames 300 --warmup 30   # or --ramp
+python3 <engine>/tools/perf/stress_frames.py --exe build/macos-release/bin/BagiStress --scene sprites --count 5000 --frames 300 --warmup 30   # or --ramp, --backend sdl-gpu
 python3 <engine>/tools/perf/trace_summary.py trace.json [--top N] [--json]
 .venv/bin/python -m pytest tools/perf/tests                  # in the engine
 ```
 
-Exit code of `perf.py`: 0 (no regression), 3 (a regression), 1 (a failed build or run, a bad set, the store unreachable). A failed run prints the tails of its stdout and stderr apart and writes the whole output to `build/perf/<name>-failed.log`, the next failure of that benchmark overwriting it.
+Exit code of `perf.py`: 0 (no regression), 3 (a regression), 1 (a failed build or run, a bad set, the store unreachable). A command that exits 77 after printing a `skip: <reason>` line (a backend the machine lacks) is **skipped**, not failed: `skipped: <name>: <reason>` on stderr, `SKIPPED` in the report, a `skipped` map in `--json`; it has no verdict, no `results` and no baseline record, and does not change the exit code. A failed run prints the tails of its stdout and stderr apart and writes the whole output to `build/perf/<name>-failed.log`, the next failure of that benchmark overwriting it.
 
 ## The benchmark set
 

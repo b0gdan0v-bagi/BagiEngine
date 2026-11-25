@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Application/RenderBackendChoice.h>
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/MainWindow/WindowSimulation.h>
 #include <BECore/Reflection/IDeserializer.h>
@@ -22,6 +23,8 @@ namespace BECore {
         inline constexpr StringView kReplayExit = "--replay-exit";
         inline constexpr StringView kWindow = "--window";
         inline constexpr StringView kDensity = "--density";
+        inline constexpr StringView kBackend = "--backend";
+        inline constexpr StringView kHiddenWindow = "--hidden-window";
     }  // namespace ControlArguments
 
     struct ApplicationConfigLoad;  // Application/ApplicationConfig.h, which includes this file
@@ -29,13 +32,15 @@ namespace BECore {
     /// How the external control API is started: off by default, a development tool that has to be asked for
     struct ControlSettings {
         bool enabled = false;
-        uint16_t port = kDefaultControlPort;  // 0 asks the system for a free port
-        bool manualClock = false;             // frames run only on a `step`; ControlService::SetManualClock
-        bool headless = false;                // no window: the SDL software renderer on the dummy video driver (ApplicationOptions)
-        String replayPath;                    // --replay=FILE: Application plays this replay file once the game is up; empty is none
-        bool replayExit = false;              // --replay-exit: the application quits when the replay is over
-        Optional<WindowSize> windowSize;      // --window=WxH: the start size of a headless window, in window units; inside WindowLimits
-        Optional<float> density;              // --density=D: its output pixels per window unit; inside WindowLimits. Both flags need headless
+        uint16_t port = kDefaultControlPort;                      // 0 asks the system for a free port
+        bool manualClock = false;                                 // frames run only on a `step`; ControlService::SetManualClock
+        bool headless = false;                                    // no window: the SDL software renderer on the dummy video driver (ApplicationOptions)
+        String replayPath;                                        // --replay=FILE: Application plays this replay file once the game is up; empty is none
+        bool replayExit = false;                                  // --replay-exit: the application quits when the replay is over
+        Optional<WindowSize> windowSize;                          // --window=WxH: the start size of a headless window, in window units; inside WindowLimits
+        Optional<float> density;                                  // --density=D: its output pixels per window unit; inside WindowLimits. Both flags need headless
+        RenderBackendChoice backend = RenderBackendChoice::Auto;  // --backend=software|sdl-gpu|vulkan; Auto is not given. Software needs headless, the others a window
+        bool hiddenWindow = false;                                // --hidden-window: the real window is created hidden; needs the API and a window
         /// Findings of the command line that are no error: an argument that looks like a mistyped flag of these settings
         /// (`--contol-port`). The caller logs them; they never stop a start-up
         Vector<DeserializeError> warnings;

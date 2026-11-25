@@ -163,6 +163,18 @@ namespace BECore::VulkanSwapchainPolicy {
         }
     }
 
+    /// The present mode of a swapchain. Not uncapped: MAILBOX, else FIFO (always offered, waits for the display). Uncapped (a
+    /// benchmark that must not wait for the display): IMMEDIATE, else the not-uncapped choice.
+    [[nodiscard]] constexpr VkPresentModeKHR ChoosePresentMode(Span<const VkPresentModeKHR> modes, bool uncapped) {
+        const auto offers = [&modes](VkPresentModeKHR wanted) {
+            return std::find(modes.begin(), modes.end(), wanted) != modes.end();
+        };
+        if (uncapped && offers(VK_PRESENT_MODE_IMMEDIATE_KHR)) {
+            return VK_PRESENT_MODE_IMMEDIATE_KHR;
+        }
+        return offers(VK_PRESENT_MODE_MAILBOX_KHR) ? VK_PRESENT_MODE_MAILBOX_KHR : VK_PRESENT_MODE_FIFO_KHR;
+    }
+
     /// ImGui's vertex colours are sRGB values and an sRGB attachment encodes what it is given, so Linearize turns them
     /// linear first; a swapchain that is not sRGB takes them as they are.
     [[nodiscard]] constexpr ImGuiColorMode ChooseImGuiColorMode(VkFormat mainSwapchainFormat) {

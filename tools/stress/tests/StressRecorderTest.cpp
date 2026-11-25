@@ -22,9 +22,9 @@ namespace BECore::Stress::Tests {
             return recorder;
         }
 
-        constexpr const char* kKeys[] = {"allocBytesPerFrame", "allocTracking", "allocsPerFrame", "atlases",   "count",      "cpuMs",       "cpuMsP50", "cpuMsP99",
-                                         "drawCalls",          "frameMsP50",    "frameMsP99",     "frames",    "interleave", "manualClock", "scene",    "textureSwitches",
-                                         "triangles",          "warmup",        "workMs",         "workMsP50", "workMsP99"};
+        constexpr const char* kKeys[] = {"allocBytesPerFrame", "allocTracking", "allocsPerFrame", "atlases",    "batching",  "count",      "cpuMs",       "cpuMsP50",
+                                         "cpuMsP99",           "drawCalls",     "frameMsP50",     "frameMsP99", "frames",    "interleave", "manualClock", "scene",
+                                         "textureSwitches",    "triangles",     "warmup",         "workMs",     "workMsP50", "workMsP99"};
 
         StressRunContext Context() {
             StressRunContext context;
@@ -218,6 +218,7 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetParamInt(parsed.Root(), "frames").value_or(0), 100);
         EXPECT_EQ(GetParamInt(parsed.Root(), "warmup").value_or(0), 30);
         EXPECT_EQ(GetParamInt(parsed.Root(), "atlases").value_or(0), 8);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "batching").value_or(-1), 1);
         EXPECT_EQ(GetParamBool(parsed.Root(), "interleave"), Optional(true));
         EXPECT_EQ(GetParamBool(parsed.Root(), "manualClock"), Optional(true));
         EXPECT_EQ(GetParamBool(parsed.Root(), "allocTracking"), Optional(false));

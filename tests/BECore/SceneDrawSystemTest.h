@@ -16,4 +16,16 @@ namespace BECore::Tests {
         void OnDraw() override;
     };
 
+    /// Draws one geometry triangle at x = @c marker in OnDraw(): a draw the batcher never takes, between two sprites
+    class DrawGeometryMarkerComponent : public IComponent {
+        BE_CLASS(DrawGeometryMarkerComponent)
+    public:
+        DrawGeometryMarkerComponent() = default;
+        ~DrawGeometryMarkerComponent() override = default;
+
+        float marker = 0.0f;
+
+        void OnDraw() override;
+    };
+
 }  // namespace BECore::Tests

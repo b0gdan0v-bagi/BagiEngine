@@ -301,13 +301,7 @@ namespace BECore {
         Vector<VkPresentModeKHR> modes(count);
         vkGetPhysicalDeviceSurfacePresentModesKHR(device.GetPhysicalDevice(), surface, &count, modes.data());
 
-        for (const auto& mode : modes) {
-            if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
-                return mode;
-            }
-        }
-        // FIFO is always available (v-sync)
-        return VK_PRESENT_MODE_FIFO_KHR;
+        return VulkanSwapchainPolicy::ChoosePresentMode({modes.data(), modes.size()}, _uncapped);
     }
 
 }  // namespace BECore

@@ -24,6 +24,7 @@ namespace BECore {
         constexpr float kChannelMax = 255.0f;
         constexpr size_t kIndicesPerTriangle = 3;
         constexpr int kFloatsPerColor = 4;
+        constexpr uint8_t kOpaqueAlpha = 255;
         constexpr Color kOpaqueBlack{0, 0, 0, 255};  // the colour of a target pass that no Clear() named
 
         // The SDL blend mode of an IRenderer blend mode: straight alpha, additive, and `src * dst + dst * (1 - a)`
@@ -64,6 +65,16 @@ namespace BECore {
 
         const char* rendererName = SDL_GetRendererName(_renderer);
         _software = rendererName && std::strcmp(rendererName, kSoftwareRenderer) == 0;
+        if (_software && sdlWindow->GetBackend() == RenderBackendChoice::SdlGpu) {
+            // SDL falls back to its software renderer when no GPU one starts; a silent fallback would give a benchmark of the wrong thing
+            LOG_ERROR("SDLRendererBackend: the hardware renderer was asked for and SDL made the software one");
+            SDL_DestroyRenderer(_renderer);
+            _renderer = nullptr;
+            _software = false;
+            return false;
+        }
+        LOG_INFO("SDLRendererBackend: renderer '{}'", rendererName ? rendererName : "?");
+        SetBatchingEnabled(true);
 
 #ifdef __EMSCRIPTEN__
         // In the browser a frame is a requestAnimationFrame. A renderer made without vsync makes SDL set the swap interval to 0 when
@@ -71,6 +82,10 @@ namespace BECore {
         // (emscripten warns "rendering without using requestAnimationFrame" in a Debug build). Interval 1 keeps the loop on rAF.
         if (!SDL_SetRenderVSync(_renderer, 1)) {
             LOG_WARNING("SDLRendererBackend: cannot turn vsync on: {}", SDL_GetError());
+        }
+#else
+        if (_uncapped && !SDL_SetRenderVSync(_renderer, 0)) {
+            LOG_WARNING("SDLRendererBackend: cannot turn vsync off: {}", SDL_GetError());
         }
 #endif
 
@@ -103,6 +118,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::Destroy() {
+        DiscardBatch();              // its texture and its target go with the renderer
         _captureCallback = nullptr;  // nothing will be presented any more
         ReleaseTargets();            // before the renderer: SDL frees a texture with its renderer, and a target must not free it a second time
         if (_renderer) {
@@ -112,11 +128,16 @@ namespace BECore {
         }
     }
 
-    void SDLRendererBackend::BeginFrame() {}
+    void SDLRendererBackend::BeginFrame() {
+        Flush();
+    }
 
-    void SDLRendererBackend::EndFrame() {}
+    void SDLRendererBackend::EndFrame() {
+        Flush();
+    }
 
     void SDLRendererBackend::Clear(const Color& color) {
+        Flush();  // what was drawn before the clear must not land after it
         _nextTargetClear = color;
         if (_renderer) {
             SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
@@ -129,6 +150,13 @@ namespace BECore {
     }
 
     void SDLRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
+        if (_renderer && IsBatchingEnabled()) {
+            if (BatchesRect(x, y, w, h, color)) {
+                BatchRect(x, y, w, h, color);
+                return;
+            }
+            Flush();  // drawn at once below, so the batch before it goes first
+        }
         if (_renderer && !IsClipEmpty()) {
             SDL_SetRenderDrawBlendMode(_renderer, ToSDLBlendMode(GetBlendMode()));
             const Color faded = ApplyOpacity(color);
@@ -141,6 +169,13 @@ namespace BECore {
     }
 
     void SDLRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) {
+        if (_renderer && IsBatchingEnabled()) {
+            if (BatchesEverything()) {
+                BatchTexture(texture, srcRect, dstX, dstY, dstW, dstH, tint);
+                return;
+            }
+            Flush();
+        }
         if (!_renderer || IsClipEmpty()) {
             return;
         }
@@ -168,6 +203,13 @@ namespace BECore {
         if (transform.IsIdentity()) {
             DrawTexture(texture, srcRect, dstX, dstY, dstW, dstH, tint);
             return;
+        }
+        if (_renderer && IsBatchingEnabled()) {
+            if (BatchesEverything()) {
+                BatchTransformedTexture(texture, srcRect, dstX, dstY, dstW, dstH, tint, transform);
+                return;
+            }
+            Flush();
         }
         if (!_renderer || IsClipEmpty() || texture.GetWidth() <= 0.0f || texture.GetHeight() <= 0.0f) {
             return;
@@ -229,6 +271,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) {
+        Flush();  // not batched, so the quads before it are drawn first
         if (!_renderer || IsClipEmpty() || vertices.empty() || indices.size() < kIndicesPerTriangle) {
             return;
         }
@@ -249,13 +292,21 @@ namespace BECore {
             }
         }
 
-        const ViewTransform& view = GetViewTransform();
+        if (!QueueGeometry(handle, vertices, indices, translateX, translateY, GetViewTransform(), true, GetBlendMode())) {
+            return;
+        }
+        CountDraw(texture, indices.size() / kIndicesPerTriangle);
+    }
+
+    bool SDLRendererBackend::QueueGeometry(SDL_Texture* handle, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY, const ViewTransform& view, bool fade,
+                                           BlendMode blend) {
+        const int vertexCount = static_cast<int>(vertices.size());
         _geometryPositions.resize(vertices.size() * 2);
         _geometryColors.resize(vertices.size() * kFloatsPerColor);
         _geometryTexCoords.resize(vertices.size() * 2);
         for (size_t i = 0; i < vertices.size(); ++i) {
             const GeometryVertex& vertex = vertices[i];
-            const Color color = ApplyOpacity(vertex.color);
+            const Color color = fade ? ApplyOpacity(vertex.color) : vertex.color;
             _geometryPositions[i * 2] = (vertex.x + translateX) * view.scale + view.offsetX;
             _geometryPositions[i * 2 + 1] = (vertex.y + translateY) * view.scale + view.offsetY;
             _geometryColors[i * kFloatsPerColor] = static_cast<float>(color.r) / kChannelMax;
@@ -267,7 +318,7 @@ namespace BECore {
         }
 
         // An untextured draw blends by the draw mode; a texture by its own, set on every draw as in DrawTexture() (the colors multiply the texel, SDL ignores the modulation of the texture here)
-        const SDL_BlendMode blendMode = ToSDLBlendMode(GetBlendMode());
+        const SDL_BlendMode blendMode = ToSDLBlendMode(blend);
         if (handle) {
             SDL_SetTextureBlendMode(handle, blendMode);
         } else {
@@ -278,9 +329,44 @@ namespace BECore {
                                   _geometryTexCoords.data(), 2 * sizeof(float), vertexCount, indices.data(), static_cast<int>(indices.size() - indices.size() % kIndicesPerTriangle), sizeof(int));
         if (!drawn) {
             LOG_ERROR("SDLRendererBackend: DrawGeometry failed: {}", SDL_GetError());
+        }
+        return drawn;
+    }
+
+    bool SDLRendererBackend::BatchesRect(float x, float y, float w, float h, const Color& color) const {
+        if (BatchesEverything()) {
+            return true;
+        }
+        // Proved byte-equal to SDL_RenderFillRect by SDLCaptureTest: a rect whose output edges lie on whole pixels, opaque, or under a blend mode whose
+        // triangle path rounds as the rect path does. A fractional edge, a translucent straight-alpha color and a rect without extent differ.
+        const Rect out = GetViewTransform().ToOutput(x, y, w, h);
+        const auto whole = [](float value) { return value == std::floor(value); };
+        if (!(out.w > 0.0f && out.h > 0.0f) || !whole(out.x) || !whole(out.y) || !whole(out.w) || !whole(out.h)) {
+            return false;
+        }
+        return GetBlendMode() != BlendMode::Alpha || ApplyOpacity(color).a == kOpaqueAlpha;
+    }
+
+    bool SDLRendererBackend::CanDrawTexture(const ITexture& texture) const {
+        const auto* sdlTexture = dynamic_cast<const SDLTexture*>(&texture);
+        return sdlTexture != nullptr && sdlTexture->GetSDLTexture() != nullptr;
+    }
+
+    void SDLRendererBackend::SubmitBatch(const RenderBatch& batch) {
+        if (!_renderer) {
             return;
         }
-        CountDraw(texture, indices.size() / kIndicesPerTriangle);
+        BE_PROFILE_SCOPE("SDLRenderer::SubmitBatch");
+        SDL_Texture* handle = nullptr;
+        if (batch.texture) {
+            const auto* sdlTexture = dynamic_cast<const SDLTexture*>(batch.texture.Get());
+            handle = sdlTexture ? sdlTexture->GetSDLTexture() : nullptr;
+            if (!handle) {
+                return;
+            }
+        }
+        // The blend mode of the batch, not of the renderer: it may have changed since the quads were appended
+        QueueGeometry(handle, {batch.vertices.data(), batch.vertices.size()}, {batch.indices.data(), batch.indices.size()}, 0.0f, 0.0f, ViewTransform{}, false, batch.blend);
     }
 
     void SDLRendererBackend::OnClipRectChanged() {
@@ -321,6 +407,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::SetRenderTarget(IRenderTarget* target) {
+        Flush();  // the batch belongs to the target it was drawn for
         if (!target) {
             UnsetRenderTarget();
             return;
@@ -344,6 +431,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::UnsetRenderTarget() {
+        Flush();
         if (_renderer && _currentTarget) {
             SDL_SetRenderTarget(_renderer, nullptr);
         }
@@ -383,6 +471,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::OnRenderClear() {
+        Flush();
         if (_renderer) {
             SDL_RenderClear(_renderer);
         }
@@ -394,6 +483,7 @@ namespace BECore {
 
     void SDLRendererBackend::PresentFrame() {
         BE_PROFILE_SCOPE("SDLRenderer::PresentFrame");
+        Flush();  // before the capture reads the pixels and before the present
         if (_renderer) {
             // The window is what is presented and what a capture reads: a pass left open on a target ends here
             UnsetRenderTarget();
@@ -475,6 +565,7 @@ namespace BECore {
 
     void SDLRendererBackend::OnImGuiRender() {
         BE_PROFILE_SCOPE("SDLRenderer::ImGuiRender");
+        Flush();
         if (_renderer) {
             ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), _renderer);
         }

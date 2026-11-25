@@ -60,7 +60,7 @@ namespace BECore::Tests {
             stats.frameMs = 20.0;
             stats.cpuMs = 5.0;
             stats.stageMs[+FrameStage::Wait] = 8.5;
-            stats.draws = RenderCounters{.drawCalls = 12, .triangles = 24, .textureSwitches = 3};
+            stats.draws = RenderCounters{.drawCalls = 12, .primitives = 30, .triangles = 24, .textureSwitches = 3};
             stats.allocCount = 7;
             stats.allocBytes = 2048;
             stats.counters.push_back({"ImGui draw calls"_intern, 9.0});
@@ -96,7 +96,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(AnyLineContains(lines, "Frame 42"));
         EXPECT_TRUE(AnyLineContains(lines, "50 fps"));
         EXPECT_TRUE(AnyLineContains(lines, "Wait 8.50 ms"));
-        EXPECT_TRUE(AnyLineContains(lines, "Draw calls 12"));
+        EXPECT_TRUE(AnyLineContains(lines, "Draw calls 12  Primitives 30  Triangles 24"));
         EXPECT_TRUE(AnyLineContains(lines, "Texture switches 3"));
         EXPECT_TRUE(AnyLineContains(lines, "Allocations 7 (2.0 KB)"));
         EXPECT_TRUE(AnyLineContains(lines, "Live 3.0 MB"));

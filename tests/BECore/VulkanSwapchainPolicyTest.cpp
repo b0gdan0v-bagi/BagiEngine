@@ -61,6 +61,27 @@ namespace BECore::Tests {
         EXPECT_EQ(PresentModeName(VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR), "other");
     }
 
+    TEST(VulkanSwapchainPolicyTest, ChoosePresentModeUncappedTakesImmediate) {
+        const VkPresentModeKHR modes[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR};
+        EXPECT_EQ(ChoosePresentMode(modes, true), VK_PRESENT_MODE_IMMEDIATE_KHR);
+    }
+
+    TEST(VulkanSwapchainPolicyTest, ChoosePresentModeUncappedWithoutImmediateFallsToMailboxThenFifo) {
+        const VkPresentModeKHR withMailbox[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR};
+        const VkPresentModeKHR fifoOnly[] = {VK_PRESENT_MODE_FIFO_KHR};
+        EXPECT_EQ(ChoosePresentMode(withMailbox, true), VK_PRESENT_MODE_MAILBOX_KHR);
+        EXPECT_EQ(ChoosePresentMode(fifoOnly, true), VK_PRESENT_MODE_FIFO_KHR);
+    }
+
+    TEST(VulkanSwapchainPolicyTest, ChoosePresentModeCappedKeepsTheOldRule) {
+        const VkPresentModeKHR all[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR};
+        const VkPresentModeKHR noMailbox[] = {VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR};
+        EXPECT_EQ(ChoosePresentMode(all, false), VK_PRESENT_MODE_MAILBOX_KHR);
+        // IMMEDIATE is never taken unless asked for: it tears
+        EXPECT_EQ(ChoosePresentMode(noMailbox, false), VK_PRESENT_MODE_FIFO_KHR);
+        EXPECT_EQ(ChoosePresentMode(Span<const VkPresentModeKHR>{}, false), VK_PRESENT_MODE_FIFO_KHR);
+    }
+
     TEST(VulkanSwapchainPolicyTest, IsMinimizedWhenEitherSideIsZero) {
         static_assert(IsMinimized(0, 600) && !IsMinimized(800, 600));
         EXPECT_TRUE(IsMinimized(0, 0));

@@ -32,6 +32,8 @@ def make_args(*argv: str) -> argparse.Namespace:
         chunk=stress_frames.DEFAULT_CHUNK,
         timeout=stress_frames.DEFAULT_TIMEOUT_SECONDS,
         trace=None,
+        backend=stress_frames.DEFAULT_BACKEND,
+        no_batching=False,
     )
     for item in argv:
         name, _, value = item.partition("=")
@@ -50,6 +52,21 @@ def test_a_ramp_passes_neither_the_count_nor_the_frames():
     flags = stress_frames.stress_flags(make_args("--ramp", "--measure=cpu", "--interleave", "--count=7"))
     assert "--stress-ramp" in flags and "--stress-interleave" in flags and "--stress-measure=cpu" in flags
     assert not any(flag.startswith(("--stress-count", "--stress-frames", "--stress-warmup")) for flag in flags)
+
+
+def test_no_batching_is_a_flag_of_the_game():
+    assert "--stress-no-batching" in stress_frames.stress_flags(make_args("--no-batching"))
+    assert "--stress-no-batching" not in stress_frames.stress_flags(make_args())
+
+
+def test_the_software_backend_is_the_headless_run_and_a_gpu_backend_a_hidden_window():
+    exe = Path("BagiStress")
+    software = stress_frames.game_command(exe, 7000, make_args())
+    assert "--headless" in software and "--hidden-window" not in software and not any(arg.startswith("--backend") for arg in software)
+    for backend in ("sdl-gpu", "vulkan"):
+        command = stress_frames.game_command(exe, 7000, make_args(f"--backend={backend}"))
+        assert "--hidden-window" in command and f"--backend={backend}" in command and "--headless" not in command
+        assert "--control" in command and "--manual-clock" in command
 
 
 def test_a_trace_is_an_absolute_flag_of_the_game(tmp_path):
@@ -134,3 +151,22 @@ def test_a_game_that_never_quits_ends_at_the_step_bound(fake_stress_exe):
     result = run_script(fake_stress_exe, "--frames", "10", "--warmup", "0", "--chunk", "400", env={"FAKE_STRESS_MODE": "never"})
     assert result.returncode == 1 and result.stdout == ""
     assert "did not quit in 800 stepped frames" in result.stderr
+
+
+def test_a_gpu_backend_is_passed_to_the_game(fake_stress_exe):
+    result = run_script(fake_stress_exe, "--frames", "50", "--warmup", "0", "--backend", "sdl-gpu", "--no-batching")
+    assert result.returncode == 0, result.stderr
+    flags = json.loads(result.stdout)["flags"]
+    assert "--backend=sdl-gpu" in flags and "--hidden-window" in flags and "--stress-no-batching" in flags and "--headless" not in flags
+
+
+def test_a_missing_backend_is_a_skip_with_the_games_words(fake_stress_exe):
+    result = run_script(fake_stress_exe, "--frames", "50", "--warmup", "0", "--backend", "vulkan", env={"FAKE_STRESS_MODE": "unavailable"})
+    assert result.returncode == stress_frames.EXIT_SKIPPED
+    assert result.stdout == "skip: Backend 'vulkan' is not available on this machine: no Vulkan loader\n"
+
+
+def test_another_early_exit_stays_an_error(fake_stress_exe):
+    result = run_script(fake_stress_exe, "--frames", "50", "--warmup", "0", "--backend", "vulkan", env={"FAKE_STRESS_MODE": "earlyexit"})
+    assert result.returncode == 1 and result.stdout == ""
+    assert "something else broke" in result.stderr

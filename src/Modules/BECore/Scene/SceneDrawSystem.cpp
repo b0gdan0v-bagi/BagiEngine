@@ -231,6 +231,7 @@ namespace BECore {
         }
         if (renderer != nullptr) {
             clips.Switch(*renderer, list.clips, view, -1);
+            renderer->Flush();  // so the zone holds the submissions and nothing stays queued past the pass
         }
         scene.SetDrawing(false, {});
     }

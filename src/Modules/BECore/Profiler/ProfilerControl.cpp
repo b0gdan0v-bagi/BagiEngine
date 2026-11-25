@@ -57,6 +57,7 @@ namespace BECore {
             writer.Member("paused", stats.paused);
             writer.Member("poolLiveBlocks", stats.poolLiveBlocks);
             writer.Member("poolPageBytes", stats.poolPageBytes);
+            writer.Member("primitives", stats.draws.primitives);
             writer.Key("stagesMs");
             WriteMembersByName(writer, kFrameStageCount, [](size_t i) { return EnumUtils<FrameStage>::ToString(static_cast<FrameStage>(i)); }, [&](size_t i) { writer.Value(stats.stageMs[i]); });
             writer.Key("tagAllocCount");

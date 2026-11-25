@@ -497,6 +497,89 @@ namespace BECore::Tests {
         EXPECT_FALSE(settings->density.has_value());
     }
 
+    TEST(ControlSettingsTest, TheBackendIsAutoAndTheWindowShownByDefault) {
+        const auto settings = Resolve({"--control"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_EQ(settings->backend, RenderBackendChoice::Auto);
+        EXPECT_FALSE(settings->hiddenWindow);
+    }
+
+    TEST(ControlSettingsTest, EachBackendSpellingIsRead) {
+        const auto software = Resolve({"--control", "--headless", "--backend=software"});
+        ASSERT_TRUE(software.has_value());
+        EXPECT_EQ(software->backend, RenderBackendChoice::Software);
+        const auto sdlGpu = Resolve({"--control", "--backend=sdl-gpu"});
+        ASSERT_TRUE(sdlGpu.has_value());
+        EXPECT_EQ(sdlGpu->backend, RenderBackendChoice::SdlGpu);
+        const auto vulkan = Resolve({"--backend=vulkan"});
+        ASSERT_TRUE(vulkan.has_value());
+        EXPECT_EQ(vulkan->backend, RenderBackendChoice::Vulkan);
+    }
+
+    TEST(ControlSettingsTest, ABackendThatIsNotSpelledIsAnErrorNamingTheFlag) {
+        for (const char* text : {"metal", "SDL-GPU", "sdl_gpu", "auto", "", "Vulkan"}) {
+            const auto result = Resolve({"--control", Format("--backend={}", text)});
+            ExpectInvalid(result);
+            EXPECT_NE(result.error().message.find("--backend"), String::npos) << text << ": " << result.error().message.c_str();
+        }
+    }
+
+    TEST(ControlSettingsTest, ABareBackendFlagNeedsAValue) {
+        const auto result = Resolve({"--control", "--backend"});
+        ExpectInvalid(result);
+        EXPECT_NE(result.error().message.find("--backend"), String::npos) << result.error().message.c_str();
+    }
+
+    TEST(ControlSettingsTest, TheSoftwareBackendNeedsHeadless) {
+        ExpectInvalid(Resolve({"--control", "--backend=software"}));
+        ExpectInvalid(Resolve({"--backend=software"}));
+        EXPECT_TRUE(Resolve({"--backend=software"}, R"(<root control="true" headless="true"/>)").has_value());
+    }
+
+    TEST(ControlSettingsTest, AGpuBackendRefusesHeadless) {
+        const auto sdlGpu = Resolve({"--control", "--headless", "--backend=sdl-gpu"});
+        ExpectInvalid(sdlGpu);
+        EXPECT_NE(sdlGpu.error().message.find("--backend=sdl-gpu"), String::npos) << sdlGpu.error().message.c_str();
+        ExpectInvalid(Resolve({"--control", "--headless", "--backend=vulkan"}));
+        ExpectInvalid(Resolve({"--backend=vulkan"}, R"(<root control="true" headless="true"/>)"));
+    }
+
+    TEST(ControlSettingsTest, AGpuBackendOnAVisibleWindowNeedsNoApi) {
+        EXPECT_TRUE(Resolve({"--backend=sdl-gpu"}).has_value());
+    }
+
+    TEST(ControlSettingsTest, AHiddenWindowIsReadWithTheApi) {
+        const auto settings = Resolve({"--control", "--hidden-window"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->hiddenWindow);
+        const auto off = Resolve({"--control", "--hidden-window=false"});
+        ASSERT_TRUE(off.has_value());
+        EXPECT_FALSE(off->hiddenWindow);
+    }
+
+    TEST(ControlSettingsTest, AHiddenWindowNeedsTheApi) {
+        const auto result = Resolve({"--hidden-window"});
+        ExpectInvalid(result);
+        EXPECT_NE(result.error().message.find("--hidden-window"), String::npos) << result.error().message.c_str();
+    }
+
+    TEST(ControlSettingsTest, AHiddenWindowRefusesHeadless) {
+        const auto result = Resolve({"--control", "--headless", "--hidden-window"});
+        ExpectInvalid(result);
+        EXPECT_NE(result.error().message.find("--hidden-window"), String::npos) << result.error().message.c_str();
+        ExpectInvalid(Resolve({"--hidden-window"}, R"(<root control="true" headless="true"/>)"));
+    }
+
+    TEST(ControlSettingsTest, AMistypedBackendFlagIsAWarning) {
+        const auto settings = Resolve({"--control", "--hiden-window", "--backnd=vulkan"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_EQ(settings->backend, RenderBackendChoice::Auto);
+        EXPECT_FALSE(settings->hiddenWindow);
+        ASSERT_EQ(settings->warnings.size(), 2u);
+        EXPECT_NE(settings->warnings[0].errorMessage.find("--hidden-window"), String::npos) << settings->warnings[0].errorMessage.c_str();
+        EXPECT_NE(settings->warnings[1].errorMessage.find("--backend"), String::npos) << settings->warnings[1].errorMessage.c_str();
+    }
+
     TEST(ControlSettingsTest, TheCommandLineOverridesTheFileFieldByField) {
         const char* config = R"(<root control="true" controlPort="9000" manualClock="true" headless="true"/>)";
 

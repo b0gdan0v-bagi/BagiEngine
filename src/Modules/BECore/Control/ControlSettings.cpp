@@ -18,7 +18,9 @@ namespace BECore {
                                             ControlFlagFields::kReplay,
                                             ControlFlagFields::kReplayExit,
                                             ControlFlagFields::kWindow,
-                                            ControlFlagFields::kDensity};
+                                            ControlFlagFields::kDensity,
+                                            ControlFlagFields::kBackend,
+                                            ControlFlagFields::kHiddenWindow};
 
         /// The paths of the ApplicationConfig fields that are control settings (the names of the attributes)
         bool IsControlField(StringView path) {
@@ -92,6 +94,15 @@ namespace BECore {
         settings.replayExit = flags._replayExit;
         settings.windowSize = flags._window;
         settings.density = flags._density;
+        settings.hiddenWindow = flags._hiddenWindow;
+        if (const Optional<CommandLineArgument> backend = commandLine.Find(ControlArguments::kBackend)) {
+            const Optional<RenderBackendChoice> parsed = ParseRenderBackend(flags._backend);
+            if (!parsed) {
+                return std::unexpected(InvalidSetting(Format("{}: '{}' is not a backend: {}, {} or {}", ControlArguments::kBackend, flags._backend, RenderBackendSpelling::kSoftware,
+                                                             RenderBackendSpelling::kSdlGpu, RenderBackendSpelling::kVulkan)));
+            }
+            settings.backend = *parsed;
+        }
         settings.warnings = reader.GetWarnings();
 
         if (commandLine.Find(ControlArguments::kControlPort) && !settings.enabled) {
@@ -112,6 +123,21 @@ namespace BECore {
         }
         if (!settings.replayPath.empty() && !settings.manualClock) {
             return std::unexpected(InvalidSetting(Format("{}=FILE needs {}: the replay passes the game time of the file on it", ControlArguments::kReplay, ControlArguments::kManualClock)));
+        }
+        if (settings.hiddenWindow && !settings.enabled) {
+            return std::unexpected(
+                InvalidSetting(Format("{} needs {}: without the control API nobody could reach a window that is not shown", ControlArguments::kHiddenWindow, ControlArguments::kControl)));
+        }
+        if (settings.hiddenWindow && settings.headless) {
+            return std::unexpected(InvalidSetting(Format("{} has no effect with {}: a headless run has no real window", ControlArguments::kHiddenWindow, ControlArguments::kHeadless)));
+        }
+        if (settings.backend == RenderBackendChoice::Software && !settings.headless) {
+            return std::unexpected(
+                InvalidSetting(Format("{}={} needs {}: the software renderer is the headless one", ControlArguments::kBackend, RenderBackendSpelling::kSoftware, ControlArguments::kHeadless)));
+        }
+        if ((settings.backend == RenderBackendChoice::SdlGpu || settings.backend == RenderBackendChoice::Vulkan) && settings.headless) {
+            return std::unexpected(InvalidSetting(
+                Format("{}={} cannot run with {}: the dummy video driver has no GPU surface", ControlArguments::kBackend, RenderBackendName(settings.backend), ControlArguments::kHeadless)));
         }
 
         if ((settings.windowSize || settings.density) && !settings.headless) {
