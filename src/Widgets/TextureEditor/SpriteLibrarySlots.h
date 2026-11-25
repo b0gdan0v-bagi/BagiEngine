@@ -13,10 +13,12 @@ namespace BECore {
     struct SpriteEntry;
 
     /**
-     * @brief The drawers of `SpriteLibraryPanel.xml` that the format cannot say: the sprite list and the preview of the selected entry's texture
+     * @brief The drawers of `SpriteLibraryPanel.xml` that the format cannot say: the sprite list, the preview of the selected entry's texture and the
+     * picture of the atlas preview
      *
-     * Owned by `SpriteLibraryPanelModel`, which registers them as the slots `spriteList` and `spritePreview` in its `Initialize` and takes them back when
-     * it dies. **A slot notes, the model applies**: a clicked row, a drop and a finished drag are handed to the model (`Note...`) and applied in its
+     * Owned by `SpriteLibraryPanelModel`, which registers them as the slots `spriteList`, `spritePreview` and `spriteAtlasPreview` in its `Initialize` and
+     * takes them back when it dies. **A slot notes, the model applies**: a clicked row, a drop, a finished drag and a clicked rect of the atlas preview are
+     * handed to the model (`Note...`) and applied in its
      * `EndUpdate`, after the walk, because applying them inside it would change the lists the interpreter is reading. The preview keeps its texture
      * handle and the drag here; the selection, the library and the list's state are the model's.
      */
@@ -30,6 +32,7 @@ namespace BECore {
     private:
         void DrawList();
         void DrawPreview();
+        void DrawAtlasPreview();
         /// The drag-to-select over the image just drawn: a rect in texture pixels is noted on release
         void DrawDrag(ImDrawList& drawList, float textureWidth, float textureHeight);
 
@@ -45,6 +48,7 @@ namespace BECore {
 
         PanelSlotHandle _listSlot;
         PanelSlotHandle _previewSlot;
+        PanelSlotHandle _atlasPreviewSlot;
     };
 
 }  // namespace BECore

@@ -7,6 +7,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Generated/SpriteLibraryPanelModel.gen.hpp>
+#include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/EditorLayout/EditorDocumentRows.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
 
@@ -44,6 +45,10 @@ namespace BECore {
         _library = library;
         _save = library != nullptr ? std::move(save) : LibrarySave{};
         _key.built = false;
+    }
+
+    void SpriteLibraryPanelModel::UseAtlasFiles(const SpriteAtlasFiles* files) {
+        _atlasPanel.UseFiles(files);
     }
 
     void SpriteLibraryPanelModel::UseTextureMount(PoolString mountPoint) {
@@ -149,6 +154,28 @@ namespace BECore {
         if (_view.slice.canSlice) {
             _slicePanel.Sync(_view.slice, Library(), entry->texturePath, _sheetWidth, _sheetHeight);
         }
+        SyncAtlas(entry);
+    }
+
+    void SpriteLibraryPanelModel::SyncAtlas(const SpriteEntry* entry) {
+        if (entry != nullptr) {
+            _atlasPanel.Sync(_view.atlas, Library(), *entry);
+        }
+        const PoolString group = entry != nullptr && entry->atlas.has_value() ? entry->atlas->name : PoolString{};
+        SpriteAtlasPreviewView& preview = _view.preview;
+        preview.hasGroup = !group.Empty();
+        preview.anyPacked = preview.hasGroup && AtlasSummary(Library(), group.ToStringView()).packed > 0;
+        if (preview.mode != _shownPreviewMode) {
+            _previewChoice = preview.mode;
+        }
+        // Without a packed member there is no current atlas to show, so the plan is what is left
+        _shownPreviewMode = preview.anyPacked ? _previewChoice : AtlasPreviewMode::Plan;
+        preview.mode = _shownPreviewMode;
+    }
+
+    void SpriteLibraryPanelModel::AtlasChanged() {
+        _textures.ForgetFailed();
+        MarkDirty();
     }
 
     bool SpriteLibraryPanelModel::CanSlice(const SpriteEntry* entry) const {
@@ -251,6 +278,10 @@ namespace BECore {
         _notedRect = rect;
     }
 
+    void SpriteLibraryPanelModel::NotePreviewClick(PoolString sprite) {
+        _notedPreviewClick = sprite;
+    }
+
     void SpriteLibraryPanelModel::NoteSheet(PoolString texturePath, int width, int height) {
         _sheetPath = texturePath;
         _sheetWidth = width;
@@ -260,6 +291,9 @@ namespace BECore {
     void SpriteLibraryPanelModel::EndUpdate() {
         if (_notedClick >= 0) {
             Select(std::exchange(_notedClick, -1));
+        }
+        if (!_notedPreviewClick.Empty()) {
+            SelectByName(std::exchange(_notedPreviewClick, PoolString{}));
         }
         if (_notedRect) {
             ApplyDraggedRect(*_notedRect);
@@ -418,6 +452,31 @@ namespace BECore {
             const SpriteEntry* entry = GetSelected();
             if (CanSlice(entry)) {
                 _slicePanel.FindIslands(entry->texturePath, _sheetWidth, _sheetHeight);
+            }
+            return true;
+        }
+        if (is(EditorCommandIds::kSpriteLibraryAtlasName)) {
+            const SpriteEntry* entry = GetSelected();
+            if (entry != nullptr && !IsPackedSprite(*entry)) {
+                // The old field held the longest name the model accepts; a longer one is cut the same way, and the rules refuse what is left if bad
+                if (_view.atlas.name.size() > kMaxSpriteNameLength) {
+                    _view.atlas.name.resize(kMaxSpriteNameLength);
+                }
+                if (_atlasPanel.ApplyGroupName(Library(), *entry, _view.atlas.name)) {
+                    AtlasChanged();
+                }
+            }
+            return true;
+        }
+        if (is(EditorCommandIds::kSpriteLibraryPack) || is(EditorCommandIds::kSpriteLibraryUnpack)) {
+            const SpriteEntry* entry = GetSelected();
+            const PoolString group = entry != nullptr && entry->atlas.has_value() ? entry->atlas->name : PoolString{};
+            if (group.Empty()) {
+                return true;
+            }
+            const bool changed = is(EditorCommandIds::kSpriteLibraryPack) ? _atlasPanel.Pack(Library(), group) : _atlasPanel.Unpack(Library(), group);
+            if (changed) {
+                AtlasChanged();
             }
             return true;
         }

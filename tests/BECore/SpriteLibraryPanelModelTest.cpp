@@ -15,6 +15,9 @@ namespace BECore::Tests {
 
         constexpr int kSteadyFrames = 8;
         constexpr const char* kMount = "sprite_library_model";
+        constexpr const char* kGamePrefix = "sprite_library_model_game";
+        constexpr StringView kQueenPng = "assets/artgen/queen.png";
+        constexpr StringView kRookPng = "assets/artgen/rook.png";
 
         SpriteEntry EntryOf(StringView name, StringView path, const Rect& rect) {
             SpriteEntry entry;
@@ -43,6 +46,7 @@ namespace BECore::Tests {
                 return _saveSucceeds;
             });
             _model->UseTextureMount(PoolString::Intern(kMount));
+            _model->UseAtlasFiles(&_atlasFiles);
             _model->Initialize();
             _model->Update();
         }
@@ -90,6 +94,21 @@ namespace BECore::Tests {
             _model->Update();
         }
 
+        /// Puts queen and rook into the group "pieces" with their pictures in the game folder, unpacked
+        void FillPieces() {
+            AddPiece("queen", kQueenPng, 4);
+            AddPiece("rook", kRookPng, 2);
+        }
+
+        void AddPiece(StringView name, StringView path, uint32_t size) {
+            _game.SavePng(path, MakeSolid(size, size, kHigh, 0, 0));
+            SpriteEntry entry = EntryOf(name, path, Rect(0, 0, static_cast<float>(size), static_cast<float>(size)));
+            SpriteAtlasLink link;
+            link.name = "pieces"_intern;
+            entry.atlas = link;
+            _library.AddOrUpdate(std::move(entry));
+        }
+
         /// Makes @p name a packed member of an atlas, as Pack leaves it
         void Pack(StringView name) {
             SpriteEntry entry = Entry(name);
@@ -102,6 +121,9 @@ namespace BECore::Tests {
             _library.AddOrUpdate(std::move(entry));
         }
 
+        ArtGenGameFolder _game{kGamePrefix};
+        MoveOnlyFunction<bool(PoolString)> _exists = [this](PoolString path) { return _game.Exists(path.ToStringView()); };
+        SpriteAtlasFiles _atlasFiles{_game.Io(), _exists};
         TextureLibrary _library;
         IntrusivePtr<SpriteLibraryPanelModel> _model;
         int _saves = 0;
@@ -521,6 +543,138 @@ namespace BECore::Tests {
         View().slice.padding = 1;
         _model->Update();
         EXPECT_EQ(View().slice.summary, "Press Find islands");
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, AGroupNameIsAppliedOnCommitAndABadOneIsTheStatusError) {
+        SelectAndUpdate("rook");
+        EXPECT_FALSE(View().atlas.hasGroup);
+        EXPECT_FALSE(View().atlas.canPack);
+
+        View().atlas.name = "pieces";
+        _model->Update();
+        EXPECT_FALSE(Entry("rook").atlas.has_value()) << "the field is applied on its commit only";
+        EXPECT_TRUE(Run(EditorCommandIds::kSpriteLibraryAtlasName));
+        _model->Update();
+
+        ASSERT_TRUE(Entry("rook").atlas.has_value());
+        EXPECT_EQ(Entry("rook").atlas->name, "pieces"_intern);
+        EXPECT_TRUE(View().dirty);
+        EXPECT_TRUE(View().atlas.hasGroup);
+        EXPECT_EQ(View().atlas.summary, "Atlas 'pieces': 1 sprites, 0 packed");
+        EXPECT_TRUE(View().atlas.canPack);
+        EXPECT_FALSE(View().atlas.canUnpack);
+
+        View().atlas.name = "bad name";
+        Run(EditorCommandIds::kSpriteLibraryAtlasName);
+        _model->Update();
+        EXPECT_EQ(Entry("rook").atlas->name, "pieces"_intern);
+        EXPECT_TRUE(View().atlas.hasStatus);
+        EXPECT_TRUE(View().atlas.statusError);
+        EXPECT_FALSE(View().atlas.status.empty());
+
+        SelectAndUpdate("queen");
+        EXPECT_FALSE(View().atlas.hasStatus) << "another sprite starts with no status";
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, TheSettingsFollowTheGroupsPackRecordWhenTheSelectionMovesToIt) {
+        SpriteEntry queen = Entry("queen");
+        SpriteAtlasLink link;
+        link.name = "ui"_intern;
+        AtlasPackRecord record;
+        record.padding = 3;
+        record.sizeMode = "Tight"_intern;
+        record.maxSide = kDefaultAtlasMaxSide;
+        link.pack = record;
+        queen.atlas = link;
+        _library.AddOrUpdate(std::move(queen));
+
+        SelectAndUpdate("rook");
+        EXPECT_EQ(View().atlas.padding, kDefaultAtlasPadding);
+        EXPECT_EQ(View().atlas.sizeMode, AtlasSizeMode::PowerOfTwo);
+
+        SelectAndUpdate("queen");
+        EXPECT_EQ(View().atlas.name, "ui");
+        EXPECT_EQ(View().atlas.padding, 3);
+        EXPECT_EQ(View().atlas.sizeMode, AtlasSizeMode::Tight);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ThePaddingIsClampedInTheView) {
+        SelectAndUpdate("rook");
+        View().atlas.padding = 100;
+        _model->Update();
+        EXPECT_EQ(View().atlas.padding, kMaxAtlasPadding);
+        EXPECT_EQ(_model->GetAtlasSettings().padding, kMaxAtlasPadding);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, PackAndUnpackChangeTheGroupAndSayWhatTheyDid) {
+        FillPieces();
+        SelectAndUpdate("queen");
+
+        EXPECT_TRUE(Run(EditorCommandIds::kSpriteLibraryPack));
+        _model->Update();
+
+        EXPECT_TRUE(IsPackedSprite(Entry("queen")));
+        EXPECT_TRUE(IsPackedSprite(Entry("rook")));
+        EXPECT_TRUE(_game.Exists("assets/atlases/pieces.png"));
+        EXPECT_TRUE(View().dirty);
+        EXPECT_FALSE(View().atlas.statusError);
+        EXPECT_EQ(View().atlas.status.find("Packed 2 sprites into assets/atlases/pieces.png"), 0U);
+        EXPECT_TRUE(View().atlas.packed);
+        EXPECT_EQ(View().atlas.packedText, "Packed on 'pieces': Unpack to change");
+        EXPECT_TRUE(View().atlas.canUnpack);
+        EXPECT_TRUE(View().packed);
+
+        EXPECT_TRUE(Run(EditorCommandIds::kSpriteLibraryUnpack));
+        _model->Update();
+
+        EXPECT_FALSE(IsPackedSprite(Entry("queen")));
+        EXPECT_EQ(Entry("queen").texturePath.ToStringView(), kQueenPng);
+        EXPECT_EQ(View().atlas.status.find("Unpacked 2 sprites"), 0U);
+        EXPECT_FALSE(View().atlas.packed);
+        EXPECT_FALSE(View().atlas.canUnpack);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, AFailedPackIsTheStatusErrorAndChangesNothing) {
+        FillPieces();
+        RemoveFileIfPresent(_game.Resolve(kRookPng));
+        SelectAndUpdate("queen");
+
+        Run(EditorCommandIds::kSpriteLibraryPack);
+        _model->Update();
+
+        EXPECT_FALSE(IsPackedSprite(Entry("queen")));
+        EXPECT_TRUE(View().atlas.statusError);
+        EXPECT_FALSE(View().dirty);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ThePreviewShowsThePlanWhileNothingIsPackedAndKeepsTheChoice) {
+        FillPieces();
+        SelectAndUpdate("queen");
+        EXPECT_TRUE(View().preview.hasGroup);
+        EXPECT_FALSE(View().preview.anyPacked);
+        EXPECT_EQ(View().preview.mode, AtlasPreviewMode::Plan);
+
+        Run(EditorCommandIds::kSpriteLibraryPack);
+        _model->Update();
+        EXPECT_TRUE(View().preview.anyPacked);
+        EXPECT_EQ(View().preview.mode, AtlasPreviewMode::Current) << "the choice it had before";
+
+        View().preview.mode = AtlasPreviewMode::Plan;
+        _model->Update();
+        EXPECT_EQ(View().preview.mode, AtlasPreviewMode::Plan);
+
+        SelectAndUpdate("rook");
+        EXPECT_EQ(View().preview.mode, AtlasPreviewMode::Plan);
+    }
+
+    TEST_F(SpriteLibraryPanelModelTest, ARectClickedOnTheAtlasPreviewSelectsItsSpriteAfterTheWalk) {
+        SelectAndUpdate("queen");
+        _model->NotePreviewClick("rook"_intern);
+        EXPECT_EQ(View().name, "queen");
+
+        EndFrame();
+
+        EXPECT_EQ(View().name, "rook");
     }
 
     TEST_F(SpriteLibraryPanelModelTest, ASteadyUpdateAllocatesNothing) {

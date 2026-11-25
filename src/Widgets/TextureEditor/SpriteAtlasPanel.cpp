@@ -6,6 +6,7 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <Generated/SpriteAtlasPanel.gen.hpp>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -29,7 +30,8 @@ namespace BECore {
 
         /// The sprites of the active scene that show these library entries show the new pixels from the next frame
         void ReloadInActiveScene(const Vector<PoolString>& sprites) {
-            Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
+            SceneManager* scenes = CoreManager::FindSceneManager();
+            Scene* scene = scenes != nullptr ? scenes->GetActiveScene() : nullptr;
             if (scene == nullptr) {
                 return;
             }
@@ -60,7 +62,7 @@ namespace BECore {
         ItemTooltip("The atlas this sprite belongs to; sprites with the same name are packed into assets/atlases/<name>.png. Empty: none");
         if (packed) {
             ImGui::TextDisabled("Packed on '%s': Unpack to change", group.CStr());
-        } else if (nameLeft && ApplyGroupName(library, entry)) {
+        } else if (nameLeft && ApplyGroupName(library, entry, StringView(_name))) {
             return true;
         }
 
@@ -112,13 +114,46 @@ namespace BECore {
         return changed;
     }
 
-    void SpriteAtlasPanel::SyncNameField(const TextureLibrary& library, const SpriteEntry& entry, PoolString group) {
+    void SpriteAtlasPanel::Sync(SpriteAtlasView& view, const TextureLibrary& library, const SpriteEntry& entry) {
+        const PoolString group = GroupOf(entry);
+        if (SyncNameField(library, entry, group)) {
+            const StringView name = group.ToStringView();
+            view.name.assign(name.data(), name.size());
+            view.padding = _settings.padding;
+            view.sizeMode = _settings.sizeMode;
+        }
+        view.padding = std::clamp(view.padding, 0, kMaxAtlasPadding);
+        _settings.padding = view.padding;
+        _settings.sizeMode = view.sizeMode;
+
+        const bool packed = IsPackedSprite(entry);
+        const AtlasCounts counts = group.Empty() ? AtlasCounts{} : AtlasSummary(library, group.ToStringView());
+        if (!_viewBuilt || group != _shownGroup || packed != _shownPacked || counts.members != _shownCounts.members || counts.packed != _shownCounts.packed) {
+            _viewBuilt = true;
+            _shownGroup = group;
+            _shownPacked = packed;
+            _shownCounts = counts;
+            view.packed = packed;
+            view.packedText = packed ? Format("Packed on '{}': Unpack to change", group.ToStringView()) : String{};
+            view.hasGroup = !group.Empty();
+            view.summary = group.Empty() ? String{} : Format("Atlas '{}': {} sprites, {} packed", group.ToStringView(), counts.members, counts.packed);
+            view.canPack = counts.members > 0;
+            view.canUnpack = counts.packed > 0;
+        }
+        if (_statusRevision != _shownStatusRevision) {
+            _shownStatusRevision = _statusRevision;
+            view.status.assign(_status);
+            view.statusError = _hasError;
+            view.hasStatus = _status[0] != '\0';
+        }
+    }
+
+    bool SpriteAtlasPanel::SyncNameField(const TextureLibrary& library, const SpriteEntry& entry, PoolString group) {
         if (entry.name == _boundSprite && group == _boundGroup) {
-            return;
+            return false;
         }
         if (entry.name != _boundSprite) {
-            _status[0] = '\0';
-            _hasError = false;
+            SetStatus({}, false);
         }
         // A repack from here must make the file the group was packed as (and the file Accept makes), so the fields follow the group;
         // a group nobody packed yet keeps what the person set
@@ -128,10 +163,11 @@ namespace BECore {
         _boundSprite = entry.name;
         _boundGroup = group;
         snprintf(_name, sizeof(_name), "%s", group.CStr());
+        return true;
     }
 
-    bool SpriteAtlasPanel::ApplyGroupName(TextureLibrary& library, const SpriteEntry& entry) {
-        auto result = SetSpriteAtlas(library, entry.name, StringView(_name));
+    bool SpriteAtlasPanel::ApplyGroupName(TextureLibrary& library, const SpriteEntry& entry, StringView name) {
+        auto result = SetSpriteAtlas(library, entry.name, name);
         if (!result) {
             SetStatus(StringView(result.error()), true);
             return false;
@@ -143,7 +179,7 @@ namespace BECore {
     bool SpriteAtlasPanel::Pack(TextureLibrary& library, PoolString group) {
         FileSystem& files = CoreManager::GetFileSystem();
         auto resolve = [&files](StringView path) { return files.ResolvePath(path); };
-        const AtlasIo io{files.GetMountedPath(MountPoints::assets), resolve};
+        const AtlasIo io = _files != nullptr ? _files->io : AtlasIo{files.GetMountedPath(MountPoints::assets), resolve};
 
         auto written = WriteAtlas(library, group.ToStringView(), _settings, io);
         if (!written) {
@@ -161,7 +197,8 @@ namespace BECore {
 
     bool SpriteAtlasPanel::Unpack(TextureLibrary& library, PoolString group) {
         const FileSystem& files = CoreManager::GetFileSystem();
-        auto exists = [&files](PoolString path) { return files.Exists(path.ToStringView()); };
+        auto inGame = [&files](PoolString path) { return files.Exists(path.ToStringView()); };
+        const FunctionRef<bool(PoolString)> exists = _files != nullptr ? _files->exists : FunctionRef<bool(PoolString)>(inGame);
 
         auto unpacked = UnpackAtlas(library, group.ToStringView(), exists);
         if (!unpacked) {
@@ -179,6 +216,7 @@ namespace BECore {
     }
 
     void SpriteAtlasPanel::SetStatus(StringView text, bool isError) {
+        ++_statusRevision;
         _hasError = isError;
         if (text.empty()) {
             _status[0] = '\0';

@@ -10,6 +10,8 @@
 #include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
+#include <Widgets/TextureEditor/SpriteAtlasPanel.h>
+#include <Widgets/TextureEditor/SpriteAtlasPreviewPanel.h>
 #include <Widgets/TextureEditor/SpriteLibraryPanel.h>
 #include <Widgets/TextureEditor/SpriteLibrarySlots.h>
 #include <Widgets/TextureEditor/SpriteSheetSlicePanel.h>
@@ -63,6 +65,10 @@ namespace BECore {
         BE_REFLECT_FIELD String dropTakenText;
         /// The "Slice sheet" section
         BE_REFLECT_FIELD SpriteSliceView slice;
+        /// The "Atlas" section
+        BE_REFLECT_FIELD SpriteAtlasView atlas;
+        /// The mode of the "Atlas preview" section
+        BE_REFLECT_FIELD SpriteAtlasPreviewView preview;
     };
 
     /**
@@ -77,11 +83,14 @@ namespace BECore {
      * library is saved by the command while the panel is closed too. Commands (`EditorCommandIds`, run only while the panel is open):
      * `spriteLibrary.rename` (the name field's `commitCommand`), `spriteLibrary.rescan`, `spriteLibrary.add`, `spriteLibrary.delete`,
      * `spriteLibrary.dropAccept` and `spriteLibrary.dropCancel` (the "Add sprite" dialog), `spriteLibrary.sliceFindIslands` and
-     * `spriteLibrary.sliceAdd` (the "Slice sheet" section, whose fields `SpriteSheetSlicePanel::Sync` takes while the section can slice).
+     * `spriteLibrary.sliceAdd` (the "Slice sheet" section, whose fields `SpriteSheetSlicePanel::Sync` takes while the section can slice),
+     * `spriteLibrary.atlasName` (the group field's `commitCommand`), `spriteLibrary.pack` and `spriteLibrary.unpack` (the "Atlas" section, whose fields
+     * `SpriteAtlasPanel::Sync` takes); a change of the library by them forgets the failed textures and marks it unsaved. The "Atlas preview" picture is
+     * the slot `spriteAtlasPreview`, and the model keeps its mode.
      *
-     * `Initialize` registers the slots `spriteList` and `spritePreview` (`SpriteLibrarySlots`). They note a clicked row, a drop and a finished drag, and
-     * `EndUpdate` applies them. A drop on a row replaces that sprite at once; a drop on the free area opens the dialog. The accept goes through
-     * `ArtGenVariantDropEvent` (the Generate panel owns the accept), and its answer is the view's drop message.
+     * `Initialize` registers the slots `spriteList`, `spritePreview` and `spriteAtlasPreview` (`SpriteLibrarySlots`). They note a clicked row, a drop, a
+     * finished drag and a clicked rect of the atlas preview, and `EndUpdate` applies them. A drop on a row replaces that sprite at once; a drop on the free area opens the dialog. The accept goes
+     * through `ArtGenVariantDropEvent` (the Generate panel owns the accept), and its answer is the view's drop message.
      */
     class SpriteLibraryPanelModel : public IPanelModel, public SubscriptionHolder {
         BE_CLASS(SpriteLibraryPanelModel)
@@ -101,6 +110,9 @@ namespace BECore {
         /// Works on @p library and saves it through @p save instead of CoreManager's library and its `Save` (a test over a library of its own; @p library
         /// must outlive the model). Null goes back to CoreManager's
         void UseLibrary(TextureLibrary* library, LibrarySave save);
+
+        /// Packs into and checks @p files instead of the game's folders (a test); it must outlive the model. Null goes back to the FileSystem's
+        void UseAtlasFiles(const SpriteAtlasFiles* files);
 
         /// Lists the images of @p mountPoint instead of `assets` for the texture rows (a test over a folder of its own); the list is made again now
         void UseTextureMount(PoolString mountPoint);
@@ -127,6 +139,13 @@ namespace BECore {
         [[nodiscard]] const SpriteSheetSlicePanel& GetSlicePanel() const {
             return _slicePanel;
         }
+        [[nodiscard]] SpriteAtlasPreviewPanel& GetAtlasPreviewPanel() {
+            return _atlasPreviewPanel;
+        }
+        /// The Atlas section's pack settings, which the preview's `Plan` packs with
+        [[nodiscard]] const PackSettings& GetAtlasSettings() const {
+            return _atlasPanel.Settings();
+        }
 
         /// What the slots saw this frame, applied by `EndUpdate`: a clicked row of the list, a variant released on it, a rect dragged on the preview (texture
         /// pixels). The preview also says which texture it has loaded and its size (an empty path when none), which the next `Update` gives to the slice
@@ -135,6 +154,8 @@ namespace BECore {
         void NoteDrop(const SpriteLibraryDrop& drop);
         void NoteDraggedRect(const Rect& rect);
         void NoteSheet(PoolString texturePath, int width, int height);
+        /// A sprite whose rect was clicked on the atlas preview: it is selected by `EndUpdate`
+        void NotePreviewClick(PoolString sprite);
 
         /// The library with its unsaved flag, for `editor_state` (`.claude/rules/control-editor-api.md`); a closed panel reports too
         void AppendDocuments(Vector<EditorDocumentState>& out);
@@ -178,6 +199,9 @@ namespace BECore {
         /// The slice section works on the selected entry's sheet only when the preview has it loaded and the entry is not packed
         [[nodiscard]] bool CanSlice(const SpriteEntry* entry) const;
         void SliceAdd();
+        void SyncAtlas(const SpriteEntry* entry);
+        /// A change of the library by the Atlas section: the textures that failed may exist now, and the library is unsaved
+        void AtlasChanged();
 
         SpriteLibraryPanelView _view;
         ViewKey _key;
@@ -194,6 +218,7 @@ namespace BECore {
         int _notedClick = -1;
         Optional<Rect> _notedRect;
         Optional<SpriteLibraryDrop> _notedDrop;
+        PoolString _notedPreviewClick;
         PoolString _sheetPath;
         int _sheetWidth = 0;
         int _sheetHeight = 0;
@@ -202,9 +227,14 @@ namespace BECore {
         ArtGenDropPlan _dropPlan;
         String _plannedDropName;  // the dialog's name `_dropPlan` was made for
 
+        AtlasPreviewMode _previewChoice = AtlasPreviewMode::Current;  // the user's choice, kept while `Plan` is shown for want of a packed member
+        AtlasPreviewMode _shownPreviewMode = AtlasPreviewMode::Current;
+
         SpriteTextureCache _textures;
         SpriteLibraryPanel _libraryPanel;
         SpriteSheetSlicePanel _slicePanel;
+        SpriteAtlasPanel _atlasPanel;
+        SpriteAtlasPreviewPanel _atlasPreviewPanel;
 
         // The registrations come last: they end first, while the members their callbacks read are alive
         SpriteLibrarySlots _slots{*this};

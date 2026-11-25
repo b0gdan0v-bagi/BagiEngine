@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -16,8 +17,24 @@ namespace BECore {
     CORE_ENUM(AtlasPreviewMode, uint8_t, Current, Plan)
 
     /**
+     * @brief The mode of the "Atlas preview" section as the Sprite Library asset binds it (`sprites.preview`)
+     *
+     * `mode` is written by the radios; the model shows `Plan` while no member of the group is packed (`Current` is off then) and keeps the choice, so the
+     * section returns to it once a member is packed.
+     */
+    struct SpriteAtlasPreviewView {
+        BE_CLASS(SpriteAtlasPreviewView)
+
+        BE_REFLECT_FIELD AtlasPreviewMode mode = AtlasPreviewMode::Current;
+        BE_REFLECT_FIELD bool anyPacked = false;
+        /// The selected sprite has a group: the section shows the picture only then
+        BE_REFLECT_FIELD bool hasGroup = false;
+    };
+
+    /**
      * @brief The "Atlas preview" section of the Sprite Library panel: the atlas of the selected sprite's group drawn rect by rect with
-     * its names, its size and its fill ratio. The model is `SpriteAtlasPreview`; this draws what it says.
+     * its names, its size and its fill ratio. The model is `SpriteAtlasPreview`; this draws what it says. `Render` is the whole section of
+     * `TextureEditorWidget` (its header, the mode radios and the body); the asset draws the body alone (`DrawBody`) and keeps the mode itself.
      *
      * The preview is made again only when `AtlasPreviewKey`, the mode, the pack settings (Plan) or the size of a texture it read
      * moved, so a steady frame allocates nothing. `Plan` takes the sizes from the loaded textures and writes no pixel.
@@ -29,6 +46,12 @@ namespace BECore {
          * @return The name of the sprite whose rect was clicked this frame, else empty
          */
         PoolString Render(const TextureLibrary& library, const SpriteEntry& entry, const PackSettings& settings, SpriteTextureCache& textures);
+
+        /**
+         * @brief Draws the error line, the picture, the size and the fill of the atlas of @p group in @p mode; @p settings are the Atlas section's.
+         * @return The name of the sprite whose rect was clicked this frame, else empty
+         */
+        PoolString DrawBody(const TextureLibrary& library, PoolString group, AtlasPreviewMode mode, const PackSettings& settings, SpriteTextureCache& textures);
 
     private:
         /// A texture the current preview was made from and the size it had, compared every frame so a load, an evict or a rewritten file makes the preview again

@@ -13,6 +13,7 @@ namespace BECore {
 
         constexpr StringView kListSlotName = "spriteList";
         constexpr StringView kPreviewSlotName = "spritePreview";
+        constexpr StringView kAtlasPreviewSlotName = "spriteAtlasPreview";
 
         /// The longer side of the preview in screen pixels; a smaller texture is drawn at its own size
         constexpr float kPreviewMaxSize = 400.0f;
@@ -27,6 +28,7 @@ namespace BECore {
         // The closures keep `this` only: they are called inside the frame and the handles end with this object
         _listSlot = slots.Register(kListSlotName, [this] { DrawList(); });
         _previewSlot = slots.Register(kPreviewSlotName, [this] { DrawPreview(); });
+        _atlasPreviewSlot = slots.Register(kAtlasPreviewSlotName, [this] { DrawAtlasPreview(); });
     }
 
     void SpriteLibrarySlots::DrawList() {
@@ -105,6 +107,17 @@ namespace BECore {
         }
         DrawDrag(*drawList, textureWidth, textureHeight);
         ImGui::TextUnformatted("Click and drag on the texture to select the sprite area.");
+    }
+
+    void SpriteLibrarySlots::DrawAtlasPreview() {
+        const SpriteEntry* entry = _model.GetSelected();
+        if (entry == nullptr || !entry->atlas.has_value() || entry->atlas->name.Empty()) {
+            return;
+        }
+        const PoolString clicked = _model.GetAtlasPreviewPanel().DrawBody(_model.GetLibrary(), entry->atlas->name, _model.GetView().preview.mode, _model.GetAtlasSettings(), _model.GetTextureCache());
+        if (!clicked.Empty()) {
+            _model.NotePreviewClick(clicked);
+        }
     }
 
     void SpriteLibrarySlots::DrawDrag(ImDrawList& drawList, float textureWidth, float textureHeight) {
