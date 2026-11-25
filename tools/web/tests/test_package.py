@@ -341,5 +341,44 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("package.py:", err.getvalue())
 
 
+class NoticesTest(unittest.TestCase):
+    NOTICES = b"Third-party notices\n"
+
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.root = Path(self._temp.name)
+        self.build = write_build_output(self.root / "build")
+        self.out = self.root / "dist"
+
+    def run_package(self) -> dict:
+        return package.package(self.build, self.out, brotli_module=None)
+
+    def write_notices(self, text: bytes = NOTICES):
+        (self.build / f"{GAME}.notices.txt").write_bytes(text)
+
+    def test_the_notices_of_the_build_are_published_and_listed_with_size_and_hash(self):
+        self.write_notices()
+        manifest = self.run_package()
+        self.assertEqual((self.out / "third-party-notices.txt").read_bytes(), self.NOTICES)
+        self.assertEqual(manifest["files"]["third-party-notices.txt"],
+                         {"size": len(self.NOTICES), "sha256": hashlib.sha256(self.NOTICES).hexdigest()})
+        self.assertFalse((self.out / "third-party-notices.txt.gz").exists())
+        self.assertFalse((self.out / f"{GAME}.notices.txt").exists())
+
+    def test_a_build_without_notices_publishes_none(self):
+        manifest = self.run_package()
+        self.assertNotIn("third-party-notices.txt", manifest["files"])
+        self.assertFalse((self.out / "third-party-notices.txt").exists())
+
+    def test_the_notices_of_an_earlier_run_do_not_outlive_a_build_without_them(self):
+        self.write_notices()
+        self.run_package()
+        (self.build / f"{GAME}.notices.txt").unlink()
+        manifest = self.run_package()
+        self.assertFalse((self.out / "third-party-notices.txt").exists())
+        self.assertNotIn("third-party-notices.txt", manifest["files"])
+
+
 if __name__ == "__main__":
     unittest.main()
