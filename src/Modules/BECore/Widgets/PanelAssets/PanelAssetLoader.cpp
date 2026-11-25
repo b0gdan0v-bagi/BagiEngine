@@ -178,7 +178,9 @@ namespace BECore {
                     _issues.Add(where, "only a section, a row, a child, a popup, a dropdown, a tab bar, a tab or a menu holds elements");
                 }
 
-                if (const auto* text = element.Cast<PanelText>()) {
+                if (const auto* section = element.Cast<PanelSection>()) {
+                    Binding(where, "openBind", section->openBind, false);
+                } else if (const auto* text = element.Cast<PanelText>()) {
                     if (text->text.empty() && text->bind.empty()) {
                         _issues.Add(where, "a text needs 'text' or 'bind'");
                     }
@@ -198,6 +200,10 @@ namespace BECore {
                     if (input->focus && _popupDepth == 0) {
                         _issues.Add(where, "focus is for an input inside a popup");
                     }
+                    ScrollLimit(where, "lines", input->lines, PanelAssetLimits::kMaxInputLines);
+                    if (input->lines > 0 && !input->submitCommand.empty()) {
+                        _issues.Add(where, "a multiline input has no submitCommand: Enter is a new line there");
+                    }
                 } else if (const auto* checkbox = element.Cast<PanelCheckbox>()) {
                     Binding(where, "bind", checkbox->bind, true);
                     Binding(where, "labelBind", checkbox->labelBind, false);
@@ -209,6 +215,8 @@ namespace BECore {
                     CheckCombo(*combo, where);
                 } else if (const auto* number = element.Cast<PanelNumber>()) {
                     CheckNumber(*number, where);
+                } else if (const auto* radio = element.Cast<PanelRadio>()) {
+                    CheckRadio(*radio, where);
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Command(where, "command", button->command);
                     Condition(where, "enableWhen", button->enableWhen);
@@ -217,7 +225,9 @@ namespace BECore {
                         _issues.Add(where, "fillWhen needs a fill");
                     }
                     Literal(where, "argument", button->argument);
-                    Extent(where, "width", button->width);
+                    if (button->width != kPanelFillLineWidth && !IsExtent(button->width)) {
+                        _issues.Add(where, Format("width must be {} (the rest of the line) or from 0 to {}", kPanelFillLineWidth, PanelAssetLimits::kMaxChildExtent));
+                    }
                 } else if (const auto* menu = element.Cast<PanelMenu>()) {
                     CheckMenu(*menu, where);
                 } else if (const auto* item = element.Cast<PanelMenuItem>()) {
@@ -345,6 +355,9 @@ namespace BECore {
                 if (number.input && number.slider) {
                     _issues.Add(where, "a number is a slider or an input, not both");
                 }
+                if (number.stepper && (number.slider || number.input)) {
+                    _issues.Add(where, "a stepper is neither a slider nor an input");
+                }
                 // Every limit is written as a comparison that a NaN fails
                 const auto inRange = [](float value, float lowest) { return value >= lowest && value <= PanelAssetLimits::kMaxNumberExtent; };
                 const bool minOk = inRange(number.min, -PanelAssetLimits::kMaxNumberExtent);
@@ -359,6 +372,28 @@ namespace BECore {
                 if (!inRange(number.step, 0.0f)) {
                     _issues.Add(where, Format("step must be from 0 to {}", PanelAssetLimits::kMaxNumberExtent));
                 }
+                if (!inRange(number.stepFast, 0.0f)) {
+                    _issues.Add(where, Format("stepFast must be from 0 to {}", PanelAssetLimits::kMaxNumberExtent));
+                } else if (number.stepFast != 0.0f && !number.stepper) {
+                    _issues.Add(where, "stepFast needs stepper");
+                }
+            }
+
+            void CheckRadio(const PanelRadio& radio, StringView where) {
+                Binding(where, "bind", radio.bind, true);
+                if (radio.value.empty()) {
+                    _issues.Add(where, "value is required");
+                } else if (radio.value.size() <= PanelAssetLimits::kMaxTextBytes) {  // past the limit it is reported by CheckTexts
+                    PanelConditionTerm term;
+                    term.compare = PanelCompare::Equal;
+                    if (const auto literal = ParsePanelConditionLiteral(radio.value, term); !literal) {
+                        _issues.Add(where, Format("value: {}", literal.error()));
+                    }
+                }
+                if (radio.text.empty() && radio.icon.empty()) {
+                    _issues.Add(where, "a radio needs 'text' or 'icon'");
+                }
+                Condition(where, "enableWhen", radio.enableWhen);
             }
 
             void CheckPopup(const PanelPopup& popup, StringView where) {
@@ -482,8 +517,12 @@ namespace BECore {
                 }
             }
 
+            static bool IsExtent(float value) {
+                return std::isfinite(value) && value >= 0.0f && value <= PanelAssetLimits::kMaxChildExtent;
+            }
+
             void Extent(StringView where, StringView field, float value) {
-                if (!std::isfinite(value) || value < 0.0f || value > PanelAssetLimits::kMaxChildExtent) {
+                if (!IsExtent(value)) {
                     _issues.Add(where, Format("{} must be from 0 to {}", field, PanelAssetLimits::kMaxChildExtent));
                 }
             }

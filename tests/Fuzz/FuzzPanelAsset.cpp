@@ -133,6 +133,21 @@ namespace BECore::Fuzz {
                 if (!(number.step >= 0.0f && number.step <= kLimit)) {
                     Fail();
                 }
+                if (!(number.stepFast >= 0.0f && number.stepFast <= kLimit) || (number.stepFast != 0.0f && !number.stepper)) {
+                    Fail();
+                }
+                if (number.stepper && (number.slider || number.input)) {
+                    Fail();
+                }
+            }
+
+            /// A literal as a condition's: within the text limit and read by the condition's own literal reader under `==`
+            void RadioValue(const String& value) {
+                PanelConditionTerm term;
+                term.compare = PanelCompare::Equal;
+                if (value.empty() || value.size() > PanelAssetLimits::kMaxTextBytes || !ParsePanelConditionLiteral(value, term)) {
+                    Fail();
+                }
             }
 
             void Condition(const String& text) {
@@ -200,6 +215,9 @@ namespace BECore::Fuzz {
 
                 if (const auto* section = element.Cast<PanelSection>()) {
                     Text(section->title);
+                    Text(section->icon);
+                    Text(section->openBind);
+                    Binding(section->openBind, false);
                 } else if (const auto* text = element.Cast<PanelText>()) {
                     Text(text->text);
                     Text(text->bind);
@@ -226,6 +244,10 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                     if (input->width < 0.0f) {
+                        Fail();
+                    }
+                    AtMost(input->lines, PanelAssetLimits::kMaxInputLines);
+                    if (input->lines > 0 && !input->submitCommand.empty()) {
                         Fail();
                     }
                 } else if (const auto* checkbox = element.Cast<PanelCheckbox>()) {
@@ -267,6 +289,18 @@ namespace BECore::Fuzz {
                     if (number->input && number->slider) {
                         Fail();
                     }
+                } else if (const auto* radio = element.Cast<PanelRadio>()) {
+                    Text(radio->bind);
+                    Text(radio->value);
+                    Text(radio->text);
+                    Text(radio->icon);
+                    Text(radio->enableWhen);
+                    Binding(radio->bind, true);
+                    RadioValue(radio->value);
+                    if (radio->text.empty() && radio->icon.empty()) {
+                        Fail();
+                    }
+                    Condition(radio->enableWhen);
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Text(button->text);
                     Text(button->icon);
@@ -283,7 +317,9 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                     Literal(button->argument);
-                    Extent(button->width);
+                    if (button->width != kPanelFillLineWidth) {
+                        Extent(button->width);
+                    }
                 } else if (const auto* menu = element.Cast<PanelMenu>()) {
                     Menu(*menu);
                 } else if (const auto* item = element.Cast<PanelMenuItem>()) {

@@ -19,12 +19,15 @@ namespace BECore {
     /// The fill of a `PanelButton`: the palette's accent or its muted accent (`None`: the plain button)
     CORE_ENUM(PanelButtonFill, uint8_t, None, Accent, Muted)
 
-    /// A collapsing header over its `elements`
+    /// A collapsing header over its `elements`; `icon` is the glyph before the title. `openBind` is a bool field the header's open state is written to whenever it
+    /// differs from what the field reads; the header never follows the field (a model reads whether the section is open, it does not open it)
     class PanelSection : public PanelElement {
         BE_CLASS(PanelSection)
     public:
         BE_REFLECT_FIELD String title;
         BE_REFLECT_FIELD bool defaultOpen = true;
+        BE_REFLECT_FIELD String icon;
+        BE_REFLECT_FIELD String openBind;
     };
 
     /// Its `elements` on one line; with `align` `Center` the children are centred as one group on the width that is free
@@ -135,7 +138,8 @@ namespace BECore {
     };
 
     /// A text field bound to a `String` field; `width` is in em, 0 fills the line. The field is written at every change. `focus` takes the keyboard focus on the frame the surrounding
-    /// popup appears (so it is only for an input inside a popup); `submitCommand` runs when Enter is pressed in it, `commitCommand` when the user lets go of it after an edit; empty: none
+    /// popup appears (so it is only for an input inside a popup); `submitCommand` runs when Enter is pressed in it, `commitCommand` when the user lets go of it after an edit; empty: none.
+    /// `lines` > 0 makes it a multiline field that many lines high; Enter is a new line there, so it takes no `submitCommand`
     class PanelInput : public PanelElement {
         BE_CLASS(PanelInput)
     public:
@@ -146,6 +150,7 @@ namespace BECore {
         BE_REFLECT_FIELD bool focus = false;
         BE_REFLECT_FIELD String submitCommand;
         BE_REFLECT_FIELD String commitCommand;
+        BE_REFLECT_FIELD uint32_t lines = 0;
     };
 
     /// A bool field `bind` as a check box or, as `Toggle`, a button filled with the accent while on; the label is `text`, or the text of `labelBind` when that is set, after the glyph
@@ -180,7 +185,8 @@ namespace BECore {
     /// 0 picks one; `text` is the label after the control. It writes the field itself and runs no command but `commitCommand`; `width` is in em, 0 is ImGui's default item width, which leaves room for
     /// the label. `commitCommand` runs when the user lets go of the control after an edit (a slider is saved on release, not at every drag frame); empty: none. `input` makes it a
     /// typed field instead of a drag (not with `slider`): the field is written, clamped to `min` / `max` when they differ, only when the user confirms or leaves it after an edit.
-    /// Nothing is written while the condition `enableWhen` reads false
+    /// `stepper` makes it a typed field with - and + buttons instead (not with `slider` or `input`): `step` is the change of a click, `stepFast` of a Ctrl-click (only with
+    /// `stepper`), and the field is written, clamped to `min` / `max` when they differ, at every change. Nothing is written while the condition `enableWhen` reads false
     class PanelNumber : public PanelElement {
         BE_CLASS(PanelNumber)
     public:
@@ -194,12 +200,30 @@ namespace BECore {
         BE_REFLECT_FIELD String commitCommand;
         BE_REFLECT_FIELD bool input = false;
         BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
+        BE_REFLECT_FIELD bool stepper = false;
+        BE_REFLECT_FIELD float stepFast = 0.0f;
     };
 
+    /// One choice of a group of radio buttons (a group is several of them, usually in a `PanelRow`): selected while the field `bind` (an enum, an integer or a float) reads equal to
+    /// `value`, and a click writes `value` there. `value` is a literal as in a condition: a number, or a bare word that names a value of the enum. The label is `text` after the glyph
+    /// `icon`, at least one of them. It runs no command, and writes nothing while the condition `enableWhen` reads false
+    class PanelRadio : public PanelElement {
+        BE_CLASS(PanelRadio)
+    public:
+        BE_REFLECT_FIELD String bind;
+        BE_REFLECT_FIELD String value;
+        BE_REFLECT_FIELD String text;
+        BE_REFLECT_FIELD String icon;
+        BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
+    };
+
+    /// The `width` of a `PanelButton` that fills the rest of its line (ImGui's own convention for a negative width); any other negative width is a load issue
+    inline constexpr float kPanelFillLineWidth = -1.0f;
+
     /// Runs the editor command `command` with `argument` as a literal text (a button has no row to read a path from; a column of a table has its own `argument`, a path relative to the row).
-    /// `width` is in em, 0 is the label's own width. `navigable` false keeps the button out of the keyboard navigation: a dialog that reads Space or Enter itself (a key capture)
-    /// must not have them press its focused Cancel. `fill` paints the button with the accent while the condition `fillWhen` reads true (empty: always; it needs a `fill`); `repeat` makes
-    /// a held button click again on every frame. A button with an `icon` and no `text` is a square icon button
+    /// `width` is in em, 0 is the label's own width, `kPanelFillLineWidth` the rest of the line. `navigable` false keeps the button out of the keyboard navigation: a dialog that reads Space or Enter
+    /// itself (a key capture) must not have them press its focused Cancel. `fill` paints the button with the accent while the condition `fillWhen` reads true (empty: always; it needs a `fill`);
+    /// `repeat` makes a held button click again on every frame. A button with an `icon` and no `text` is a square icon button
     class PanelButton : public PanelElement {
         BE_CLASS(PanelButton)
     public:

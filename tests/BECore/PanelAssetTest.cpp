@@ -310,6 +310,60 @@ namespace BECore::Tests {
         EXPECT_EQ(table->columns[0].enableField, "available");
     }
 
+    TEST(PanelAssetTest, FormKindsRoundTrip) {
+        constexpr const char* xml = R"(
+<PanelAsset id="Form" title="Form">
+  <elements>
+    <element type="PanelSection" id="slice" title="Slice sheet" icon="grid-3x3" openBind="sprites.sliceOpen">
+      <elements>
+        <element type="PanelRadio" id="grid" bind="sprites.mode" value="Grid" text="Grid" icon="grid-3x3" enableWhen="sprites.canSlice"/>
+        <element type="PanelRadio" id="half" bind="sprites.scale" value="0.5" icon="minus"/>
+        <element type="PanelNumber" id="columns" bind="sprites.columns" min="1" max="256" step="1" stepFast="10" stepper="true"/>
+        <element type="PanelInput" id="names" bind="sprites.names" lines="3" commitCommand="sprites.names"/>
+        <element type="PanelButton" id="add" text="Add" command="sprites.add" width="-1"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        XmlDeserializer first;
+        const auto asset = Read(xml, first);
+        ASSERT_FALSE(first.HasErrors());
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+
+        ASSERT_EQ(again->elements.size(), 1u);
+        const auto* section = ElementAs<PanelSection>(again->elements[0]);
+        ASSERT_NE(section, nullptr);
+        EXPECT_EQ(section->icon, "grid-3x3");
+        EXPECT_EQ(section->openBind, "sprites.sliceOpen");
+        ASSERT_EQ(section->elements.size(), 5u);
+        const auto* grid = ElementAs<PanelRadio>(section->elements[0]);
+        ASSERT_NE(grid, nullptr);
+        EXPECT_EQ(grid->bind, "sprites.mode");
+        EXPECT_EQ(grid->value, "Grid");
+        EXPECT_EQ(grid->text, "Grid");
+        EXPECT_EQ(grid->icon, "grid-3x3");
+        EXPECT_EQ(grid->enableWhen, "sprites.canSlice");
+        const auto* half = ElementAs<PanelRadio>(section->elements[1]);
+        ASSERT_NE(half, nullptr);
+        EXPECT_EQ(half->value, "0.5");
+        EXPECT_TRUE(half->text.empty());
+        const auto* columns = ElementAs<PanelNumber>(section->elements[2]);
+        ASSERT_NE(columns, nullptr);
+        EXPECT_TRUE(columns->stepper);
+        EXPECT_FLOAT_EQ(columns->step, 1.0f);
+        EXPECT_FLOAT_EQ(columns->stepFast, 10.0f);
+        const auto* names = ElementAs<PanelInput>(section->elements[3]);
+        ASSERT_NE(names, nullptr);
+        EXPECT_EQ(names->lines, 3u);
+        const auto* add = ElementAs<PanelButton>(section->elements[4]);
+        ASSERT_NE(add, nullptr);
+        EXPECT_FLOAT_EQ(add->width, kPanelFillLineWidth);
+    }
+
     TEST(PanelAssetTest, RowAlignAndButtonFillDefaultToTheOldLook) {
         XmlDeserializer deserializer;
         const auto asset = Read(R"(<PanelAsset id="A"><elements>
@@ -329,9 +383,9 @@ namespace BECore::Tests {
     }
 
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {
-        for (const char* name :
-             {"PanelSection",   "PanelRow",        "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelCheckbox", "PanelCombo", "PanelNumber",   "PanelButton",    "PanelTable",
-              "PanelSeparator", "PanelEmptyState", "PanelSlot", "PanelChild", "PanelPopup",  "PanelTabs",  "PanelTab",      "PanelMenu",  "PanelMenuItem", "PanelMenuItems", "PanelDropdown"}) {
+        for (const char* name : {"PanelSection", "PanelRow",    "PanelText",  "PanelField",     "PanelFields",     "PanelInput",    "PanelCheckbox", "PanelCombo",
+                                 "PanelNumber",  "PanelButton", "PanelTable", "PanelSeparator", "PanelEmptyState", "PanelSlot",     "PanelChild",    "PanelPopup",
+                                 "PanelTabs",    "PanelTab",    "PanelMenu",  "PanelMenuItem",  "PanelMenuItems",  "PanelDropdown", "PanelRadio"}) {
             const IntrusivePtr<PanelElement> element = AbstractFactory<PanelElement>::GetInstance().Create(StringView{name});
             ASSERT_NE(element, nullptr) << name;
             EXPECT_EQ(element->GetTypeMeta().typeName, StringView{name});

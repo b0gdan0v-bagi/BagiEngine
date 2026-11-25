@@ -24,6 +24,9 @@ namespace BECore::PanelAssetLimits {
     inline constexpr size_t kMaxScrollLines = 64;
     inline constexpr size_t kMaxScrollRows = 64;
 
+    /// Lines of a multiline input (`PanelInput::lines`): the height a file may ask for
+    inline constexpr size_t kMaxInputLines = 32;
+
     /// em of a child region's `width` and `height`: what a file may ask for
     inline constexpr float kMaxChildExtent = 256.0f;
 

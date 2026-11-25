@@ -140,6 +140,10 @@ namespace BECore {
 
     }  // namespace
 
+    std::expected<void, String> ParsePanelConditionLiteral(StringView token, PanelConditionTerm& term) {
+        return ReadLiteral(token, term);
+    }
+
     std::expected<PanelCondition, String> ParsePanelCondition(StringView text) {
         if (text.size() > PanelAssetLimits::kMaxTextBytes) {
             return std::unexpected(String("the condition is too long"));

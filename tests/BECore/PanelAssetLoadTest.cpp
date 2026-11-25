@@ -179,7 +179,8 @@ namespace BECore::Tests {
         const PanelLoadResult literal = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelButton" id="b" command="c.d" argument="a[" width="9"/>)")));
         EXPECT_TRUE(literal.issues.empty()) << Joined(literal.issues);
         ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" argument="a&#10;b"/>)", "b", "argument must not hold a control character");
-        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" width="-1"/>)", "b", "width must be from 0 to");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" width="-2"/>)", "b", "width must be -1 (the rest of the line) or from 0 to");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" width="-0.5"/>)", "b", "width must be -1 (the rest of the line) or from 0 to");
         ExpectSingleIssue(StringView(Format(R"(<element type="PanelButton" id="b" command="c.d" argument="{}"/>)", String(PanelAssetLimits::kMaxTextBytes + 1, 'a'))), "b", "argument is longer than");
         ExpectSingleIssue(R"(<element type="PanelTable" id="t" source="a.b"><columns><column id="c" type="Button" command="c.d" argument="a["/></columns></element>)", "t.c", "argument: bad path");
     }
@@ -663,6 +664,55 @@ namespace BECore::Tests {
         ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" separatorField="line"/>)", "k", "separatorField needs items");
         ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="s.rows" separatorField="line["/>)", "k", "separatorField: bad path");
         ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" min="0" max="1" slider="true" input="true"/>)", "k", "a slider or an input, not both");
+    }
+
+    TEST(PanelAssetLoadTest, AGoodFormWithRadiosStepperAMultilineInputAndAFillingButtonLoadsWithNoIssue) {
+        const PanelLoadResult result = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelSection" id="slice" title="Slice sheet" icon="grid-3x3" openBind="s.sliceOpen" defaultOpen="false"><elements>
+                 <element type="PanelRow" id="modes"><elements>
+                   <element type="PanelRadio" id="grid" bind="s.mode" value="Grid" text="Grid" icon="grid-3x3"/>
+                   <element type="PanelRadio" id="islands" bind="s.mode" value="Islands" icon="shapes" enableWhen="s.loaded and s.mode != Grid"/>
+                   <element type="PanelRadio" id="half" bind="s.scale" value="-0.5" text="Half"/>
+                 </elements></element>
+                 <element type="PanelNumber" id="columns" bind="s.columns" min="1" max="256" step="1" stepFast="10" stepper="true" text="Columns"/>
+                 <element type="PanelNumber" id="margin" bind="s.margin" stepper="true"/>
+                 <element type="PanelInput" id="names" bind="s.names" lines="32" commitCommand="s.names"/>
+                 <element type="PanelButton" id="add" text="Add" command="s.add" width="-1"/>
+               </elements></element>)")));
+        EXPECT_TRUE(result.issues.empty()) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ARadioNeedsABindingALiteralValueAndALabel) {
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" value="Grid" text="Grid"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s" value="Grid" text="Grid"/>)", "k", "bind: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" text="Grid"/>)", "k", "value is required");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="Grid"/>)", "k", "a radio needs 'text' or 'icon'");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="Two words" text="x"/>)", "k", "value: the literal is a number or a word");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="s.other" text="x"/>)", "k", "value: the literal is a number or a word");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="1e999" text="x"/>)", "k", "value: the literal is not a finite number");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="Grid" text="x" enableWhen="s.a and"/>)", "k", "enableWhen: ");
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelRadio" id="k" bind="s.mode" value="{}" text="x"/>)", String(PanelAssetLimits::kMaxTextBytes + 1, 'a'))), "k",
+                          "value is longer than");
+    }
+
+    TEST(PanelAssetLoadTest, AMultilineInputIsBoundedAndHasNoSubmitCommand) {
+        ExpectSingleIssue(Format(R"(<element type="PanelInput" id="k" bind="s.names" lines="{}"/>)", PanelAssetLimits::kMaxInputLines + 1), "k", "lines must be at most");
+        ExpectSingleIssue(R"(<element type="PanelInput" id="k" bind="s.names" lines="3" submitCommand="s.go"/>)", "k", "a multiline input has no submitCommand");
+        const PanelLoadResult singleLine = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelInput" id="k" bind="s.name" lines="0" submitCommand="s.go"/>)")));
+        EXPECT_TRUE(singleLine.issues.empty()) << Joined(singleLine.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AStepperIsNeitherASliderNorAnInputAndOnlyItHasAFastStep) {
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" min="0" max="1" slider="true" stepper="true"/>)", "k", "a stepper is neither a slider nor an input");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" input="true" stepper="true"/>)", "k", "a stepper is neither a slider nor an input");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" stepFast="10"/>)", "k", "stepFast needs stepper");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" stepper="true" stepFast="-1"/>)", "k", "stepFast must be from 0");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" stepper="true" stepFast="2000000000"/>)", "k", "stepFast must be from 0");
+    }
+
+    TEST(PanelAssetLoadTest, ASectionOpenBindingIsChecked) {
+        ExpectSingleIssue(R"(<element type="PanelSection" id="k" title="S" openBind="open"/>)", "k", "openBind: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelSection" id="k" title="S" openBind="!s.open"/>)", "k", "'!' is allowed in a condition only");
     }
 
     TEST(PanelAssetLoadTest, ADropdownNeedsALabelAndNeitherNestsNorHoldsAPopup) {

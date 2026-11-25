@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<PanelAsset id="SpriteLibrary" title="Sprite Library" command="view.spriteLibrary" open="true" width="700" height="500">
+  <sources>
+    <source name="sprites" model="SpriteLibraryPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="panes">
+      <elements>
+        <element type="PanelChild" id="left" width="18" border="true">
+          <elements>
+            <element type="PanelSlot" id="list" name="spriteList"/>
+            <element type="PanelButton" id="add" text="Add" icon="plus" command="spriteLibrary.add" width="-1"/>
+          </elements>
+        </element>
+        <element type="PanelChild" id="right" border="true">
+          <elements>
+            <element type="PanelInput" id="name" bind="sprites.name" commitCommand="spriteLibrary.rename"/>
+            <element type="PanelSection" id="slice" title="Slice sheet" icon="grid-3x3" defaultOpen="false" openBind="sprites.slice.open" visible="sprites.slice.canSlice">
+              <elements>
+                <element type="PanelRow" id="modes">
+                  <elements>
+                    <element type="PanelRadio" id="grid" bind="sprites.slice.mode" value="Grid" text="Grid" icon="grid-3x3" tooltip="Cut the sheet into equal cells"/>
+                    <element type="PanelRadio" id="islands" bind="sprites.slice.mode" value="Islands" text="Alpha islands" icon="shapes"/>
+                  </elements>
+                </element>
+                <element type="PanelNumber" id="columns" bind="sprites.slice.columns" text="Columns" min="1" max="256" step="1" stepFast="10" stepper="true" visible="sprites.slice.mode == Grid"/>
+                <element type="PanelNumber" id="threshold" bind="sprites.slice.alphaThreshold" text="Alpha threshold" min="0" max="255" step="1" stepFast="16" stepper="true" visible="sprites.slice.mode == Islands"/>
+                <element type="PanelInput" id="names" bind="sprites.slice.names" hint="one name per line" lines="3"/>
+                <element type="PanelRow" id="policy">
+                  <elements>
+                    <element type="PanelRadio" id="overwrite" bind="sprites.slice.policy" value="Overwrite" text="Overwrite"/>
+                    <element type="PanelRadio" id="skip" bind="sprites.slice.policy" value="1" text="Skip" enableWhen="sprites.slice.canAdd"/>
+                  </elements>
+                </element>
+                <element type="PanelButton" id="sliceAdd" text="Add sprites" icon="plus" command="spriteLibrary.sliceAdd" enableWhen="sprites.slice.canAdd"/>
+              </elements>
+            </element>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

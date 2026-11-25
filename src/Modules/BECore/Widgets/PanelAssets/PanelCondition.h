@@ -42,6 +42,14 @@ namespace BECore {
     [[nodiscard]] std::expected<PanelCondition, String> ParsePanelCondition(StringView text);
 
     /**
+     * @brief Reads one literal of a compare term as `ParsePanelCondition` does: a number into `numeric` / `number`, or a bare word into `word`
+     *
+     * `term.compare` is the compare the literal stands under (an order compare takes a number only). For a literal outside a condition text:
+     * the `value` of a `PanelRadio`, read under `Equal`.
+     */
+    [[nodiscard]] std::expected<void, String> ParsePanelConditionLiteral(StringView token, PanelConditionTerm& term);
+
+    /**
      * @brief Evaluates a condition against the sources
      *
      * A number term reads through ReadNumber, a word term through ReadText into @p scratch; a term that cannot be read (any status but `Ok`,
