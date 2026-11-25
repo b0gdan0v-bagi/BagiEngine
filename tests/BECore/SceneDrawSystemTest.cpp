@@ -11,7 +11,6 @@
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Generated/SceneDrawSystemTest.gen.hpp>
-#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -205,28 +204,23 @@ namespace BECore::Tests {
         EXPECT_EQ(item->layer, -1);
     }
 
-    TEST_F(SceneDrawSystemTest, RemovingANodeDestroysTheEntitiesOfItsWholeSubtree) {
+    TEST_F(SceneDrawSystemTest, RemovingANodeDropsItsWholeSubtreeFromTheDrawOrder) {
         auto removed = AddQuad(*_scene, nullptr, "Removed", 1.0f);
         auto child = AddQuad(*_scene, removed.Get(), "Child", 2.0f);
         auto grandChild = AddQuad(*_scene, child.Get(), "GrandChild", 3.0f);
-        auto kept = AddQuad(*_scene, nullptr, "Kept", 4.0f);
+        AddQuad(*_scene, nullptr, "Kept", 4.0f);
         EXPECT_EQ(Draw(), (Vector<float>{1.0f, 2.0f, 3.0f, 4.0f}));
-
-        auto& registry = _scene->GetRegistry();
-        const entt::entity removedEntities[] = {removed->GetEntity(), child->GetEntity(), grandChild->GetEntity()};
-        for (const entt::entity entity : removedEntities) {
-            ASSERT_TRUE(registry.valid(entity));
-        }
+        ASSERT_GT(_scene->GetDrawRank(*grandChild), 0);
 
         _scene->GetRootNode().RemoveChild(removed.Get());
 
-        for (const entt::entity entity : removedEntities) {
-            EXPECT_FALSE(registry.valid(entity));
-        }
-        EXPECT_TRUE(removed->GetEntity() == entt::null);
-        EXPECT_TRUE(child->GetEntity() == entt::null);
-        EXPECT_TRUE(grandChild->GetEntity() == entt::null);
-        EXPECT_TRUE(registry.valid(kept->GetEntity()));
+        // Nothing may read a rank or an item that points into the removed subtree before the next draw
+        EXPECT_FALSE(_scene->IsDrawListValid());
+        EXPECT_EQ(removed->GetParent(), nullptr);
+        EXPECT_FALSE(_scene->MoveNode(*removed, nullptr));
+        EXPECT_FALSE(_scene->DuplicateNode(*child));
+        EXPECT_EQ(_scene->GetDrawRank(*removed), 0);
+        EXPECT_EQ(_scene->GetDrawRank(*grandChild), 0);
 
         EXPECT_EQ(Draw(), (Vector<float>{4.0f}));
         EXPECT_EQ(_scene->GetDrawList().items.size(), 2u);

@@ -27,7 +27,7 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 
 `type` is the component class name; field names lose the leading underscore. A `scene` can carry `viewWidth` / `viewHeight` ("View size") and a node `layer="-1"` ("Draw order"). A game's `SceneConfig.xml` replaces the engine's. A node can live in a file (`<node ref="nodes/MyHud"/>`, "Node files").
 
-**Nested nodes:** a node can hold `<children><node name layer>..</node></children>` after its `<components>`, to any depth, in file order, wired like a top-level node (entity, `OnAttached` once). `<node ref>` is a top-level element only: not inside `<children>`.
+**Nested nodes:** a node can hold `<children><node name layer>..</node></children>` after its `<components>`, to any depth, in file order, wired like a top-level node (`OnAttached` once). `<node ref>` is a top-level element only: not inside `<children>`.
 
 ## Node files
 
@@ -64,7 +64,7 @@ A game can split its one `SceneConfig.xml`: a node kept in a file of its own is 
 
 ## Editing the tree
 
-`Scene::MoveNode(node, newParent, index)` reparents and reorders (null parent = root; `index` counts the children after the node left its place, clamped, `kAppend`); entity and components stay; false and unchanged for the root, a node or parent of another scene, or a parent that is the node or below it. `DuplicateNode(node)` deep-copies a subtree after the original, named `Name (copy)`, `Name (copy 2)`, ...; the top copy keeps `sourceRef`; empty for the root.
+`Scene::MoveNode(node, newParent, index)` reparents and reorders (null parent = root; `index` counts the children after the node left its place, clamped, `kAppend`); the components stay; false and unchanged for the root, a node or parent of another scene, or a parent that is the node or below it. `DuplicateNode(node)` deep-copies a subtree after the original, named `Name (copy)`, `Name (copy 2)`, ...; the top copy keeps `sourceRef`; empty for the root.
 
 ## Component lifecycle
 
@@ -77,7 +77,7 @@ A game can split its one `SceneConfig.xml`: a node kept in a file of its own is 
 Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a loop over the scene's `SceneDrawList` (`SceneDrawList.h`): one entry per drawing component of a visible node, sorted by (`GetLayer()`, scene order, the component's index in its node). It is rebuilt only when `IsDrawListValid()` is false (a node added, removed, moved or put on another layer, a component added or removed, the editor flags changed); a steady frame only loops. The quad and the sprite are drawn by the system from their fields, read at draw time (no hook); every other component through `IComponent::OnDraw()`. `HasOnDraw()` is asked once per rebuild: false leaves a component out (default true, so a game's component that overrides `OnDraw()` needs nothing).
 
 - A lower layer is drawn first (default 0, negative = background). On one layer: scene order, parent before children, later siblings on top. **Give a background a lower `layer`**; the order never depends on subscriptions. A child does not inherit its parent's layer.
-- Only the active scene draws, so `OnDraw()` needs no `IsSceneActive()` check. `RemoveChild()` destroys the entities of the removed subtree.
+- Only the active scene draws, so `OnDraw()` needs no `IsSceneActive()` check. `RemoveChild()` takes the removed subtree out of the update lists and makes the draw order stale.
 - **Override `OnDraw()`, never subscribe to draw.** `OnDraw()` only reads state and issues renderer calls: it must not add or remove nodes or components, call `SetLayer()` or change the editor flags: the list holds raw pointers and is stale after such a change (Debug asserts).
 - **A node's layer changes only through `SceneNode::SetLayer()`**, which makes the list and the ranks stale: a direct write to the reflected `_layer` (reflection, a field visitor) shows in the order only after the next rebuild, which nothing triggers.
 - `Scene::GetDrawRank(node)` is a node's position in this order (its `SceneDrawItem` is in `SceneDrawList::items`, sorted, and the index is written into the node with the list, so O(1) after any pass); `GetInputOrder(component)` = rank times `kMaxComponentsPerNode` plus the component's index, the key of every `UIInput` handler; `GetDrawPass()` counts the `Draw()` calls, so a target takes input only for a node that drew; the clip of a `ClipRectComponent` is pushed around the entries that name its node as clip owner (`SceneDrawList::clips`).

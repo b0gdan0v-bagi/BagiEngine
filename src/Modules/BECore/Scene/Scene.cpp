@@ -10,20 +10,14 @@
 #include <BECore/Time/Time.h>
 #include <Events/SceneEvents.h>
 #include <Generated/Scene.gen.hpp>
-#include <entt/entt.hpp>
 
 namespace BECore {
-
-    Scene::Scene() : _registry(MakeUnique<entt::registry>()) {}
-
-    Scene::~Scene() = default;
 
     void Scene::Initialize() {
         InvalidateDrawOrder();
         _rootNode = BECore::New<SceneNode>();
         _rootNode->_name = "Root"_intern;
         _rootNode->_scene = this;
-        _rootNode->_entity = _registry->create();
 
         for (auto& node : _nodes) {
             node->WireToScene(this, _rootNode.Get());
@@ -253,10 +247,6 @@ namespace BECore {
         _active = active;
     }
 
-    entt::registry& Scene::GetRegistry() {
-        return *_registry;
-    }
-
     SceneNode& Scene::GetRootNode() {
         return *_rootNode;
     }
@@ -275,7 +265,6 @@ namespace BECore {
         InvalidateDrawOrder();
         auto node = BECore::New<SceneNode>();
         node->_name = name;
-        node->_entity = _registry->create();
         node->_scene = this;
 
         SceneNode* targetParent = parent ? parent : _rootNode.Get();
@@ -298,7 +287,7 @@ namespace BECore {
             return fail("the scene is not initialized");
         }
         SceneNode* const target = parent ? parent : _rootNode.Get();
-        if (target->_scene != this || !_registry->valid(target->_entity)) {
+        if (!IsLiveNode(*target)) {
             return fail("the parent is not a node of this scene");
         }
 
@@ -327,7 +316,15 @@ namespace BECore {
     }
 
     bool Scene::IsLiveNode(const SceneNode& node) const {
-        return node._scene == this && _registry->valid(node._entity);
+        return node._scene == this && IsInTree(node);
+    }
+
+    bool Scene::IsInTree(const SceneNode& node) const {
+        const SceneNode* top = &node;
+        while (top->_parent != nullptr) {
+            top = top->_parent;
+        }
+        return top == _rootNode.Get();
     }
 
     bool Scene::MoveNode(SceneNode& node, SceneNode* newParent, size_t index) {
@@ -406,18 +403,14 @@ namespace BECore {
         clear(clear, *_rootNode);
     }
 
-    void Scene::DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>) {
+    void Scene::NodeRemoved(SceneNode& node, PassKey<SceneNode>) {
         InvalidateDrawOrder();
-        DestroyEntities(node);
+        ReleaseSubtree(node);
     }
 
     void Scene::AddUpdater(SceneUpdateKind kind, IComponent& component, SceneUpdateInvoker invoke, PassKey<IComponent>) {
         // A node that RemoveChild() took out keeps its scene (and so does a child made under it), but no exit of the list would ever reach its components
-        const SceneNode* top = &component.GetNode();
-        while (top->_parent != nullptr) {
-            top = top->_parent;
-        }
-        if (top != _rootNode.Get()) {
+        if (!IsInTree(component.GetNode())) {
             return;
         }
         GetUpdateList(kind).Add(component, invoke);
@@ -444,17 +437,13 @@ namespace BECore {
         return kind == SceneUpdateKind::Frame ? _frameUpdaters : _fixedUpdaters;
     }
 
-    void Scene::DestroyEntities(SceneNode& node) {
+    void Scene::ReleaseSubtree(SceneNode& node) {
         for (const auto& child : node.GetChildren()) {
-            DestroyEntities(*child);
+            ReleaseSubtree(*child);
         }
         for (const auto& component : node.GetComponents()) {
             DropUpdaters(*component);
         }
-        if (_registry->valid(node._entity)) {
-            _registry->destroy(node._entity);
-        }
-        node._entity = entt::null;
     }
 
 }  // namespace BECore

@@ -8,7 +8,6 @@
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Types/Types.h>
 #include <cstdint>
-#include <entt/entity/fwd.hpp>
 
 namespace BECore {
 
@@ -46,7 +45,6 @@ namespace BECore {
         using ComponentList = SmallVector<IntrusivePtr<IComponent>, kInlineComponents>;
         using ChildList = SmallVector<IntrusivePtr<SceneNode>, kInlineChildren>;
 
-        SceneNode();
         ~SceneNode() override = default;
 
         SceneNode* GetParent() const;
@@ -100,7 +98,6 @@ namespace BECore {
         void SetEditorFlags(EditorFlags flags);
         bool HasEditorFlag(EditorFlags flag) const;
 
-        entt::entity GetEntity() const;
         const ComponentList& GetComponents() const;
 
     private:
@@ -111,7 +108,6 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString _name;
         BE_REFLECT_FIELD int32_t _layer = 0;
         BE_REFLECT_FIELD PoolString _sourceRef;
-        entt::entity _entity;   // entt::null until Scene makes the entity
         int32_t _drawRank = 0;  // index of the node in SceneDrawList::items, written by Scene::DrawRanksWritten(); read through Scene::GetDrawRank() only
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;

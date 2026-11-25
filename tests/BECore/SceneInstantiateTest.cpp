@@ -15,7 +15,6 @@
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
-#include <entt/entt.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -121,7 +120,7 @@ namespace BECore::Tests {
         EXPECT_EQ(node->GetLayer(), 2);
         EXPECT_EQ(node->GetSourceRef(), PoolString::Intern(kBoxRef));
         EXPECT_EQ(node->GetParent(), &scene.GetRootNode());
-        EXPECT_TRUE(scene.GetRegistry().valid(node->GetEntity()));
+        EXPECT_TRUE(scene.MoveNode(*node, node->GetParent()));  // a live node of the scene, already last
         EXPECT_EQ(scene.GetRootNode().GetChildren().size(), before + 1);
         EXPECT_EQ(scene.GetRootNode().GetChildren().back().Get(), node.Get());
         ASSERT_EQ(node->GetComponents().size(), 3u);
@@ -184,7 +183,7 @@ namespace BECore::Tests {
         EXPECT_EQ(node->GetParent(), parent);
         EXPECT_EQ(ChildNames(*parent), (Vector<String>{"Existing", "Box"}));
         EXPECT_EQ(ChildNames(scene.GetRootNode()), (Vector<String>{"A", "C"}));
-        EXPECT_TRUE(scene.GetRegistry().valid(node->GetEntity()));
+        EXPECT_TRUE(scene.MoveNode(*node, parent));  // a live node of the scene, already last
     }
 
     TEST_F(SceneInstantiateTest, TheIndexPicksThePlaceAmongTheChildren) {
@@ -213,7 +212,7 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(a);
         ASSERT_TRUE(b);
-        EXPECT_NE(a->GetEntity(), b->GetEntity());
+        EXPECT_NE(a.Get(), b.Get());
         EXPECT_NE(a->GetComponent<TransformComponent>().Get(), b->GetComponent<TransformComponent>().Get());
         EXPECT_EQ(Require(a->GetComponent<TransformComponent>())._x, 50.0f);
         EXPECT_EQ(Require(b->GetComponent<TransformComponent>())._x, 1.0f);

@@ -3,11 +3,8 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Scene/Scene.h>
 #include <Generated/SceneNode.gen.hpp>
-#include <entt/entt.hpp>
 
 namespace BECore {
-
-    SceneNode::SceneNode() : _entity(entt::null) {}
 
     SceneNode* SceneNode::GetParent() const {
         return _parent;
@@ -42,9 +39,9 @@ namespace BECore {
 
         if (reverseIt != _children.rend()) {
             const auto it = _children.begin() + (_children.rend() - reverseIt - 1);
-            // The registry must not keep a SceneDrawItem that points into the removed subtree
+            // The draw list must not outlive the removed subtree, and its components leave the update lists
             if (_scene) {
-                _scene->DestroyNodeEntities(**it, {});
+                _scene->NodeRemoved(**it, {});
             }
             (*it)->_parent = nullptr;
             _children.erase(it);
@@ -96,7 +93,6 @@ namespace BECore {
     void SceneNode::WireToScene(Scene* scene, SceneNode* parent) {
         _scene = scene;
         _parent = parent;
-        _entity = scene->GetRegistry().create();
 
         for (auto& comp : _components) {
             comp->_scene = scene;
@@ -149,10 +145,6 @@ namespace BECore {
 
     bool SceneNode::HasEditorFlag(EditorFlags flag) const {
         return (_editorFlags & flag) != EditorFlags::None;
-    }
-
-    entt::entity SceneNode::GetEntity() const {
-        return _entity;
     }
 
     const SceneNode::ComponentList& SceneNode::GetComponents() const {
