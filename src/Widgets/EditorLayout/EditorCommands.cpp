@@ -51,6 +51,10 @@ namespace BECore {
                 {kFileChangesRescan, "File Changes: Rescan", std::nullopt, true},
                 {kFileChangesApplyAll, "File Changes: Apply All", std::nullopt, true},
                 {kFileChangesApply, "File Changes: Apply One", std::nullopt, true},
+                {kGamePanelReset, "Game Panel: Reset", std::nullopt, true},
+                {kGamePanelPerform, "Game Panel: Perform", std::nullopt, true},
+                {kGamePanelCall, "Game Panel: Call", std::nullopt, true},
+                {kGamePanelCopyState, "Game Panel: Copy State", std::nullopt, true},
             };
             return table;
         }
