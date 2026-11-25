@@ -63,3 +63,7 @@ CMakeLists.txt text eol=lf
 
 # Fuzz seeds are raw bytes (CRLF inside a request head is the input): never normalized
 /tests/Fuzz/corpus/** binary
+
+# Derived from changelog/*.md: `changelog.py install-driver` registers the driver per clone (tools/changelog/CLAUDE.md, "Merging")
+/src/Modules/BECore/Utils/EngineVersion.h merge=bagi-changelog
+/CHANGELOG.md merge=bagi-changelog

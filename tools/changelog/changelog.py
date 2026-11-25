@@ -7,6 +7,8 @@ Standard library only, Python 3.10+. The contract is `tools/changelog/CLAUDE.md`
     python3 <engine>/tools/changelog/changelog.py render    [--check] [--root E]
     python3 <engine>/tools/changelog/changelog.py check     [--root E]
     python3 <engine>/tools/changelog/changelog.py breaking  --since <commit|version|pointer> [--repo E] [--json] [--all] [--check]
+    python3 <engine>/tools/changelog/changelog.py settle|install-driver [--root E]
+    python3 <engine>/tools/changelog/changelog.py merge-driver BASE OURS THEIRS PATH   (git's %O %A %B %P)
     python3 <engine>/tools/changelog/changelog.py renumber  --plan|--apply [--floor V] [--ref R ...] [--root E]
 """
 
@@ -16,6 +18,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -69,6 +72,11 @@ POINTER = "pointer"
 KIND_COMMIT = "commit"
 KIND_VERSION = "version"
 GIT_TIMEOUT_SECONDS = 60
+MERGE_DRIVER = "bagi-changelog"
+DRIVER_SCRIPT = "tools/changelog/changelog.py"  # relative: git runs a merge driver in the top folder of the checkout that merges
+DERIVED_PATHS = (VERSION_HEADER.as_posix(), CHANGELOG_FILE)  # the two files the fragments determine
+LOG_BLOCK_START = re.compile(r"(?m)^(?=## )")
+LOG_BLOCK_VERSION = re.compile(r"## (\d+)\.(\d+)\.(\d+) ")
 RENUMBER_FLOOR = "0.1.3"  # the last version every branch shared before each counted on its own
 
 Version = tuple[int, int, int]
@@ -249,15 +257,19 @@ def read_version_header(root: Path) -> Version:
     return (numbers[0], numbers[1], numbers[2])
 
 
-def write_version_header(root: Path, version: Version) -> None:
-    """Rewrites the three macro lines and nothing else (the line endings stay)."""
-    path = root / VERSION_HEADER
-    text = path.read_bytes().decode("utf-8")
+def with_version(text: str, version: Version, shown: str) -> str:
+    """`text` of the header with the three macro lines set to `version` and nothing else changed (the line endings stay)."""
     for name, number in zip(MACRO_NAMES, version):
         text, count = re.subn(rf"^(#define BE_ENGINE_VERSION_{name}[ \t]+)\d+([ \t]*)(?=\r?$)", rf"\g<1>{number}\g<2>", text, flags=re.MULTILINE)
         if count != 1:
-            raise ChangelogError(f"{path}: expected one line `#define BE_ENGINE_VERSION_{name} <number>`, found {count}")
-    path.write_bytes(text.encode("utf-8"))
+            raise ChangelogError(f"{shown}: expected one line `#define BE_ENGINE_VERSION_{name} <number>`, found {count}")
+    return text
+
+
+def write_version_header(root: Path, version: Version) -> None:
+    """Rewrites the three macro lines and nothing else (the line endings stay)."""
+    path = root / VERSION_HEADER
+    path.write_bytes(with_version(path.read_bytes().decode("utf-8"), version, str(path)).encode("utf-8"))
 
 
 def read_content_version(root: Path) -> int:
@@ -578,6 +590,121 @@ class Renumbered:
     new: Version | None = None
 
 
+def merge_log_text(base: str, ours: str, theirs: str) -> str:
+    """CHANGELOG.md of two sides: the version blocks of both, minus a block one side removed, newest first.
+    At driver time the fragments of the other side may not be in the working tree, so this cannot render; `settle` makes the text exact."""
+    preamble_base, *blocks_base = LOG_BLOCK_START.split(base)
+    preamble_ours, *blocks_ours = LOG_BLOCK_START.split(ours)
+    preamble_theirs, *blocks_theirs = LOG_BLOCK_START.split(theirs)
+    blocks_base, blocks_ours, blocks_theirs = ([block.rstrip("\n") for block in blocks] for blocks in (blocks_base, blocks_ours, blocks_theirs))
+    removed = (set(blocks_base) - set(blocks_ours)) | (set(blocks_base) - set(blocks_theirs))
+    merged: list[str] = []
+    for block in blocks_ours + blocks_theirs:
+        if block not in removed and block not in merged:
+            merged.append(block)
+
+    def newest_first(block: str) -> Version:
+        match = LOG_BLOCK_VERSION.match(block)
+        return (int(match.group(1)), int(match.group(2)), int(match.group(3))) if match else (-1, -1, -1)
+
+    merged.sort(key=newest_first, reverse=True)
+    preamble = (preamble_ours if preamble_ours != preamble_base else preamble_theirs).rstrip("\n") + "\n"
+    return "\n\n".join([preamble.rstrip("\n"), *merged]) + "\n" if merged else preamble
+
+
+def merge_version_header_text(base: str, ours: str, theirs: str) -> str | None:
+    """The header of two sides: the highest version of the two on top of a line merge of everything else; None when that merge conflicts."""
+    versions = []
+    for side in (ours, theirs):
+        numbers = [re.search(rf"^#define BE_ENGINE_VERSION_{name}[ \t]+(\d+)", side, re.MULTILINE) for name in MACRO_NAMES]
+        if not all(numbers):
+            return None
+        versions.append(tuple(int(match.group(1)) for match in numbers))
+    highest = max(versions)
+    try:
+        texts = [with_version(text, highest, "header") for text in (base, ours, theirs)]
+    except ChangelogError:
+        return None
+    with tempfile.TemporaryDirectory() as folder:
+        files = []
+        for name, text in zip(("base", "ours", "theirs"), texts):
+            file = Path(folder) / name
+            file.write_bytes(text.encode("utf-8"))
+            files.append(str(file))
+        result = subprocess.run(["git", "merge-file", "-p", files[1], files[0], files[2]], capture_output=True, timeout=GIT_TIMEOUT_SECONDS)
+    return result.stdout.decode("utf-8") if result.returncode == 0 else None
+
+
+def merge_derived_text(path: str, base: str, ours: str, theirs: str) -> str | None:
+    if path == VERSION_HEADER.as_posix():
+        return merge_version_header_text(base, ours, theirs)
+    if path == CHANGELOG_FILE:
+        return merge_log_text(base, ours, theirs)
+    return None
+
+
+def command_merge_driver(root: Path, args: argparse.Namespace) -> int:
+    """The git merge driver `bagi-changelog` (`%O %A %B %P`): the merged text goes into the file of our side; exit 1 leaves a conflict."""
+    texts = [Path(name).read_bytes().decode("utf-8") for name in (args.base, args.ours, args.theirs)]
+    merged = merge_derived_text(Path(args.path).as_posix(), *texts)
+    if merged is None:
+        print(f"{args.path}: not merged by the driver", file=sys.stderr)
+        return EXIT_REFUSED
+    Path(args.ours).write_bytes(merged.encode("utf-8"))
+    return EXIT_OK
+
+
+def stage_text(root: Path, stage: int, path: str) -> str | None:
+    """The text of `path` at a merge stage (1 base, 2 ours, 3 theirs); None when the stage has none."""
+    result = subprocess.run(["git", "-C", str(root), "show", f":{stage}:{path}"], capture_output=True, timeout=GIT_TIMEOUT_SECONDS)
+    return result.stdout.decode("utf-8") if result.returncode == 0 else None
+
+
+def command_settle(root: Path, args: argparse.Namespace) -> int:
+    """Finishes a merge in the working tree of `root`: the header and CHANGELOG.md are derived from the fragments, then `check` must pass.
+    Touches nothing and exits 1 when any path other than those two is conflicted."""
+    unmerged = git(root, "diff", "--name-only", "--diff-filter=U").splitlines()
+    foreign = [path for path in unmerged if path not in DERIVED_PATHS]
+    if foreign:
+        for path in foreign:
+            print(f"{path}: conflicted and not derived from the fragments, resolve it by hand", file=sys.stderr)
+        return EXIT_REFUSED
+    header = VERSION_HEADER.as_posix()
+    if header in unmerged:
+        stages = [stage_text(root, stage, header) for stage in (1, 2, 3)]
+        merged = merge_version_header_text(stages[0] or "", stages[1] or "", stages[2] or "") if stages[1] and stages[2] else None
+        if merged is None:
+            print(f"{header}: the two sides differ in more than the version, resolve it by hand", file=sys.stderr)
+            return EXIT_REFUSED
+        (root / VERSION_HEADER).write_bytes(merged.encode("utf-8"))
+    loaded, problems = load_fragments(root)
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return EXIT_REFUSED
+    fragments = [fragment for _, fragment in loaded]
+    if fragments and read_version_header(root) != max(fragment.version for fragment in fragments):
+        write_version_header(root, max(fragment.version for fragment in fragments))
+    (root / CHANGELOG_FILE).write_bytes(render_changelog(fragments).encode("utf-8"))
+    problems = check_tree(root)
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    if problems:
+        return EXIT_REFUSED
+    git(root, "add", "--", *DERIVED_PATHS)
+    print(f"settled: {version_text(read_version_header(root))}")
+    return EXIT_OK
+
+
+def command_install_driver(root: Path, args: argparse.Namespace) -> int:
+    """Registers the merge driver in the local git config of the clone (shared by its worktrees); `.gitattributes` names the two files."""
+    interpreter = Path(sys.executable).as_posix()
+    git(root, "config", "--local", f"merge.{MERGE_DRIVER}.name", "the version header and CHANGELOG.md of the engine")
+    git(root, "config", "--local", f"merge.{MERGE_DRIVER}.driver", f'"{interpreter}" {DRIVER_SCRIPT} merge-driver %O %A %B %P')
+    print(f"merge driver {MERGE_DRIVER} installed in the config of {root}")
+    return EXIT_OK
+
+
 def renumber_refs(repo: Path) -> list[str]:
     names = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/main", "refs/heads/games").splitlines()
     if not names:
@@ -696,6 +823,11 @@ def build_parser() -> argparse.ArgumentParser:
     render = command("render", "regenerate CHANGELOG.md from the fragments")
     render.add_argument("--check", action="store_true", help="write nothing, exit 1 when CHANGELOG.md is out of date")
     command("check", "exit 1 naming the file when the fragments, the header and CHANGELOG.md disagree")
+    command("settle", "finish a merge in progress: derive the header and CHANGELOG.md from the fragments, check; exit 1 on any other conflicted path")
+    command("install-driver", "register the git merge driver of the header and CHANGELOG.md in the local config of the clone")
+    driver = command("merge-driver", "the git merge driver (%O %A %B %P): merged text of the header or CHANGELOG.md into the file of our side")
+    for name in ("base", "ours", "theirs", "path"):
+        driver.add_argument(name)
     breaking = commands.add_parser("breaking", help="what the entries merged after a point change for a game: Breaking and Migration (read-only, no fetch)")
     breaking.add_argument("--repo", "--root", dest="root", default=str(ENGINE_ROOT), help="the engine repository ('engine' in a game; default: the one this tool is in)")
     breaking.add_argument("--since", required=True, help="a commit, a version `0.3.0`, or `pointer` (the commit the superproject records for the repository)")
@@ -719,6 +851,9 @@ HANDLERS = {
     "check": command_check,
     "breaking": command_breaking,
     "renumber": command_renumber,
+    "settle": command_settle,
+    "install-driver": command_install_driver,
+    "merge-driver": command_merge_driver,
 }
 
 
