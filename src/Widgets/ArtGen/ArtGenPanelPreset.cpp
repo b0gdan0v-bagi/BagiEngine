@@ -50,15 +50,6 @@ namespace BECore {
             return -1;
         }
 
-        int32_t IndexOfMode(StringView mode) {
-            for (size_t i = 0; i < kArtGenReferenceModes.size(); ++i) {
-                if (kArtGenReferenceModes[i].mode == mode) {
-                    return static_cast<int32_t>(i);
-                }
-            }
-            return -1;
-        }
-
         String MaxSizeText(int32_t maxSize) {
             return maxSize == 0 ? String("original size") : Format("{} px", maxSize);
         }
@@ -345,7 +336,7 @@ namespace BECore {
         } else {
             const ArtGenReferenceModeRow& row = ArtGenReferenceModeOf(StringView(own->mode));
             view.mode = own->mode;
-            view.modeIndex = IndexOfMode(StringView(own->mode));
+            view.modeIndex = ModeIndexOf(StringView(own->mode));
             view.modeTip = String(row.tip);
             view.image = own->image;
             view.imageTip = String(ArtGenReferenceFileName(StringView(own->image)));

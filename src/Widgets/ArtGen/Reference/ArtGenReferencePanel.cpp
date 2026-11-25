@@ -89,6 +89,35 @@ namespace BECore {
         _texture = CoreManager::GetResourceManager().Load<ITexture>(StringView(_path.data(), _path.size()));
     }
 
+    void ArtGenReferencePanel::DrawLoadedPicture() {
+        const auto& palette = GetImGuiPalette();
+        ImGui::BeginGroup();
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        ImGui::Dummy(ImVec2(kPictureSize, kPictureSize));
+        ItemTooltip(_path.c_str());
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const ImVec2 corner(origin.x + kPictureSize, origin.y + kPictureSize);
+        const ITexture* texture = _texture.Get();
+        if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
+            const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
+            DrawArtGenChecker(drawList, origin, kPictureSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
+            drawList->AddImage(id, origin, corner);
+        } else {
+            drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));
+        }
+        ImGui::EndGroup();
+    }
+
+    void ArtGenReferencePanel::DrawPicture(ArtGenSession& session) {
+        const Optional<ArtGenReference>& slot = session.GetReferenceSlot();
+        if (!slot) {
+            DropThumbnail();
+            return;
+        }
+        SyncThumbnail(session.GetGameRoot(), slot->image);
+        DrawLoadedPicture();
+    }
+
     void ArtGenReferencePanel::DrawPresetReference(ArtGenSession& session, ArtGenPresetForm& form) {
         const auto& palette = GetImGuiPalette();
         ImGui::PushTextWrapPos(0.0f);
@@ -167,7 +196,6 @@ namespace BECore {
     }
 
     void ArtGenReferencePanel::Draw(ArtGenSession& session) {
-        const auto& palette = GetImGuiPalette();
         ImGui::SeparatorText(kSectionLabel);
         DrawFileField(session);
         const Optional<ArtGenReference>& slot = session.GetReferenceSlot();
@@ -179,22 +207,7 @@ namespace BECore {
             return;
         }
         SyncThumbnail(session.GetGameRoot(), slot->image);
-
-        ImGui::BeginGroup();
-        const ImVec2 origin = ImGui::GetCursorScreenPos();
-        ImGui::Dummy(ImVec2(kPictureSize, kPictureSize));
-        ItemTooltip(_path.c_str());
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const ImVec2 corner(origin.x + kPictureSize, origin.y + kPictureSize);
-        const ITexture* texture = _texture.Get();
-        if (texture != nullptr && texture->GetState() == ResourceState::Loaded) {
-            const auto id = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(texture->GetNativeHandle()));
-            DrawArtGenChecker(drawList, origin, kPictureSize, ImGui::GetColorU32(palette.panelBg), ImGui::GetColorU32(palette.frameBg));
-            drawList->AddImage(id, origin, corner);
-        } else {
-            drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(palette.frameBg));
-        }
-        ImGui::EndGroup();
+        DrawLoadedPicture();
         ImGui::SameLine();
 
         ImGui::BeginGroup();

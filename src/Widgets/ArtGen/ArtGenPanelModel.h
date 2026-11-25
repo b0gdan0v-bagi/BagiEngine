@@ -2,19 +2,25 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Renderer/ITexture.h>
+#include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Events/SubscriptionHolder.h>
 #include <Widgets/ArtGen/ArtGenPanelSlots.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
+#include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/ArtGenVerdict.h>
+#include <Widgets/ArtGen/Reference/ArtGenReferencePanel.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <cstdint>
+#include <expected>
 
 namespace BECore {
 
-    class ArtGenSession;
     class ControlService;
+    struct ArtGenVariantDropEvent;
     struct SceneSelectionChangedEvent;
 
     /// The literal `argument`s of the `artgen.*` buttons (EditorCommands.h); any other text does nothing
@@ -35,6 +41,12 @@ namespace BECore {
         inline constexpr StringView kAcceptDefaults = "acceptDefaults";
         inline constexpr StringView kTakeSlot = "takeSlot";
         inline constexpr StringView kRemoveReference = "removeReference";
+        inline constexpr StringView kUseFile = "useFile";
+        inline constexpr StringView kClear = "clear";
+        inline constexpr StringView kUseSprite = "useSprite";
+        inline constexpr StringView kUseShape = "useShape";
+        inline constexpr StringView kGenerate = "generate";
+        inline constexpr StringView kImage = "image";
     }  // namespace ArtGenPanelArgs
 
     /// Which service line the panel shows: the control API is off, the bridge was started and has not polled yet, nothing polls, or a service polls
@@ -217,6 +229,89 @@ namespace BECore {
         BE_REFLECT_FIELD bool canRemove = false;
     };
 
+    /// The reference slot of the session (the Reference section of the Generate tab): the picture the next single Generate starts from
+    struct ArtGenRefView {
+        BE_CLASS(ArtGenRefView)
+
+        /// The path field of Use file: relative to the game root, or absolute
+        BE_REFLECT_FIELD String typedPath;
+        /// Use file found no such file; kept until the text changes
+        BE_REFLECT_FIELD bool fileMissing = false;
+        BE_REFLECT_FIELD bool has = false;
+        /// The picture's file name
+        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD String mode;
+        BE_REFLECT_FIELD int32_t modeIndex = -1;
+        BE_REFLECT_FIELD Vector<ArtGenComboRow> modes;
+        BE_REFLECT_FIELD String modeTip;
+        /// The mode's default while the slot sets none; a mode change drops the slot's
+        BE_REFLECT_FIELD float weight = 0.0f;
+    };
+
+    /// The Generate tab's form and the state of its run
+    struct ArtGenRunView {
+        BE_CLASS(ArtGenRunView)
+
+        BE_REFLECT_FIELD String subject;
+        /// 1..`ArtGenSession::kMaxCount`
+        BE_REFLECT_FIELD int32_t count = 4;
+        BE_REFLECT_FIELD bool randomSeed = true;
+        /// Not below 0; sent only without a random seed
+        BE_REFLECT_FIELD int64_t seed = 0;
+        BE_REFLECT_FIELD bool keepVariants = false;
+        /// The preset makes images: the Reference section is shown
+        BE_REFLECT_FIELD bool images = true;
+        BE_REFLECT_FIELD bool canGenerate = false;
+        /// A run of this tab is in work: Cancel is shown
+        BE_REFLECT_FIELD bool singleRunInWork = false;
+        BE_REFLECT_FIELD bool cancelRequested = false;
+        /// A job of a set holds the session: Generate is off until it ends
+        BE_REFLECT_FIELD bool setRunning = false;
+        BE_REFLECT_FIELD String requestError;
+        BE_REFLECT_FIELD bool hasRequestError = false;
+        BE_REFLECT_FIELD ArtGenRunState state = ArtGenRunState::Idle;
+        /// The run is the last job of a set: its variants are judged on the Set tab
+        BE_REFLECT_FIELD bool isSetJob = false;
+        BE_REFLECT_FIELD String setJobText;
+        /// The images made of the count, the one in work counted by its steps
+        BE_REFLECT_FIELD float progress = 0.0f;
+        BE_REFLECT_FIELD String progressText;
+        BE_REFLECT_FIELD String doneText;
+        BE_REFLECT_FIELD String failedText;
+        BE_REFLECT_FIELD String cancelledText;
+        /// The variants are sounds: the sound list and its Accept instead of the grid
+        BE_REFLECT_FIELD bool hasSounds = false;
+        BE_REFLECT_FIELD bool hasImages = false;
+    };
+
+    /// The Accept section of an image: the picked variant, what Accept would write of it, the sprite name and the answer
+    struct ArtGenAcceptView {
+        BE_CLASS(ArtGenAcceptView)
+
+        BE_REFLECT_FIELD bool hasPick = false;
+        BE_REFLECT_FIELD String seedText;
+        /// The drawn box and the written size, or why Accept would refuse the picture
+        BE_REFLECT_FIELD String summary;
+        BE_REFLECT_FIELD PanelTextStyle summaryStyle = PanelTextStyle::Disabled;
+        BE_REFLECT_FIELD bool hasSummary = false;
+        /// The sprite (or, for a sound, the clip) name; filled from the subject at the first pick
+        BE_REFLECT_FIELD String sprite;
+        BE_REFLECT_FIELD bool spriteValid = false;
+        /// A name is typed and is not valid
+        BE_REFLECT_FIELD bool nameWarning = false;
+        BE_REFLECT_FIELD bool haveNode = false;
+        /// Cleared while no node is selected
+        BE_REFLECT_FIELD bool useOnSelected = false;
+        BE_REFLECT_FIELD String useOnSelectedTip;
+        BE_REFLECT_FIELD String message;
+        BE_REFLECT_FIELD PanelTextStyle messageStyle = PanelTextStyle::Success;
+        BE_REFLECT_FIELD bool hasMessage = false;
+        /// An image Accept succeeded and the preset makes images: Use as reference and Use as shape take the sprite
+        BE_REFLECT_FIELD bool hasAccepted = false;
+        /// What Accept of an image writes, with the path the acceptor builds
+        BE_REFLECT_FIELD String note;
+    };
+
     /// What `GeneratePanel.xml` binds to, as `art.<section>.<field>`
     struct ArtGenPanelView {
         BE_CLASS(ArtGenPanelView)
@@ -225,6 +320,9 @@ namespace BECore {
         BE_REFLECT_FIELD ArtGenSetupView setup;
         BE_REFLECT_FIELD ArtGenPresetView preset;
         BE_REFLECT_FIELD ArtGenPresetRefView presetRef;
+        BE_REFLECT_FIELD ArtGenRefView ref;
+        BE_REFLECT_FIELD ArtGenRunView run;
+        BE_REFLECT_FIELD ArtGenAcceptView accept;
     };
 
     /// What the model talks to. The editor keeps every default; a test replaces them before `Initialize`
@@ -252,9 +350,15 @@ namespace BECore {
      * one on the first workflow, while the form is empty, then makes the view again when the form's revision or the session moved. The workflow's inputs
      * are the slot `artgenWorkflowInputs` (`ArtGenPanelSlots`), which edits the form in place.
      *
+     * The Generate tab: the reference slot's picture is the slot `artgenReferencePicture` (`ArtGenReferencePanel`), the variants the grid of the slot
+     * `artgenVariants`; a click there is noted and applied in `EndUpdate` (a slot notes, the model applies). The thumbnails are loaded from the run's
+     * files and evicted when the run replaces them or the model dies. A variant dragged into another panel is answered from `ArtGenVariantDropEvent`,
+     * which the model subscribes to in `Initialize`, so also while the panel is closed.
+     *
      * Commands (`EditorCommandIds`, run only while the panel is open): `artgen.service` (`start`: the control API first when it is off, the bridge once
      * it listens; `disconnect`), `artgen.setup` (`plan`, `install`, `start`, `stop`, `cancel`, `dismiss`), `artgen.preset` (`new`, `duplicate`, `save`,
-     * `saveAs`, `revert`, `resetSize`, `acceptDefaults`, `takeSlot`, `removeReference`) and `artgen.saveAsOpened` (fills the Save-as name from the form).
+     * `saveAs`, `revert`, `resetSize`, `acceptDefaults`, `takeSlot`, `removeReference`), `artgen.saveAsOpened` (fills the Save-as name from the form),
+     * `artgen.reference` (`useFile`, `clear`, `useSprite`, `useShape`), `artgen.run` (`generate`, `cancel`) and `artgen.accept` (`image`).
      */
     class ArtGenPanelModel : public IPanelModel, public SubscriptionHolder {
         BE_CLASS(ArtGenPanelModel)
@@ -271,6 +375,7 @@ namespace BECore {
         void Initialize() override;
         [[nodiscard]] TypedRef GetObject() override;
         void Update() override;
+        void EndUpdate() override;
         bool RunCommand(StringView id, StringView argument) override;
 
         [[nodiscard]] const ArtGenPanelView& GetView() const {
@@ -288,7 +393,28 @@ namespace BECore {
             return _form;
         }
 
+        /// The variants slot's clicks, applied in `EndUpdate`: a tile picks its variant (and fills an empty name from the subject), the dice puts its
+        /// seed into the run form, Use as reference fills the session's slot with the picked picture
+        void NotePick(int64_t seed) {
+            _pickedSeed = seed;
+        }
+
+        void NoteDice(int64_t seed) {
+            _diceSeed = seed;
+        }
+
+        void NoteUseAsReference(int64_t seed) {
+            _referenceSeed = seed;
+        }
+
+        /// The variant the Accept section works on
+        [[nodiscard]] const Optional<int64_t>& GetSelectedSeed() const {
+            return _selectedSeed;
+        }
+
     private:
+        friend class ArtGenPanelSlots;
+
         [[nodiscard]] ControlServerStatus ControlStatus();
         void OnSelectionChanged(const SceneSelectionChangedEvent& event);
         void RunService(StringView argument);
@@ -312,6 +438,31 @@ namespace BECore {
         void RefreshPreset();
         void RefreshPresetRef();
         void RefreshWorkflowRows(const ArtGenWorkflow* current);
+
+        /// The row of @p mode in `kArtGenReferenceModes`; -1 for a mode the table does not know
+        [[nodiscard]] static int32_t ModeIndexOf(StringView mode);
+        void InitRunRows();
+        /// The reference slot is the session's: Use as reference fills it from anywhere, the next Generate sends it
+        void RunReference(StringView argument);
+        void ApplyRefEdits();
+        void RefreshRef();
+        void RunRun(StringView argument);
+        /// The form of the run every frame (its checks read the typed subject), the run's texts when the session moved
+        void UpdateRun(bool sessionMoved);
+        void RefreshRunTexts();
+        [[nodiscard]] bool PresetMakesImages() const;
+        void UpdateAccept();
+        void RunAccept(StringView argument);
+        /// A panel dropped a dragged variant (ArtGenDrag.h): accepts it as the sprite the event names and answers in the event's result
+        void OnVariantDropped(const ArtGenVariantDropEvent& event);
+        /// Takes the answer of an image Accept (the button's or a drop's) into the message line and the sprite Use as reference takes
+        void NoteImageAccepted(StringView sprite, const std::expected<ArtGenAcceptAnswer, ControlError>& result);
+        /// Reads the picked image's drawn box when the pick changes and makes the summary line again when that or a setting changed
+        void RefreshAcceptSummary(const ArtGenRun& run, const ArtGenVariant& variant);
+        void SyncThumbnails(const ArtGenRun& run);
+        void DropThumbnails();
+        /// The clicks the variants slot noted while it drew
+        void ApplyNotedClicks();
 
         ArtGenPanelView _view;
         ArtGenPanelServices _services;
@@ -339,6 +490,40 @@ namespace BECore {
         uint64_t _presetVersion = 0;
         uint64_t _formRevision = 0;
         bool _presetStale = true;
+
+        ArtGenReferencePanel _referencePanel;
+        Optional<ArtGenReference> _refShown;  // the slot the ref view was made from: an edit applies only over it
+        String _typedPathSeen;
+        uint64_t _runVersion = 0;
+        bool _runStale = true;
+        String _requestError;
+
+        // One thumbnail per variant of the run, in its order; a path that leaves the run is evicted
+        Vector<ResourceHandle<ITexture>> _thumbnails;
+        Vector<String> _thumbnailPaths;
+        Vector<ArtGenVerdict> _verdicts;
+        Optional<int64_t> _selectedSeed;
+        // Noted by the variants slot while it drew, applied in EndUpdate
+        Optional<int64_t> _pickedSeed;
+        Optional<int64_t> _diceSeed;
+        Optional<int64_t> _referenceSeed;
+
+        String _acceptMessage;
+        bool _acceptFailed = false;
+        String _acceptedSprite;  // the sprite the last successful Accept wrote: Use as reference takes it
+        bool _acceptStale = true;
+        Optional<int64_t> _acceptShownSeed;
+
+        // What Accept would make of the picked image. The file is decoded once per pick (a slider drag must not decode it per frame), the line is made
+        // again only when the box or a setting changes
+        uint32_t _boundsRun = 0;
+        String _boundsPath;
+        bool _boundsRead = false;
+        Optional<ArtGenIntRect> _drawn;
+        int32_t _imageWidth = 0;
+        int32_t _imageHeight = 0;
+        ArtGenImageSettings _summarySettings;
+        bool _summaryValid = false;
 
         // The keys of the last refresh: the view is made again only when one moved or the model changed what it shows
         bool _stale = true;

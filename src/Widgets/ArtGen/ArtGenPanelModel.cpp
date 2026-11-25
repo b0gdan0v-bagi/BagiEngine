@@ -9,6 +9,7 @@
 #include <Generated/ArtGenPanelModel.gen.hpp>
 #include <Widgets/ArtGen/ArtGenAccept.h>
 #include <Widgets/ArtGen/ArtGenAtlasAccept.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -66,9 +67,13 @@ namespace BECore {
 
     ArtGenPanelModel::ArtGenPanelModel() {
         InitPresetRows();
+        InitRunRows();
     }
 
-    ArtGenPanelModel::~ArtGenPanelModel() = default;
+    ArtGenPanelModel::~ArtGenPanelModel() {
+        DropThumbnails();
+        _referencePanel.DropThumbnail();
+    }
 
     void ArtGenPanelModel::SetServices(ArtGenPanelServices services) {
         _services = std::move(services);
@@ -89,6 +94,7 @@ namespace BECore {
 
     void ArtGenPanelModel::Initialize() {
         Subscribe<SceneSelectionChangedEvent, &ArtGenPanelModel::OnSelectionChanged>(this);
+        Subscribe<ArtGenVariantDropEvent, &ArtGenPanelModel::OnVariantDropped>(this);
         ArtGenSession& session = GetSession();
         session.SetGameRoot(CoreManager::GetFileSystem().GetRootPath().View());
         session.SetAcceptor(&AcceptForControl);
@@ -121,6 +127,11 @@ namespace BECore {
             RefreshPreset();
         }
         _view.preset.saveAsValid = IsValidSpriteName(StringView(_view.preset.saveAsName));
+        ApplyRefEdits();
+        const bool sessionMoved = _runVersion != session.Version();
+        _runVersion = session.Version();
+        UpdateRun(sessionMoved);
+        UpdateAccept();
 
         const ControlServerStatus control = ControlStatus();
         if (control.listening && _bridgeWaitsForControl) {
@@ -143,6 +154,10 @@ namespace BECore {
         _starting = starting;
         RefreshService(control, starting);
         RefreshSetup();
+    }
+
+    void ArtGenPanelModel::EndUpdate() {
+        ApplyNotedClicks();
     }
 
     bool ArtGenPanelModel::IsStarting() {
@@ -286,6 +301,18 @@ namespace BECore {
         }
         if (is(EditorCommandIds::kArtGenSaveAsOpened)) {
             OpenSaveAs();
+            return true;
+        }
+        if (is(EditorCommandIds::kArtGenReference)) {
+            RunReference(argument);
+            return true;
+        }
+        if (is(EditorCommandIds::kArtGenRun)) {
+            RunRun(argument);
+            return true;
+        }
+        if (is(EditorCommandIds::kArtGenAccept)) {
+            RunAccept(argument);
             return true;
         }
         return false;

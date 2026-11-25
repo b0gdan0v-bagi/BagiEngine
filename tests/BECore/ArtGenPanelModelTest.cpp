@@ -1,10 +1,13 @@
 #include <BECore/Control/ControlService.h>
 #include <Common/AllocCheck.h>
+#include <Common/ArtGenTestSupport.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
+#include <Widgets/ArtGen/ArtGenDrag.h>
 #include <Widgets/ArtGen/ArtGenPanelModel.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -38,6 +41,60 @@ namespace BECore::Tests {
         String Report(uint32_t id, StringView members) {
             return Format(R"({{"id":{},{}}})", id, members);
         }
+
+        /// What the fake acceptor was called with (a function pointer cannot capture, so the test reads it here)
+        struct AcceptCall {
+            int64_t seed = -1;
+            String sprite;
+            ArtGenImageSettings settings;
+            int calls = 0;
+        };
+        AcceptCall gAccepted;
+
+        std::expected<ArtGenAcceptAnswer, ControlError> FakeAcceptor(const ArtGenVariant& variant, StringView sprite, const ArtGenImagePlan& plan, SceneNode* /*node*/) {
+            gAccepted.seed = variant.seed;
+            gAccepted.sprite = String(sprite);
+            gAccepted.settings = plan.settings;
+            ++gAccepted.calls;
+            ArtGenAcceptAnswer reply;
+            reply.sprite = String(sprite);
+            reply.texturePath = Format("assets/artgen/{}.png", sprite);
+            reply.reloadedSprites = 1;
+            return reply;
+        }
+
+        /// A folder the session takes as the game root, removed with the object
+        class TempGame {
+        public:
+            TempGame() : _root(TestTempDirectory("ArtGenPanelModelTest")) {
+                MakeEmptyDirectory(_root);
+            }
+            ~TempGame() {
+                RemoveDirectory(_root);
+            }
+            TempGame(const TempGame&) = delete;
+            TempGame& operator=(const TempGame&) = delete;
+
+            [[nodiscard]] const Path& Root() const {
+                return _root;
+            }
+
+            /// A `kSide` square PNG at @p name, opaque or with nothing drawn; its real path
+            String SavePng(StringView name, bool drawn) const {
+                RgbaImage image = MakeSolid(kSide, kSide, kHigh, kLow, kLow);
+                if (!drawn) {
+                    std::fill(image.pixels.begin(), image.pixels.end(), uint8_t{0});
+                }
+                const Path file = _root / name;
+                EXPECT_TRUE(SaveRgbaPng(file, image).has_value());
+                return String(file.View());
+            }
+
+            static constexpr uint32_t kSide = 8;
+
+        private:
+            Path _root;
+        };
 
     }  // namespace
 
@@ -113,6 +170,48 @@ namespace BECore::Tests {
         /// The view's preset section, written as the panel's controls write it; the next `Update` applies it
         ArtGenPresetView& Edit() {
             return model.GetMutableView().preset;
+        }
+
+        const ArtGenRunView& RunView() {
+            model.Update();
+            return model.GetView().run;
+        }
+
+        const ArtGenRefView& Ref() {
+            model.Update();
+            return model.GetView().ref;
+        }
+
+        const ArtGenAcceptView& Accept() {
+            model.Update();
+            return model.GetView().accept;
+        }
+
+        /// A run of the preset `wood` to its end with images at the paths @p files, seeds 1, 2, ...; its id
+        uint32_t RunWithImages(const Vector<String>& files) {
+            const uint32_t id = Require(session.Request("wood", "White Knight", static_cast<int32_t>(files.size()), Optional<int64_t>(1)));
+            Call("artgen_poll", kCatalogPoll);
+            for (size_t i = 0; i < files.size(); ++i) {
+                Call("artgen_image", Report(id, Format(R"("path":"{}","seed":{})", files[i], i + 1)));
+            }
+            Call("artgen_done", Report(id, R"("status":"ok")"));
+            return id;
+        }
+
+        static int32_t ModeRow(StringView mode) {
+            for (size_t i = 0; i < kArtGenReferenceModes.size(); ++i) {
+                if (kArtGenReferenceModes[i].mode == mode) {
+                    return static_cast<int32_t>(i);
+                }
+            }
+            return -1;
+        }
+
+        /// A click of the variants slot on the tile of @p seed, applied at the end of the frame
+        void Pick(int64_t seed) {
+            model.Update();
+            model.NotePick(seed);
+            model.EndUpdate();
         }
 
         /// The service listed the catalog and the model loaded its first preset
@@ -509,6 +608,182 @@ namespace BECore::Tests {
         ExpectNoAllocations([&] {
             for (int frame = 0; frame < kSteadyFrames; ++frame) {
                 model.Update();
+            }
+        });
+    }
+
+    TEST_F(ArtGenPanelModelTest, UseFileFillsTheSlotOnlyWithAFileThatExists) {
+        const TempGame game;
+        session.SetGameRoot(game.Root().View());
+        model.GetMutableView().ref.typedPath = "sketch.png";
+        Ref();
+        EXPECT_TRUE(Run(EditorCommandIds::kArtGenReference, ArtGenPanelArgs::kUseFile));
+        EXPECT_TRUE(Ref().fileMissing);
+        EXPECT_FALSE(Ref().has);
+        model.GetMutableView().ref.typedPath = "sketch2.png";
+        EXPECT_FALSE(Ref().fileMissing) << "the note goes when the text changes";
+
+        game.SavePng("sketch2.png", true);
+        Run(EditorCommandIds::kArtGenReference, ArtGenPanelArgs::kUseFile);
+        ASSERT_TRUE(Ref().has);
+        EXPECT_EQ(Ref().name, "sketch2.png");
+        EXPECT_EQ(Ref().mode, "structure") << "an empty slot takes a file as the shape";
+        EXPECT_FLOAT_EQ(Ref().weight, static_cast<float>(ArtGenReferenceDefaultWeight("structure")));
+
+        model.GetMutableView().ref.weight = 1.2f;
+        Ref();
+        EXPECT_NEAR(session.GetReferenceSlot()->weight.value_or(0.0), 1.2, 1e-6);
+        model.GetMutableView().ref.modeIndex = ModeRow("init");
+        EXPECT_EQ(Ref().mode, "init");
+        EXPECT_FALSE(session.GetReferenceSlot()->weight.has_value()) << "a mode change drops the weight";
+
+        Run(EditorCommandIds::kArtGenReference, ArtGenPanelArgs::kClear);
+        EXPECT_FALSE(Ref().has);
+        EXPECT_FALSE(session.GetReferenceSlot().has_value());
+    }
+
+    TEST_F(ArtGenPanelModelTest, GenerateNeedsASubjectAndSendsASavedPresetByNameAndAnEditedOneAsADraft) {
+        Catalog();
+        EXPECT_FALSE(RunView().canGenerate);
+        Run(EditorCommandIds::kArtGenRun, ArtGenPanelArgs::kGenerate);
+        EXPECT_EQ(session.GetRun().state, ArtGenRunState::Idle);
+
+        model.GetMutableView().run.subject = "queen";
+        model.GetMutableView().run.count = 99;
+        model.GetMutableView().run.randomSeed = false;
+        model.GetMutableView().run.seed = -5;
+        EXPECT_TRUE(RunView().canGenerate);
+        EXPECT_EQ(RunView().count, ArtGenSession::kMaxCount);
+        EXPECT_EQ(RunView().seed, 0);
+        Run(EditorCommandIds::kArtGenRun, ArtGenPanelArgs::kGenerate);
+        EXPECT_EQ(session.GetRun().preset, "wood");
+        EXPECT_TRUE(session.GetRun().presetData.empty());
+        EXPECT_EQ(session.GetRun().count, ArtGenSession::kMaxCount);
+        EXPECT_EQ(session.GetRun().seed, Optional<int64_t>(0));
+        EXPECT_TRUE(RunView().singleRunInWork);
+        EXPECT_FALSE(RunView().canGenerate);
+
+        Run(EditorCommandIds::kArtGenRun, ArtGenPanelArgs::kCancel);
+        EXPECT_FALSE(session.IsRunInWork());
+        Edit().title = "Carved";
+        Preset();
+        Run(EditorCommandIds::kArtGenRun, ArtGenPanelArgs::kGenerate);
+        EXPECT_FALSE(session.GetRun().presetData.empty()) << "an edited preset goes inline";
+        EXPECT_FALSE(RunView().hasRequestError);
+    }
+
+    TEST_F(ArtGenPanelModelTest, TheRunStateShowsItsProgressAndItsEnd) {
+        Catalog();
+        const uint32_t id = Require(session.Request("wood", "queen", 2, Optional<int64_t>(1)));
+        EXPECT_EQ(RunView().state, ArtGenRunState::Queued);
+        Call("artgen_poll", kCatalogPoll);
+        Call("artgen_progress", Report(id, R"("image":0,"step":5,"steps":25)"));
+        EXPECT_EQ(RunView().state, ArtGenRunState::Running);
+        EXPECT_FLOAT_EQ(RunView().progress, 0.1f);
+        EXPECT_EQ(RunView().progressText, "image 1 of 2, step 5 of 25");
+        Call("artgen_image", Report(id, R"("path":"D:/out/queen_1.png","seed":1)"));
+        Call("artgen_done", Report(id, R"("error":"out of memory","status":"failed")"));
+        EXPECT_EQ(RunView().state, ArtGenRunState::Failed);
+        EXPECT_EQ(RunView().failedText, "Failed: out of memory");
+        EXPECT_TRUE(RunView().hasImages);
+        EXPECT_FALSE(RunView().hasSounds);
+    }
+
+    TEST_F(ArtGenPanelModelTest, ANotedPickSelectsAtTheEndOfTheFrameAndFillsTheName) {
+        const TempGame game;
+        Catalog();
+        RunWithImages({game.SavePng("a.png", true), game.SavePng("b.png", false)});
+        EXPECT_EQ(RunView().doneText, "2 image(s) of \"White Knight\"");
+        EXPECT_FALSE(Accept().hasPick);
+
+        model.Update();
+        model.NotePick(1);
+        EXPECT_FALSE(model.GetSelectedSeed().has_value()) << "a click is applied after the window";
+        model.EndUpdate();
+        EXPECT_EQ(model.GetSelectedSeed(), Optional<int64_t>(1));
+        EXPECT_TRUE(Accept().hasPick);
+        EXPECT_EQ(Accept().seedText, "seed 1");
+        EXPECT_EQ(Accept().sprite, "white_knight");
+        EXPECT_TRUE(Accept().spriteValid);
+        EXPECT_EQ(Accept().summary.find(Format("drawn {} x {}", TempGame::kSide, TempGame::kSide)), 0u);
+        EXPECT_EQ(Accept().summaryStyle, PanelTextStyle::Disabled);
+
+        Pick(2);
+        EXPECT_EQ(Accept().summary, "Nothing is drawn: Accept would refuse this picture");
+        EXPECT_EQ(Accept().summaryStyle, PanelTextStyle::Error);
+
+        model.Update();
+        model.NoteDice(2);
+        model.EndUpdate();
+        EXPECT_FALSE(RunView().randomSeed);
+        EXPECT_EQ(RunView().seed, 2);
+    }
+
+    TEST_F(ArtGenPanelModelTest, AcceptWritesTheMessageAndTheSpriteBecomesAReference) {
+        const TempGame game;
+        session.SetAcceptor(&FakeAcceptor);
+        gAccepted = AcceptCall{};
+        Catalog();
+        RunWithImages({game.SavePng("a.png", true)});
+        Pick(1);
+        model.GetMutableView().accept.sprite = "bad name";
+        EXPECT_TRUE(Accept().nameWarning);
+        Run(EditorCommandIds::kArtGenAccept, ArtGenPanelArgs::kImage);
+        EXPECT_EQ(gAccepted.calls, 0) << "an invalid name is never accepted";
+
+        model.GetMutableView().accept.sprite = "icon";
+        model.GetMutableView().accept.useOnSelected = true;
+        EXPECT_FALSE(Accept().useOnSelected) << "cleared without a selected node";
+        Run(EditorCommandIds::kArtGenAccept, ArtGenPanelArgs::kImage);
+        EXPECT_EQ(gAccepted.calls, 1);
+        EXPECT_EQ(gAccepted.seed, 1);
+        EXPECT_EQ(gAccepted.sprite, "icon");
+        EXPECT_EQ(Accept().message, "Accepted as 'icon' (assets/artgen/icon.png); 1 sprite(s) reloaded");
+        EXPECT_EQ(Accept().messageStyle, PanelTextStyle::Success);
+        EXPECT_TRUE(Accept().hasAccepted);
+
+        Run(EditorCommandIds::kArtGenReference, ArtGenPanelArgs::kUseShape);
+        ASSERT_TRUE(session.GetReferenceSlot().has_value());
+        EXPECT_EQ(session.GetReferenceSlot()->mode, "structure");
+        EXPECT_EQ(session.GetReferenceSlot()->image, ArtGenReferenceOfSprite("icon").image);
+
+        Pick(1);
+        EXPECT_TRUE(Accept().hasMessage) << "picking the same variant keeps the answer";
+    }
+
+    TEST_F(ArtGenPanelModelTest, ADroppedVariantIsAnsweredWhileThePanelIsClosed) {
+        const TempGame game;
+        session.SetAcceptor(&FakeAcceptor);
+        gAccepted = AcceptCall{};
+        Catalog();
+        RunWithImages({game.SavePng("a.png", true)});
+        Edit().accept.maxSizeIndex = 0;
+        model.Update();
+
+        ArtGenDropResult result;
+        ArtGenVariantDropEvent::Emit(MakeArtGenDragPayload(ArtGenDragKind::Image, 1, {}, {}, "knight"), StringView("knight"), &result);
+        EXPECT_TRUE(result.ok);
+        EXPECT_EQ(gAccepted.sprite, "knight");
+        EXPECT_EQ(gAccepted.settings.maxSize, 0) << "the form's accept settings, as the Accept button";
+        EXPECT_EQ(Accept().message, result.message);
+
+        ArtGenDropResult sound;
+        ArtGenVariantDropEvent::Emit(MakeArtGenDragPayload(ArtGenDragKind::Audio, 1, {}, {}, "knight"), StringView("knight"), &sound);
+        EXPECT_FALSE(sound.ok);
+        EXPECT_EQ(sound.message, kArtGenSoundIsNotASprite);
+    }
+
+    TEST_F(ArtGenPanelModelTest, ASteadyUpdateWithARunAndAPickAllocatesNothing) {
+        const TempGame game;
+        Catalog();
+        RunWithImages({game.SavePng("a.png", true)});
+        Pick(1);
+        model.GetMutableView().run.subject = "queen";
+        model.Update();
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < kSteadyFrames; ++frame) {
+                model.Update();
+                model.EndUpdate();
             }
         });
     }
