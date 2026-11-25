@@ -163,7 +163,7 @@ namespace BECore::Tests {
         collector.EndStage(FrameStage::Render);
         collector.SetCounter("Things"_intern, 3.0);
         collector.SetCounter("Things"_intern, 5.0);
-        collector.EndFrame(RenderCounters{.drawCalls = 7, .triangles = 14, .textureSwitches = 1}, AllocTotals{});
+        collector.EndFrame(RenderCounters{.drawCalls = 7, .primitives = 20, .triangles = 14, .textureSwitches = 1}, AllocTotals{});
 
         const FrameStats* last = collector.GetLast();
         ASSERT_NE(last, nullptr);
@@ -175,6 +175,7 @@ namespace BECore::Tests {
         EXPECT_DOUBLE_EQ(last->GetStageMs(FrameStage::Render), 4.0);
         EXPECT_DOUBLE_EQ(last->GetStageMs(FrameStage::Present), 0.0);
         EXPECT_EQ(last->draws.drawCalls, 7u);
+        EXPECT_EQ(last->draws.primitives, 20u);
         EXPECT_EQ(last->FindCounter("Things"_intern), 5.0);
         EXPECT_FALSE(last->FindCounter("Other"_intern).has_value());
 

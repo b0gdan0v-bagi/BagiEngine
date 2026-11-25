@@ -41,7 +41,8 @@ namespace BECore {
         give(FormatToN(buffer, kOverlayLineCapacity, "Update {:.2f} (scene {:.2f})  Render {:.2f} (scene {:.2f})  Present {:.2f}  Wait {:.2f} ms", stats.GetStageMs(FrameStage::Update),
                        stats.GetStageMs(FrameStage::SceneUpdate), stats.GetStageMs(FrameStage::Render), stats.GetStageMs(FrameStage::SceneDraw), stats.GetStageMs(FrameStage::Present),
                        stats.GetStageMs(FrameStage::Wait)));
-        give(FormatToN(buffer, kOverlayLineCapacity, "Draw calls {}  Triangles {}  Texture switches {}", stats.draws.drawCalls, stats.draws.triangles, stats.draws.textureSwitches));
+        give(FormatToN(buffer, kOverlayLineCapacity, "Draw calls {}  Primitives {}  Triangles {}  Texture switches {}", stats.draws.drawCalls, stats.draws.primitives, stats.draws.triangles,
+                       stats.draws.textureSwitches));
         if (allocTracking) {
             give(FormatToN(buffer, kOverlayLineCapacity, "Allocations {} ({}) this frame  Live {}  Peak {}", stats.allocCount, FormatBytes(stats.allocBytes), FormatBytes(totals.liveBytes),
                            FormatBytes(totals.peakLiveBytes)));

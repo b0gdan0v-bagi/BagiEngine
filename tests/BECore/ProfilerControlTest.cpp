@@ -149,7 +149,7 @@ namespace BECore::Tests {
         ASSERT_NE(to, String::npos);
         EXPECT_EQ(
             MaskIntegers(String(text.substr(from, to - from))),
-            R"json("frames":[{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":2.25,"drawCalls":N,"frame":N,"frameMs":2.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0,"Wait":0.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N}])json");
+            R"json("frames":[{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":2.25,"drawCalls":N,"frame":N,"frameMs":2.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"primitives":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0,"Wait":0.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N}])json");
     }
 
     TEST_F(ProfilerControlGoldenTest, FrameStatsOfSeveralFramesKeepsTheirBytes) {
@@ -167,7 +167,7 @@ namespace BECore::Tests {
         ASSERT_NE(to, String::npos);
         EXPECT_EQ(
             MaskIntegers(String(text.substr(from, to - from))),
-            R"json("frames":[{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":2.25,"drawCalls":N,"frame":N,"frameMs":2.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0,"Wait":0.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N},{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":3.25,"drawCalls":N,"frame":N,"frameMs":3.25,"liveBytes":N,"paused":true,"poolLiveBlocks":N,"poolPageBytes":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0,"Wait":0.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N},{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":4.25,"drawCalls":N,"frame":N,"frameMs":4.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0,"Wait":0.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N}])json");
+            R"json("frames":[{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":2.25,"drawCalls":N,"frame":N,"frameMs":2.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"primitives":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0,"Wait":0.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N},{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":3.25,"drawCalls":N,"frame":N,"frameMs":3.25,"liveBytes":N,"paused":true,"poolLiveBlocks":N,"poolPageBytes":N,"primitives":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0,"Wait":0.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N},{"allocBytes":N,"allocCount":N,"arenaOverflows":N,"arenaPeakBytes":N,"arenaUsedBytes":N,"counters":{"Mid":0.25,"alpha":2.0,"zeta":1.5},"cpuMs":4.25,"drawCalls":N,"frame":N,"frameMs":4.25,"liveBytes":N,"paused":false,"poolLiveBlocks":N,"poolPageBytes":N,"primitives":N,"stagesMs":{"Present":0.0,"Render":0.0,"SceneDraw":0.25,"SceneUpdate":0.0,"Update":1.0,"Wait":0.0},"tagAllocCount":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"tagLiveBytes":{"Audio":N,"Core":N,"Game":N,"Network":N,"Resource":N,"Scene":N,"Text":N,"UI":N,"Untagged":N},"textureSwitches":N,"triangles":N}])json");
     }
 
     TEST_F(ProfilerControlGoldenTest, FrameStatsListsArenasPoolsAndTagsInTheirOwnKeyOrder) {
@@ -366,7 +366,7 @@ namespace BECore::Tests {
         FrameStatsCollector& collector = CoreManager::GetFrameStats();
         for (int i = 0; i < 3; ++i) {
             collector.BeginFrame();
-            collector.EndFrame(RenderCounters{.drawCalls = 4, .triangles = 8}, AllocTracker::GetTotals());
+            collector.EndFrame(RenderCounters{.drawCalls = 4, .primitives = 9, .triangles = 8}, AllocTracker::GetTotals());
         }
         const StringView params = R"({"frames":2})";
         const ControlReply response = Call("frame_stats", params);
@@ -377,9 +377,10 @@ namespace BECore::Tests {
         ASSERT_EQ(frames.Size(), 2u);
         const JsonView last = ItemAt(frames, 1);
         EXPECT_EQ(IntOf(last, "drawCalls"), 4);
+        EXPECT_EQ(IntOf(last, "primitives"), 9);
         EXPECT_EQ(IntOf(last, "triangles"), 8);
         for (const char* key : {"frame", "paused", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "arenaUsedBytes", "arenaPeakBytes", "arenaOverflows",
-                                "poolLiveBlocks", "poolPageBytes", "counters", "tagAllocCount", "tagLiveBytes"}) {
+                                "poolLiveBlocks", "poolPageBytes", "primitives", "counters", "tagAllocCount", "tagLiveBytes"}) {
             EXPECT_TRUE(last.Find(key).has_value()) << key;
         }
         for (size_t i = 0; i < kMemTagCount; ++i) {
