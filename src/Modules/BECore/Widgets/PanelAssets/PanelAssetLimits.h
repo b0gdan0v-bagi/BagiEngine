@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace BECore::PanelAssetLimits {
 
@@ -32,6 +33,9 @@ namespace BECore::PanelAssetLimits {
 
     /// What a number control may be asked for: `min`, `max` and `step` of a `PanelNumber` lie within plus and minus this
     inline constexpr float kMaxNumberExtent = 1.0e9f;
+
+    /// Digits after the point a `PanelNumber` may ask for (`decimals`)
+    inline constexpr uint32_t kMaxNumberDecimals = 6;
 
     /// Popups of one asset; a popup is modal and none holds another
     inline constexpr size_t kMaxPopups = 8;

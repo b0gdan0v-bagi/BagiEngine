@@ -763,6 +763,63 @@ namespace BECore::Tests {
         EXPECT_TRUE(HasIssue(selected.issues, "t.x", "selectedField is for a Selectable column")) << Joined(selected.issues);
     }
 
+    TEST(PanelAssetLoadTest, AGoodGenerateFormWithEveryNewAttributeLoadsWithNoIssue) {
+        const PanelLoadResult result = LoadPanelAsset(StringView(Wrap(Format(
+            R"(<element type="PanelSection" id="settings" title="Settings" look="Tree" tooltipBind="a.tip"><elements>
+                 <element type="PanelText" id="service" bind="a.status" icon="plug"/>
+                 <element type="PanelInput" id="name" bind="a.name" text="Name" fill="false"/>
+                 <element type="PanelInput" id="prompt" bind="a.prompt" text="Prompt" lines="4"/>
+                 <element type="PanelCombo" id="preset" bind="a.preset" items="a.presets" itemField="label" enableField="usable" tooltipField="error" previewBind="a.preview" text="Preset"/>
+                 <element type="PanelNumber" id="padding" bind="a.padding" min="0" max="50" slider="true" unit="%" decimals="{}"/>
+                 <element type="PanelProgress" id="download" bind="a.fraction" textBind="a.overlay" width="12"/>
+                 <element type="PanelProgress" id="images" bind="a.done"/>
+                 <element type="PanelDropdown" id="saveAs" icon="save-all" openCommand="a.saveAsOpened"><elements>
+                   <element type="PanelRow" id="saveRow"><elements>
+                     <element type="PanelButton" id="save" text="Save" command="a.save" closePopup="true"/>
+                   </elements></element>
+                 </elements></element>
+                 <element type="PanelTable" id="plan" source="a.plan"><columns>
+                   <column id="what" type="Text" field="what" tooltipField="licence"/>
+                 </columns></element>
+                 <element type="PanelTabs" id="tabs"><elements>
+                   <element type="PanelTab" id="run" title="Generate" icon="image"/>
+                 </elements></element>
+               </elements></element>)",
+            PanelAssetLimits::kMaxNumberDecimals))));
+        EXPECT_TRUE(result.issues.empty()) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, TheGenerateAttributesAreChecked) {
+        ExpectSingleIssue(R"(<element type="PanelText" id="k" text="x" tooltipBind="tip"/>)", "k", "tooltipBind: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" enableField="usable"/>)", "k", "enableField needs items");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" tooltipField="error"/>)", "k", "tooltipField needs items");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="s.rows" enableField="on["/>)", "k", "enableField: bad path");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" previewBind="!s.text"/>)", "k", "previewBind: ");
+        ExpectSingleIssue(R"(<element type="PanelProgress" id="k" textBind="s.text"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelProgress" id="k" bind="s.f" textBind="text"/>)", "k", "textBind: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelProgress" id="k" bind="s.f" width="-2"/>)", "k", "width must be from 0");
+        ExpectSingleIssue(Format(R"(<element type="PanelNumber" id="k" bind="s.n" decimals="{}"/>)", PanelAssetLimits::kMaxNumberDecimals + 1), "k", "decimals must be at most");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" unit="&#10;dB"/>)", "k", "unit must not hold a control character");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="k" command="s.go" closePopup="true"/>)", "k", "closePopup is for a button inside a dropdown");
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="s.open"><elements><element type="PanelButton" id="k" command="s.go" closePopup="true"/></elements></element>)", "k",
+                          "closePopup is for a button inside a dropdown");
+        ExpectSingleIssue(R"(<element type="PanelTable" id="t" source="s.rows"><columns><column id="c" type="Text" field="name" tooltipField="tip["/></columns></element>)", "t.c",
+                          "tooltipField: bad path");
+
+        const PanelLoadResult badLook = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelSection" id="k" title="S" look="Leaf"/>)")));
+        EXPECT_FALSE(badLook.issues.empty());
+        EXPECT_NE(Joined(badLook.issues).find("Leaf"), String::npos) << Joined(badLook.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ADropdownOpenCommandIsCheckedLikeAButtonsCommand) {
+        PanelValidationContext context;
+        const auto known = [](StringView command) { return command == "x.known"; };
+        context.isKnownCommand = FunctionRef<bool(StringView)>(known);
+        const PanelLoadResult result = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelDropdown" id="d" text="D" openCommand="x.unknown"/>)")), context);
+        EXPECT_EQ(result.issues.size(), 1u) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "d", "openCommand: unknown command 'x.unknown'")) << Joined(result.issues);
+    }
+
     TEST(PanelAssetLoadTest, ATextOverTheLimitIsAnIssue) {
         const String longText(PanelAssetLimits::kMaxTextBytes + 1, 'x');
         ExpectSingleIssue(StringView(Format(R"(<element type="PanelText" id="t" text="{}"/>)", longText)), "t", "text is longer than 512 bytes");

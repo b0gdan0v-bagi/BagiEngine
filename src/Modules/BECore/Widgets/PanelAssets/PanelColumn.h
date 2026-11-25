@@ -20,6 +20,7 @@ namespace BECore {
      * text at `labelField` (only this type may name it). `enableField` is a bool path relative to the row: a `Button`, `Input` or
      * `Checkbox` cell is disabled while it reads false (empty: always enabled). `selectedField` is a bool path relative to the row: a
      * `Selectable` cell is drawn selected while it reads true (empty: never selected); no other column type may name it.
+     * `tooltipField` is a text path relative to the row whose text, when it reads, replaces `tooltip` for that row's cell.
      */
     struct PanelColumn {
         BE_CLASS(PanelColumn)
@@ -37,6 +38,7 @@ namespace BECore {
         BE_REFLECT_FIELD String argument;
         BE_REFLECT_FIELD String icon;
         BE_REFLECT_FIELD String tooltip;
+        BE_REFLECT_FIELD String tooltipField;
     };
 
 }  // namespace BECore

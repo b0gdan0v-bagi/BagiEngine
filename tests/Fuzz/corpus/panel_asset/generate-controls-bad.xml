@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<PanelAsset id="GenerateControlsBad" title="Bad">
+  <elements>
+    <element type="PanelText" id="badTooltip" text="x" tooltipBind="tip"/>
+    <element type="PanelCombo" id="enableNoItems" bind="s.mode" enableField="usable"/>
+    <element type="PanelCombo" id="tooltipNoItems" bind="s.mode" tooltipField="error"/>
+    <element type="PanelCombo" id="badPreview" bind="s.mode" items="s.rows" previewBind="!s.text" enableField="on["/>
+    <element type="PanelProgress" id="noBind" textBind="text" width="-2"/>
+    <element type="PanelNumber" id="tooManyDecimals" bind="s.n" decimals="7" unit="&#10;dB"/>
+    <element type="PanelButton" id="closeOutside" command="s.go" closePopup="true"/>
+    <element type="PanelSection" id="badLook" title="S" look="Leaf"/>
+    <element type="PanelTable" id="t" source="s.rows">
+      <columns>
+        <column id="c" type="Text" field="name" tooltipField="tip["/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>
