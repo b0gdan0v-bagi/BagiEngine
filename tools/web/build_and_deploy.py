@@ -35,6 +35,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS_DIR.parent / "alltests"))
 
 import alltests_results  # noqa: E402
+import deploy_status  # noqa: E402
 import deploy_targets  # noqa: E402
 
 PACKAGE_SCRIPT = TOOLS_DIR / "package.py"
@@ -75,10 +76,13 @@ class Step(NamedTuple):
     cwd: Path
     # The deploy step: the files it needs are staged just before it
     is_deploy: bool = False
+    # The stage of the progress file (deploy_status.py) this step belongs to
+    stage: str = "build"
 
 
 def resolve_target(args: argparse.Namespace, source_dir: Path) -> None:
     """Fills game, preset and service: from the target of --target (refusing the free options), else from the options and defaults."""
+    args.target_info = None
     if args.target is None:
         args.game = args.game or DEFAULT_GAME
         args.preset = args.preset or DEFAULT_PRESET
@@ -90,6 +94,7 @@ def resolve_target(args: argparse.Namespace, source_dir: Path) -> None:
     target = deploy_targets.find(source_dir, args.target)
     args.game, args.preset, args.service = target.game, target.preset, target.service
     args.fetch = True
+    args.target_info = target
     print(f"target {target.name}: {target.game}, {target.preset}, {target.service}, {target.address}", flush=True)
 
 
@@ -119,11 +124,20 @@ def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_
     steps = [
         Step(["cmake", "--preset", preset], source_dir),
         Step(["cmake", "--build", "--preset", preset, "--target", args.game], source_dir),
-        Step(package_command, source_dir),
+        Step(package_command, source_dir, stage="package"),
     ]
     if args.deploy:
-        steps.append(Step(["railway", "up", str(stage_dir), "--path-as-root", "--service", args.service, "--detach"], stage_dir, True))
+        steps.append(Step(["railway", "up", str(stage_dir), "--path-as-root", "--service", args.service, "--detach"], stage_dir, True, "deploy"))
     return steps
+
+
+def stages_of(args: argparse.Namespace) -> list[str]:
+    """The stages of the progress file this run goes through: `fetch` only in checkout mode, `deploy` only with --deploy."""
+    stages = ["fetch"] if args.fetch else []
+    stages += ["build", "package"]
+    if args.deploy:
+        stages.append("deploy")
+    return stages
 
 
 def format_command(command: list[str]) -> str:
@@ -192,26 +206,36 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
         print(f"build_and_deploy.py: {error}", file=sys.stderr)
         return 2
 
+    target = args.target_info
+    status = deploy_status.Status(None if args.dry_run else args.status_file, args.target, stages_of(args), target and target.address, args.service)
+
+    def fail(message: str, code: int) -> int:
+        print(f"build_and_deploy.py: {message}", file=sys.stderr)
+        status.fail(message)
+        return code
+
     try:
         check_environment(args, emsdk_dir, which)
     except DeployError as error:
-        print(f"build_and_deploy.py: {error}", file=sys.stderr)
-        return 2
+        return fail(str(error), 2)
     dist = args.dist or source_dir / DIST_FOLDER
     stage_dir = args.stage_dir or source_dir / STAGE_FOLDER
-    if args.deploy and not alltests_results.allows_deploy(gate(source_dir, args.alltests_results, (dist, stage_dir)), args.skip_alltests, args.dry_run):
-        return 2
+    if args.deploy:
+        verdict = gate(source_dir, args.alltests_results, (dist, stage_dir))
+        if not alltests_results.allows_deploy(verdict, args.skip_alltests, args.dry_run):
+            status.fail(verdict.message)
+            return 2
 
     for step in plan_commands(args, source_dir, dist, stage_dir):
         program = step.command[0]
+        status.enter(step.stage)
         if step.is_deploy:
             print(f"stage {dist} and {', '.join(STAGED_FILES)} into {stage_dir}", flush=True)
             if not args.dry_run:
                 try:
                     stage(dist, stage_dir, source_dir)
                 except (DeployError, OSError) as error:
-                    print(f"build_and_deploy.py: cannot stage {dist} into {stage_dir}: {error}", file=sys.stderr)
-                    return 2
+                    return fail(f"cannot stage {dist} into {stage_dir}: {error}", 2)
         print(f"+ ({step.cwd}) {format_command(step.command)}", flush=True)
         if args.dry_run:
             continue
@@ -221,11 +245,10 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
         try:
             completed = runner(command, cwd=step.cwd, check=False)
         except OSError as error:
-            print(f"build_and_deploy.py: cannot start `{command[0]}`: {error}", file=sys.stderr)
-            return 2
+            return fail(f"cannot start `{command[0]}`: {error}", 2)
         if completed.returncode != 0:
-            print(f"build_and_deploy.py: `{program}` failed with exit code {completed.returncode}", file=sys.stderr)
-            return completed.returncode or 1
+            return fail(f"`{program}` failed with exit code {completed.returncode}", completed.returncode or 1)
+    status.done()
     return 0
 
 

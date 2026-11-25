@@ -6,6 +6,7 @@ import functools
 import io
 import json
 import re
+import sys
 import tempfile
 import unittest
 import unittest.mock
@@ -258,6 +259,71 @@ class TargetTest(DeployTestCase):
         self.assertIn("--preset web-release", out)
         self.assertIn("--service bagi-web", out)
         self.assertFalse([line for line in out.splitlines() if line.startswith("target ")])
+
+
+class StatusFileTest(DeployTestCase):
+    """--status-file: the progress of the run, written by deploy_status.py."""
+
+    def status(self) -> dict:
+        return json.loads((self.source / "status.json").read_text(encoding="utf-8"))
+
+    def test_a_successful_build_ends_done_in_the_package_stage_and_lists_no_deploy_stage(self):
+        code, _, err, _ = self.run_script("--status-file", str(self.source / "status.json"))
+        self.assertEqual(code, 0, err)
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"], data["stages"]), ("done", "package", ["build", "package"]))
+
+    def test_a_failing_cmake_is_failed_at_build_with_the_error(self):
+        code, _, err, _ = self.run_script("--status-file", str(self.source / "status.json"), runner=FakeRunner(fail_on="cmake"))
+        self.assertEqual(code, 3)
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"]), ("failed", "build"))
+        self.assertIn("`cmake` failed with exit code 3", data["error"])
+        self.assertIn("`cmake` failed with exit code 3", err)
+
+    def test_a_failing_package_step_is_failed_at_package(self):
+        code, _, _, _ = self.run_script("--status-file", str(self.source / "status.json"), runner=FakeRunner(fail_on=sys.executable))
+        self.assertEqual(code, 3)
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("failed", "package"))
+
+    def test_a_deploy_ends_done_in_the_deploy_stage_and_a_missing_dist_is_failed_there(self):
+        status_file = str(self.source / "status.json")
+        code, _, _, _ = self.run_script("--deploy", "--status-file", status_file, which=have_railway)
+        self.assertEqual(code, 2)
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("failed", "deploy"))
+        (self.source / "dist").mkdir()
+        (self.source / "dist" / "index.html").write_bytes(b"<html></html>")
+        code, _, err, _ = self.run_script("--deploy", "--status-file", status_file, which=have_railway)
+        self.assertEqual(code, 0, err)
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("done", "deploy"))
+
+    def test_a_refused_gate_a_missing_sdk_and_a_program_that_cannot_start_are_failed(self):
+        status_file = str(self.source / "status.json")
+        red = lambda *args: alltests_results.Verdict(False, GREEN_COMMIT, "no green run of this commit")
+        code, _, _, _ = self.run_script("--deploy", "--status-file", status_file, which=have_railway, gate=red)
+        self.assertEqual(code, 2)
+        self.assertEqual((self.status()["state"], self.status()["error"]), ("failed", "no green run of this commit"))
+        code, _, _, _ = self.run_script("--status-file", status_file, emsdk=self.source / "none")
+        self.assertEqual(code, 2)
+        self.assertIn("Emscripten SDK", self.status()["error"])
+        code, _, _, _ = self.run_script("--status-file", status_file, runner=FakeRunner(cannot_start="cmake"))
+        self.assertEqual(code, 2)
+        self.assertIn("cannot start `cmake`", self.status()["error"])
+
+    def test_a_dry_run_and_a_run_without_the_option_write_no_status(self):
+        self.run_script("--dry-run", "--status-file", str(self.source / "status.json"))
+        self.run_script()
+        self.assertEqual([entry.name for entry in self.source.iterdir()], [])
+
+    def test_the_target_and_its_service_and_address_are_in_the_file(self):
+        (self.source / "web").mkdir()
+        (self.source / "web" / "targets.json").write_text(json.dumps({"format": 1, "targets": {"t": {
+            "game": "G", "preset": "web-editor", "service": "svc", "address": "svc.example.dev"}}}), encoding="utf-8")
+        code, _, err, _ = self.run_script("--target", "t", "--status-file", str(self.source / "status.json"))
+        self.assertEqual(code, 0, err)
+        data = self.status()
+        self.assertEqual((data["target"], data["service"], data["url"]), ("t", "svc", "https://svc.example.dev"))
+        self.assertEqual(data["stages"], ["fetch", "build", "package"])
 
 
 class PreconditionTest(DeployTestCase):
