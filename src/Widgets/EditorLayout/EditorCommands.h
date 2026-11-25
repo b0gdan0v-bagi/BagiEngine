@@ -131,6 +131,11 @@ namespace BECore {
         inline constexpr auto kSceneDialogsAddNode = "sceneDialogs.addNode"_intern;
         inline constexpr auto kSceneDialogsAddComponent = "sceneDialogs.addComponent"_intern;
         inline constexpr auto kSceneDialogsCancel = "sceneDialogs.cancel"_intern;
+        /// The Layouts and Delete Layout menus of the menu bar (config/panels/MainMenuPanel.xml names them). MainMenuModel owns them. menuOpened is the menus' `openCommand`
+        /// (the folder is read again); load and delete take the name of a saved layout as the argument and do nothing for an empty or unknown one
+        inline constexpr auto kLayoutsMenuOpened = "layouts.menuOpened"_intern;
+        inline constexpr auto kLayoutsLoad = "layouts.load"_intern;
+        inline constexpr auto kLayoutsDelete = "layouts.delete"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

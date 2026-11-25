@@ -38,6 +38,10 @@ namespace BECore::Tests {
             return {};
         }
 
+        void LoadLayout(StringView name) override {
+            loadedLayouts.emplace_back(name.data(), name.size());
+        }
+
         void NotifyPreferencesChanged() override {
             ++preferencesNotified;
         }
@@ -51,6 +55,8 @@ namespace BECore::Tests {
         /// The model the toolbar reads; the test drives it directly, as the widget's commands would
         EditorPlayModel playModel;
         bool hasPlayModel = true;
+        /// The names `LoadLayout` was asked for, in order
+        Vector<String> loadedLayouts;
         int preferencesNotified = 0;
         int layoutsNotified = 0;
     };

@@ -47,6 +47,7 @@ namespace BECore {
         [[nodiscard]] const EditorPlayModel* GetPlayModel() const override;
         /// Needs an ImGui context: the text is ImGui's ini of the moment
         std::expected<void, String> SaveCurrentLayoutAs(StringView name) override;
+        void LoadLayout(StringView name) override;
         void NotifyPreferencesChanged() override;
         void NotifyLayoutsChanged() override;
 
@@ -80,9 +81,6 @@ namespace BECore {
         void AnnouncePreferences() const;
         /// A menu item that emits the command @p id, with its chord shown right-aligned
         void CommandMenuItem(PoolString id, const char* label, bool enabled = true);
-
-        /// Reads the layout @p name and keeps its text until the next ImGuiNewFrameEvent
-        void QueueLayout(const String& name);
 
         Optional<EditorSettings> _settings;
         Optional<LayoutStore> _layouts;  // none when the system gives no per-user folder

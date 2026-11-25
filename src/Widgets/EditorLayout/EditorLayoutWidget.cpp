@@ -282,7 +282,7 @@ namespace BECore {
             }
             for (const String& name : names) {
                 if (ImGui::MenuItem(name.c_str())) {
-                    QueueLayout(name);
+                    LoadLayout(name);
                 }
             }
             ImGui::EndMenu();
@@ -350,7 +350,10 @@ namespace BECore {
         }
     }
 
-    void EditorLayoutWidget::QueueLayout(const String& name) {
+    void EditorLayoutWidget::LoadLayout(StringView name) {
+        if (!_layouts) {
+            return;
+        }
         const auto text = _layouts->Load(name);
         if (!text) {
             LOG_WARNING("Editor: cannot load layout '{}': {}", name, text.error().detail);

@@ -34,6 +34,10 @@ namespace BECore {
         /// Writes the current dock layout under @p name. The error is a sentence for the dialog
         virtual std::expected<void, String> SaveCurrentLayoutAs(StringView name) = 0;
 
+        /// Reads the saved layout @p name and applies it at the start of the next ImGui frame (a loaded ini cannot be swapped in the middle of one). A name that
+        /// cannot be read, or a text with no dock tree, is a warning and the current layout stays
+        virtual void LoadLayout(StringView name) = 0;
+
         /// The preferences of `GetSettings()` were changed by the caller: the host applies them (the font scale) and tells the panels, in its next
         /// `Update` at the latest, so the call may come every frame of a drag and costs a flag
         virtual void NotifyPreferencesChanged() = 0;
