@@ -1,6 +1,7 @@
 #include "SceneNodeInstance.h"
 
 #include <BECore/Config/StringXmlWriter.h>
+#include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -126,6 +127,49 @@ namespace BECore {
             return true;
         }
 
+        /// The serialized fields of a freshly created component per type name: the state the loader builds a component in before it reads its fields.
+        /// A null entry is a type the factory cannot create. One per AppendNodeElement call, not global, so a tree makes each default once
+        using DefaultFieldsCache = HashMap<String, UniquePtr<SerializedComponent>>;
+
+        const SerializedComponent* DefaultFieldsOf(const IComponent& component, DefaultFieldsCache& cache) {
+            const String type = component.GetTypeMeta().typeName.data();
+            if (const auto found = cache.find(type); found != cache.end()) {
+                return found->second.get();
+            }
+            UniquePtr<SerializedComponent> defaults;
+            if (const IntrusivePtr<IComponent> fresh = AbstractFactory<IComponent>::GetInstance().Create(StringView{type.c_str(), type.size()})) {
+                defaults = MakeUnique<SerializedComponent>();
+                SerializeComponent(*fresh, *defaults);
+            }
+            return cache.emplace(type, eastl::move(defaults)).first->second.get();
+        }
+
+        /// Writes the fields of @p live into @p componentEl in their order, leaving out each one the default has the same way (equal attribute and
+        /// equal text of its elements). A field the default has and @p live does not (a list that was emptied) is written as an empty element:
+        /// the loader would otherwise keep the default's. @p defaults null writes every field
+        void AppendComponentFields(pugi::xml_node live, const SerializedComponent* defaults, pugi::xml_node componentEl) {
+            const pugi::xml_node base = defaults ? defaults->fields.document_element() : pugi::xml_node{};
+            const auto isDefault = [&](const char* name) { return defaults && ReadField(live, name) == ReadField(base, name); };
+            for (pugi::xml_attribute attr = live.first_attribute(); attr; attr = attr.next_attribute()) {
+                if (!isDefault(attr.name())) {
+                    componentEl.append_attribute(attr.name()).set_value(attr.value());
+                }
+            }
+            for (pugi::xml_node child = live.first_child(); child; child = child.next_sibling()) {
+                if (!isDefault(child.name())) {
+                    componentEl.append_copy(child);
+                }
+            }
+            if (!defaults) {
+                return;
+            }
+            for (pugi::xml_node child = base.first_child(); child; child = child.next_sibling()) {
+                if (child.type() == pugi::node_element && !live.child(child.name()) && !live.attribute(child.name()) && !componentEl.child(child.name())) {
+                    componentEl.append_child(child.name());
+                }
+            }
+        }
+
     }  // namespace
 
     IntrusivePtr<SceneNode> DeserializeNode(IDeserializer& deserializer, StringView what) {
@@ -145,41 +189,44 @@ namespace BECore {
         return DeserializeNode(deserializer, what);
     }
 
+    namespace {
+
+        void AppendNodeElementWith(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options, DefaultFieldsCache& defaults) {
+            pugi::xml_node nodeEl = parent.append_child(kNodeElementName.data());
+            nodeEl.append_attribute("name").set_value(node.GetName().CStr());
+            if (node.GetLayer() != 0) {
+                nodeEl.append_attribute("layer").set_value(node.GetLayer());
+            }
+
+            if (!node.GetComponents().empty()) {
+                pugi::xml_node componentsEl = nodeEl.append_child(kComponentsElementName.data());
+                for (const auto& component : node.GetComponents()) {
+                    pugi::xml_node componentEl = componentsEl.append_child(kComponentElementName.data());
+                    componentEl.append_attribute(kComponentTypeAttribute.data()).set_value(component->GetTypeMeta().typeName.data());
+
+                    XmlSerializer serializer;
+                    component->Serialize(serializer);
+                    AppendComponentFields(serializer.GetRootNode(), options.skipDefaults ? DefaultFieldsOf(*component, defaults) : nullptr, componentEl);
+                }
+            }
+
+            pugi::xml_node childrenEl;
+            for (const auto& child : node.GetChildren()) {
+                if (options.skipGenerated && child->IsGenerated()) {
+                    continue;
+                }
+                if (!childrenEl) {
+                    childrenEl = nodeEl.append_child("children");
+                }
+                AppendNodeElementWith(childrenEl, *child, options, defaults);
+            }
+        }
+
+    }  // namespace
+
     void AppendNodeElement(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options) {
-        pugi::xml_node nodeEl = parent.append_child(kNodeElementName.data());
-        nodeEl.append_attribute("name").set_value(node.GetName().CStr());
-        if (node.GetLayer() != 0) {
-            nodeEl.append_attribute("layer").set_value(node.GetLayer());
-        }
-
-        if (!node.GetComponents().empty()) {
-            pugi::xml_node componentsEl = nodeEl.append_child(kComponentsElementName.data());
-            for (const auto& component : node.GetComponents()) {
-                pugi::xml_node componentEl = componentsEl.append_child(kComponentElementName.data());
-                componentEl.append_attribute(kComponentTypeAttribute.data()).set_value(component->GetTypeMeta().typeName.data());
-
-                XmlSerializer serializer;
-                component->Serialize(serializer);
-                const pugi::xml_node fields = serializer.GetRootNode();
-                for (pugi::xml_attribute attr = fields.first_attribute(); attr; attr = attr.next_attribute()) {
-                    componentEl.append_attribute(attr.name()).set_value(attr.value());
-                }
-                for (pugi::xml_node child = fields.first_child(); child; child = child.next_sibling()) {
-                    componentEl.append_copy(child);
-                }
-            }
-        }
-
-        pugi::xml_node childrenEl;
-        for (const auto& child : node.GetChildren()) {
-            if (options.skipGenerated && child->IsGenerated()) {
-                continue;
-            }
-            if (!childrenEl) {
-                childrenEl = nodeEl.append_child("children");
-            }
-            AppendNodeElement(childrenEl, *child, options);
-        }
+        DefaultFieldsCache defaults;
+        AppendNodeElementWith(parent, node, options, defaults);
     }
 
     bool BuildNodeReference(const SceneNode& live, NodeFileLoaderRef loader, pugi::xml_node nodesEl, String& reason) {

@@ -524,6 +524,11 @@ namespace BECore::Tests {
 
         _manager->SetActiveScene("Menu"_intern);
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+        // The contract of the defaults: an attribute equal to the one of a default scene is absent, and absent loads as that default
+        const pugi::xml_node savedMenu = FindSceneElement(ConfigRoot(), "Menu");
+        EXPECT_FALSE(savedMenu.attribute("viewWidth"));
+        EXPECT_FALSE(savedMenu.attribute("viewHeight"));
+        EXPECT_TRUE(savedMenu.attribute("name"));
         ASSERT_NO_FATAL_FAILURE(SaveAndReload());
         EXPECT_FLOAT_EQ(Reloaded("Menu").GetViewWidth(), 0.0f);
         EXPECT_FLOAT_EQ(Reloaded("Menu").GetViewHeight(), 0.0f);

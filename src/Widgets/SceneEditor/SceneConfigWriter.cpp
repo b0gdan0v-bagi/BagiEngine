@@ -10,6 +10,7 @@ namespace BECore {
 
     namespace {
 
+        constexpr StringView kNameAttribute = "name";
         constexpr const char* kNoLoaderReason = "no node file loader was given";
         constexpr const char* kHasChildrenReason = "it has child nodes";
 
@@ -83,7 +84,17 @@ namespace BECore {
         XmlSerializer s;
         scene.Serialize(s);
         const auto& srcRoot = s.GetRootNode();
+        // A default Scene serializes the attributes of an unedited one: an attribute that has the same value there loads as that value, so the file leaves it out
+        const IntrusivePtr<Scene> defaults = New<Scene>();
+        XmlSerializer defaultSerializer;
+        defaults->Serialize(defaultSerializer);
+        const auto& defaultRoot = defaultSerializer.GetRootNode();
         for (auto attr = srcRoot.first_attribute(); attr; attr = attr.next_attribute()) {
+            const bool alwaysWritten = StringView{attr.name()} == kNameAttribute;
+            const pugi::xml_attribute defaultAttr = defaultRoot.attribute(attr.name());
+            if (!alwaysWritten && defaultAttr && StringView{defaultAttr.value()} == StringView{attr.value()}) {
+                continue;
+            }
             sceneEl.append_attribute(attr.name()).set_value(attr.value());
         }
         for (auto child = srcRoot.first_child(); child; child = child.next_sibling()) {

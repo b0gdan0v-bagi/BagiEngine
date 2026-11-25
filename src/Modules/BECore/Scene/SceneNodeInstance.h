@@ -26,6 +26,11 @@ namespace BECore {
     struct NodeWriteOptions {
         /// Leaves out every generated descendant (SceneNode::IsGenerated()) with its subtree: the code that made it makes it again at the next load. The node given is always written
         bool skipGenerated = false;
+
+        /// Leaves out every component field that a freshly created component of the same type (AbstractFactory, not initialized, not attached: the state the loader
+        /// reads the fields into) serializes the same way, so a file keeps only what the author set and loads back to the same values. A component whose fields are
+        /// all defaults is `<component type=".."/>`. A type the factory cannot create writes all its fields; a field of an emptied list is written as an empty element
+        bool skipDefaults = false;
     };
 
     /**

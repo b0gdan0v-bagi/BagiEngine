@@ -1,10 +1,14 @@
 #include "SceneGeneratedNodesTypes.h"
 
+#include <BECore/Config/StringXmlWriter.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Scene/Components/QuadRendererComponent.h>
+#include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNodeInstance.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
@@ -142,6 +146,83 @@ namespace BECore::Tests {
         const IntrusivePtr<SceneNode> copy = _scene->DuplicateNode(Node("Plain"));
         ASSERT_TRUE(copy);
         EXPECT_EQ(copy->GetChildren().size(), 2u);  // Inner and Added
+    }
+
+    /// NodeWriteOptions::skipDefaults: a field equal to the one of a freshly created component is not written, and the file loads back to the same values
+    class SceneNodeDefaultsTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        static IntrusivePtr<SceneNode> Load(const char* text) {
+            pugi::xml_document document;
+            EXPECT_TRUE(document.load_string(text));
+            return DeserializeNode(document.document_element(), "SceneNodeDefaultsTest");
+        }
+
+        static String Written(const SceneNode& node, bool skipDefaults) {
+            pugi::xml_document document;
+            AppendNodeElement(document, node, NodeWriteOptions{.skipDefaults = skipDefaults});
+            StringXmlWriter writer;
+            document.print(writer, "", pugi::format_raw);
+            return writer.text;
+        }
+
+        static String Components(const SceneNode& node) {
+            String all;
+            for (const auto& component : node.GetComponents()) {
+                XmlSerializer serializer;
+                component->Serialize(serializer);
+                StringXmlWriter writer;
+                serializer.GetRootNode().print(writer, "", pugi::format_raw);
+                all += component->GetTypeMeta().typeName.data();
+                all += writer.text;
+            }
+            return all;
+        }
+    };
+
+    TEST_F(SceneNodeDefaultsTest, ADefaultFieldIsLeftOutAndTheRestIsKept) {
+        const IntrusivePtr<SceneNode> node = Load(
+            R"(<node name="N"><components>
+  <component type="TransformComponent" x="0" y="0" width="50" height="20" rotation="0" pivotX="0.5" pivotY="0.5"/>
+  <component type="QuadRendererComponent" blend="Alpha"/>
+  <component type="SpriteRendererComponent" blend="Alpha" flipX="true"/>
+</components></node>)");
+
+        EXPECT_EQ(Written(*node, true), R"(<node name="N"><components><component type="TransformComponent" width="50" height="20"/>)"
+                                        R"(<component type="QuadRendererComponent"/><component type="SpriteRendererComponent" flipX="true"/></components></node>)");
+    }
+
+    TEST_F(SceneNodeDefaultsTest, AFieldSetAndSetBackIsLeftOutAndOneThatStaysSetIsWritten) {
+        const IntrusivePtr<SceneNode> node = Load(R"(<node name="N"><components><component type="TransformComponent"/></components></node>)");
+        const auto transform = node->GetComponent<TransformComponent>();
+        ASSERT_TRUE(transform);
+
+        transform->_rotation = 90.0f;
+        EXPECT_NE(Written(*node, true).find("rotation=\"90\""), String::npos);
+
+        transform->_rotation = 0.0f;
+        EXPECT_EQ(Written(*node, true).find("rotation"), String::npos);
+        // Without the option every field is still written
+        EXPECT_NE(Written(*node, false).find("rotation=\"0\""), String::npos);
+    }
+
+    TEST_F(SceneNodeDefaultsTest, TheWrittenTextLoadsBackToTheSameComponents) {
+        const IntrusivePtr<SceneNode> node = Load(
+            R"(<node name="N"><components>
+  <component type="TransformComponent" x="3" width="50" height="1" rotation="90" pivotX="0"/>
+  <component type="QuadRendererComponent"><color r="0" g="255" b="0" a="255"/></component>
+  <component type="SpriteRendererComponent" spriteId="Hero" flipY="true" blend="Additive"/>
+</components></node>)");
+
+        pugi::xml_document document;
+        AppendNodeElement(document, *node, NodeWriteOptions{.skipDefaults = true});
+        const IntrusivePtr<SceneNode> loaded = DeserializeNode(document.document_element(), "round trip");
+
+        EXPECT_EQ(Components(*loaded), Components(*node));
+        EXPECT_FALSE(Components(*node).empty());
     }
 
 }  // namespace BECore::Tests
