@@ -1,11 +1,13 @@
 #include "ImGuiWidget.h"
 
+#include <BECore/Control/ControlService.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Time/Time.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <Events/ApplicationEvents.h>
@@ -16,6 +18,13 @@
 #include <imgui.h>
 
 namespace BECore {
+
+    float ImGuiFrameSeconds(bool manualClock, double clockDelta, float backendDelta) {
+        if (!manualClock) {
+            return backendDelta;
+        }
+        return std::max(static_cast<float>(clockDelta), kMinImGuiFrameSeconds);
+    }
 
     ImGuiWidget::~ImGuiWidget() {
         Destroy();
@@ -147,6 +156,8 @@ namespace BECore {
 
         RenderEvents::ImGuiNewFrameEvent::Emit();
         ApplyWindowScale();
+        ImGuiIO& io = ImGui::GetIO();
+        io.DeltaTime = ImGuiFrameSeconds(CoreManager::GetControlService().IsManualClock(), CoreManager::GetTime().GetDeltaTime(), io.DeltaTime);
         ImGui::NewFrame();
     }
 

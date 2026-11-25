@@ -13,6 +13,18 @@ namespace BECore {
         struct SDLEventWrapper;
     }
 
+    /// ImGui's frame time never goes below this: it asserts `DeltaTime > 0` after the first frame, and a frame of zero seconds (a `screenshot`, `imgui_find`) is real
+    inline constexpr float kMinImGuiFrameSeconds = 1.0e-6f;
+
+    /**
+     * @brief The `io.DeltaTime` of the next ImGui frame.
+     *
+     * The SDL backend measures the wall clock, which on the manual clock makes a double click, a tooltip delay, the caret blink and a window fade depend on the
+     * machine and on how fast a client sends requests. With the manual clock the frame lasts what the clock says (@p clockDelta, the `step`'s `dt`), at least
+     * `kMinImGuiFrameSeconds`; with the real clock the backend's @p backendDelta is kept.
+     */
+    [[nodiscard]] float ImGuiFrameSeconds(bool manualClock, double clockDelta, float backendDelta);
+
     class ImGuiWidget : public IWidget {
         BE_CLASS(ImGuiWidget)
     public:

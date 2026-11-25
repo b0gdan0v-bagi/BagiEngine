@@ -4,6 +4,7 @@
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Widgets/ImGuiWidget.h>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <imgui.h>
@@ -16,6 +17,8 @@ namespace BECore::Tests {
         constexpr ImVec2 kDisplaySize{800.0f, 600.0f};
         constexpr float kPixelDensity = 2.0f;
         constexpr float kFrameSeconds = 1.0f / 60.0f;
+        /// What the SDL backend would measure between two requests of a client: far above a manual frame
+        constexpr float kWallSeconds = 0.4f;
         constexpr ImVec2 kPanelSize{400.0f, 300.0f};
         constexpr float kListHeight = 80.0f;
         constexpr int kListRows = 40;
@@ -77,8 +80,9 @@ namespace BECore::Tests {
 
             void RunFrame() {
                 ImGuiIO& io = ImGui::GetIO();
-                io.DeltaTime = kFrameSeconds;
+                io.DeltaTime = ImGuiFrameSeconds(true, static_cast<double>(kFrameSeconds), kWallSeconds);
                 ImGui::NewFrame();
+                maxClickedCount = std::max(maxClickedCount, static_cast<int>(io.MouseClickedCount[0]));
                 if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_A)) {
                     ++chordPresses;
                 }
@@ -144,6 +148,7 @@ namespace BECore::Tests {
             int64_t lastId = 0;
             int buttonPresses = 0;
             int chordPresses = 0;
+            int maxClickedCount = 0;
             bool checked = false;
             float scrollY = 0.0f;
             ImGuiID buttonId = 0;
@@ -154,6 +159,17 @@ namespace BECore::Tests {
         };
 
     }  // namespace
+
+    TEST(ImGuiFrameSecondsTest, TheManualClockSetsTheFrameAndNeverZero) {
+        EXPECT_FLOAT_EQ(ImGuiFrameSeconds(true, 0.25, kWallSeconds), 0.25f);
+        EXPECT_FLOAT_EQ(ImGuiFrameSeconds(true, 0.0, kWallSeconds), kMinImGuiFrameSeconds);
+        EXPECT_GT(ImGuiFrameSeconds(true, -1.0, kWallSeconds), 0.0f);
+    }
+
+    TEST(ImGuiFrameSecondsTest, TheRealClockKeepsWhatTheBackendMeasured) {
+        EXPECT_FLOAT_EQ(ImGuiFrameSeconds(false, 0.25, kWallSeconds), kWallSeconds);
+        EXPECT_FLOAT_EQ(ImGuiFrameSeconds(false, 0.0, 0.0f), 0.0f);
+    }
 
     TEST_F(ImGuiInputControlTest, FindGivesTheRectOfAnItemInOutputPixels) {
         const ControlReply reply = Call("imgui_find", R"({"label":"Press"})");
@@ -267,6 +283,14 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(reply.IsOk()) << String(reply.Text()).c_str();
         EXPECT_EQ(buttonPresses, 2);
+    }
+
+    TEST_F(ImGuiInputControlTest, ADoubleClickIsOneToImGuiOnTheClockOfTheFrames) {
+        const ImVec2 center = button.Center();
+        const ControlReply reply = Call("imgui_input", ClickParams(center.x * kPixelDensity, center.y * kPixelDensity, R"(,"count":2)"));
+
+        ASSERT_TRUE(reply.IsOk()) << String(reply.Text()).c_str();
+        EXPECT_EQ(maxClickedCount, 2);
     }
 
     TEST_F(ImGuiInputControlTest, TheImGuiSpaceTakesPositionsInImGuiUnits) {
