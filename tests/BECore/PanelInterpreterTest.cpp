@@ -829,6 +829,33 @@ namespace BECore::Tests {
             return Chain(HostId(), {rowId, elementId, label});
         }
 
+        /// Frames the mouse rests on an item before ImGui shows its tooltip (the stationary and the short hover delay), with room to spare
+        static constexpr int kTooltipFrames = 30;
+
+        /// The width of the text of the tooltip that shows after the mouse rests at @p point; none when no tooltip shows
+        Optional<float> TooltipWidthAt(ImVec2 point) {
+            ImGui::GetIO().AddMousePosEvent(point.x, point.y);
+            for (int i = 0; i < kTooltipFrames; ++i) {
+                Frame();
+            }
+            const ImGuiWindow* tooltip = ImGui::FindWindowByName("##Tooltip_00");
+            if (tooltip == nullptr || !tooltip->WasActive) {
+                return std::nullopt;
+            }
+            return tooltip->ContentSize.x;
+        }
+
+        /// How many vertices of the host drawn in the text colour lie inside @p record: four per glyph that is drawn (a space draws none)
+        static size_t TextVerticesIn(const ImGuiItemRecord& record) {
+            const ImU32 text = ImGui::GetColorU32(ImGuiCol_Text);
+            size_t count = 0;
+            for (const ImDrawVert& vertex : ImGui::FindWindowByName(kHostName)->DrawList->VtxBuffer) {
+                const bool inside = vertex.pos.x >= record.minX && vertex.pos.x <= record.maxX && vertex.pos.y >= record.minY && vertex.pos.y <= record.maxY;
+                count += vertex.col == text && inside ? 1 : 0;
+            }
+            return count;
+        }
+
         bool menuBar = false;
         ImGuiFontBuffers buffers;
         ImGuiFonts fonts;
@@ -2207,6 +2234,215 @@ namespace BECore::Tests {
         for (int i = 0; i < kInputWarmUpFrames; ++i) {
             Frame();
         }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+    }
+
+    namespace {
+
+        constexpr const char* kBoundTooltips = R"(
+<PanelAsset id="Tooltips" title="Tooltips">
+  <elements>
+    <element type="PanelRow" id="buttons">
+      <elements>
+        <element type="PanelButton" id="bound" text="Bound" command="probe.go" tooltip="Lit" tooltipBind="probe.title"/>
+        <element type="PanelButton" id="broken" text="Broken" command="probe.go" tooltip="Lit" tooltipBind="probe.nothing"/>
+      </elements>
+    </element>
+    <element type="PanelTable" id="plan" source="probe.rows">
+      <columns>
+        <column id="pick" type="Selectable" field="name" tooltipField="note"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kRowFieldCombo = R"(
+<PanelAsset id="Combo" title="Combo">
+  <elements>
+    <element type="PanelCombo" id="preset" bind="probe.pick" items="probe.rows" itemField="name" enableField="enabled" tooltipField="note" previewBind="probe.choice" text="Preset"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kLabelledInput = R"(
+<PanelAsset id="Input" title="Input">
+  <elements>
+    <element type="PanelInput" id="name" bind="probe.filter" text="Name"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kInputWidths = R"(
+<PanelAsset id="Widths" title="Widths">
+  <elements>
+    <element type="PanelInput" id="narrow" bind="probe.filter" fill="false"/>
+    <element type="PanelInput" id="wide" bind="probe.filter"/>
+  </elements>
+</PanelAsset>)";
+
+        /// A text and a tab bar; the icon of each is spliced in by the test
+        constexpr const char* kIconsTemplate = R"(
+<PanelAsset id="Icons" title="Icons">
+  <elements>
+    <element type="PanelText" id="status" text="Ready" {}/>
+    <element type="PanelTabs" id="tabs">
+      <elements>
+        <element type="PanelTab" id="run" title="{}" icon="check"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kUnitNumbers = R"(
+<PanelAsset id="Units" title="Units">
+  <elements>
+    <element type="PanelNumber" id="padding" bind="probe.gain" min="0" max="100" slider="true" unit="%" decimals="0"/>
+    <element type="PanelNumber" id="percent" bind="probe.level" min="0" max="100" slider="true" unit="%" decimals="2"/>
+    <element type="PanelNumber" id="plain" bind="probe.gain" min="0" max="100" slider="true"/>
+  </elements>
+</PanelAsset>)";
+
+        /// The glyphs drawn of `12 %` (a space draws none) and of ImGui's default float format, `12.000`
+        constexpr size_t kPercentGlyphs = 3;
+        constexpr size_t kDefaultFormatGlyphs = 6;
+        constexpr size_t kVerticesPerGlyph = 4;
+
+    }  // namespace
+
+    TEST_F(PanelInterpreterTest, ABoundTooltipReplacesTheLiteralAndOneThatCannotBeReadLeavesTheLiteral) {
+        probe.title = "A tooltip the model wrote";
+        Load(kBoundTooltips);
+
+        const Optional<float> bound = TooltipWidthAt(Locate(Chain(HostId(), {"buttons", "bound", "Bound"})));
+        ASSERT_TRUE(bound.has_value());
+        EXPECT_NEAR(*bound, ImGui::CalcTextSize(probe.title.c_str()).x, 1.0f);
+
+        const Optional<float> broken = TooltipWidthAt(Locate(Chain(HostId(), {"buttons", "broken", "Broken"})));
+        ASSERT_TRUE(broken.has_value());
+        EXPECT_NEAR(*broken, ImGui::CalcTextSize("Lit").x, 1.0f);
+    }
+
+    TEST_F(PanelInterpreterTest, AColumnsTooltipFieldIsTheTextOfItsRow) {
+        probe.rows[1].note = "The licence of the second row";
+        Load(kBoundTooltips);
+        const ImGuiID beta = Chain(TableCellChain("plan", 1, "pick"), {"beta##select"});
+        const Optional<float> width = TooltipWidthAt(Locate(beta));
+        ASSERT_TRUE(width.has_value());
+        EXPECT_NEAR(*width, ImGui::CalcTextSize(probe.rows[1].note.c_str()).x, 1.0f);
+
+        const ImGuiID alpha = Chain(TableCellChain("plan", 0, "pick"), {"alpha##select"});
+        EXPECT_FALSE(TooltipWidthAt(Locate(alpha)).has_value()) << "an empty text shows no tooltip";
+    }
+
+    TEST_F(PanelInterpreterTest, AComboRowThatItsEnableFieldTurnsOffIsNeverPickedAndARowShowsItsTooltip) {
+        probe.rows[1].enabled = false;
+        probe.rows[2].note = "The third row";
+        Load(kRowFieldCombo);
+        ClickAt(Locate(Chain(HostId(), {"preset", "##preset"})));
+        Settle();
+        const ImGuiWindow* popup = ComboPopup();
+        ASSERT_NE(popup, nullptr);
+
+        ClickAt(LocateInWindow(ComboRowId(*popup, 1, "beta"), *popup));
+        Settle();
+        EXPECT_EQ(probe.pick, 0);
+        EXPECT_TRUE(AnyPopupOpen()) << "a click on a disabled row keeps the combo open";
+
+        const Optional<float> width = TooltipWidthAt(LocateInWindow(ComboRowId(*popup, 2, "gamma"), *popup));
+        ASSERT_TRUE(width.has_value());
+        EXPECT_NEAR(*width, ImGui::CalcTextSize(probe.rows[2].note.c_str()).x, 1.0f);
+
+        ClickAt(LocateInWindow(ComboRowId(*popup, 2, "gamma"), *popup));
+        Settle();
+        EXPECT_EQ(probe.pick, 2);
+    }
+
+    TEST_F(PanelInterpreterTest, AComboShowsItsPreviewBindWhileClosedAndItsLabelAfterIt) {
+        probe.choice.clear();
+        Load(kRowFieldCombo);
+        const int emptyPreview = HostVertices();
+        probe.choice = "WWWW";
+        Settle();
+        EXPECT_EQ(HostVertices() - emptyPreview, static_cast<int>(probe.choice.size() * kVerticesPerGlyph)) << "the bound text is the preview, not the chosen row's";
+
+        const Optional<ImGuiItemRecord> combo = RecordOf(Chain(HostId(), {"preset", "##preset"}));
+        ASSERT_TRUE(combo.has_value());
+        EXPECT_NEAR(ContentRight(), combo->maxX + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Preset").x, 1.0f);
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputWithATextDrawsItAfterTheFieldAndOneThatDoesNotFillIsNarrower) {
+        Load(kLabelledInput);
+        const Optional<ImGuiItemRecord> labelled = RecordOf(Chain(HostId(), {"name", "##name"}));
+        ASSERT_TRUE(labelled.has_value());
+        EXPECT_NEAR(ContentRight(), labelled->maxX + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize("Name").x, 1.0f);
+
+        Load(kInputWidths);
+        const Optional<ImGuiItemRecord> narrow = RecordOf(Chain(HostId(), {"narrow", "##narrow"}));
+        const Optional<ImGuiItemRecord> wide = RecordOf(Chain(HostId(), {"wide", "##wide"}));
+        ASSERT_TRUE(narrow.has_value());
+        ASSERT_TRUE(wide.has_value());
+        EXPECT_NEAR(narrow->maxX - narrow->minX, labelled->maxX - labelled->minX, 1.0f) << "a field with a label and one that does not fill take the same default width";
+        EXPECT_LT(narrow->maxX - narrow->minX, wide->maxX - wide->minX);
+        EXPECT_NEAR(wide->maxX, ImGui::FindWindowByName(kHostName)->WorkRect.Max.x, 1.0f);
+    }
+
+    TEST_F(PanelInterpreterTest, ATextAndATabDrawTheGlyphOfTheirIconAndTheTabKeepsItsIdWhenItsTitleChanges) {
+        Load(Format(kIconsTemplate, "", "Generate"));
+        const int plain = HostVertices();
+        Load(Format(kIconsTemplate, R"(icon="check")", "Generate"));
+        EXPECT_EQ(HostVertices() - plain, static_cast<int>(kVerticesPerGlyph)) << "the glyph is drawn before the text";
+
+        // The bar pushes its own id, the walk the tab's, and the label hashes from its `###` on
+        const ImGuiID bar = Chain(HostId(), {"tabs", "##tabs"});
+        const ImGuiID tabId = Chain(bar, {"run", "###run"});
+        const Optional<ImGuiItemRecord> tab = RecordOf(tabId);
+        ASSERT_TRUE(tab.has_value());
+        EXPECT_NEAR(tab->maxX - tab->minX, ImGui::CalcTextSize(ICON_LC_CHECK " Generate").x + ImGui::GetStyle().FramePadding.x * 2.0f, 1.0f) << "the glyph and a space come before the title";
+
+        Load(Format(kIconsTemplate, R"(icon="check")", "Images"));
+        EXPECT_TRUE(RecordOf(tabId).has_value());
+    }
+
+    TEST_F(PanelInterpreterTest, ANumberWithAUnitShowsItAfterTheValueAndStillWritesTheNumber) {
+        probe.gain = 12.0f;
+        probe.level = 12;
+        Load(kUnitNumbers);
+        for (const char* id : {"padding", "percent"}) {
+            const Optional<ImGuiItemRecord> record = RecordOf(Chain(HostId(), {id, Format("##{}", id).c_str()}));
+            ASSERT_TRUE(record.has_value()) << id;
+            EXPECT_EQ(TextVerticesIn(*record), kPercentGlyphs * kVerticesPerGlyph) << id << " shows `12 %`";
+        }
+        const Optional<ImGuiItemRecord> plain = RecordOf(Chain(HostId(), {"plain", "##plain"}));
+        ASSERT_TRUE(plain.has_value());
+        EXPECT_EQ(TextVerticesIn(*plain), kDefaultFormatGlyphs * kVerticesPerGlyph) << "no unit and no decimals keep ImGui's format";
+
+        const Optional<ImGuiItemRecord> padding = RecordOf(Chain(HostId(), {"padding", "##padding"}));
+        ASSERT_TRUE(padding.has_value());
+        ClickAt(ImVec2(padding->minX + 2.0f, padding->CenterY()));
+        Settle();
+        EXPECT_LT(probe.gain, 12.0f) << "a click near the left end writes a smaller number";
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameWithABoundTooltipShownAndAnOpenComboOfRowFieldsAllocatesNothing) {
+        probe.title = "A tooltip the model wrote";
+        probe.rows[0].note = "First";
+        probe.choice = "chosen";
+        Load(kBoundTooltips);
+        ASSERT_TRUE(TooltipWidthAt(Locate(Chain(HostId(), {"buttons", "bound", "Bound"}))).has_value());
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+
+        Load(kRowFieldCombo);
+        ClickAt(Locate(Chain(HostId(), {"preset", "##preset"})));
+        Settle();
+        const ImGuiWindow* popup = ComboPopup();
+        ASSERT_NE(popup, nullptr);
+        ASSERT_TRUE(TooltipWidthAt(LocateInWindow(ComboRowId(*popup, 0, "alpha"), *popup)).has_value());
         ExpectNoAllocations([&] {
             for (int i = 0; i < kSteadyFrames; ++i) {
                 Frame();

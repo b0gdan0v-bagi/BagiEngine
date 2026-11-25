@@ -176,8 +176,15 @@ namespace BECore {
         [[nodiscard]] bool ReadRowFlag(const PanelBinding& list, size_t row, StringView path);
         /// Copies @p current into `_inputBuffer`, cut at a character boundary when it does not fit
         void FillInputBuffer(StringView current);
-        /// Shows @p current in a text field under @p label; true when the user changed it (with @p enterOnly: pressed Enter), the new text being in `_inputBuffer`
-        [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly = false);
+        /// Shows @p current in a text field under @p label, @p widthPixels wide (0: ImGui's default item width); true when the user changed it (with @p enterOnly: pressed
+        /// Enter), the new text being in `_inputBuffer`
+        [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthPixels, bool enterOnly = false);
+        /// The tooltip of the last item, while it is hovered (also disabled): the text of the element's `tooltipBind` when it reads, else its `tooltip`
+        void ElementTooltip(const PreparedElement& prepared);
+        /// The tooltip of the last item drawn for a row of @p list (a table's cell, a combo's row): the text at @p path of the row when it reads, else @p literal
+        void RowTooltip(StringView literal, const PanelBinding& list, size_t row, StringView path);
+        /// What a combo shows closed: the text of its `previewBind` when it reads, else @p chosen
+        [[nodiscard]] const char* ComboPreview(const PreparedElement& prepared, const String& chosen);
         void NoteClick(StringView command, StringView argument);
         /// The chord text of @p command in `_chordScratch`, null when there is none or no provider
         [[nodiscard]] const char* ChordOf(StringView command);
@@ -197,6 +204,10 @@ namespace BECore {
         String _chordScratch;
         /// What a combo shows closed; `BeginCombo` wants it as a C string
         String _preview;
+        /// A combo's `previewBind` text, copied for `BeginCombo`
+        String _boundPreview;
+        /// The bound text of the tooltip being shown; apart from the others, which the hovered control may still view
+        String _tooltipScratch;
         /// What the text field being drawn edits; one field is drawn at a time
         char _inputBuffer[kInputBufferSize] = {};
         /// The typed number being edited: ImGui reports the value only on the frames the text changed, and it is written when the field is left, so the last value is kept

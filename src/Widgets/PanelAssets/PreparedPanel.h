@@ -53,14 +53,19 @@ namespace BECore {
         PreparedCondition match;
         /// The `bind` of a text, field, fields, input, checkbox, combo, number or radio, the `openBind` of a section, the `source` of a table or of a `PanelMenuItems`
         PreparedBinding bind;
-        /// A checkbox's `labelBind`
+        /// A checkbox's `labelBind`, a combo's `previewBind`
         PreparedBinding label;
+        /// The `tooltipBind` of any element: its text replaces `tooltip` when it reads
+        PreparedBinding tooltip;
         /// A combo's `items`
         PreparedBinding items;
-        /// The glyph of a button's, a dropdown's, an input's, a checkbox's, a radio's, a section's, a menu item's or an empty state's `icon`, null when it names none
+        /// The glyph of a button's, a dropdown's, an input's, a checkbox's, a radio's, a section's, a text's, a tab's, a menu item's or an empty state's `icon`, null when it names none
         const char* glyph = nullptr;
         /// The hint of an input with the glyph of its icon in front of it
         String hint;
+        /// The printf formats of a number with `decimals` or a `unit`, for a float field and for an integer one; empty (ImGui's default) when it has neither
+        String format;
+        String integerFormat;
         Vector<PreparedElement> children;
         Vector<PreparedColumn> columns;
         /// A popup's `open` as the last frame read it: the walk is const over the tree and this is the one thing it remembers, so the modal opens on the rising edge
