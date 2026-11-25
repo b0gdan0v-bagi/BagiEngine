@@ -21,7 +21,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
   "benchmarks": [
     {
       "name": "stress-sprites",
-      "about": "BagiStress sprites without a window: 5000 spinning sprites, one IRenderer call each, 300 frames after 30 of warm-up. work_ms_p50 is about 0.8 ms (the scene update and the calls); a frame is about 63 ms because the software renderer draws the sprites in its present, so more sprites or frames only make the run longer (10000 sprites: 43 s a run). The number a 2D batcher moves is work_ms",
+      "about": "BagiStress sprites without a window: 5000 spinning sprites, one IRenderer call each, 300 frames after 30 of warm-up. work_ms_p50 is about 0.8 ms (the scene update and the calls); a frame is about 63 ms because the software renderer draws the sprites in its present, so more sprites or frames only make the run longer (10000 sprites: 43 s a run). The 2D batcher leaves textured quads unbatched on the software renderer (a byte-exactness gate, rendering-module.md, Batching), so work_ms does not move and draw_calls stays one per sprite (the in-process line of `StressRecorder` carries no `primitives` key; the profiler answer does); the gain of batching is on a GPU driver, which a headless run does not use",
       "fast": false,
       "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30"],
       "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--trace", "{trace}"],

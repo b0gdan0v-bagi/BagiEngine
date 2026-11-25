@@ -5,6 +5,7 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIEnvironment.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/DestroyTally.h>
 #include <Common/EngineEnvironment.h>
@@ -241,6 +242,34 @@ namespace BECore::Tests {
             String lastText;  // the text of the newest response, as the transport got it
             IntrusivePtr<IRenderer> previousRenderer;
             int64_t lastId = 0;
+        };
+
+        /// Draws a scene unbatched and batched on the same renderer, to compare the two images
+        class SDLBatchCaptureTest : public SDLCaptureTest {
+        protected:
+            PixelBuffer Render(bool batched, FunctionRef<void()> scene) {
+                renderer->SetBatchingEnabled(batched);
+                renderer->Clear(kBackground);
+                scene();
+                return PresentAndRead();
+            }
+
+            /// How many pixels differ between the unbatched and the batched image of @p scene
+            size_t DifferingPixels(FunctionRef<void()> scene) {
+                const PixelBuffer plain = Render(false, scene);
+                const PixelBuffer batched = Render(true, scene);
+                if (plain.rgba.empty() || plain.rgba.size() != batched.rgba.size()) {
+                    ADD_FAILURE() << "a frame was not captured";
+                    return plain.rgba.size() + batched.rgba.size();
+                }
+                size_t differing = 0;
+                for (size_t i = 0; i < plain.rgba.size(); i += kChannelCount) {
+                    if (!std::equal(plain.rgba.begin() + static_cast<ptrdiff_t>(i), plain.rgba.begin() + static_cast<ptrdiff_t>(i + kChannelCount), batched.rgba.begin() + static_cast<ptrdiff_t>(i))) {
+                        ++differing;
+                    }
+                }
+                return differing;
+            }
         };
 
     }  // namespace
@@ -1207,6 +1236,267 @@ namespace BECore::Tests {
         ASSERT_EQ(responses.size(), 2u);
         EXPECT_TRUE(Result(0).IsObject());
         EXPECT_EQ(responses[1].IdText(), "2");
+    }
+
+    TEST_F(SDLBatchCaptureTest, ByDefaultTheSoftwareRendererBatchesOnlyWhatWasProvedExact) {
+        EXPECT_TRUE(renderer->IsBatchingEnabled());
+        EXPECT_TRUE(renderer->IsBatchOnlyExactDraws());
+
+        auto texture = MakeSolidTexture(8, 8, kRed);
+        ASSERT_TRUE(texture);
+        const Color white{255, 255, 255, 255};
+        renderer->Clear(kBackground);
+        renderer->TakeRenderCounters();
+
+        renderer->DrawFilledRect(10.0f, 10.0f, 20.0f, 20.0f, kRed);                   // batched: whole pixels, opaque
+        renderer->DrawFilledRect(40.0f, 10.0f, 20.0f, 20.0f, kRed);                   // the same batch
+        renderer->DrawFilledRect(10.5f, 50.0f, 20.0f, 20.0f, kRed);                   // a fractional edge: drawn at once
+        renderer->DrawFilledRect(40.0f, 50.0f, 20.0f, 20.0f, Color{255, 0, 0, 128});  // translucent straight alpha: drawn at once
+        renderer->DrawTexture(*texture, nullptr, 70.0f, 10.0f, 8.0f, 8.0f, white);    // a textured quad: drawn at once
+        renderer->DrawTransformedTexture(*texture, nullptr, 70.0f, 30.0f, 8.0f, 8.0f, white, DrawTransform{30.0f, 74.0f, 34.0f});
+        renderer->DrawTransformedRect(90.0f, 10.0f, 20.0f, 20.0f, Color{255, 0, 0, 128}, DrawTransform{30.0f, 100.0f, 20.0f});  // geometry either way: batched
+        renderer->Flush();
+
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(counters.primitives, 7u);
+        EXPECT_EQ(counters.drawCalls, 6u);  // the batch of two rects, the four draws made at once, the batch of the transformed rect
+    }
+
+    TEST_F(SDLBatchCaptureTest, WholePixelRectsAreByteEqualBatched) {
+        // The class the software gate lets through: positive size, edges on whole output pixels, opaque or additive or multiplied
+        for (const BlendMode mode : {BlendMode::Alpha, BlendMode::Add, BlendMode::Multiply}) {
+            for (const bool opaque : {true, false}) {
+                if (mode == BlendMode::Alpha && !opaque) {
+                    continue;  // translucent straight alpha is outside the class
+                }
+                const size_t differing = DifferingPixels([&] {
+                    ScopedBlendMode blend(*renderer, mode);
+                    uint32_t seed = 12345;
+                    const auto next = [&seed] {
+                        seed = seed * 1664525u + 1013904223u;
+                        return (seed >> 8) & 0xFFFF;
+                    };
+                    for (int i = 0; i < 100; ++i) {
+                        const Color color{static_cast<uint8_t>(next()), static_cast<uint8_t>(next()), static_cast<uint8_t>(next()), opaque ? uint8_t{255} : static_cast<uint8_t>(next())};
+                        renderer->DrawFilledRect(static_cast<float>(next() % 300), static_cast<float>(next() % 300), static_cast<float>(1 + next() % 120), static_cast<float>(1 + next() % 120), color);
+                    }
+                });
+                EXPECT_EQ(differing, 0u) << "mode " << static_cast<int>(mode) << (opaque ? " opaque" : " translucent");
+            }
+        }
+    }
+
+    TEST_F(SDLBatchCaptureTest, WholePixelRectsUnderAViewTransformAndAClipAreByteEqualBatched) {
+        const size_t differing = DifferingPixels([&] {
+            renderer->SetViewTransform(ViewTransform{2.0f, 7.0f, 3.0f});
+            renderer->PushClipRect(Rect{30.5f, 20.0f, 100.0f, 80.0f});  // grown to whole pixels by the backend
+            renderer->DrawFilledRect(10.0f, 10.0f, 40.0f, 30.0f, Color{200, 100, 50, 255});
+            renderer->DrawFilledRect(30.0f, 20.0f, 40.0f, 30.0f, Color{20, 200, 50, 255});
+            renderer->PopClipRect();
+            renderer->DrawFilledRect(90.0f, 60.0f, 40.0f, 30.0f, Color{20, 20, 250, 255});
+            renderer->SetViewTransform({});
+        });
+        EXPECT_EQ(differing, 0u);
+    }
+
+    TEST_F(SDLBatchCaptureTest, TransformedRectsAreByteEqualBatched) {
+        // Geometry in both forms, so the translucent straight-alpha colors that the plain rect path rounds differently are equal here
+        for (const BlendMode mode : {BlendMode::Alpha, BlendMode::Add, BlendMode::Multiply}) {
+            const size_t differing = DifferingPixels([&] {
+                ScopedBlendMode blend(*renderer, mode);
+                renderer->DrawTransformedRect(20.0f, 20.0f, 80.0f, 40.0f, Color{200, 100, 50, 180}, DrawTransform{30.0f, 60.0f, 40.0f});
+                renderer->DrawTransformedRect(60.0f, 30.0f, 80.0f, 40.0f, Color{20, 200, 50, 90}, DrawTransform{90.0f, 100.0f, 50.0f});
+                renderer->DrawTransformedRect(40.0f, 50.0f, 60.5f, 40.25f, Color{20, 20, 250, 200}, DrawTransform{217.0f, 70.0f, 70.0f});
+            });
+            EXPECT_EQ(differing, 0u) << "mode " << static_cast<int>(mode);
+        }
+    }
+
+    TEST_F(SDLBatchCaptureTest, TexturedDrawsAreImmediateByDefaultSoTheirPixelsDoNotChange) {
+        // The traps of the software triangle path (shrunk texels, a quad turned by 90 degrees taken for a blit) are why the gate keeps every textured quad out
+        const Color white{255, 255, 255, 255};
+        auto texture = MakeTexture(MakeQuadrants({kRed, Color{0, 255, 0, 255}, Color{0, 0, 255, 255}, white}));
+        ASSERT_TRUE(texture);
+        const size_t differing = DifferingPixels([&] {
+            renderer->DrawFilledRect(0.0f, 0.0f, 400.0f, 300.0f, Color{60, 60, 60, 255});
+            renderer->DrawTexture(*texture, nullptr, 20.0f, 20.0f, 8.0f, 8.0f, white);
+            renderer->DrawTexture(*texture, nullptr, 60.0f, 20.0f, 40.0f, 40.0f, Color{255, 120, 30, 200});
+            renderer->DrawTransformedTexture(*texture, nullptr, 120.0f, 20.0f, 40.0f, 40.0f, white, DrawTransform{0.0f, 0.0f, 0.0f, true, false});
+            renderer->DrawTransformedTexture(*texture, nullptr, 180.0f, 20.0f, 80.0f, 40.0f, white, DrawTransform{90.0f, 220.0f, 40.0f});
+            renderer->DrawTransformedTexture(*texture, nullptr, 280.0f, 20.0f, 80.0f, 40.0f, white, DrawTransform{270.0f, 320.0f, 40.0f});
+            renderer->DrawTransformedTexture(*texture, nullptr, 20.0f, 100.0f, 40.0f, 40.0f, white, DrawTransform{30.0f, 40.0f, 120.0f});
+            renderer->DrawFilledRect(10.0f, 150.0f, 100.0f, 20.0f, Color{200, 100, 50, 255});
+        });
+        EXPECT_EQ(differing, 0u);
+    }
+
+    TEST_F(SDLBatchCaptureTest, ARectAGeometryDrawAndAnotherRectKeepTheirOrder) {
+        const Color green{0, 255, 0, 255};
+        const Color blue{0, 0, 255, 255};
+        renderer->Clear(kBackground);
+        renderer->DrawFilledRect(10.0f, 10.0f, 60.0f, 60.0f, kRed);
+        const GeometryQuad quad = Quad(40.0f, 40.0f, 100.0f, 100.0f, green);
+        renderer->DrawGeometry(nullptr, {quad.vertices.data(), quad.vertices.size()}, {quad.indices.data(), quad.indices.size()}, 0.0f, 0.0f);
+        renderer->DrawFilledRect(60.0f, 60.0f, 20.0f, 20.0f, blue);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_EQ(PixelAt(image, 20, 20), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 50, 50), AsPixel(green));  // over the first rect
+        EXPECT_EQ(PixelAt(image, 70, 70), AsPixel(blue));   // over the geometry
+        EXPECT_EQ(PixelAt(image, 90, 90), AsPixel(green));
+    }
+
+    TEST_F(SDLBatchCaptureTest, AClipChangeSplitsTheBatchAndEachPartKeepsItsClip) {
+        const size_t differing = DifferingPixels([&] {
+            renderer->DrawFilledRect(10.0f, 10.0f, 100.0f, 100.0f, kRed);
+            renderer->PushClipRect(Rect{30.0f, 30.0f, 40.0f, 40.0f});
+            renderer->DrawFilledRect(0.0f, 0.0f, 200.0f, 200.0f, Color{0, 255, 0, 255});
+            renderer->PushClipRect(Rect{50.0f, 50.0f, 40.0f, 40.0f});
+            renderer->DrawFilledRect(0.0f, 0.0f, 200.0f, 200.0f, Color{0, 0, 255, 255});
+            renderer->PopClipRect();
+            renderer->PopClipRect();
+            renderer->DrawFilledRect(100.0f, 100.0f, 30.0f, 30.0f, Color{255, 255, 0, 255});
+        });
+        EXPECT_EQ(differing, 0u);
+    }
+
+    TEST_F(SDLBatchCaptureTest, BatchingDoesNotChangeTheCountOfPrimitives) {
+        renderer->Clear(kBackground);
+        renderer->SetBatchingEnabled(true);
+        renderer->TakeRenderCounters();
+        for (int i = 0; i < 10; ++i) {
+            renderer->DrawFilledRect(static_cast<float>(i * 12), 10.0f, 10.0f, 10.0f, kRed);
+        }
+        renderer->Flush();
+        const RenderCounters batched = renderer->TakeRenderCounters();
+
+        renderer->SetBatchingEnabled(false);
+        for (int i = 0; i < 10; ++i) {
+            renderer->DrawFilledRect(static_cast<float>(i * 12), 10.0f, 10.0f, 10.0f, kRed);
+        }
+        const RenderCounters plain = renderer->TakeRenderCounters();
+
+        EXPECT_EQ(batched.primitives, 10u);
+        EXPECT_EQ(batched.drawCalls, 1u);
+        EXPECT_EQ(batched.triangles, plain.triangles);
+        EXPECT_EQ(plain.primitives, 10u);
+        EXPECT_EQ(plain.drawCalls, 10u);
+    }
+
+    /// The textured classes are batched only when the gate is lifted: a block of the batched image is where the immediate draw puts it
+    class SDLBatchedTextureTest : public SDLBatchCaptureTest {
+    protected:
+        void SetUp() override {
+            SDLBatchCaptureTest::SetUp();
+            if (IsSkipped()) {
+                return;
+            }
+            renderer->SetBatchOnlyExactDraws(false);
+            texture = MakeTexture(MakeQuadrants(kBlocks));
+        }
+
+        /// The centers of the four blocks of a quad drawn at @p rect turned by @p degrees about @p pivot, in the order of the blocks
+        static Array<Vec2, 4> BlockCenters(const Rect& rect, float degrees, float pivotX, float pivotY) {
+            const float radians = degrees * kPi / kHalfTurnDegrees;
+            const float cosine = std::cos(radians);
+            const float sine = std::sin(radians);
+            Array<Vec2, 4> centers;
+            for (size_t i = 0; i < centers.size(); ++i) {
+                const float x = rect.x + rect.w * (i % 2 == 0 ? 0.25f : 0.75f) - pivotX;
+                const float y = rect.y + rect.h * (i / 2 == 0 ? 0.25f : 0.75f) - pivotY;
+                centers[i] = Vec2{pivotX + x * cosine - y * sine, pivotY + x * sine + y * cosine};
+            }
+            return centers;
+        }
+
+        /// Draws @p scene unbatched and batched and expects every block center to hold the same color (within the blend rounding)
+        void ExpectSameBlocks(const Array<Vec2, 4>& centers, FunctionRef<void()> scene) {
+            const PixelBuffer plain = Render(false, scene);
+            const PixelBuffer batched = Render(true, scene);
+            ASSERT_FALSE(plain.rgba.empty());
+            ASSERT_FALSE(batched.rgba.empty());
+            for (const Vec2& center : centers) {
+                const auto x = static_cast<uint32_t>(center.x);
+                const auto y = static_cast<uint32_t>(center.y);
+                EXPECT_TRUE(IsNear(PixelAt(batched, x, y), PixelAt(plain, x, y), kBlendTolerance)) << "at (" << x << ", " << y << ")";
+            }
+        }
+
+        static constexpr float kPi = 3.14159265f;
+        static constexpr float kHalfTurnDegrees = 180.0f;
+        static inline const Array<Color, 4> kBlocks = {Color{255, 0, 0, 255}, Color{0, 255, 0, 255}, Color{0, 0, 255, 255}, Color{255, 255, 255, 255}};
+        const Color white{255, 255, 255, 255};
+        IntrusivePtr<ITexture> texture;
+    };
+
+    TEST_F(SDLBatchedTextureTest, AWholeTextureAndASourceRectLandWhereTheImmediateDrawPutsThem) {
+        ASSERT_TRUE(texture);
+        const Rect whole{100.0f, 60.0f, 80.0f, 80.0f};
+        ExpectSameBlocks(BlockCenters(whole, 0.0f, 0.0f, 0.0f), [&] { renderer->DrawTexture(*texture, nullptr, whole.x, whole.y, whole.w, whole.h, white); });
+
+        // The red block alone, stretched: every sample is red
+        const Rect red{0.0f, 0.0f, 4.0f, 4.0f};
+        const PixelBuffer image = Render(true, [&] { renderer->DrawTexture(*texture, &red, 100.0f, 60.0f, 80.0f, 80.0f, white); });
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 80), AsPixel(kBlocks[0]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 160, 120), AsPixel(kBlocks[0]), kBlendTolerance));
+    }
+
+    TEST_F(SDLBatchedTextureTest, ATintAndAHalfOpacityAreInTheBatchedColors) {
+        ASSERT_TRUE(texture);
+        const Rect rect{100.0f, 60.0f, 80.0f, 80.0f};
+        const Color tint{255, 120, 30, 200};
+        ExpectSameBlocks(BlockCenters(rect, 0.0f, 0.0f, 0.0f), [&] { renderer->DrawTexture(*texture, nullptr, rect.x, rect.y, rect.w, rect.h, tint); });
+        ExpectSameBlocks(BlockCenters(rect, 0.0f, 0.0f, 0.0f), [&] {
+            ScopedOpacity opacity(*renderer, 0.5f);
+            renderer->DrawTexture(*texture, nullptr, rect.x, rect.y, rect.w, rect.h, white);
+        });
+    }
+
+    TEST_F(SDLBatchedTextureTest, AFlippedAndATurnedQuadShowTheirBlocksWhereTheImmediateDrawPutsThem) {
+        ASSERT_TRUE(texture);
+        const Rect rect{100.0f, 60.0f, 80.0f, 80.0f};
+        ExpectSameBlocks(BlockCenters(rect, 0.0f, 0.0f, 0.0f),
+                         [&] { renderer->DrawTransformedTexture(*texture, nullptr, rect.x, rect.y, rect.w, rect.h, white, DrawTransform{0.0f, 0.0f, 0.0f, true, false}); });
+        ExpectSameBlocks(BlockCenters(rect, 0.0f, 0.0f, 0.0f),
+                         [&] { renderer->DrawTransformedTexture(*texture, nullptr, rect.x, rect.y, rect.w, rect.h, white, DrawTransform{0.0f, 0.0f, 0.0f, false, true}); });
+        const float pivotX = rect.x + rect.w * 0.5f;
+        const float pivotY = rect.y + rect.h * 0.5f;
+        ExpectSameBlocks(BlockCenters(rect, 30.0f, pivotX, pivotY),
+                         [&] { renderer->DrawTransformedTexture(*texture, nullptr, rect.x, rect.y, rect.w, rect.h, white, DrawTransform{30.0f, pivotX, pivotY}); });
+    }
+
+    TEST_F(SDLBatchedTextureTest, AnAdditiveDrawThenAnAlphaDrawOfOneTextureDoNotShareABlendMode) {
+        ASSERT_TRUE(texture);
+        const Rect first{20.0f, 20.0f, 80.0f, 80.0f};
+        const Rect second{200.0f, 20.0f, 80.0f, 80.0f};
+        const auto scene = [&] {
+            renderer->DrawFilledRect(0.0f, 0.0f, 400.0f, 200.0f, Color{60, 60, 60, 255});
+            {
+                ScopedBlendMode blend(*renderer, BlendMode::Add);
+                renderer->DrawTexture(*texture, nullptr, first.x, first.y, first.w, first.h, white);
+            }
+            renderer->DrawTexture(*texture, nullptr, second.x, second.y, second.w, second.h, white);
+        };
+        Array<Vec2, 4> centers = BlockCenters(first, 0.0f, 0.0f, 0.0f);
+        const Array<Vec2, 4> later = BlockCenters(second, 0.0f, 0.0f, 0.0f);
+        ExpectSameBlocks(centers, scene);
+        ExpectSameBlocks(later, scene);
+    }
+
+    TEST_F(SDLBatchedTextureTest, QuadsOfOneTextureAreOneSubmission) {
+        ASSERT_TRUE(texture);
+        renderer->Clear(kBackground);
+        renderer->SetBatchingEnabled(true);
+        renderer->TakeRenderCounters();
+        for (int i = 0; i < 5; ++i) {
+            renderer->DrawTexture(*texture, nullptr, static_cast<float>(i * 20), 10.0f, 16.0f, 16.0f, white);
+        }
+        renderer->Flush();
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(counters.primitives, 5u);
+        EXPECT_EQ(counters.drawCalls, 1u);
+        EXPECT_EQ(counters.textureSwitches, 1u);
     }
 
 }  // namespace BECore::Tests
