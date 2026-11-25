@@ -17,6 +17,7 @@
 #include <BECore/FileSystem/FileWatchControl.h>
 #include <BECore/FileSystem/FileWatcher.h>
 #include <BECore/FileSystem/PlatformFileWatchBackend.h>
+#include <BECore/Input/ImGuiInputControl.h>
 #include <BECore/Input/InputControl.h>
 #include <BECore/Input/UIInput.h>
 #include <BECore/Logger/LoggerManager.h>
@@ -152,6 +153,7 @@ namespace BECore {
         RegisterControlBuiltins(*_controlService);
         RegisterUIControl(*_controlService);
         RegisterInputControl(*_controlService);
+        RegisterImGuiInputControl(*_controlService);
         RegisterProfilerControl(*_controlService);
         RegisterClipboardControl(*_controlService);
         RegisterAudioControl(*_controlService, *_audioManager);

@@ -366,6 +366,69 @@ def click_at(
 
 @server.tool()
 @reports_errors
+def imgui_find(
+    label: str | None = None,
+    label_contains: str | None = None,
+    id: str | None = None,
+    window: str | None = None,
+    kind: str | None = None,
+    visible_only: bool = False,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Finds the windows and items of the editor's ImGui by label or id: {frame, display, wantCaptureMouse, wantCaptureKeyboard, wantTextInput, hoveredWindow?,
+    focusedWindow?, matches: [{kind, id, label, window?, x, y, width, height, visible, hovered}], truncated?}. The rects are output pixels, the pixels of `screenshot`.
+
+    Needs the editor: launch_game(editor=True), else the error no_imgui. With no filter only the windows are listed. label: the whole label or its part before `##`;
+    label_contains: a part of it; id: ImGui's hex id (0x1A2B3C4D); window: only what belongs to that window; kind: "window" or "item"; visible_only: leave out what is
+    clipped or scrolled out. An item exists only in a frame that drew it: a menu item is there only while its menu is open (click the menu, then find the item).
+    """
+    return session.imgui_find(label, label_contains=label_contains, id=id, window=window, kind=kind, visible_only=visible_only, limit=limit)
+
+
+@server.tool()
+@reports_errors
+def imgui_click(
+    label: str | None = None,
+    x: float | None = None,
+    y: float | None = None,
+    window: str | None = None,
+    button: str = "left",
+    count: int = 1,
+    mods: list[str] | None = None,
+) -> dict[str, Any]:
+    """Clicks an item of the editor's ImGui like a user: the centre of the one visible item called `label` (in `window`, to tell same names apart), or the output
+    pixel x, y. count 2 is a double click, button "left", "right" or "middle", mods "ctrl" (Cmd on macOS), "shift", "alt", "super".
+
+    Needs the editor (launch_game(editor=True), else no_imgui). Answers {events, frames, wantCaptureMouse, wantCaptureKeyboard, wantTextInput}: a click ImGui did
+    not want (wantCaptureMouse false) went on to the game. No visible match or several is an error that lists them. A menu item exists only while its menu is open:
+    click the menu, then the item. The call runs its own frames, no step is needed. A recording keeps it, and it replays in the editor only.
+    """
+    return session.imgui_click(label, x=x, y=y, window=window, button=button, count=count, mods=mods or ())
+
+
+@server.tool()
+@reports_errors
+def imgui_type(text: str) -> dict[str, Any]:
+    """Types text into the focused text field of the editor's ImGui (click the field first; wantTextInput in the answer says whether a field had the focus).
+
+    Needs the editor (launch_game(editor=True), else no_imgui). A recording keeps it, and it replays in the editor only.
+    """
+    return session.imgui_type(text)
+
+
+@server.tool()
+@reports_errors
+def imgui_key(key: str, mods: list[str] | None = None) -> dict[str, Any]:
+    """Presses and releases a key in the editor's ImGui: key is ImGui's name (Enter, Escape, A, F6, LeftArrow, Backspace...), mods "ctrl" (Cmd on macOS), "shift",
+    "alt", "super": imgui_key("P", ["ctrl", "shift"]) is the chord Ctrl+Shift+P. An unknown key is invalid_params.
+
+    Needs the editor (launch_game(editor=True), else no_imgui). A recording keeps it, and it replays in the editor only.
+    """
+    return session.imgui_key(key, mods or ())
+
+
+@server.tool()
+@reports_errors
 def frame_stats(frames: int = 1) -> dict[str, Any]:
     """What the last frames cost, oldest first: {frames: [...], allocTracking, arenas, pools}.
 

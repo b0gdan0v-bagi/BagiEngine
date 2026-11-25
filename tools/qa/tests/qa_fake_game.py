@@ -19,6 +19,10 @@ Knobs (the number is the 1-based count of `perform_action` calls):
   QA_FAKE_CRASH_AT=N         the Nth action makes the game exit at once without an answer
   QA_FAKE_NO_UI=1            `ui_tree` has a canvas with no elements
   QA_FAKE_WINDOW=1           the game serves `set_window {width, height}` (a size of 0 is `invalid_params`) and `status` shows `window`
+  QA_FAKE_EDITOR=1           an editor build: `status.runMode` is `Editor` (else `Game`); `imgui_find` lists the windows `Scene Editor` and `Game Panel` and
+                             the items `Save` (Scene Editor) and `Close` (in both windows, so a click on it is ambiguous); `imgui_input` answers like the real one,
+                             and a click on `Save` writes the text QA_FAKE_SAVE_TEXT into the file QA_FAKE_CONTENT_FILE
+  QA_FAKE_EDITOR_DIR_OUT=F   the game writes the BAGI_EDITOR_DIR it was started with into the file F (an empty line when it was not set)
 `bad` (not listed) is always refused with `illegal_action`. `reset` takes {"count"}.
 """
 
@@ -38,6 +42,15 @@ from fake_game import png_2x1  # noqa: E402
 WATCHDOG_SECONDS = 60.0
 
 
+SAVE_RECT = {"x": 100.0, "y": 50.0, "width": 40.0, "height": 20.0}
+EDITOR_WINDOWS = ("Scene Editor", "Game Panel")
+EDITOR_ITEMS = [
+    {"kind": "item", "label": "Save", "window": "Scene Editor", **SAVE_RECT},
+    {"kind": "item", "label": "Close", "window": "Scene Editor", "x": 200.0, "y": 50.0, "width": 40.0, "height": 20.0},
+    {"kind": "item", "label": "Close", "window": "Game Panel", "x": 200.0, "y": 150.0, "width": 40.0, "height": 20.0},
+]
+
+
 def knob(name: str) -> int:
     return int(os.environ.get(name, "0") or 0)
 
@@ -48,6 +61,10 @@ def main() -> int:
     state = {"count": 0, "version": 1, "actions": 0, "frame": 0, "volume": 0.0, "window": [1920, 1080]}
     window_served = bool(os.environ.get("QA_FAKE_WINDOW"))
     late: list[str] = []
+    editor = bool(os.environ.get("QA_FAKE_EDITOR"))
+    editor_dir_out = os.environ.get("QA_FAKE_EDITOR_DIR_OUT")
+    if editor_dir_out:
+        Path(editor_dir_out).write_text(os.environ.get("BAGI_EDITOR_DIR", "") + "\n", encoding="utf-8")
 
     def full_state() -> dict:
         return {"game": "Fake", "version": state["version"], "state": {"count": state["count"]}}
@@ -91,13 +108,33 @@ def main() -> int:
     served = ["get_state", "list_actions", "list_games", "list_methods", "perform_action", "ping", "quit", "reset", "screenshot", "status", "step", "ui_click", "ui_tree"]
     if window_served:
         served.append("set_window")
+    if editor:
+        served += ["imgui_find", "imgui_input"]
+
+    def imgui_find(params: dict) -> dict:
+        windows = [{"kind": "window", "label": label, "id": index, "x": 0.0, "y": 0.0, "width": 400.0, "height": 300.0, "visible": True, "hovered": False} for index, label in enumerate(EDITOR_WINDOWS)]
+        items = [{**item, "id": 10 + index, "visible": True, "hovered": False} for index, item in enumerate(EDITOR_ITEMS)]
+        wanted = [match for match in windows + items if (params.get("kind") is None or match["kind"] == params["kind"]) and (params.get("window") is None or match.get("window") == params["window"])]
+        if params.get("label") is not None:
+            wanted = [match for match in wanted if match["label"] == params["label"]]
+        elif params.get("kind") is None and "label" not in params:
+            wanted = windows
+        return {"frame": state["frame"], "display": [1920, 1080], "wantCaptureMouse": False, "wantCaptureKeyboard": False, "matches": wanted}
+
+    def imgui_input(params: dict) -> dict:
+        for event in params.get("events", []):
+            if event.get("type") == "click" and SAVE_RECT["x"] <= event.get("x", -1) <= SAVE_RECT["x"] + SAVE_RECT["width"] and SAVE_RECT["y"] <= event.get("y", -1) <= SAVE_RECT["y"] + SAVE_RECT["height"]:
+                target = os.environ.get("QA_FAKE_CONTENT_FILE")
+                if target:
+                    Path(target).write_text(os.environ.get("QA_FAKE_SAVE_TEXT", "saved"), encoding="utf-8")
+        return {"events": len(params.get("events", [])), "frames": 1, "wantCaptureMouse": False, "wantCaptureKeyboard": False, "wantTextInput": False}
 
     def handle(method: str, params: dict | None):
         params = params or {}
         if method == "ping":
             return {"pong": True, "protocol": 1}
         if method == "status":
-            answer = {"frame": state["frame"], "manualClock": "--manual-clock" in args}
+            answer = {"frame": state["frame"], "manualClock": "--manual-clock" in args, "runMode": "Editor" if editor else "Game"}
             if window_served:
                 answer["window"] = state["window"]
             return answer
@@ -146,6 +183,10 @@ def main() -> int:
             return {"scene": "Main", "canvases": [canvas]}
         if method == "ui_click":
             return ui_click(params)
+        if editor and method == "imgui_find":
+            return imgui_find(params)
+        if editor and method == "imgui_input":
+            return imgui_input(params)
         if method == "set_window" and window_served:
             return set_window(params)
         if method == "screenshot":

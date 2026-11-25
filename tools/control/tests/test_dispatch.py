@@ -318,6 +318,7 @@ EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "click_at", "game_log", "quit",
     "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop", "image_diff",
     "log_mark", "log_since", "log_subscribe", "batch", "run_until", "set_window",
+    "imgui_find", "imgui_click", "imgui_type", "imgui_key",
 }
 
 
