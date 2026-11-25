@@ -53,6 +53,14 @@ namespace BECore {
      * `ImGuiListClipper`): a row outside the window is not a control, so the control API does not find it. The ids of a cell are the same
      * as in a table that does not scroll.
      *
+     * **A child region** (`PanelChild`) is an ImGui child window labelled `##<element id>` under the element's `PushID`. A child is a window of its own, so the ids of the controls in it start from
+     * the child's window id, not from the chain of the window around it.
+     *
+     * **A popup** (`PanelPopup`) is a modal window the model opens with a bool: the walk calls `OpenPopup` once when `open` reads true and the popup is
+     * not open in ImGui, and `CloseCurrentPopup` as soon as it reads false (its children are drawn disabled that frame, so nothing can be clicked while it
+     * goes). Unlike every other condition, one that cannot be read counts as closed: a modal opened by a broken file would block the editor. A click inside
+     * is noted like any other, so the command that clears the bool takes effect on the next frame.
+     *
      * Main thread only; needs an ImGui frame in progress.
      */
     class PanelInterpreter {
@@ -95,6 +103,8 @@ namespace BECore {
         void DrawButtonCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
         void DrawInputCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row);
         void DrawSlot(const PreparedElement& prepared);
+        void DrawChild(const PreparedElement& prepared);
+        void DrawPopup(const PreparedElement& prepared);
 
         [[nodiscard]] bool IsVisible(const PreparedElement& prepared);
         [[nodiscard]] bool ReadCondition(const PreparedBinding& condition);
@@ -102,6 +112,8 @@ namespace BECore {
         [[nodiscard]] bool ReadArgument(const PanelBinding& list, size_t row, StringView path, StringView& out);
         /// The bool cell @p path of a row; true when @p path is empty or cannot be read, so a broken binding is seen and not hidden
         [[nodiscard]] bool ReadRowCondition(const PanelBinding& list, size_t row, StringView path);
+        /// Whether the `Selectable` column's `selectedField` of a row reads true; false when it is empty or cannot be read
+        [[nodiscard]] bool ReadRowSelected(const PanelBinding& list, size_t row, StringView path);
         /// Shows @p current in a text field under @p label; true when the user changed it, the new text being in `_inputBuffer`
         [[nodiscard]] bool DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm);
         void NoteClick(StringView command, StringView argument);

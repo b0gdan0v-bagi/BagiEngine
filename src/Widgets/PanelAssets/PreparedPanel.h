@@ -9,7 +9,7 @@
 namespace BECore {
 
     /// What `PanelInterpreter::Prepare` makes of an element's class: the walk switches on this and never asks the type again
-    CORE_ENUM(PreparedKind, uint8_t, Unknown, Section, Row, Text, Field, Fields, Input, Button, Table, Separator, EmptyState, Slot)
+    CORE_ENUM(PreparedKind, uint8_t, Unknown, Section, Row, Text, Field, Fields, Input, Button, Table, Separator, EmptyState, Slot, Child, Popup)
 
     /// Whether a binding text was empty (no condition, no bound text), did not parse, or parsed
     CORE_ENUM(PreparedBindingState, uint8_t, Empty, Bad, Ok)
@@ -36,6 +36,8 @@ namespace BECore {
         PreparedBinding visible;
         /// A button's `enableWhen`
         PreparedBinding enableWhen;
+        /// A popup's `open`: unlike the others, a condition that cannot be read counts as false
+        PreparedBinding open;
         /// The `bind` of a text, field, fields or input, the `source` of a table
         PreparedBinding bind;
         /// The glyph of a button's, an input's or an empty state's `icon`, null when it names none

@@ -169,6 +169,12 @@ namespace BECore {
             if (element.Is<PanelSlot>()) {
                 return PreparedKind::Slot;
             }
+            if (element.Is<PanelChild>()) {
+                return PreparedKind::Child;
+            }
+            if (element.Is<PanelPopup>()) {
+                return PreparedKind::Popup;
+            }
             return PreparedKind::Unknown;
         }
 
@@ -202,6 +208,11 @@ namespace BECore {
             switch (prepared.kind) {
                 case PreparedKind::Section:
                 case PreparedKind::Row:
+                case PreparedKind::Child:
+                    PrepareElements(element->elements, prepared.children);
+                    break;
+                case PreparedKind::Popup:
+                    prepared.open = PrepareBinding(element->Cast<PanelPopup>()->open, BindingForm::Condition);
                     PrepareElements(element->elements, prepared.children);
                     break;
                 case PreparedKind::Text:
@@ -335,6 +346,12 @@ namespace BECore {
             case PreparedKind::Slot:
                 DrawSlot(prepared);
                 break;
+            case PreparedKind::Child:
+                DrawChild(prepared);
+                break;
+            case PreparedKind::Popup:
+                DrawPopup(prepared);
+                break;
             default:
                 // A plain `PanelElement` of an unknown type: shown, so a file that names one is seen
                 DrawUnreadable();
@@ -354,6 +371,41 @@ namespace BECore {
             first = false;
             DrawElement(child);
         }
+    }
+
+    void PanelInterpreter::DrawChild(const PreparedElement& prepared) {
+        const PanelChild& child = *prepared.element->Cast<PanelChild>();
+        const float em = ImGui::GetFontSize();
+        _label.assign(kIdSuffix);
+        _label.append(child.id);
+        const ImGuiChildFlags flags = child.border ? ImGuiChildFlags_Borders : ImGuiChildFlags_None;
+        if (ImGui::BeginChild(_label.c_str(), ImVec2(child.width * em, child.height * em), flags)) {
+            DrawElements(prepared.children);
+        }
+        // Ends the window whether or not it is visible
+        ImGui::EndChild();
+    }
+
+    void PanelInterpreter::DrawPopup(const PreparedElement& prepared) {
+        const PanelPopup& popup = *prepared.element->Cast<PanelPopup>();
+        bool value = false;
+        const bool wanted = prepared.open.state == PreparedBindingState::Ok && _reader.ReadBool(*_sources, prepared.open.binding, value) == PanelReadStatus::Ok && value;
+        _label.assign(popup.title.c_str(), popup.title.size());
+        _label.append(kIdSuffix);
+        _label.append(popup.id);
+        if (wanted && !ImGui::IsPopupOpen(_label.c_str())) {
+            ImGui::OpenPopup(_label.c_str());
+        }
+        if (!ImGui::BeginPopupModal(_label.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            return;
+        }
+        if (!wanted) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::BeginDisabled(!wanted);
+        DrawElements(prepared.children);
+        ImGui::EndDisabled();
+        ImGui::EndPopup();
     }
 
     void PanelInterpreter::DrawTextLine(const PreparedElement& prepared) {
@@ -483,6 +535,11 @@ namespace BECore {
         return value;
     }
 
+    bool PanelInterpreter::ReadRowSelected(const PanelBinding& list, size_t row, StringView path) {
+        bool value = false;
+        return !path.empty() && _reader.ReadRowBool(*_sources, list, row, path, value) == PanelReadStatus::Ok && value;
+    }
+
     void PanelInterpreter::DrawTable(const PreparedElement& prepared) {
         const PanelTable& table = *prepared.element->Cast<PanelTable>();
         size_t count = 0;
@@ -582,7 +639,7 @@ namespace BECore {
         // The label is the text of the cell and a suffix, so an empty cell is still an item
         _label.assign(text.data(), text.size());
         _label.append(kSelectableSuffix);
-        if (ImGui::Selectable(_label.c_str()) && !column.command.empty()) {
+        if (ImGui::Selectable(_label.c_str(), ReadRowSelected(list, row, column.selectedField)) && !column.command.empty()) {
             StringView argument;
             if (ReadArgument(list, row, column.argument, argument)) {
                 NoteClick(column.command, argument);
