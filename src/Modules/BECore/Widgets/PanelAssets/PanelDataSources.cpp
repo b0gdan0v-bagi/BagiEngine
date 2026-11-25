@@ -42,14 +42,22 @@ namespace BECore {
 
     TypedRef PanelDataSources::Find(StringView name) const {
         const auto found = _sources.find(name);
-        if (found == _sources.end() || !found->second.provider) {
-            return {};
+        if (found == _sources.end()) {
+            return _parent != nullptr ? _parent->Find(name) : TypedRef{};
         }
-        return found->second.provider();
+        return found->second.provider ? found->second.provider() : TypedRef{};
     }
 
     bool PanelDataSources::Contains(StringView name) const {
-        return _sources.find(name) != _sources.end();
+        return _sources.find(name) != _sources.end() || (_parent != nullptr && _parent->Contains(name));
+    }
+
+    void PanelDataSources::SetParent(const PanelDataSources* parent) {
+        if (parent == this) {
+            LOG_ERROR("[PanelDataSources] a registry cannot be its own parent, the parent is not set");
+            return;
+        }
+        _parent = parent;
     }
 
     void PanelDataSources::Unregister(StringView name, uint64_t token) {

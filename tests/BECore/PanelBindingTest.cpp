@@ -134,6 +134,50 @@ namespace BECore::Tests {
         EXPECT_FALSE(sources.Contains("probe"));
     }
 
+    TEST(PanelDataSourcesTest, AnOwnSourceWinsOverTheParentAndTheParentIsFoundBehindIt) {
+        PanelDataSources parent;
+        PanelDataSources child;
+        PanelProbe parentProbe;
+        PanelProbe childProbe;
+        PanelProbe onlyInParent;
+        const PanelSourceHandle parentShared = parent.Register("shared", [&parentProbe] { return TypedRef::Of(parentProbe); });
+        const PanelSourceHandle parentOnly = parent.Register("only", [&onlyInParent] { return TypedRef::Of(onlyInParent); });
+        const PanelSourceHandle childShared = child.Register("shared", [&childProbe] { return TypedRef::Of(childProbe); });
+        child.SetParent(&parent);
+
+        EXPECT_EQ(child.Find("shared").object, &childProbe);
+        EXPECT_EQ(child.Find("only").object, &onlyInParent);
+        EXPECT_TRUE(child.Contains("only"));
+        EXPECT_FALSE(child.Contains("nowhere"));
+        EXPECT_FALSE(parent.Find("nowhere"));
+    }
+
+    TEST(PanelDataSourcesTest, AParentChainIsFollowedAndAnEmptyOwnSourceIsNotSkipped) {
+        PanelDataSources grandparent;
+        PanelDataSources parent;
+        PanelDataSources child;
+        PanelProbe probe;
+        bool gone = false;
+        const PanelSourceHandle far = grandparent.Register("far", [&probe, &gone] { return gone ? TypedRef{} : TypedRef::Of(probe); });
+        const PanelSourceHandle shadow = child.Register("far", [] { return TypedRef{}; });
+        const PanelSourceHandle near = grandparent.Register("near", [&probe, &gone] { return gone ? TypedRef{} : TypedRef::Of(probe); });
+        parent.SetParent(&grandparent);
+        child.SetParent(&parent);
+
+        EXPECT_EQ(child.Find("near").object, &probe);
+        EXPECT_FALSE(child.Find("far")) << "a name the own sources hold is not looked up in the parent";
+        gone = true;
+        EXPECT_FALSE(child.Find("near"));
+        EXPECT_TRUE(child.Contains("near"));
+    }
+
+    TEST(PanelDataSourcesTest, ARegistryRefusesToBeItsOwnParent) {
+        PanelDataSources sources;
+        sources.SetParent(&sources);
+        EXPECT_FALSE(sources.Find("anything"));
+        EXPECT_FALSE(sources.Contains("anything"));
+    }
+
     TEST(PanelDataSourcesTest, ALookupNeverInternsTheName) {
         PanelDataSources sources;
         const String fresh = FreshText("panel_source");

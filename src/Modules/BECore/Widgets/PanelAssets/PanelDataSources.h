@@ -50,6 +50,9 @@ namespace BECore {
      *
      * Main thread only, like `ControlRoots`, so it takes no lock. Names are held as `String` and looked up as text, never interned: a
      * name comes from an asset file. The registry owns no object and a `TypedRef` it gives is not kept past the frame.
+     *
+     * A registry may have a parent (a widget's own registry behind which the global one stands): a name is looked up in the own sources
+     * first and, when the own sources do not hold it, in the parent. A name the own sources hold wins even when its provider gives no object.
      */
     class PanelDataSources : public Singleton<PanelDataSources> {
     public:
@@ -63,6 +66,9 @@ namespace BECore {
 
         [[nodiscard]] bool Contains(StringView name) const;
 
+        /// The registry looked in when a name is not an own source; not owned, it must outlive this one. A cycle is the caller's bug: @p parent == this is refused and logged
+        void SetParent(const PanelDataSources* parent);
+
     private:
         friend class PanelSourceHandle;
 
@@ -75,6 +81,7 @@ namespace BECore {
 
         Map<String, Entry> _sources;
         uint64_t _nextToken = 1;
+        const PanelDataSources* _parent = nullptr;
     };
 
 }  // namespace BECore

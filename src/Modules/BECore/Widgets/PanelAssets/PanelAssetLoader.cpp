@@ -215,6 +215,7 @@ namespace BECore {
                     } else {
                         RelativePath(where, "field", column.field);
                     }
+                    RelativePath(where, "styleField", column.styleField);
                     RelativePath(where, "argument", column.argument);
                 }
             }

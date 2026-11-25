@@ -104,6 +104,21 @@ namespace BECore::Tests {
         EXPECT_EQ(result.issues.size(), 5u) << Joined(result.issues);
     }
 
+    TEST(PanelAssetLoadTest, TheStyleFieldIsARelativePath) {
+        const auto load = [](StringView styleField) {
+            return LoadPanelAsset(
+                StringView(Wrap(Format(R"(<element type="PanelTable" id="t" source="a.b"><columns><column id="x" type="Text" field="p" styleField="{}"/></columns></element>)", styleField))));
+        };
+
+        const PanelLoadResult good = load("style");
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+        const PanelLoadResult nested = load("state.style");
+        EXPECT_TRUE(nested.issues.empty()) << Joined(nested.issues);
+        const PanelLoadResult bad = load("state[");
+        EXPECT_EQ(bad.issues.size(), 1u) << Joined(bad.issues);
+        EXPECT_TRUE(HasIssue(bad.issues, "t.x", "styleField: bad path")) << Joined(bad.issues);
+    }
+
     TEST(PanelAssetLoadTest, BindingSyntaxIsChecked) {
         ExpectSingleIssue(R"(<element type="PanelText" id="t" bind="files"/>)", "t", "bind: expected 'source.path'");
         ExpectSingleIssue(R"(<element type="PanelText" id="t" bind="!files.x"/>)", "t", "'!' is allowed in a condition only");

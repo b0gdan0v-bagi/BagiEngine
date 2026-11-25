@@ -1,0 +1,14 @@
+<PanelAsset id="StyleField" title="Style field" command="view.fileChanges" open="false">
+  <sources>
+    <source name="files" model="FileChangesPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelTable" id="applied" source="files.applied" visible="files.showApplied">
+      <columns>
+        <column type="Text" id="path" field="path" styleField="style"/>
+        <column type="Text" id="error" field="error" styleField="state[1"/>
+        <column type="Text" id="deep" field="state.text" styleField="state.style"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>

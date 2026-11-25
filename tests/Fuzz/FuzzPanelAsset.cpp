@@ -198,7 +198,7 @@ namespace BECore::Fuzz {
                         Fail();
                         return;
                     }
-                    for (const String* text : {&column.id, &column.title, &column.field, &column.command, &column.argument, &column.icon, &column.tooltip}) {
+                    for (const String* text : {&column.id, &column.title, &column.field, &column.styleField, &column.command, &column.argument, &column.icon, &column.tooltip}) {
                         Text(*text);
                     }
                     if (!IsWellFormedId(column.id) || !ids.insert(column.id).second) {
@@ -213,6 +213,7 @@ namespace BECore::Fuzz {
                     } else {
                         RelativePath(column.field);
                     }
+                    RelativePath(column.styleField);
                     RelativePath(column.argument);
                 }
             }
