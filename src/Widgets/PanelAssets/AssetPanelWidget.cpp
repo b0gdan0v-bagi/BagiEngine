@@ -61,6 +61,7 @@ namespace BECore {
                 _openDecided = true;
             }
             _windowTitle = Format("{}###{}", _asset, _asset);
+            _hasTitleBinding = false;
             return;
         }
         if (!_openDecided) {
@@ -72,6 +73,15 @@ namespace BECore {
         }
         _preparedVersion = _holder.Version();
         _windowTitle = Format("{}###{}", asset->title, asset->id);
+        _titleText = asset->title;
+        _hasTitleBinding = false;
+        if (!asset->titleBind.empty()) {
+            // The loader refused a bad `titleBind`, so a parse failure here leaves the plain title
+            if (std::expected<PanelBinding, String> binding = ParseBinding(asset->titleBind)) {
+                _titleBinding = std::move(*binding);
+                _hasTitleBinding = true;
+            }
+        }
         _interpreter.Prepare(_holder.Current());
         SyncModels();
     }
@@ -169,6 +179,7 @@ namespace BECore {
         for (const ModelEntry& entry : _models) {
             entry.model->Update();
         }
+        SyncTitle();
         const PanelAsset* asset = _holder.Current().Get();
         if (asset != nullptr && (asset->width > 0.0f || asset->height > 0.0f)) {
             ImGui::SetNextWindowSize(ImVec2(asset->width, asset->height), ImGuiCond_FirstUseEver);
@@ -186,6 +197,24 @@ namespace BECore {
             if (const EditorCommand* command = FindEditorCommand(StringView(_result.command))) {
                 EditorCommandEvent::Emit(command->id, _result.argument);
             }
+        }
+    }
+
+    void AssetPanelWidget::SyncTitle() {
+        if (!_hasTitleBinding) {
+            return;
+        }
+        const PanelAsset* asset = _holder.Current().Get();
+        if (asset == nullptr) {
+            return;
+        }
+        StringView text;
+        if (_titleReader.ReadText(_sources, _titleBinding, _titleScratch, text) != PanelReadStatus::Ok) {
+            text = StringView(asset->title);
+        }
+        if (text != StringView(_titleText)) {
+            _titleText = String(text);
+            _windowTitle = Format("{}###{}", _titleText, asset->id);
         }
     }
 

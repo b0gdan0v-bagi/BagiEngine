@@ -3,6 +3,7 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/PanelHotReloadProbe.h>
 #include <BECore/RefCounted/New.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
@@ -50,6 +51,16 @@ namespace BECore::Tests {
     <element type="PanelButton" id="go" text="Go" command="fileChanges.rescan"/>
   </elements>
 </PanelAsset>)";
+
+        /// `{}` slot: the binding of `titleBind`; the source `a` is a `ProbePanelModel`, whose text field `lastCommand` is the last command it was told
+        constexpr const char* kTitledAsset = R"(<PanelAsset id="Hot" title="Plain" titleBind="{}" command="view.fileChanges" open="true" width="300" height="200">
+  <sources><source name="a" model="ProbePanelModel"/></sources>
+  <elements>
+    <element type="PanelButton" id="go" text="Go" command="fileChanges.rescan"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr int kSteadyFrames = 8;
 
         String Asset(StringView title, StringView button, StringView model = "CountingPanelModel", StringView source = "a") {
             return Format(kAsset, title, source, model, button);
@@ -304,6 +315,47 @@ namespace BECore::Tests {
         EXPECT_FALSE(_widget->IsOpen());
         Command(EditorCommandIds::kFileChangesRescan);
         EXPECT_EQ(CountingPanelModel::commands, 1);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ABoundTitleFollowsTheTextAndKeepsTheIdAfterTheMarker) {
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kTitledAsset, "a.lastCommand")));
+        // The model has told nothing yet: its text is empty and readable, so the title is the empty text
+        EXPECT_EQ(_widget->GetWindowTitle(), "###Hot");
+
+        Command("probe.first"_intern);
+        Settle();
+        EXPECT_EQ(_widget->GetWindowTitle(), "probe.first###Hot");
+
+        Command("probe.second"_intern);
+        Settle();
+        EXPECT_EQ(_widget->GetWindowTitle(), "probe.second###Hot");
+        EXPECT_EQ(ImGui::FindWindowByName(kWindowName), Window()) << "the window is found by its id after the title changed";
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AnUnreadableBoundTitleKeepsThePlainTitleAndAReloadRebindsIt) {
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kTitledAsset, "nobody.text")));
+        EXPECT_EQ(_widget->GetWindowTitle(), "Plain###Hot");
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Format(kTitledAsset, "a.lastCommand")));
+        Command("probe.third"_intern);
+        Settle();
+        EXPECT_EQ(_widget->GetWindowTitle(), "probe.third###Hot");
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Asset("Another", "Go")));
+        EXPECT_EQ(_widget->GetWindowTitle(), "Another###Hot") << "the bound text outlived the binding";
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ASteadyFrameWithABoundTitleAllocatesNothing) {
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kTitledAsset, "a.lastCommand")));
+        Command("probe.steady"_intern);
+        for (int i = 0; i < kSteadyFrames; ++i) {
+            Frame();
+        }
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
     }
 
 }  // namespace BECore::Tests

@@ -4,6 +4,8 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <BECore/Widgets/PanelAssets/PanelAssetHolder.h>
+#include <BECore/Widgets/PanelAssets/PanelBinding.h>
+#include <BECore/Widgets/PanelAssets/PanelBindingReader.h>
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
 #include <Events/ConfigEvents.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -19,7 +21,8 @@ namespace BECore {
      *
      * `asset` is the config name (the file stem under `config/panels`). The widget keeps the last asset that read with no issue and draws it; a file
      * with issues, or one that could not be read again, shows a banner above it (`PanelAssetHolder`), and a first load that failed shows the banner alone.
-     * The window is `<title>###<asset id>`, so a saved layout and the control API's lookup by name find it by the asset's id.
+     * The window is `<title>###<asset id>`, so a saved layout and the control API's lookup by name find it by the asset's id. With `titleBind` the title is
+     * the bound text, made again in `Update` only when the text differs from the last one; an unreadable text leaves the asset's `title`.
      *
      * **Models.** Each `<source>` with a `model` is one `IPanelModel` made by `CreatePanelModel` and registered in the widget's own `PanelDataSources` (the
      * global one stands behind it), so two panels may both name a source `files`. A reload keeps the instance of a source whose name and model did not change.
@@ -49,6 +52,11 @@ namespace BECore {
             return _open;
         }
 
+        /// What `Begin` gets: the title and `###<asset id>`. The window's own `Name` keeps the first one in a floating window, so a test reads it here
+        [[nodiscard]] const String& GetWindowTitle() const {
+            return _windowTitle;
+        }
+
         [[nodiscard]] const PanelAssetHolder& GetHolder() const {
             return _holder;
         }
@@ -72,6 +80,7 @@ namespace BECore {
         void OnAssetChanged();
         void SyncModels();
         void DrawBanner() const;
+        void SyncTitle();
         [[nodiscard]] const ConfigManager& Configs() const;
 
         BE_REFLECT_FIELD String _asset;
@@ -82,6 +91,12 @@ namespace BECore {
         Vector<ModelEntry> _models;
         const ConfigManager* _configs = nullptr;
         String _windowTitle;
+        /// The text the title was last made from (the asset's `title` or the bound one)
+        String _titleText;
+        String _titleScratch;
+        PanelBinding _titleBinding;
+        PanelBindingReader _titleReader;
+        bool _hasTitleBinding = false;
         uint32_t _preparedVersion = 0;
         bool _open = false;
         bool _openDecided = false;
