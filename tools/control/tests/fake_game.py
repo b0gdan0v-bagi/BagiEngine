@@ -174,6 +174,7 @@ def main() -> int:
     state = {"version": 1}
     log = {"lines": [], "warnings": 0, "errors": 0, "subscribed": False, "level": "warning"}  # lines: {sequence, level, time, message}, sequence from 1
     published: list[tuple[str, dict]] = []  # every push, for run_until's `event` condition
+    editor_scene = {"dirty": False}  # the one scene document of `editor_state`; the action `edit_scene` makes it dirty
     later: list[int] = []  # the frame count at which each "later" action raises the version
 
     def publish(event: str, data: dict) -> None:
@@ -197,6 +198,15 @@ def main() -> int:
 
     def counts() -> dict:
         return {"warnings": log["warnings"], "errors": log["errors"]}
+
+    def editor_state() -> dict:
+        if "--editor" not in args:
+            raise FakeError("not_editor", "the game does not run in the editor run mode")
+        overlay = next((arg.split("=", 1)[1] for arg in args if arg.startswith("--content-overlay=")), None)
+        path = "config/SceneConfig.xml"
+        file = path if overlay is None else f"{overlay}/{path}"
+        scene = {"id": "scene:Fake", "kind": "scene", "name": "Fake", "dirty": editor_scene["dirty"], "path": path, "file": file}
+        return {"anyDirty": scene["dirty"], "documents": [scene]}
 
     def log_mark() -> dict:
         return {"mark": len(log["lines"]) + 1, **counts()}
@@ -324,11 +334,15 @@ def main() -> int:
                 raise FakeError("illegal_action", "not allowed")
             if (params or {}).get("type") == "needs_noop" and state["version"] == 1:
                 raise FakeError("illegal_action", "a noop has to come first")  # a precondition: an action that is legal only after another
+            if (params or {}).get("type") == "edit_scene":
+                editor_scene["dirty"] = True
             if (params or {}).get("type") == "later":
                 later.append(frame["count"] + (params or {}).get("frames", 1))
                 return {"game": "Fake", "version": state["version"], "outcome": params}
             raise_version()
             return {"game": "Fake", "version": state["version"], "outcome": params}
+        if method == "editor_state":
+            return editor_state()
         if method == "warn":
             return warn(params or {})
         if method == "log_mark":

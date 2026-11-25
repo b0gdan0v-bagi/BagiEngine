@@ -20,6 +20,7 @@ import base64
 import collections
 import copy
 import re
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,10 @@ from typing import Any, Callable, Sequence
 import scenario
 from bagi_control_client import DEFAULT_HOST, DEFAULT_PORT, BagiControlClient, ConnectionClosed, ControlError
 from game_process import DEFAULT_SHUTDOWN_TIMEOUT, DEFAULT_STARTUP_TIMEOUT, GameLaunchError, GameProcess, build_game_command, free_port, preset_executable
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shots"))
+
+import png_ops  # noqa: E402
 
 CALL_TIMEOUT_SECONDS = 60.0
 STEP_SECONDS_PER_FRAME = 0.05  # a generous bound for a frame: a step of N frames may take N times this before the call gives up
@@ -45,6 +50,9 @@ SET_WINDOW_METHOD = "set_window"
 WINDOW_FLAG = "--window="
 DENSITY_FLAG = "--density="
 EDITOR_FLAG = "--editor"
+CONTENT_OVERLAY_FLAG = "--content-overlay="
+EDITOR_STATE_METHOD = "editor_state"
+NOT_EDITOR_CODE = "not_editor"
 WINDOW_SIZE_PATTERN = re.compile(r"\d+x\d+")  # "WxH", the form of the engine's --window flag
 SAFE_AREA_SIDES = ("top", "right", "bottom", "left")
 
@@ -114,18 +122,22 @@ class GameSession:
         window: str | None = None,
         density: float | None = None,
         editor: bool = False,
+        content_overlay: str | None = None,
     ) -> dict[str, Any]:
         """Starts a game with the control API on a free port and connects to it. A game that this session started earlier is stopped.
 
         The game is given either as `exe` (a path) or as `preset` + `game` (build/<preset>/bin/<game>, see preset_executable); exactly one of the two.
         `window` ("WxH" in window units) and `density` are the start size and pixel density of a headless window (`--window=`, `--density=`), which
-        set_window changes later. `editor` starts the game in the Editor run mode (`--editor`; a build without the editor runs Game: `status.runMode` says which). `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
+        set_window changes later. `editor` starts the game in the Editor run mode (`--editor`; a build without the editor runs Game: `status.runMode` says which). `content_overlay` is a folder (made when missing) that
+        every write of the editor panels goes into instead of the content files (`--content-overlay=`); it has to lie outside every git work tree, so that a QA session never leaves a change
+        in a repository, and it is not part of a recording's header (a path of this machine). `extra` are more start flags for the game. `record` is the path of a scenario file to record the session to (start_recording).
         """
         by_path = bool(exe)
         by_preset = bool(preset) or bool(game)
         if by_path == by_preset or (by_preset and not (preset and game)):
             raise SessionError("name the game either by `exe` (the path of the built executable) or by `preset` and `game` together (build/<preset>/bin/<game>), not both and not neither")
         window_flags = self._window_flags(window, density, headless) + [EDITOR_FLAG] * editor
+        overlay_flags = [] if content_overlay is None else [CONTENT_OVERLAY_FLAG + str(self._check_overlay_target(Path(content_overlay)))]
         self.close()
         if record is not None:
             self._check_record_target(Path(record), record_expect)
@@ -135,7 +147,7 @@ class GameSession:
             raise SessionError(f"there is no game executable at {exe_path}{hint}")
 
         port = free_port()
-        process = GameProcess(build_game_command(exe_path, port, headless, manual_clock, (*window_flags, *extra)), cwd=exe_path.parent)
+        process = GameProcess(build_game_command(exe_path, port, headless, manual_clock, (*window_flags, *overlay_flags, *extra)), cwd=exe_path.parent)
         try:
             process.start()
             client = process.connect(port, startup_timeout)
@@ -247,6 +259,19 @@ class GameSession:
         if safe_area is not None:
             params["safeArea"] = self._safe_area_object(safe_area)
         return self.call(SET_WINDOW_METHOD, params)
+
+    def editor_state(self) -> dict[str, Any]:
+        """The unsaved changes of the editor panels: `{anyDirty, documents: [{id, kind, name, dirty, path, file}]}` sorted by `id`.
+
+        `file` is the real file a save writes: with `launch(content_overlay=...)` the copy in the overlay, never the checkout's file. A game that does not
+        run in the editor is a SessionError: launch it with `editor=True` (a build without the editor runs Game).
+        """
+        try:
+            return self.call(EDITOR_STATE_METHOD)
+        except ControlError as error:
+            if error.code == NOT_EDITOR_CODE:
+                raise SessionError("the game does not run in the editor run mode: launch it with editor=True (a build without the editor cannot)") from error
+            raise
 
     def log_counts(self) -> dict[str, int]:
         """The warnings and errors the game has logged since its start: `{warnings, errors}` (`log` of `status`)."""
@@ -474,6 +499,15 @@ class GameSession:
         folder = path.expanduser().resolve().parent
         if not folder.is_dir():
             raise SessionError(f"cannot record to {path}: the folder {folder} does not exist")
+
+    @staticmethod
+    def _check_overlay_target(path: Path) -> Path:
+        folder = path.expanduser().resolve()
+        if folder.exists() and not folder.is_dir():
+            raise SessionError(f"content_overlay {path} is not a folder")
+        if png_ops.inside_git_work_tree(folder):
+            raise SessionError(f"content_overlay {path} is inside a git work tree: the copy of the content must stay outside every repository")
+        return folder
 
     def _start_recording_or_close(self, path: str, expect: str, description: dict[str, Any]) -> None:
         try:
