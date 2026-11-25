@@ -47,8 +47,8 @@ namespace BECore {
         BE_REFLECT_FIELD String title;
     };
 
-    /// A modal window over its `elements`, shown while the condition `open` reads true (required: with none it could never open). When ImGui closes it itself (Esc) while `open` still
-    /// reads true, the editor command `closeCommand` runs so the model can clear what `open` reads; empty: none. Without it the popup would never open again, since it opens on a rising edge
+    /// A modal window over its `elements`, shown while the condition `open` reads true (required: with none it could never open). Esc in the focused popup closes it and runs the editor
+    /// command `closeCommand`; the model must clear what `open` reads, since the popup opens again only on a rising edge. With no `closeCommand` Esc does nothing
     class PanelPopup : public PanelElement {
         BE_CLASS(PanelPopup)
     public:
