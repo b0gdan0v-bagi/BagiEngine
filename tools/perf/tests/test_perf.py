@@ -103,6 +103,23 @@ def test_the_set_is_checked(tmp_path):
         perf.load_set(tmp_path / "none.md")
 
 
+def test_a_preset_is_a_name_or_one_per_platform(tmp_path, monkeypatch):
+    per_os = {"macos": "macos-release", "windows": "windows-clang-release"}
+    assert perf.platform_preset("p", "x") == "p"
+    assert perf.platform_preset(per_os, "x", "windows") == "windows-clang-release"
+    with pytest.raises(perf.PerfError, match="no preset for linux"):
+        perf.platform_preset(per_os, "x", "linux")
+    for broken in ("", {"macos": ""}, {"macos": 1}, ["macos-release"]):
+        with pytest.raises(perf.PerfError, match="must be a preset name"):
+            perf.platform_preset(broken, "x", "macos")
+    monkeypatch.setattr(perf, "platform_name", lambda: "macos")
+    bench = {"name": "a", "command": ["c"], "metrics": {"m": {"source": "wall"}}}
+    loaded = perf.load_set(write_rules(tmp_path / "r.md", {"area": "x", "preset": per_os, "profilePreset": {"macos": "macos-profile"}, "benchmarks": [bench]}))
+    assert (loaded["preset"], loaded["profilePreset"]) == ("macos-release", "macos-profile")
+    with pytest.raises(perf.PerfError, match="'profilePreset' names no preset for macos"):
+        perf.load_set(write_rules(tmp_path / "r.md", {"area": "x", "preset": per_os, "profilePreset": {"windows": "w"}, "benchmarks": [bench]}))
+
+
 def test_metrics_are_read_from_a_pattern_the_last_json_line_and_the_wall_time():
     bench = {
         "name": "b",
