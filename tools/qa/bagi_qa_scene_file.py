@@ -20,8 +20,8 @@ An edit is a dict with `kind` and `path` (the node's names from the scene down, 
 `attribute` (`name`, `value`: an attribute of the node), `component-attribute` (`component`, a type, `name`, `value`), `node-name` (`new_name`) and
 `node-added` (the node with its subtree is taken from the saved file; `path` is the new node). Edits apply in order and a path follows the earlier
 renames of the list. A path that names nothing in the file before is a `SceneFileError`: that is a bug of the request, not of the editor.
-Tolerances are strict: an attribute the file before lacks and Save adds is a change, unless `added_defaults` (component type to `{attribute: value}`, the
-game's allow list) names it with that value: the writer adds the defaults of a component it saves.
+Tolerances are strict: an attribute the file before lacks and Save adds, or one the file before has and Save leaves out, is a change, unless `added_defaults`
+(component type to `{attribute: value}`, the game's allow list) names it with that value: the writer adds or leaves out the defaults of a component it saves.
 
 `ContentGuard` promises: `arm()` copies the bytes of each existing file into `backup_dir` (never inside a git work tree) before anything can write,
 `release()` writes the bytes back where the file differs (removing a file that did not exist), checks the result byte by byte and answers the files it had to
@@ -389,7 +389,8 @@ def _component(node: ElementTree.Element, type_name: str) -> ElementTree.Element
 
 def _diff_attributes(old: ElementTree.Element, new: ElementTree.Element, path: str, out: list[tuple[str, str | None, str | None]], defaults: Mapping[str, str] | None = None) -> None:
     for key in sorted(set(old.attrib) | set(new.attrib)):
-        if old.get(key) is None and defaults is not None and defaults.get(key) == new.get(key):
+        fallback = defaults.get(key) if defaults is not None else None
+        if fallback is not None and old.get(key, fallback) == new.get(key, fallback):
             continue
         if old.get(key) != new.get(key):
             out.append((f"{path}@{key}", old.get(key), new.get(key)))

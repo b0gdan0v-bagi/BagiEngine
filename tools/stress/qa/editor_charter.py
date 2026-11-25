@@ -8,18 +8,18 @@ session's and `tools/qa/bagi_qa_scene_file.py`'s):
 
 - **edit**: start with `--stress-scene=entities --stress-count=1`, widen the left dock, select the node `Run`, change a number (`TransformComponent` x), the
   layer and the name through the inspector, see the unsaved-changes marker, Save, see it go, and compare the saved `SceneConfig.xml` with the one before
-  (the edits are there, nothing else of the scene changed: the findings `editor.*`). Then **reload**: the game is started again on the saved file and the
-  hierarchy must show the renamed node. Sessions `<out>/edit` and `<out>/reload`.
+  (the edits are there, nothing else of the scene changed: the findings `editor.*`). Then **reload**: the game is started again on the same overlay,
+  so it reads the saved copy, and the hierarchy must show the renamed node. Sessions `<out>/edit` and `<out>/reload`.
 - **panels**: open every panel of the View menu, a rebindable chord closes and opens the Game panel, the command palette opens, filters and closes, the
   `ui` scene is shown in the editor; a picture of each. Nothing is saved, so a write of the content file is the finding `editor.content_file_written`.
   The `ui` scene's `ui_tree` is not checked: the canvas of the `Screen` space takes the shape of the viewport panel while the stress grid
   fills a view of its own size, so the labels of the second column are `OutsideCanvas`: a property of the scene, not of the editor.
   Session `<out>/panels`.
 
-Save writes the tracked `tools/stress/config/SceneConfig.xml` (the content roots are compiled into the executable, which therefore has to be this
-checkout's). The sessions put it back after each run (`tools/qa/CLAUDE.md`, "The session"); the reload needs the saved bytes on disk, so the script writes
-them there itself and a guard of its own puts the original back at the very end, also when the script fails. The original is kept in `<out>/original/`.
-A script killed by a signal cannot put it back: `git status` then shows the file, and the copy in `<out>/original/` is its content.
+The editor runs with `--content-overlay=<out>/<session>/content-overlay` (`QaSession` does it), so Save writes the overlay's copy, which
+`editor_state` names (`file`), and the tracked `tools/stress/config/SceneConfig.xml` is never written. The executable still has to be this checkout's
+(the content roots are compiled into it): the session's guard is the second line and a write of the checkout is the finding
+`editor.content_file_written`. The script ends by comparing the checkout's file with its bytes at the start; a difference is exit 1.
 
 Exit code: 0 no bug (known deviations do not count), 1 a bug (the session folders hold `bugs/`, `report.md`, `shots/`), 2 a bad option or an `--out` inside a
 git work tree, 77 no executable or a build without the editor (`status.runMode` Game).
@@ -61,7 +61,6 @@ PANELS_TEXT = "The editor: panels and chords, no save"
 SESSION_EDIT = "edit"
 SESSION_RELOAD = "reload"
 SESSION_PANELS = "panels"
-ORIGINAL_FOLDER = "original"
 
 EDIT_FLAGS = ["--stress-scene=entities", "--stress-count=1"]
 RESET_ENTITIES = {"scene": "entities", "count": 1}
@@ -86,6 +85,8 @@ SETTLE_FRAMES = 3
 
 NAME_MOVE_FAILED = "editor.move_failed"
 NAME_MARKER_MISSING = "editor.dirty_marker_missing"
+NAME_SAVED_FILE_MISSING = "editor.saved_file_missing"
+NAME_DIRTY_AFTER_SAVE = "editor.dirty_after_save"
 NAME_RELOAD_NODE_MISSING = "editor.reload_node_missing"
 NAME_PANEL_MISSING = "editor.panel_missing"
 NAME_CHORD_NO_EFFECT = "editor.chord_no_effect"
@@ -101,11 +102,11 @@ class Played:
     drafts: list[Path]
 
 
-def launch(session: QaSession, exe: Path, flags: Sequence[str]) -> None:
+def launch(session: QaSession, exe: Path, flags: Sequence[str], content_overlay: Path | None = None) -> None:
     """Starts the editor; once more on another port when `free_port()` lost the race. NoEditorError for a build without the editor."""
     for attempt in range(2):
         try:
-            session.launch(exe=str(exe), extra=flags, editor=True)
+            session.launch(exe=str(exe), extra=flags, editor=True, content_overlay=content_overlay)
             return
         except NoEditorError:
             raise
@@ -115,15 +116,15 @@ def launch(session: QaSession, exe: Path, flags: Sequence[str]) -> None:
             raise
 
 
-def finish(name: str, session: QaSession, content_writes_expected: bool) -> Played:
-    finished = session.finish(content_writes_expected=content_writes_expected)
+def finish(name: str, session: QaSession) -> Played:
+    finished = session.finish()
     return Played(name, session, finished.drafts)
 
 
-def abandon(session: QaSession, content_writes_expected: bool) -> None:
-    """Ends a session whose charter died on an unexpected exception: the game is stopped and the content file put back, then the exception goes on."""
+def abandon(session: QaSession) -> None:
+    """Ends a session whose charter died on an unexpected exception: the game is stopped and the guard run, then the exception goes on."""
     with contextlib.suppress(SessionError):
-        session.finish(content_writes_expected=content_writes_expected)
+        session.finish()
 
 
 def move_failed(session: QaSession, error: SessionError) -> None:
@@ -132,7 +133,7 @@ def move_failed(session: QaSession, error: SessionError) -> None:
 
 
 def play_edit(exe: Path, out: Path, content_file: Path, invariants: checks.Invariants) -> tuple[Played, bytes | None]:
-    """Edit and Save; the saved file is judged, the session ends (the guard puts the original back) and the saved bytes are given for the reload."""
+    """Edit and Save; the overlay's saved file is compared with the checkout's one and its bytes are given back (None when the charter did not get there)."""
     session = QaSession(out / SESSION_EDIT, EDIT_TEXT, INVARIANTS)
     launch(session, exe, EDIT_FLAGS)
     saved: bytes | None = None
@@ -153,19 +154,25 @@ def play_edit(exe: Path, out: Path, content_file: Path, invariants: checks.Invar
         session.note(f"edited {EDITED_NODE}: {EDITED_COMPONENT} x = {EDITED_NUMBER}, layer = {EDITED_LAYER}, name = {RENAMED_NODE}")
         if editor.dirty(session):
             editor.save(session)
-            saved = content_file.read_bytes()
+            if editor.any_dirty(session):
+                session.flag(NAME_DIRTY_AFTER_SAVE, "a panel of the editor still has unsaved changes after Save")
+            saved_file = Path(editor.scene_document(session)["file"])
+            if saved_file.is_file():
+                saved = saved_file.read_bytes()
+                session.note(f"saved through the Save button into {saved_file} and compared with the checkout's file")
+                for violation in compare(before, saved, invariants):
+                    session.flag(violation.name, violation.message)
+            else:
+                session.flag(NAME_SAVED_FILE_MISSING, f"after Save the file {saved_file} that editor_state names does not exist")
             session.shot("saved", EDITOR_SHOT_SIZE)
-            session.note("saved through the Save button and compared with the file before")
-            for violation in compare(before, saved, invariants):
-                session.flag(violation.name, violation.message)
     except SessionError as error:
         move_failed(session, error)
     except scene_file.SceneFileError as error:
         session.flag(NAME_MOVE_FAILED, f"the charter's own edits do not fit the file before: {error}")
     except BaseException:
-        abandon(session, content_writes_expected=True)
+        abandon(session)
         raise
-    return finish(SESSION_EDIT, session, content_writes_expected=True), saved
+    return finish(SESSION_EDIT, session), saved
 
 
 def compare(before: bytes, saved: bytes, invariants: checks.Invariants) -> list[checks.Violation]:
@@ -173,11 +180,10 @@ def compare(before: bytes, saved: bytes, invariants: checks.Invariants) -> list[
     return scene_file.compare_scene_files(before, saved, SCENE_FILE_NAME, EDITS, ignore_children_of=generated, added_defaults=invariants.editor_added_defaults)
 
 
-def play_reload(exe: Path, out: Path, content_file: Path, saved: bytes) -> Played:
-    """A fresh start on the saved file: nothing reloads a live scene, so this is what 'reload' is. The hierarchy shows the renamed node; the start writes nothing."""
-    content_file.write_bytes(saved)
+def play_reload(exe: Path, out: Path, overlay: Path) -> Played:
+    """A fresh start on the overlay the edit session saved into: nothing reloads a live scene, so this is what 'reload' is. The hierarchy shows the renamed node."""
     session = QaSession(out / SESSION_RELOAD, EDIT_TEXT + " (the start after the save)", INVARIANTS)
-    launch(session, exe, EDIT_FLAGS)
+    launch(session, exe, EDIT_FLAGS, content_overlay=overlay)
     try:
         session.reset(**RESET_ENTITIES)
         editor.widen_left_dock(session)
@@ -192,9 +198,9 @@ def play_reload(exe: Path, out: Path, content_file: Path, saved: bytes) -> Playe
     except SessionError as error:
         move_failed(session, error)
     except BaseException:
-        abandon(session, content_writes_expected=False)
+        abandon(session)
         raise
-    return finish(SESSION_RELOAD, session, content_writes_expected=False)
+    return finish(SESSION_RELOAD, session)
 
 
 def play_panels(exe: Path, out: Path) -> Played:
@@ -218,9 +224,9 @@ def play_panels(exe: Path, out: Path) -> Played:
     except SessionError as error:
         move_failed(session, error)
     except BaseException:
-        abandon(session, content_writes_expected=False)
+        abandon(session)
         raise
-    return finish(SESSION_PANELS, session, content_writes_expected=False)
+    return finish(SESSION_PANELS, session)
 
 
 def chord(session: QaSession) -> None:
@@ -249,7 +255,7 @@ def palette(session: QaSession) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--exe", type=Path, required=True, help="the BagiStress executable of this checkout (the editor saves into the content roots compiled into it)")
+    parser.add_argument("--exe", type=Path, required=True, help="the BagiStress executable of this checkout (the content roots are compiled into it)")
     parser.add_argument("--out", type=Path, required=True, help="the folder of the sessions, outside every git work tree")
     parser.add_argument("--charter", choices=(CHARTER_EDIT, CHARTER_PANELS, CHARTER_ALL), default=CHARTER_ALL, help="default: %(default)s")
     return parser
@@ -268,10 +274,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         invariants = checks.load_invariants(INVARIANTS)
         content_file = ENGINE_ROOT / invariants.editor_content_files[0]
+        content_at_start = content_file.read_bytes()
         out.mkdir(parents=True, exist_ok=True)
-        outer = scene_file.ContentGuard([content_file], out / ORIGINAL_FOLDER)
-        outer.arm()
-    except (checks.InvariantsError, scene_file.ContentGuardError, IndexError, OSError) as error:
+    except (checks.InvariantsError, IndexError, OSError) as error:
         print(f"ERROR {error}")
         return EXIT_USAGE
     played: list[Played] = []
@@ -279,8 +284,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.charter in (CHARTER_EDIT, CHARTER_ALL):
             first, saved = play_edit(exe, out, content_file, invariants)
             played.append(first)
-            if saved is not None:
-                played.append(play_reload(exe, out, content_file, saved))
+            if saved is not None and first.session.content_overlay is not None:
+                played.append(play_reload(exe, out, first.session.content_overlay))
         if args.charter in (CHARTER_PANELS, CHARTER_ALL):
             played.append(play_panels(exe, out))
     except NoEditorError as error:
@@ -289,9 +294,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SessionError as error:
         print(f"ERROR {error}")
         return EXIT_USAGE
-    finally:
-        outer.release()
-    return report(played, out)
+    code = report(played, out)
+    if content_file.read_bytes() != content_at_start:
+        print(f"FOUND the checkout's {content_file} differs from its bytes at the start: the editor wrote it although it ran with an overlay")
+        return EXIT_BUG
+    return code
 
 
 def report(played: Sequence[Played], out: Path) -> int:

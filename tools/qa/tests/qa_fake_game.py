@@ -145,6 +145,8 @@ def main() -> int:
         wanted = [match for match in windows + items if (params.get("kind") is None or match["kind"] == params["kind"]) and (params.get("window") is None or match.get("window") == params["window"])]
         if params.get("label") is not None:
             wanted = [match for match in wanted if match["label"] == params["label"]]
+        elif params.get("labelContains") is not None:
+            wanted = [match for match in wanted if params["labelContains"] in match["label"]]
         elif params.get("kind") is None and "label" not in params:
             wanted = windows
         return {"frame": state["frame"], "display": [1920, 1080], "wantCaptureMouse": False, "wantCaptureKeyboard": False, "matches": wanted}

@@ -18,7 +18,7 @@ hover colour, no tooltip), the editor's own folder is a temporary one (no `imgui
 and no panel that draws a clock or a counter (the Profiler, the Console, the Game panel) is a scene.
 
 The editor's layout is built for one window size, `LAYOUT_WINDOW`: the dock constants of `bagi_qa_editor` are its output pixels. Any other `--window` is refused.
-The command never clicks Save; the session still guards the tracked content file and `finish` makes a write of it a finding.
+The command never clicks Save, and the editor runs with a content overlay (`QaSession`'s default), so the checkout is not written; a write of it is a finding.
 
 Exit code: 0 done, 1 a move that failed or a window that is not there (the text is on stdout, the scene has no picture), 2 a bad option, an unknown scene, a
 `--window` other than `LAYOUT_WINDOW` or an `--out` inside a git work tree, 77 no executable or a build without the editor.
@@ -147,9 +147,9 @@ def launch(session: QaSession, exe: Path) -> None:
 
 
 def abandon(session: QaSession) -> None:
-    """Ends a session whose script died on an unexpected exception: the game is stopped and the content file put back, then the exception goes on."""
+    """Ends a session whose script died on an unexpected exception: the game is stopped and the guard run, then the exception goes on."""
     with contextlib.suppress(SessionError):
-        session.finish(content_writes_expected=False)
+        session.finish()
 
 
 def park_pointer(session: QaSession) -> None:
@@ -268,7 +268,7 @@ def run(exe: Path, scratch: Path, folder: Path, names: Sequence[str]) -> int:
     else:
         result = EXIT_OK
     try:
-        session.finish(content_writes_expected=False)
+        session.finish()
     except SessionError as error:
         print(f"ERROR {error}")
         return EXIT_FAILED
