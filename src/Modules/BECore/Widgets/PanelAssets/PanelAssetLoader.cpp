@@ -87,6 +87,7 @@ namespace BECore {
             Validator(const PanelValidationContext& context, Vector<PanelIssue>& issues) : _context(context), _issues(issues) {}
 
             void Run(const PanelAsset& asset) {
+                _window = asset.window;
                 CheckAsset(asset);
                 WalkElements(asset.elements, "elements", 1, nullptr);
             }
@@ -102,8 +103,8 @@ namespace BECore {
                     _issues.Add(where, "width and height must not be negative");
                 }
                 Binding(where, "titleBind", asset.titleBind, false);
-                if (asset.window == PanelWindowKind::Dialogs && !asset.open) {
-                    _issues.Add(where, "a Dialogs window is always open: it needs open=\"true\"");
+                if ((asset.window == PanelWindowKind::Dialogs || asset.window == PanelWindowKind::Bar) && !asset.open) {
+                    _issues.Add(where, Format("a {} window is always open: it needs open=\"true\"", EnumUtils<PanelWindowKind>::ToString(asset.window)));
                 }
                 if (asset.sources.size() > PanelAssetLimits::kMaxSources) {
                     _issues.Add(where, Format("more than {} sources", PanelAssetLimits::kMaxSources));
@@ -145,9 +146,12 @@ namespace BECore {
                     const String where = IsValidId(element->id) ? element->id : path;
                     CheckElement(*element, where, parent);
                     const bool isPopup = element->Is<PanelPopup>();
+                    const bool isMenu = element->Is<PanelMenu>();
                     _popupDepth += isPopup ? 1 : 0;
+                    _menuDepth += isMenu ? 1 : 0;
                     WalkElements(element->elements, Format("{}.elements", path), depth + 1, element);
                     _popupDepth -= isPopup ? 1 : 0;
+                    _menuDepth -= isMenu ? 1 : 0;
                 }
             }
 
@@ -165,10 +169,10 @@ namespace BECore {
                     _issues.Add(where, "type is required");
                 }
 
-                const bool isContainer =
-                    element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>() || element.Is<PanelTabs>() || element.Is<PanelTab>();
+                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>() || element.Is<PanelTabs>() ||
+                                         element.Is<PanelTab>() || element.Is<PanelMenu>();
                 if (!isContainer && !element.elements.empty()) {
-                    _issues.Add(where, "only a section, a row, a child, a popup, a tab bar or a tab holds elements");
+                    _issues.Add(where, "only a section, a row, a child, a popup, a tab bar, a tab or a menu holds elements");
                 }
 
                 if (const auto* text = element.Cast<PanelText>()) {
@@ -206,6 +210,12 @@ namespace BECore {
                     Condition(where, "enableWhen", button->enableWhen);
                     Literal(where, "argument", button->argument);
                     Extent(where, "width", button->width);
+                } else if (const auto* menu = element.Cast<PanelMenu>()) {
+                    CheckMenu(*menu, where);
+                } else if (const auto* item = element.Cast<PanelMenuItem>()) {
+                    CheckMenuItem(*item, where, parent);
+                } else if (const auto* items = element.Cast<PanelMenuItems>()) {
+                    CheckMenuItems(*items, where, parent);
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Binding(where, "source", table->source, true);
                     ScrollLimit(where, "scrollRows", table->scrollRows, PanelAssetLimits::kMaxScrollRows);
@@ -251,6 +261,55 @@ namespace BECore {
                 if (++_tabCount == PanelAssetLimits::kMaxTabs + 1) {
                     _issues.Add(where, Format("more than {} tabs in all", PanelAssetLimits::kMaxTabs));
                 }
+            }
+
+            void CheckMenu(const PanelMenu& menu, StringView where) {
+                if (_window != PanelWindowKind::Bar) {
+                    _issues.Add(where, "a menu belongs in a Bar window");
+                }
+                if (menu.title.empty()) {
+                    _issues.Add(where, "title is required");
+                }
+                Condition(where, "enableWhen", menu.enableWhen);
+                OptionalCommand(where, "openCommand", menu.openCommand);
+                // Reported once, at the first level over the limit: a deeper menu is over it too
+                if (_menuDepth == PanelAssetLimits::kMaxMenuDepth) {
+                    _issues.Add(where, Format("menus nested deeper than {} levels", PanelAssetLimits::kMaxMenuDepth));
+                }
+                if (++_menuCount == PanelAssetLimits::kMaxMenus + 1) {
+                    _issues.Add(where, Format("more than {} menus", PanelAssetLimits::kMaxMenus));
+                }
+                for (const IntrusivePtr<PanelElement>& child : menu.elements) {
+                    if (child != nullptr && !IsMenuChild(*child)) {
+                        _issues.Add(where, "a menu holds only menus, items, separators and texts");
+                        return;
+                    }
+                }
+            }
+
+            static bool IsMenuChild(const PanelElement& element) {
+                return element.Is<PanelMenu>() || element.Is<PanelMenuItem>() || element.Is<PanelMenuItems>() || element.Is<PanelSeparator>() || element.Is<PanelText>();
+            }
+
+            void CheckMenuItem(const PanelMenuItem& item, StringView where, const PanelElement* parent) {
+                if (parent == nullptr || !parent->Is<PanelMenu>()) {
+                    _issues.Add(where, "a menu item belongs in a menu");
+                }
+                if (item.text.empty()) {
+                    _issues.Add(where, "text is required");
+                }
+                Command(where, "command", item.command);
+                Condition(where, "enableWhen", item.enableWhen);
+                Literal(where, "argument", item.argument);
+            }
+
+            void CheckMenuItems(const PanelMenuItems& items, StringView where, const PanelElement* parent) {
+                if (parent == nullptr || !parent->Is<PanelMenu>()) {
+                    _issues.Add(where, "menu items belong in a menu");
+                }
+                Binding(where, "source", items.source, true);
+                RelativePath(where, "itemField", items.itemField);
+                Command(where, "command", items.command);
             }
 
             void CheckCombo(const PanelCombo& combo, StringView where) {
@@ -441,6 +500,9 @@ namespace BECore {
             size_t _popupCount = 0;
             size_t _popupDepth = 0;
             size_t _tabCount = 0;
+            size_t _menuCount = 0;
+            size_t _menuDepth = 0;
+            PanelWindowKind _window = PanelWindowKind::Docked;
             bool _columnsReported = false;
             bool _stopped = false;
         };

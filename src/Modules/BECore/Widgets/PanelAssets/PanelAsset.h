@@ -10,8 +10,9 @@
 namespace BECore {
 
     /// How the editor opens the window of an asset: `Docked` in the dock space, `Floating` never docked, `Dialogs` a host with no visible window that draws the popups of a
-    /// tool whose own window is hand-written. A `Dialogs` asset is always open, so it must say `open="true"` and its `command` may be empty
-    CORE_ENUM(PanelWindowKind, uint8_t, Docked, Floating, Dialogs)
+    /// tool whose own window is hand-written, `Bar` a host with no window that a hand-written window draws into (a menu bar or a toolbar). A `Dialogs` or `Bar` asset is
+    /// always open, so it must say `open="true"`, and its `command` is not used (nothing shows or hides it); only a `Bar` asset may hold menus
+    CORE_ENUM(PanelWindowKind, uint8_t, Docked, Floating, Dialogs, Bar)
 
     /// A named source of a panel: `model` is the text the editor resolves to a model object (here it is only a text)
     struct PanelSource {

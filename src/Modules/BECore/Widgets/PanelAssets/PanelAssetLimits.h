@@ -33,6 +33,10 @@ namespace BECore::PanelAssetLimits {
     /// Popups of one asset; a popup is modal and none holds another
     inline constexpr size_t kMaxPopups = 8;
 
+    /// Menus of one asset, submenus included, and the levels of menus inside one another (a menu of the bar is level 1)
+    inline constexpr size_t kMaxMenus = 32;
+    inline constexpr size_t kMaxMenuDepth = 4;
+
     /// Tabs of one tab bar and of the whole asset
     inline constexpr size_t kMaxTabsPerBar = 16;
     inline constexpr size_t kMaxTabs = 32;

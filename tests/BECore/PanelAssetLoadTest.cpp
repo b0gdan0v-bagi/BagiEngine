@@ -261,7 +261,7 @@ namespace BECore::Tests {
 
     TEST(PanelAssetLoadTest, OnlyContainersHoldElements) {
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x"><elements><element type="PanelRow" id="r"/></elements></element>)", "t",
-                          "only a section, a row, a child, a popup, a tab bar or a tab holds elements");
+                          "only a section, a row, a child, a popup, a tab bar, a tab or a menu holds elements");
     }
 
     TEST(PanelAssetLoadTest, ChildAndPopupHoldElements) {
@@ -445,6 +445,129 @@ namespace BECore::Tests {
         EXPECT_TRUE(floating.issues.empty()) << Joined(floating.issues);
         const PanelLoadResult unknown = load(R"(window="Tabbed")");
         EXPECT_FALSE(unknown.issues.empty());
+    }
+
+    namespace {
+
+        /// A `Bar` asset around @p elements, the way the menu bar of the editor is one
+        PanelLoadResult LoadBar(StringView elements, StringView attributes = R"(window="Bar" open="true")", const PanelValidationContext& context = {}) {
+            return LoadPanelAsset(StringView(Format(R"(<PanelAsset id="Test" {}><elements>{}</elements></PanelAsset>)", attributes, elements)), context);
+        }
+
+        void ExpectSingleBarIssue(StringView elements, StringView where, StringView part) {
+            const PanelLoadResult result = LoadBar(elements);
+            EXPECT_EQ(result.issues.size(), 1u) << Joined(result.issues);
+            EXPECT_TRUE(HasIssue(result.issues, where, part)) << "wanted [" << String(where).c_str() << "] ..." << String(part).c_str() << "...\n" << Joined(result.issues);
+        }
+
+    }  // namespace
+
+    TEST(PanelAssetLoadTest, ABarWindowIsOpenAndNeedsNoCommand) {
+        const PanelLoadResult open = LoadBar(R"(<element type="PanelMenu" id="m" title="File"/>)");
+        EXPECT_TRUE(open.issues.empty()) << Joined(open.issues);
+        ASSERT_NE(open.asset, nullptr);
+        EXPECT_EQ(open.asset->window, PanelWindowKind::Bar);
+        EXPECT_TRUE(open.asset->command.empty());
+
+        const PanelLoadResult closed = LoadBar(R"(<element type="PanelMenu" id="m" title="File"/>)", R"(window="Bar" open="false")");
+        EXPECT_EQ(closed.issues.size(), 1u) << Joined(closed.issues);
+        EXPECT_TRUE(HasIssue(closed.issues, "Test", "always open")) << Joined(closed.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AGoodMenuBarLoadsWithNoIssue) {
+        const auto known = [](StringView command) { return command.starts_with("x."); };
+        PanelValidationContext context;
+        context.isKnownCommand = FunctionRef<bool(StringView)>(known);
+        const PanelLoadResult result = LoadBar(
+            R"(<element type="PanelMenu" id="view" title="View" enableWhen="a.b" openCommand="x.open"><elements>
+                 <element type="PanelMenuItem" id="one" text="One" icon="eye" command="x.one" argument="arg" enableWhen="a.b == 1"/>
+                 <element type="PanelSeparator" id="line"/>
+                 <element type="PanelText" id="empty" text="Nothing" style="Disabled" visible="!a.b"/>
+                 <element type="PanelMenuItems" id="rows" source="a.rows" itemField="name" command="x.row"/>
+                 <element type="PanelMenu" id="sub" title="Sub"><elements><element type="PanelMenuItem" id="two" text="Two" command="x.two"/></elements></element>
+               </elements></element>)",
+            R"(window="Bar" open="true")", context);
+        EXPECT_TRUE(result.issues.empty()) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AMenuBelongsInABarWindow) {
+        for (const char* window : {"Docked", "Floating", "Dialogs"}) {
+            const PanelLoadResult result = LoadBar(R"(<element type="PanelMenu" id="m" title="File"/>)", Format(R"(window="{}" open="true")", window));
+            EXPECT_EQ(result.issues.size(), 1u) << window << "\n" << Joined(result.issues);
+            EXPECT_TRUE(HasIssue(result.issues, "m", "a menu belongs in a Bar window")) << window << "\n" << Joined(result.issues);
+        }
+    }
+
+    TEST(PanelAssetLoadTest, AMenuItemLivesInAMenuAndNeedsATextAndACommand) {
+        ExpectSingleBarIssue(R"(<element type="PanelMenuItem" id="i" text="One" command="x.one"/>)", "i", "a menu item belongs in a menu");
+        ExpectSingleBarIssue(R"(<element type="PanelRow" id="r"><elements><element type="PanelMenuItem" id="i" text="One" command="x.one"/></elements></element>)", "i",
+                             "a menu item belongs in a menu");
+        ExpectSingleBarIssue(R"(<element type="PanelMenuItems" id="i" source="a.rows" command="x.one"/>)", "i", "menu items belong in a menu");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItem" id="i" command="x.one"/></elements></element>)", "i", "text is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItem" id="i" text="One"/></elements></element>)", "i", "command is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItems" id="i" command="x.one"/></elements></element>)", "i", "source is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItems" id="i" source="a.rows"/></elements></element>)", "i", "command is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItems" id="i" source="rows" command="x.one"/></elements></element>)", "i",
+                             "source: expected 'source.path'");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItems" id="i" source="a.rows" itemField="a..b" command="x.one"/></elements></element>)",
+                             "i", "itemField: bad path");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItem" id="i" text="One" command="x.one" enableWhen="a.b and"/></elements></element>)", "i",
+                             "enableWhen: ");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItem" id="i" text="One" command="x.one" argument="a&#10;b"/></elements></element>)", "i",
+                             "argument must not hold a control character");
+    }
+
+    TEST(PanelAssetLoadTest, AMenuHoldsMenusItemsSeparatorsAndTexts) {
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelButton" id="b" text="B" command="x.b"/></elements></element>)", "m",
+                             "a menu holds only menus, items, separators and texts");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m"/>)", "m", "title is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M" enableWhen="a"/>)", "m", "enableWhen: expected 'source.path'");
+    }
+
+    TEST(PanelAssetLoadTest, MenuCommandsAreCheckedLikeAButtonsCommand) {
+        PanelValidationContext context;
+        const auto known = [](StringView command) { return command == "x.known"; };
+        context.isKnownCommand = FunctionRef<bool(StringView)>(known);
+        const PanelLoadResult result = LoadBar(
+            R"(<element type="PanelMenu" id="m" title="M" openCommand="x.nope"><elements>
+                 <element type="PanelMenuItem" id="i" text="One" command="x.bad"/>
+                 <element type="PanelMenuItems" id="rows" source="a.rows" command="x.worse"/>
+                 <element type="PanelMenuItem" id="ok" text="Ok" command="x.known"/>
+               </elements></element>)",
+            R"(window="Bar" open="true")", context);
+        EXPECT_EQ(result.issues.size(), 3u) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "m", "openCommand: unknown command 'x.nope'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "i", "command: unknown command 'x.bad'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "rows", "command: unknown command 'x.worse'")) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, MenusAreCountedAndTheirNestingIsLimited) {
+        String menus;
+        for (size_t i = 0; i < PanelAssetLimits::kMaxMenus; ++i) {
+            menus += Format(R"(<element type="PanelMenu" id="m{}" title="M"/>)", i);
+        }
+        const PanelLoadResult atLimit = LoadBar(menus);
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        menus += R"(<element type="PanelMenu" id="extra" title="M"/><element type="PanelMenu" id="extra2" title="M"/>)";
+        const PanelLoadResult over = LoadBar(menus);
+        EXPECT_EQ(over.issues.size(), 1u) << Joined(over.issues);
+        EXPECT_TRUE(HasIssue(over.issues, "extra", "more than 32 menus")) << Joined(over.issues);
+
+        const auto nested = [](size_t levels) {
+            String open;
+            String close;
+            for (size_t i = 0; i < levels; ++i) {
+                open += Format(R"(<element type="PanelMenu" id="n{}" title="M"><elements>)", i);
+                close += "</elements></element>";
+            }
+            return open + close;
+        };
+        const PanelLoadResult deepest = LoadBar(nested(PanelAssetLimits::kMaxMenuDepth));
+        EXPECT_TRUE(deepest.issues.empty()) << Joined(deepest.issues);
+        const PanelLoadResult tooDeep = LoadBar(nested(PanelAssetLimits::kMaxMenuDepth + 3));
+        EXPECT_EQ(tooDeep.issues.size(), 1u) << Joined(tooDeep.issues);
+        EXPECT_TRUE(HasIssue(tooDeep.issues, Format("n{}", PanelAssetLimits::kMaxMenuDepth), "menus nested deeper than 4 levels")) << Joined(tooDeep.issues);
     }
 
     TEST(PanelAssetLoadTest, TheDialogCommandsAreCheckedLikeAButtonsCommand) {

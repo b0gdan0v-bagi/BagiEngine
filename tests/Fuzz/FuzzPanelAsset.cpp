@@ -70,9 +70,10 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                 }
-                if (asset.window == PanelWindowKind::Dialogs && !asset.open) {
+                if ((asset.window == PanelWindowKind::Dialogs || asset.window == PanelWindowKind::Bar) && !asset.open) {
                     Fail();
                 }
+                _window = asset.window;
                 Elements(asset.elements, 1, nullptr);
             }
 
@@ -172,9 +173,12 @@ namespace BECore::Fuzz {
                     }
                     Element(*element, parent);
                     const bool isPopup = element->Is<PanelPopup>();
+                    const bool isMenu = element->Is<PanelMenu>();
                     _popupDepth += isPopup ? 1 : 0;
+                    _menuDepth += isMenu ? 1 : 0;
                     Elements(element->elements, depth + 1, element.Get());
                     _popupDepth -= isPopup ? 1 : 0;
+                    _menuDepth -= isMenu ? 1 : 0;
                 }
             }
 
@@ -187,7 +191,7 @@ namespace BECore::Fuzz {
                 }
                 Condition(element.visible);
                 if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>() && !element.Is<PanelChild>() && !element.Is<PanelPopup>() && !element.Is<PanelTabs>() &&
-                    !element.Is<PanelTab>()) {
+                    !element.Is<PanelTab>() && !element.Is<PanelMenu>()) {
                     Fail();
                 }
 
@@ -260,6 +264,29 @@ namespace BECore::Fuzz {
                     Condition(button->enableWhen);
                     Literal(button->argument);
                     Extent(button->width);
+                } else if (const auto* menu = element.Cast<PanelMenu>()) {
+                    Menu(*menu);
+                } else if (const auto* item = element.Cast<PanelMenuItem>()) {
+                    Text(item->text);
+                    Text(item->icon);
+                    Text(item->command);
+                    Text(item->argument);
+                    Text(item->enableWhen);
+                    if (parent == nullptr || !parent->Is<PanelMenu>() || item->text.empty() || item->command.empty()) {
+                        Fail();
+                    }
+                    Condition(item->enableWhen);
+                    Literal(item->argument);
+                } else if (const auto* items = element.Cast<PanelMenuItems>()) {
+                    Text(items->source);
+                    Text(items->itemField);
+                    Text(items->command);
+                    Text(items->icon);
+                    if (parent == nullptr || !parent->Is<PanelMenu>() || items->command.empty()) {
+                        Fail();
+                    }
+                    Binding(items->source, true);
+                    RelativePath(items->itemField);
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Text(table->source);
                     Binding(table->source, true);
@@ -294,6 +321,21 @@ namespace BECore::Fuzz {
                     }
                 } else if (!element.Is<PanelRow>()) {
                     Fail();  // the base class: no `type`, or one that is no kind
+                }
+            }
+
+            void Menu(const PanelMenu& menu) {
+                Text(menu.title);
+                Text(menu.enableWhen);
+                Text(menu.openCommand);
+                if (_window != PanelWindowKind::Bar || menu.title.empty() || _menuDepth >= PanelAssetLimits::kMaxMenuDepth || ++_menuCount > PanelAssetLimits::kMaxMenus) {
+                    Fail();
+                }
+                Condition(menu.enableWhen);
+                for (const IntrusivePtr<PanelElement>& child : menu.elements) {
+                    if (child != nullptr && !child->Is<PanelMenu>() && !child->Is<PanelMenuItem>() && !child->Is<PanelMenuItems>() && !child->Is<PanelSeparator>() && !child->Is<PanelText>()) {
+                        Fail();
+                    }
                 }
             }
 
@@ -348,6 +390,9 @@ namespace BECore::Fuzz {
             size_t _popupCount = 0;
             size_t _popupDepth = 0;
             size_t _tabCount = 0;
+            size_t _menuCount = 0;
+            size_t _menuDepth = 0;
+            PanelWindowKind _window = PanelWindowKind::Docked;
             bool _violated = false;
         };
 

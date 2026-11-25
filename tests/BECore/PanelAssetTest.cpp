@@ -194,9 +194,60 @@ namespace BECore::Tests {
         EXPECT_EQ(table->columns[4].enableField, "hasParams");
     }
 
+    TEST(PanelAssetTest, MenusRoundTrip) {
+        constexpr const char* xml = R"(
+<PanelAsset id="Bar" title="Bar" window="Bar" open="true">
+  <sources>
+    <source name="menu" model="MainMenuModel"/>
+  </sources>
+  <elements>
+    <element type="PanelMenu" id="layouts" title="Layouts" enableWhen="menu.hasStore" openCommand="layouts.menuOpened">
+      <elements>
+        <element type="PanelMenuItem" id="save" text="Save" icon="save" command="file.save" argument="now" enableWhen="menu.hasStore"/>
+        <element type="PanelSeparator" id="line"/>
+        <element type="PanelMenuItems" id="saved" source="menu.layouts" itemField="name" command="layouts.load" icon="layout"/>
+        <element type="PanelMenu" id="sub" title="More"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        XmlDeserializer first;
+        const auto asset = Read(xml, first);
+        ASSERT_FALSE(first.HasErrors());
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+        EXPECT_EQ(again->window, PanelWindowKind::Bar);
+
+        ASSERT_EQ(again->elements.size(), 1u);
+        const auto* menu = ElementAs<PanelMenu>(again->elements[0]);
+        ASSERT_NE(menu, nullptr);
+        EXPECT_EQ(menu->title, "Layouts");
+        EXPECT_EQ(menu->enableWhen, "menu.hasStore");
+        EXPECT_EQ(menu->openCommand, "layouts.menuOpened");
+        ASSERT_EQ(menu->elements.size(), 4u);
+        const auto* item = ElementAs<PanelMenuItem>(menu->elements[0]);
+        ASSERT_NE(item, nullptr);
+        EXPECT_EQ(item->text, "Save");
+        EXPECT_EQ(item->icon, "save");
+        EXPECT_EQ(item->command, "file.save");
+        EXPECT_EQ(item->argument, "now");
+        EXPECT_EQ(item->enableWhen, "menu.hasStore");
+        const auto* items = ElementAs<PanelMenuItems>(menu->elements[2]);
+        ASSERT_NE(items, nullptr);
+        EXPECT_EQ(items->source, "menu.layouts");
+        EXPECT_EQ(items->itemField, "name");
+        EXPECT_EQ(items->command, "layouts.load");
+        EXPECT_EQ(items->icon, "layout");
+        EXPECT_NE(ElementAs<PanelMenu>(menu->elements[3]), nullptr);
+    }
+
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {
-        for (const char* name : {"PanelSection", "PanelRow", "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelCheckbox", "PanelCombo", "PanelNumber", "PanelButton", "PanelTable",
-                                 "PanelSeparator", "PanelEmptyState", "PanelSlot", "PanelChild", "PanelPopup", "PanelTabs", "PanelTab"}) {
+        for (const char* name :
+             {"PanelSection",   "PanelRow",        "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelCheckbox", "PanelCombo", "PanelNumber",   "PanelButton",   "PanelTable",
+              "PanelSeparator", "PanelEmptyState", "PanelSlot", "PanelChild", "PanelPopup",  "PanelTabs",  "PanelTab",      "PanelMenu",  "PanelMenuItem", "PanelMenuItems"}) {
             const IntrusivePtr<PanelElement> element = AbstractFactory<PanelElement>::GetInstance().Create(StringView{name});
             ASSERT_NE(element, nullptr) << name;
             EXPECT_EQ(element->GetTypeMeta().typeName, StringView{name});
@@ -208,7 +259,7 @@ namespace BECore::Tests {
         const auto asset = Read(R"(<PanelAsset id="A"/>)", deserializer);
         EXPECT_EQ(asset->window, PanelWindowKind::Docked);
 
-        for (const char* name : {"Docked", "Floating", "Dialogs"}) {
+        for (const char* name : {"Docked", "Floating", "Dialogs", "Bar"}) {
             XmlDeserializer reader;
             const auto named = Read(Format(R"(<PanelAsset id="A" window="{}"/>)", name), reader);
             EXPECT_FALSE(reader.HasErrors()) << name;

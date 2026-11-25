@@ -57,6 +57,38 @@ namespace BECore {
         BE_REFLECT_FIELD String closeCommand;
     };
 
+    /// A menu of a `Bar` asset: `title` is its label. Its `elements` are menus (submenus), `PanelMenuItem`s, `PanelMenuItems`, separators and texts, and the loader reports any other
+    /// child. `enableWhen` is a condition that disables the whole menu while false; `openCommand` is the editor command that runs once when the menu opens (a model refreshes what the
+    /// menu lists there)
+    class PanelMenu : public PanelElement {
+        BE_CLASS(PanelMenu)
+    public:
+        BE_REFLECT_FIELD String title;
+        BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
+        BE_REFLECT_FIELD String openCommand;
+    };
+
+    /// An item of a `PanelMenu` that runs the editor command `command` with `argument` as a literal text (as a button's). The chord of the command is shown beside the label
+    class PanelMenuItem : public PanelElement {
+        BE_CLASS(PanelMenuItem)
+    public:
+        BE_REFLECT_FIELD String text;
+        BE_REFLECT_FIELD String icon;
+        BE_REFLECT_FIELD String command;
+        BE_REFLECT_FIELD String argument;
+        BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
+    };
+
+    /// One item of a `PanelMenu` per row of the list `source`; the row's text (`itemField`, a path relative to a row, empty for a list of scalars) is the label and the argument of `command`
+    class PanelMenuItems : public PanelElement {
+        BE_CLASS(PanelMenuItems)
+    public:
+        BE_REFLECT_FIELD String source;
+        BE_REFLECT_FIELD String itemField;
+        BE_REFLECT_FIELD String command;
+        BE_REFLECT_FIELD String icon;
+    };
+
     /// A literal `text` or the text of the field `bind`; `maxLines` > 0 shows that many lines and scrolls, also sideways (0: not in a scroll region)
     class PanelText : public PanelElement {
         BE_CLASS(PanelText)

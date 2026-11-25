@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<PanelAsset id="MenusBad" title="Bad" window="Docked" command="view.menusBad" open="false">
+  <elements>
+    <element type="PanelMenu" id="outside"/>
+    <element type="PanelMenuItem" id="stray" text="No menu" command="file.quit"/>
+    <element type="PanelRow" id="row">
+      <elements>
+        <element type="PanelMenuItems" id="strayRows" command="layouts.load"/>
+      </elements>
+    </element>
+    <element type="PanelMenu" id="mixed" title="Mixed" enableWhen="menu">
+      <elements>
+        <element type="PanelButton" id="button" text="Not an item" command="file.quit"/>
+        <element type="PanelMenuItem" id="blank" argument="line&#10;break"/>
+        <element type="PanelMenuItems" id="rows" source="rows" itemField="a..b"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>
