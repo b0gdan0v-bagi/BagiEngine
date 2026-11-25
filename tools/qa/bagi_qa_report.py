@@ -73,6 +73,7 @@ class Report:
     invariants: str = ""
     session_errors: list[str] = field(default_factory=list)
     out_dir: Path | None = None  # for the scrub only; not in report.json
+    content_restored: list[str] = field(default_factory=list)  # content files the editor wrote and the session put back
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -91,6 +92,7 @@ class Report:
             "scenario": self.scenario,
             "invariants": self.invariants,
             "session_errors": self.session_errors,
+            "content_restored": self.content_restored,
         }
 
     @staticmethod
@@ -111,6 +113,7 @@ class Report:
             value["invariants"],
             list(value["session_errors"]),
             out_dir,
+            list(value.get("content_restored", [])),
         )
 
 
@@ -150,6 +153,7 @@ def build_report(session: Any) -> Report:
         Path(session.invariants.path).name if session.invariants is not None else "",
         list(session.session_errors),
         out,
+        [session.shown_path(path) for path in session.restored_files],
     )
 
 
@@ -172,6 +176,8 @@ def render_markdown(report: Report) -> str:
     lines.append(f"- Calls: {report.calls} ({report.steps} steps, {report.actions} actions, {report.refused} refused); recording: `{report.scenario}`")
     if report.invariants:
         lines.append(f"- Invariants: `{report.invariants}`")
+    if report.content_restored:
+        lines.append(f"- Content files the editor wrote and the session put back: {', '.join(f'`{path}`' for path in report.content_restored)}")
     bug_groups, known_groups = groups(report.bugs), groups(report.known)
     verdict = f"{len(bug_groups)} bug(s), {len(known_groups)} known deviation(s)" if report.bugs or report.known else "no findings"
     lines += [f"- Result: {verdict}" + (f", {len(report.session_errors)} session error(s)" if report.session_errors else ""), ""]
