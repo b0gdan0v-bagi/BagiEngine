@@ -3,20 +3,19 @@
 The editor is the engine's, so a game's charter script uses this file as it is. Every name the editor shows (a window, a menu item, a button, a hidden
 label) is a constant here, the one place to fix when the editor renames it. What the control API cannot do is done the way a person does it:
 
-- **No scene or editor method exists**, so nothing here opens a scene (a game's `reset` shows one in the Scene Editor) or reloads one.
+- **No scene method exists**, so nothing here opens a scene (a game's `reset` shows one in the Scene Editor) or reloads one.
 - **A click is a move first.** A header or a field takes a press only when the pointer was over it in an earlier frame, so `click_item` moves, then clicks.
 - **A control's name is not always an item.** The generic inspector draws a number's name as plain text after a field whose label is `##<index>` (the index
   of the field in its component), and text is not in `imgui_find`; so a number is found by its component and index (`field_label`).
 - **A number is typed**: Ctrl+click on a drag field turns it into a text field (Ctrl is Cmd on macOS, which `imgui_input` means by `ctrl`), select all, text,
   Enter. A text field takes the same without the Ctrl.
-- **The dirty marker is not an item** either: `dirty` looks at the picture to the right of the Save button for the warning colour of "(unsaved changes)".
+- **The dirty state is not an item** ("(unsaved changes)" is text): `dirty` reads the scene document of `editor_state`, which is what the marker shows.
 - **A panel is as wide as the dock gave it.** The default layout leaves the Scene Editor too narrow for its inspector, which is then clipped and has no
   items; `widen_left_dock` drags the splitter, as a person would.
 
 A move that cannot do what was asked raises `SessionError` (kept in `session_errors` by the session) naming what the editor showed instead.
 """
 
-import base64
 import re
 import sys
 from dataclasses import dataclass
@@ -25,11 +24,8 @@ from typing import Any, Sequence
 
 QA_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QA_DIR.parent / "control"))
-sys.path.insert(0, str(QA_DIR.parent / "shots"))
 sys.path.insert(0, str(QA_DIR))
 
-import scenario  # noqa: E402
-from bagi_image import read_png  # noqa: E402
 from bagi_session import SessionError  # noqa: E402
 
 MENU_BAR_VIEW = "View"
@@ -41,6 +37,7 @@ INSPECTOR_CHILD = "##inspector"
 SEARCH_FIELD = "##search"
 CLEAR_SEARCH_BUTTON = "clear_search"
 SAVE_BUTTON = "Save"
+SCENE_KIND = "scene"  # the `kind` of the scene row of `editor_state`
 ADD_NODE_BUTTON = "Add Node"
 NAME_FIELD = "##node_name"
 LAYER_FIELD = "##node_layer"
@@ -58,13 +55,6 @@ LEFT_DOCK_SPLITTER = (211.0, 400.0)  # the gap between the left column and the v
 LEFT_DOCK_DRAG_TO = (500.0, 700.0)
 ROW_CLICK_OFFSET = 60.0  # a hierarchy row also holds hide and lock toggles at its right end: click near its left
 ITEM_LIMIT = 500
-DIRTY_SHOT_SIZE = 960
-MARKER_GAP = 4  # the "(unsaved changes)" text starts a few pixels right of the Save button and fits in this width
-MARKER_WIDTH = 200
-MIN_MARKER_PIXELS = 6
-# The warning colour of the theme (ImGuiTheme.cpp, an amber): red high, red well above blue, green above blue
-MARKER_MIN_RED = 140
-MARKER_MIN_RED_OVER_BLUE = 50
 
 
 @dataclass(frozen=True)
@@ -320,42 +310,32 @@ def save_button(session: Any) -> dict[str, Any]:
     return find_item(session, SCENE_EDITOR, label_contains=SAVE_BUTTON)
 
 
+def scene_document(session: Any) -> dict[str, Any]:
+    """The one `scene` row of `editor_state` (`id`, `path`, `file`, `dirty`); `file` is the file the Save button writes (the overlay's copy under an overlay)."""
+    scenes = [document for document in session.editor_state()["documents"] if document["kind"] == SCENE_KIND]
+    if len(scenes) != 1:
+        raise SessionError(f"{len(scenes)} scene documents in editor_state ({[document['id'] for document in scenes]}): is a scene active in the editor?")
+    return scenes[0]
+
+
 def dirty(session: Any) -> bool:
-    """Whether the Scene Editor shows "(unsaved changes)": the text is no item, so the picture right of the Save button is looked at for the theme's warning colour."""
-    found = session.imgui_find(window=SCENE_EDITOR, label_contains=SAVE_BUTTON, kind="item")
-    buttons = [match for match in found["matches"] if match["visible"]]
-    if len(buttons) != 1:
-        raise SessionError(f"{len(buttons)} Save buttons in the Scene Editor: is the panel open and a scene active?")
-    save = buttons[0]
-    outcome = session.call("screenshot", {"maxSize": DIRTY_SHOT_SIZE})
-    if not outcome.accepted:
-        raise SessionError(f"screenshot was refused: {outcome.error_code} {outcome.error_message}")
-    try:
-        image = read_png(base64.b64decode(outcome.result[scenario.SCREENSHOT_PICTURE_KEY]))
-    except Exception as error:  # a PngError of the reader; the picture is the game's, so any failure is the session's
-        raise SessionError(f"the screenshot cannot be read: {error}") from error
-    scale = image.width / found["display"]["width"]
-    left = int((save["x"] + save["width"]) * scale) + MARKER_GAP
-    right = min(image.width, left + int(MARKER_WIDTH * scale))
-    channels = image.channels
-    count = 0
-    for y in range(int(save["y"] * scale), min(image.height, int((save["y"] + save["height"]) * scale) + 1)):
-        row = image.rows[y]
-        for x in range(left, right):
-            red, green, blue = row[x * channels : x * channels + 3]
-            if red >= MARKER_MIN_RED and red - blue >= MARKER_MIN_RED_OVER_BLUE and green > blue:
-                count += 1
-    return count >= MIN_MARKER_PIXELS
+    """Whether the scene has unsaved changes: the flag of the Save button and of the "(unsaved changes)" marker."""
+    return bool(scene_document(session)["dirty"])
+
+
+def any_dirty(session: Any) -> bool:
+    """Whether any editor panel has unsaved changes (also pending node-file edits, the Config Editor and the Sprite Library)."""
+    return bool(session.editor_state()["anyDirty"])
 
 
 def save(session: Any) -> None:
-    """Clicks the Save button. It is disabled while the scene is clean, so a clean scene is a SessionError; and the marker must be gone afterwards."""
+    """Clicks the Save button. It is disabled while the scene is clean, so a clean scene is a SessionError; and the scene must be clean afterwards."""
     if not dirty(session):
         raise SessionError("the Scene Editor shows no unsaved changes, so its Save button is disabled")
     click_item(session, save_button(session))
     session.step(1)
     if dirty(session):
-        raise SessionError("the Scene Editor still shows (unsaved changes) after a click on Save")
+        raise SessionError("the Scene Editor still has unsaved changes after a click on Save")
 
 
 def press_chord(session: Any, chord: tuple[str, Sequence[str]]) -> None:

@@ -61,6 +61,7 @@ LATE_LOG_NOTE = " (shown only after the game quit: its stdout is block-buffered)
 EDITOR_DIR_VARIABLE = "BAGI_EDITOR_DIR"  # where the editor keeps its per-user files (preferences, layouts): a folder of the session, never the real one
 EDITOR_DIR_FOLDER = "editor-dir"
 EDITOR_BACKUP_FOLDER = "content-backup"
+EDITOR_OVERLAY_FOLDER = "content-overlay"
 RUN_MODE_EDITOR = "Editor"
 QA_PROJECT_RULES = Path(".claude") / "rules" / "qa-project.md"  # its folder is the root `EDITOR_CONTENT_FILES` is relative to
 NAME_CONTENT_FILE_WRITTEN = "editor.content_file_written"
@@ -169,6 +170,7 @@ class QaSession:
         self.refused = 0
         self.restored_files: list[Path] = []  # the content files the guard had to put back (`finish`)
         self._game = _CountedGame(self._count_call)
+        self.content_overlay: Path | None = None  # the folder the editor of this session writes into instead of the content files; None for a game run
         self._guard: scene_file.ContentGuard | None = None
         self._guard_problem: str | None = None
         self._content_root: Path | None = None
@@ -205,26 +207,39 @@ class QaSession:
         replay: bool = False,
         editor: bool = False,
         content_files: Sequence[str | Path] | None = None,
+        content_overlay: str | Path | None = None,
     ) -> dict[str, Any]:
         """Starts the game headless on the manual clock, recording to `session.jsonl`, lets a couple of frames pass and checks it (the `ui_tree` too).
 
         `replay` is for playing a recorded scenario (bagi_qa_repro): the scenario holds its own first calls, so no frame is run and nothing is recorded.
 
         `editor` (or `--editor` in `extra`, which is what a replayed header gives) starts the editor with `BAGI_EDITOR_DIR` set to a folder of this session
-        for the start only, and needs `status.runMode` to be `Editor`: a build without the editor is stopped and raises `NoEditorError`. The editor's Save
-        writes into the checkout, so `content_files` (default: `EDITOR_CONTENT_FILES` of the invariants module, relative to the folder that holds
+        for the start only, and needs `status.runMode` to be `Editor`: a build without the editor is stopped and raises `NoEditorError`. An editor always
+        starts with `--content-overlay=<folder>`, so its Save writes a copy and never a tracked content file: `content_overlay` (default
+        `<out>/content-overlay`, outside every repository since `out` is) names the folder, which two sessions share when the second one must start on what
+        the first saved. The flag is not part of `flags`, so a recording's header never holds it and every replay or `shrink` probe gets an overlay of its own.
+
+        `ContentGuard` stays the second line: `content_files` (default: `EDITOR_CONTENT_FILES` of the invariants module, relative to the folder that holds
         `.claude/rules/qa-project.md` above it) are backed up before the game starts and put back by `finish()`, also when the game is lost or does not
-        start; an editor launch that has neither is refused with `SessionError` before the process starts. The executable must belong to the checkout of those files (the content roots are compiled into it). Without the editor nothing changes.
+        start, and a file that had to be put back is the finding `editor.content_file_written`: it covers what the overlay does not promise (the Generate
+        panel's writes under the root, an engine older than the flag). An editor launch that has neither is refused with `SessionError` before the process
+        starts. The executable must belong to the checkout of those files (the content roots are compiled into it). Without the editor nothing changes.
         """
         if self._launched:
             raise SessionError("this session already launched a game; make another QaSession")
         editor = editor or EDITOR_FLAG in extra
         extra = [flag for flag in extra if flag != EDITOR_FLAG]
+        if content_overlay is not None and not editor:
+            raise SessionError("content_overlay is for an editor launch: a game run writes no content files")
+        overlay: Path | None = None
         if editor:
             self._arm_guard(exe, preset, game, content_files)
+            overlay = Path(content_overlay).expanduser().resolve() if content_overlay is not None else self.out_dir / EDITOR_OVERLAY_FOLDER
+            overlay.mkdir(parents=True, exist_ok=True)
         try:
             with _editor_environment(self.out_dir / EDITOR_DIR_FOLDER) if editor else contextlib.nullcontext():
-                description = self._game.launch(exe=exe, preset=preset, game=game, extra=extra, record=None if replay else str(self.scenario_path), editor=editor)
+                record = None if replay else str(self.scenario_path)
+                description = self._game.launch(exe=exe, preset=preset, game=game, extra=extra, record=record, editor=editor, content_overlay=None if overlay is None else str(overlay))
         except SessionError as error:
             self.session_errors.append(str(error))
             self._release_guard()
@@ -237,6 +252,7 @@ class QaSession:
             self.session_errors.append(str(error))
             raise error
         self._launched = True
+        self.content_overlay = overlay
         self.game = description.get("activeGame")
         self.flags = [HEADLESS_FLAG, MANUAL_CLOCK_FLAG, *([EDITOR_FLAG] if editor else []), *extra]
         if not replay:
@@ -296,6 +312,10 @@ class QaSession:
     def imgui_find(self, label: str | None = None, **filters: Any) -> dict[str, Any]:
         """`GameSession.imgui_find`, recorded and counted; the log is checked after it (an ImGui assertion shows at once)."""
         return self._imgui(self._game.imgui_find, label, **filters)
+
+    def editor_state(self) -> dict[str, Any]:
+        """`GameSession.editor_state` (the unsaved changes of the editor panels), recorded and counted, then the log check; a game that is not an editor is a SessionError."""
+        return self._imgui(self._game.editor_state)
 
     def imgui_click(self, label: str | None = None, **target: Any) -> dict[str, Any]:
         """`GameSession.imgui_click`: the one visible item called `label` (in `window`), or a point `x`, `y`. An item that is not there, or is there
@@ -387,8 +407,9 @@ class QaSession:
         """Quits the game, checks the log once more (a Warning may show only now), puts the content files back, writes the recording, the report and the bug drafts. Safe to call twice.
 
         The drafts name the recording as their reproduction; `bagi_qa.py shrink` and `bagi_qa.py drafts` replace it by a cut one. A content file the editor
-        wrote is restored whatever happens; `content_writes_expected=False` (a charter that never saves) makes each one the finding
-        `editor.content_file_written`. A file that cannot be put back is a SessionError after the report is written, and the paths are in `restored_files`.
+        wrote is restored whatever happens and is the finding `editor.content_file_written`: the editor ran with an overlay, so its Save never has a reason
+        to write the checkout. `content_writes_expected` is ignored (a game's charter may still pass it). A file that cannot be put back is a SessionError
+        after the report is written, and the paths are in `restored_files`.
         """
         if not self._launched:
             raise SessionError("no game was launched, so there is no session to finish")
@@ -398,9 +419,8 @@ class QaSession:
                 self._check_log(late=True)
             finally:
                 restored = self._release_guard()
-            if not content_writes_expected:
-                for path in restored:
-                    self.flag(NAME_CONTENT_FILE_WRITTEN, f"the editor wrote the content file {self.shown_path(path)} in a session that did not save", {"file": self.shown_path(path)})
+            for path in restored:
+                self.flag(NAME_CONTENT_FILE_WRITTEN, f"the editor wrote the checkout's content file {self.shown_path(path)} although it ran with an overlay ({self.content_overlay})", {"file": self.shown_path(path)})
             try:
                 report = report_module.build_report(self)
                 markdown, data = report_module.write_report(report, self.out_dir)
