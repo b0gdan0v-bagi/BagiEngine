@@ -265,13 +265,14 @@ namespace BECore::Tests {
     TEST_F(ProfilerPanelAssetTest, WithNoFrameYetOnlyTheNoteAndTheSectionsThatNeedNoFrameAreThere) {
         Settle();
         EXPECT_EQ(Find("Pause"), nullptr);
-        EXPECT_EQ(Combo(0), nullptr);
+        EXPECT_EQ(Find("Work only"), nullptr);
         EXPECT_NE(Find("Memory"), nullptr);
         EXPECT_NE(Find("Chrome trace"), nullptr);
 
         AddFrame(kSteadyFrameTicks);
         Settle();
         EXPECT_NE(Find("Pause"), nullptr);
+        EXPECT_NE(Find("Work only"), nullptr);
         EXPECT_NE(Combo(1), nullptr);
     }
 

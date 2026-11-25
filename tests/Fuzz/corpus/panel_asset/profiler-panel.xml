@@ -14,8 +14,8 @@
     <element type="PanelRow" id="budgetRow" visible="profiler.hasFrames">
       <elements>
         <element type="PanelCombo" id="budget" bind="profiler.budget" items="profiler.budgetLabels" width="11"/>
-        <element type="PanelNumber" id="customBudget" bind="profiler.customBudgetMs" text="ms" min="1" max="1000" step="0.1" width="5" visible="profiler.budget == 2"/>
         <element type="PanelText" id="budgetLabel" text="Budget"/>
+        <element type="PanelNumber" id="customBudget" bind="profiler.customBudgetMs" text="ms" min="1" max="1000" step="0.1" width="5" visible="profiler.budget == 2"/>
         <element type="PanelCombo" id="barMode" bind="profiler.barMode" items="profiler.barModeLabels" width="10"/>
         <element type="PanelText" id="barModeLabel" text="Bars"/>
         <element type="PanelCheckbox" id="workOnly" bind="profiler.workOnly" text="Work only" tooltip="Leave out the time the backend waited for the display (the Wait stage), so a bar is what the CPU did"/>
