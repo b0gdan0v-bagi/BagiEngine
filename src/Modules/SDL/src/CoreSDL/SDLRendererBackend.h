@@ -11,16 +11,19 @@ namespace BECore {
         struct SetRenderDrawColorEvent;
     }
 
+    class SDLRenderTarget;
+
     class SDLRendererBackend : public IRenderer {
         BE_CLASS(SDLRendererBackend)
     public:
         SDLRendererBackend() = default;
-        ~SDLRendererBackend() override = default;
+        ~SDLRendererBackend() override;
 
         bool Initialize(IMainWindow& window) override;
         void Destroy() override;
         void BeginFrame() override;
         void EndFrame() override;
+        /// Fills the current target at once and remembers @p color for the next SetRenderTarget(), which clears its target with it and goes back to opaque black (as Vulkan does)
         void Clear(const Color& color) override;
         void Present() override;
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
@@ -31,7 +34,9 @@ namespace BECore {
         IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
         void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) override;
 
+        /// A RGBA target texture; empty for a zero side or when SDL refuses it. It may outlive the renderer, which releases its texture in Destroy()
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
+        /// Redirects every draw into @p target and clears it with the colour of the last Clear(). A target of another backend, or one whose renderer is gone, keeps the back buffer (logged once)
         void SetRenderTarget(IRenderTarget* target) override;
         void UnsetRenderTarget() override;
 
@@ -56,6 +61,10 @@ namespace BECore {
         void OnClipRectChanged() override;
 
     private:
+        friend class SDLRenderTarget;
+
+        void OnTargetDestroyed(SDLRenderTarget& target);
+        void ReleaseTargets();
         void OnRenderClear();
         void OnRenderPresent();
         void PresentFrame();
@@ -76,6 +85,10 @@ namespace BECore {
 
         SDL_Renderer* _renderer = nullptr;
         CaptureCallback _captureCallback;
+        Vector<SDLRenderTarget*> _targets;  // the live targets, not owned
+        SDLRenderTarget* _currentTarget = nullptr;
+        Color _nextTargetClear{0, 0, 0, 255};
+        bool _foreignTargetWarned = false;
     };
 
 }  // namespace BECore
