@@ -62,9 +62,15 @@ namespace BECore {
         /// Switches Game and Editor. Application reads Ctrl+Shift+E from the raw SDL event (RunMode.h), before ImGui, so
         /// this command is fixed: the map lists it, the palette runs it through WidgetManager::RequestToggle().
         inline constexpr auto kModeToggle = "mode.toggle"_intern;
-        /// Shows and hides the Profiler panel. Fixed like mode.toggle: ProfilerWidget reads Ctrl+Shift+P from the raw SDL event
-        /// (Profiler/ProfilerToggle.h), the palette runs it through this command
+        /// Shows and hides the Profiler panel. Fixed like mode.toggle: ProfilerPanelModel reads Ctrl+Shift+P from the raw SDL event
+        /// (Profiler/ProfilerToggle.h) and sends this command, which the asset's `command` turns into the open flag
         inline constexpr auto kViewProfiler = "view.profiler"_intern;
+        /// The Profiler panel's buttons (config/panels/ProfilerPanel.xml names them). ProfilerPanelModel owns them and runs them only while its panel is open;
+        /// trace takes the literal argument record, restart, write or writeFrames and does nothing for any other text, the rest take none
+        inline constexpr auto kProfilerTrace = "profiler.trace"_intern;
+        inline constexpr auto kProfilerSpikeLive = "profiler.spikeLive"_intern;
+        inline constexpr auto kProfilerSpikeClear = "profiler.spikeClear"_intern;
+        inline constexpr auto kProfilerResetZoneAllocs = "profiler.resetZoneAllocs"_intern;
         /// Shows and hides the Console panel (the log). The asset's `command` (config/panels/ConsolePanel.xml) owns the action
         inline constexpr auto kViewConsole = "view.console"_intern;
         /// The Console panel's buttons (config/panels/ConsolePanel.xml names them). ConsolePanelModel owns them and runs them only while its panel is open; none takes an argument
