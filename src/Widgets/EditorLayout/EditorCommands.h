@@ -110,6 +110,12 @@ namespace BECore {
         inline constexpr auto kConfigEditorReloadCancel = "configEditor.reloadCancel"_intern;
         inline constexpr auto kConfigEditorSwitchDiscard = "configEditor.switchDiscard"_intern;
         inline constexpr auto kConfigEditorSwitchCancel = "configEditor.switchCancel"_intern;
+        /// The Sprite Library's buttons and fields (config/panels/SpriteLibraryPanel.xml names them). SpriteLibraryPanelModel owns them and runs them only while its
+        /// panel is open; none takes an argument. rename is the name field's `commitCommand`; `texture.save` is not one of them (the model takes it while closed too)
+        inline constexpr auto kSpriteLibraryRename = "spriteLibrary.rename"_intern;
+        inline constexpr auto kSpriteLibraryRescan = "spriteLibrary.rescan"_intern;
+        inline constexpr auto kSpriteLibraryAdd = "spriteLibrary.add"_intern;
+        inline constexpr auto kSpriteLibraryDelete = "spriteLibrary.delete"_intern;
         /// The Preferences window's "save now": the `commitCommand` of its controls (config/panels/PreferencesPanel.xml). PreferencesPanelModel owns it and runs it
         /// only while its panel is open; it takes no argument
         inline constexpr auto kPreferencesCommit = "preferences.commit"_intern;
