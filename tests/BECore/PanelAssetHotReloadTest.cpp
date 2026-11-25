@@ -68,6 +68,17 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        /// `{}` slots: the `window` kind and the `command` of the asset; the source `a` is a `DialogPanelModel` whose bool is true, so the popup is open at once
+        constexpr const char* kWindowKindAsset = R"(<PanelAsset id="Hot" title="Kinds" window="{}" command="{}" open="true" width="300" height="200">
+  <sources><source name="a" model="DialogPanelModel"/></sources>
+  <elements>
+    <element type="PanelPopup" id="dialog" title="Sure?" open="a.dialog">
+      <elements><element type="PanelButton" id="yes" text="Yes" command="fileChanges.rescan"/></elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        constexpr const char* kPopupWindowName = "Sure?##dialog";
+
         constexpr int kSteadyFrames = 8;
 
         String Asset(StringView title, StringView button, StringView model = "CountingPanelModel", StringView source = "a") {
@@ -84,6 +95,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
+            DialogPanelModel::commands = 0;
             CountingPanelModel::Reset();
             ReloadingPanelModel::Reset();
             _dir = TestTempDirectory("panel_hot");
@@ -157,8 +169,7 @@ namespace BECore::Tests {
         }
 
         /// A point of the window where the mouse is over the control @p id, found by moving it over the window; none when no point is
-        Optional<ImVec2> TryLocate(ImGuiID id) {
-            const ImGuiWindow* window = Window();
+        Optional<ImVec2> TryLocate(ImGuiID id, const ImGuiWindow* window = Window()) {
             if (window == nullptr || id == 0) {
                 return std::nullopt;
             }
@@ -427,6 +438,47 @@ namespace BECore::Tests {
                 Frame();
             }
         });
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ADialogsAssetIsAnInvisibleAlwaysOpenHostWhoseModalIsDrawnAndTakesClicks) {
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kWindowKindAsset, "Dialogs", "view.fileChanges")));
+        const ImGuiWindow* host = Window();
+        ASSERT_NE(host, nullptr);
+        constexpr ImGuiWindowFlags kInvisible = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings;
+        EXPECT_EQ(host->Flags & kInvisible, kInvisible);
+        EXPECT_FALSE(host->HasCloseButton);
+
+        const ImGuiWindow* popup = ImGui::FindWindowByName(kPopupWindowName);
+        ASSERT_NE(popup, nullptr) << "the modal of the host is not drawn";
+        const Optional<ImVec2> yes = TryLocate(ImHashStr("Yes", 0, ImHashStr("yes", 0, popup->ID)), popup);
+        ASSERT_TRUE(yes.has_value());
+        ClickAt(*yes);
+        EXPECT_EQ(DialogPanelModel::commands, 1);
+
+        // Its own command does not close it, and it is always open
+        Command(EditorCommandIds::kViewFileChanges);
+        Settle();
+        EXPECT_TRUE(_widget->IsOpen());
+        EXPECT_NE(Window(), nullptr);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ADialogsAssetWithNoCommandHasItsModelsUpdatedEveryFrame) {
+        HookPanelModel::log.clear();
+        ASSERT_NO_FATAL_FAILURE(Start(R"(<PanelAsset id="Hot" title="Hooks" window="Dialogs" open="true">
+  <sources><source name="a" model="HookPanelModel"/></sources>
+  <elements/>
+</PanelAsset>)"));
+        EXPECT_EQ(HookPanelModel::log, "+UEUE");
+        EXPECT_TRUE(_widget->IsOpen());
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AFloatingWindowIsNeverDockedAndADockedOneMayBe) {
+        ASSERT_NO_FATAL_FAILURE(Start(Format(kWindowKindAsset, "Floating", "view.fileChanges")));
+        ASSERT_NE(Window(), nullptr);
+        EXPECT_NE(Window()->Flags & ImGuiWindowFlags_NoDocking, 0);
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Format(kWindowKindAsset, "Docked", "view.fileChanges")));
+        EXPECT_EQ(Window()->Flags & ImGuiWindowFlags_NoDocking, 0);
     }
 
 }  // namespace BECore::Tests

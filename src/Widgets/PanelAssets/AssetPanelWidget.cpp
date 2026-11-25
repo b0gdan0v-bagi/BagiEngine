@@ -15,6 +15,13 @@ namespace BECore {
         constexpr size_t kBannerIssues = 3;
         constexpr const char* kBannerId = "banner";
 
+        /// The host of a `Dialogs` asset: a window that draws nothing and takes nothing, so only the modals opened from it show. It must stay a window (a popup is opened from one),
+        /// and one pixel is enough: a modal is a window of its own, placed on the display
+        constexpr ImGuiWindowFlags kDialogsHostFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                                                       ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs |
+                                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus;
+        constexpr ImVec2 kDialogsHostSize{1.0f, 1.0f};
+
         bool IsKnownCommand(StringView name) {
             return FindEditorCommand(name) != nullptr;
         }
@@ -176,7 +183,8 @@ namespace BECore {
     void AssetPanelWidget::OnCommand(const EditorCommandEvent& event) {
         const PanelAsset* asset = _holder.Current().Get();
         const StringView id = event.commandId.ToStringView();
-        if (asset != nullptr && !asset->command.empty() && id == StringView(asset->command)) {
+        // A `Dialogs` host is always open: its command, when it has one, reaches the models like any other
+        if (asset != nullptr && asset->window != PanelWindowKind::Dialogs && !asset->command.empty() && id == StringView(asset->command)) {
             _open = !_open;
             return;
         }
@@ -200,6 +208,11 @@ namespace BECore {
 
     void AssetPanelWidget::Update() {
         ApplyPendingReload();
+        const PanelAsset* asset = _holder.Current().Get();
+        const bool dialogs = asset != nullptr && asset->window == PanelWindowKind::Dialogs;
+        if (dialogs) {
+            _open = true;
+        }
         NotifyOpenChanged();
         if (!_open) {
             return;
@@ -208,12 +221,22 @@ namespace BECore {
             entry.model->Update();
         }
         SyncTitle();
-        const PanelAsset* asset = _holder.Current().Get();
-        if (asset != nullptr && (asset->width > 0.0f || asset->height > 0.0f)) {
-            ImGui::SetNextWindowSize(ImVec2(asset->width, asset->height), ImGuiCond_FirstUseEver);
+        ImGuiWindowFlags flags = ImGuiWindowFlags_None;
+        if (dialogs) {
+            flags = kDialogsHostFlags;
+            ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+            ImGui::SetNextWindowSize(kDialogsHostSize);
+        } else {
+            if (asset != nullptr && asset->window == PanelWindowKind::Floating) {
+                flags = ImGuiWindowFlags_NoDocking;
+            }
+            if (asset != nullptr && (asset->width > 0.0f || asset->height > 0.0f)) {
+                ImGui::SetNextWindowSize(ImVec2(asset->width, asset->height), ImGuiCond_FirstUseEver);
+            }
         }
         _result.Clear();
-        if (ImGui::Begin(_windowTitle.c_str(), &_open)) {
+        // No close button on a host that is always open
+        if (ImGui::Begin(_windowTitle.c_str(), dialogs ? nullptr : &_open, flags)) {
             DrawBanner();
             if (_interpreter.IsPrepared()) {
                 _interpreter.Draw(_sources, _result);

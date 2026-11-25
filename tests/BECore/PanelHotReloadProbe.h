@@ -42,6 +42,20 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD bool flag = false;
     };
 
+    /// A model whose reflected bool `dialog` is true from the start, so a popup bound to it is open at once; it counts the commands it is run with
+    class DialogPanelModel : public IPanelModel {
+        BE_CLASS(DialogPanelModel)
+    public:
+        bool RunCommand(StringView /*id*/, StringView /*argument*/) override {
+            ++commands;
+            return true;
+        }
+
+        inline static int commands = 0;
+
+        BE_REFLECT_FIELD bool dialog = true;
+    };
+
     /// A model that writes one letter per call of the lifecycle hooks into a static log the test reads: `+` / `-` open and close, `U` Update, `E` EndUpdate
     class HookPanelModel : public IPanelModel {
         BE_CLASS(HookPanelModel)

@@ -32,6 +32,10 @@ namespace BECore {
      * A change of the asset's config is only noted by the event and applied at the next `Update` or at the end of the command being run: the event can
      * come from inside a model's own command (applying the panel's file), and a reload may drop that very model.
      *
+     * **Window kinds** (`PanelAsset::window`). `Docked` is an ordinary window. `Floating` is `ImGuiWindowFlags_NoDocking`. `Dialogs` is always open (the open flag is forced true every
+     * `Update`, and the asset's `command`, when it has one, does not toggle it): the host is a one-pixel window that draws nothing and takes no input, with no close button, so the only
+     * thing seen of it is the modals of its popups. A banner of a reload that failed is therefore not visible on a `Dialogs` host; the last good asset keeps working.
+     *
      * A click is emitted as `EditorCommandEvent` after the window is closed, never inside the walk (`PanelInterpreter`). Editor only.
      */
     class AssetPanelWidget : public IWidget {
