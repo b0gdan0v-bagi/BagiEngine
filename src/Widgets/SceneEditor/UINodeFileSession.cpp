@@ -37,6 +37,10 @@ namespace BECore {
         return status;
     }
 
+    Vector<PoolString> UINodeFileSession::PendingFiles(Scene& scene) const {
+        return NodeFilesToPatch(scene, Span<const IntrusivePtr<UIElement>>(_elements.data(), _elements.size()));
+    }
+
     UINodeFileReport UINodeFileSession::Save(Scene& scene) {
         return Save(scene, CoreManager::GetFileSystem());
     }

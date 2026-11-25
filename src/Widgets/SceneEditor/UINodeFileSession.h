@@ -39,6 +39,9 @@ namespace BECore {
             return _elements.size();
         }
 
+        /// The node files a Save would write (`NodeFilesToPatch`): the unsaved files of this session
+        [[nodiscard]] Vector<PoolString> PendingFiles(Scene& scene) const;
+
         /// What a Save would do with the pending elements of @p node
         [[nodiscard]] Status StatusFor(Scene& scene, const SceneNode& node) const;
 

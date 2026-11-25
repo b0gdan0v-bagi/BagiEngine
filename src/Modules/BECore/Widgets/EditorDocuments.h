@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
@@ -9,6 +10,9 @@ namespace BECore {
 
     /// What an editor document is: the active scene, a node file the pending UI edits patch, a selected config, a library (the Sprite Library)
     CORE_ENUM(EditorDocumentKind, uint8_t, Scene, NodeFile, Config, Library)
+
+    /// The name of @p kind on the wire and in the ids (`scene`, `nodeFile`, `config`, `library`): lower camel case, which a reflected enum would not write
+    [[nodiscard]] PoolString EditorDocumentKindName(EditorDocumentKind kind);
 
     /// One document of an editor panel as `editor_state` reports it (`.claude/rules/control-editor-api.md`)
     struct EditorDocumentState {

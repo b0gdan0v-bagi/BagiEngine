@@ -5,6 +5,32 @@
 
 namespace BECore {
 
+    namespace {
+
+        struct KindNames {
+            static constexpr auto scene = "scene"_intern;
+            static constexpr auto nodeFile = "nodeFile"_intern;
+            static constexpr auto config = "config"_intern;
+            static constexpr auto library = "library"_intern;
+        };
+
+    }  // namespace
+
+    PoolString EditorDocumentKindName(EditorDocumentKind kind) {
+        // No default: a new kind is a -Wswitch warning here, not a document that shows as "scene"
+        switch (kind) {
+            case EditorDocumentKind::Scene:
+                return KindNames::scene;
+            case EditorDocumentKind::NodeFile:
+                return KindNames::nodeFile;
+            case EditorDocumentKind::Config:
+                return KindNames::config;
+            case EditorDocumentKind::Library:
+                return KindNames::library;
+        }
+        return KindNames::scene;
+    }
+
     EditorDocumentsHandle::~EditorDocumentsHandle() {
         Reset();
     }

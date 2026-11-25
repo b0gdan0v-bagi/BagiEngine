@@ -13,28 +13,6 @@ namespace BECore {
 
         constexpr StringView kNotEditor = "not_editor";
 
-        struct KindNames {
-            static constexpr auto scene = "scene"_intern;
-            static constexpr auto nodeFile = "nodeFile"_intern;
-            static constexpr auto config = "config"_intern;
-            static constexpr auto library = "library"_intern;
-        };
-
-        PoolString KindKey(EditorDocumentKind kind) {
-            // No default: a new kind is a -Wswitch warning here, not a document that shows as "scene"
-            switch (kind) {
-                case EditorDocumentKind::Scene:
-                    return KindNames::scene;
-                case EditorDocumentKind::NodeFile:
-                    return KindNames::nodeFile;
-                case EditorDocumentKind::Config:
-                    return KindNames::config;
-                case EditorDocumentKind::Library:
-                    return KindNames::library;
-            }
-            return KindNames::scene;
-        }
-
         void HandleEditorState(ControlCall& call, EditorDocuments& documents) {
             if (CoreManager::GetWidgetManager().GetMode() != RunMode::Editor) {
                 call.Fail(kNotEditor, "the editor panels exist only in the Editor run mode");
@@ -48,7 +26,7 @@ namespace BECore {
                 item.dirty = state.dirty;
                 item.file = TextView(state.file);
                 item.id = TextView(state.id);
-                item.kind = KindKey(state.kind);
+                item.kind = EditorDocumentKindName(state.kind);
                 item.name = TextView(state.name);
                 item.path = TextView(state.path);
                 answer.anyDirty = answer.anyDirty || state.dirty;

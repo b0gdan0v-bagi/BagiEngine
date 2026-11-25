@@ -44,6 +44,10 @@ namespace BECore {
     /// How many nodes of @p scene are instances of the node file @p ref: a file with more than one is never written by SaveUIRectsToNodeFiles
     size_t CountNodeInstances(Scene& scene, PoolString ref);
 
+    /// The references of the node files SaveUIRectsToNodeFiles would try to write for @p edited, each once: the node holds an edited element, the file has one instance
+    /// in @p scene and the reference is valid. A reference that only an override in the scene file takes the edit is not listed
+    Vector<PoolString> NodeFilesToPatch(Scene& scene, Span<const IntrusivePtr<UIElement>> edited);
+
     /**
      * @brief Writes the rect edits of @p edited into the node files their nodes came from
      *
