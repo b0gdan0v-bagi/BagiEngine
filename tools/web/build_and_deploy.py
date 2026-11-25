@@ -52,6 +52,8 @@ ENGINE_DIR = TOOLS_DIR.parents[1]
 EMSDK_RELATIVE = Path("external") / "emsdk"
 EMSDK_DIR = ENGINE_DIR / EMSDK_RELATIVE
 SDK_FILES = (Path("upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"), Path("upstream/emscripten/emcc.py"), Path(".emscripten"))
+# alltests.py: 0 green, 3 red (a result is recorded), 1 an error (nothing is recorded)
+ALLTESTS_EXIT_RED = 3
 SETUP_EMSDK_SCRIPT = Path("CI") / "scripts" / "setup_emsdk.py"
 SDK_MISSING_MESSAGE = "the Emscripten SDK is not installed: run: python CI/scripts/setup_emsdk.py (in a game: python engine/CI/scripts/setup_emsdk.py)"
 # The suffix of the presets of the single-thread page (CMakePresets.json: web-release-single-thread, web-debug-single-thread)
@@ -73,6 +75,15 @@ APP_FILE = Path("web") / "app.json"
 
 class DeployError(Exception):
     """A precondition is missing; the message says what to do."""
+
+
+class CheckoutPlan(NamedTuple):
+    """What checkout mode adds to a run: the script that installs the SDK of the checkout (None when it has one), the dry run's note on
+    the gate and, for the gate that starts the test run itself, `alltests.py` of the checkout's engine and the todo area it files to."""
+    setup_sdk: Path | None
+    dry_run_gate_note: str
+    alltests_script: Path
+    area: str
 
 
 class Step(NamedTuple):
@@ -139,8 +150,11 @@ def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_
 
 
 def stages_of(args: argparse.Namespace) -> list[str]:
-    """The stages of the progress file this run goes through: `fetch` only in checkout mode, `deploy` only with --deploy."""
+    """The stages of the progress file this run goes through: `fetch` only in checkout mode, `tests` only there with --deploy (the gate
+    may run the test run), `deploy` only with --deploy."""
     stages = ["fetch"] if args.fetch else []
+    if args.fetch and args.deploy and not args.skip_alltests:
+        stages.append("tests")
     stages += ["build", "package"]
     if args.deploy:
         stages.append("deploy")
@@ -249,28 +263,72 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
             return fail(status, f"cannot make the checkout: {error}", 2)
         status.set(commit=fetched.commit, engineCommit=fetched.engine_commit)
         # The SDK of a checkout is installed once, by its first run: a step here, where a hand run refuses and says how
-        sdk_script = None if is_sdk_installed(fetched.engine_dir / EMSDK_RELATIVE) else fetched.engine_dir / SETUP_EMSDK_SCRIPT
-        return build_and_package(args, fetched.path, fetched.engine_dir / "tools" / "web", status, which, runner, gate, sdk_script,
-                                 f"alltests gate: asked after the fetch, on origin/{base}")
+        plan = CheckoutPlan(None if is_sdk_installed(fetched.engine_dir / EMSDK_RELATIVE) else fetched.engine_dir / SETUP_EMSDK_SCRIPT,
+                            f"alltests gate: asked after the fetch, on origin/{base}", fetched.engine_dir / alltests_results.SCRIPT,
+                            target.area if target else deploy_targets.DEFAULT_AREA)
+        return build_and_package(args, fetched.path, fetched.engine_dir / "tools" / "web", status, which, runner, gate, plan)
+
+
+def recorded_result(results_file: Path | None, project: Path, commit: str) -> dict | None:
+    """The record of `commit` in the results file of tools/alltests (None: there is none, or the file cannot be read)."""
+    try:
+        results_file = results_file or alltests_results.default_results_file(project)
+        return alltests_results.load(results_file).get("results", {}).get(commit)
+    except (alltests_results.GitError, OSError, ValueError):
+        return None
+
+
+def gate_with_tests(args: argparse.Namespace, project: Path, dist: Path, stage_dir: Path, status: deploy_status.Status, runner, gate,
+                    plan: CheckoutPlan) -> int | None:
+    """The deploy gate of checkout mode: a commit without a green record gets the full test run started here, and the deploy goes on
+    only when the record is green. None: go on; else the exit code. A tree with uncommitted changes is refused without a run (the
+    checkout is clean after the fetch, so that is a bug), and the message carries no --skip-alltests hint: this mode refuses it."""
+    status.enter("tests")
+    verdict = gate(project, args.alltests_results, (dist, stage_dir))
+    record = recorded_result(args.alltests_results, project, verdict.commit) if verdict.commit else None
+    if not verdict.green and verdict.commit and (record is None or record.get("status") != alltests_results.GREEN):
+        command = [sys.executable, str(plan.alltests_script), "--repo", str(project), "--commit", verdict.commit, "--area", plan.area]
+        print(f"alltests gate: commit {verdict.commit[:12]} has no green full test run: starting it", flush=True)
+        print(f"+ ({project}) {format_command(command)}", flush=True)
+        try:
+            completed = runner(command, cwd=project, check=False)
+        except OSError as error:
+            return fail(status, f"cannot start `{command[0]}`: {error}", 2)
+        if completed.returncode not in (0, ALLTESTS_EXIT_RED):
+            return fail(status, f"alltests.py failed with exit code {completed.returncode} and recorded nothing: see its output above", 2)
+        verdict = gate(project, args.alltests_results, (dist, stage_dir))
+        record = recorded_result(args.alltests_results, project, verdict.commit)
+    if verdict.green:
+        print(f"alltests gate: {verdict.message}", flush=True)
+        return None
+    if record and record.get("status") == alltests_results.RED:
+        failed = record.get("failed", [])
+        status.set(failedTests=failed)
+        return fail(status, f"alltests is red for commit {verdict.commit[:12]} (failed: {', '.join(failed) or 'unknown'})", 2)
+    return fail(status, verdict.message, 2)
 
 
 def build_and_package(args: argparse.Namespace, project: Path, tools_dir: Path, status: deploy_status.Status, which, runner, gate,
-                      setup_sdk: Path | None = None, dry_run_gate_note: str | None = None) -> int:
+                      plan: CheckoutPlan | None = None) -> int:
     """Everything after the project is known: `project` is the folder that is built (the checkout in checkout mode) and `tools_dir` the folder of
     package.py, serve.py and the Dockerfile that travel with it. In checkout mode the gate runs after the fetch, so a dry run says
     so instead of asking it about a checkout that does not exist."""
     dist = args.dist or project / DIST_FOLDER
     stage_dir = args.stage_dir or project / STAGE_FOLDER
     if args.deploy:
-        if dry_run_gate_note and args.dry_run:
-            print(dry_run_gate_note, flush=True)
+        if plan and not args.skip_alltests and not args.dry_run:
+            code = gate_with_tests(args, project, dist, stage_dir, status, runner, gate, plan)
+            if code is not None:
+                return code
+        elif plan and not args.skip_alltests:
+            print(plan.dry_run_gate_note, flush=True)
         else:
             verdict = gate(project, args.alltests_results, (dist, stage_dir))
             if not alltests_results.allows_deploy(verdict, args.skip_alltests, args.dry_run):
                 status.fail(verdict.message)
                 return 2
 
-    for step in plan_commands(args, project, dist, stage_dir, tools_dir, setup_sdk):
+    for step in plan_commands(args, project, dist, stage_dir, tools_dir, plan and plan.setup_sdk):
         program = step.command[0]
         status.enter(step.stage)
         if step.is_deploy:
