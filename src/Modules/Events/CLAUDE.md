@@ -18,7 +18,7 @@ Every event type has its own channel of listeners and its own queue (CRTP `Event
 
 Derive from `EventBase<T>`:
 - Simple event: `struct MyEvent : EventBase<MyEvent> {};`
-- With data: add fields **and a constructor**. `Emit(args...)` builds the event with `Derived{args...}`, and an `EventBase` event is not an aggregate (`BaseEvent` has a virtual destructor), so the constructor must match the arguments (see `ActionEvent`, `SetRenderDrawColorEvent`).
+- With data: add fields **and a constructor**. `Emit(args...)` builds the event with `Derived{args...}`, and an `EventBase` event is not an aggregate (`BaseEvent` has a virtual destructor), so the constructor must match the arguments (see `ActionEvent`).
 - For reflection/serialization of an event, add `BE_EVENT(MyEvent)` (see `.claude/rules/reflection-events.md`).
 
 ## Subscription API
@@ -54,7 +54,7 @@ class MyWidget : public IWidget {   // IWidget and IRenderer already derive from
 | File | Purpose |
 |------|---------|
 | `ApplicationEvents.h` | App lifecycle (`QuitEvent`, `ApplicationCleanUpEvent`) |
-| `RenderEvents.h` | Rendering (`NewFrameEvent`, `RenderClearEvent`, `RenderPresentEvent`, `ImGui*Event`, `SetRenderDrawColorEvent`) |
+| `RenderEvents.h` | Rendering (`NewFrameEvent`, `RenderPresentEvent`, `ImGui*Event`) |
 | `InputEvents.h` | Input (`ActionEvent`) |
 | `SceneEvents.h` | Scene (`SceneUpdateEvent` and `SceneFixedUpdateEvent` carry `deltaTime`), declared with `BE_EVENT`. Global, not per scene: components subscribe with `IComponent::SubscribeInScene`. For the two update events that registers in the scene's `SceneUpdateList`, run by `Scene::Update()` (a hand `Emit()` reaches plain `Subscribe`rs only); for the others only the active scene's react (`BECore/Scene/CLAUDE.md`). Drawing is not an event: `Scene::Draw()` runs the draw system in sorted order: it draws the quad and the sprite itself and calls `IComponent::OnDraw()` of the other components |
 | `ConfigEvents.h` | `ConfigChangedEvent{name}`: a cached config document changed (file edited on disk, `SaveConfig`, `ReloadConfig`); `BECore/Config/CLAUDE.md`, "Hot reload" |

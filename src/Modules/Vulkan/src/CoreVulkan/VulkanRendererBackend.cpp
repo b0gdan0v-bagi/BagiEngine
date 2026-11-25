@@ -136,8 +136,6 @@ namespace BECore {
         SetBatchingEnabled(true);
 
         Subscribe<RenderEvents::NewFrameEvent, &VulkanRendererBackend::OnNewFrame>(this);
-        Subscribe<RenderEvents::SetRenderDrawColorEvent, &VulkanRendererBackend::OnSetRenderDrawColor>(this);
-        Subscribe<RenderEvents::RenderClearEvent, &VulkanRendererBackend::OnRenderClear>(this);
         Subscribe<RenderEvents::RenderPresentEvent, &VulkanRendererBackend::OnRenderPresent>(this);
         Subscribe<SDLEvents::WindowEvent, &VulkanRendererBackend::OnWindowEvent>(this);
         Subscribe<RenderEvents::ImGuiInitEvent, &VulkanRendererBackend::OnImGuiInit>(this);
@@ -328,7 +326,6 @@ namespace BECore {
     void VulkanRendererBackend::BeginFrame(const Color& clearColor) {
         Flush();  // quads of the frame before never land in this one
         _frameClearColor = ToClearValue(clearColor);
-        _frameClearColorSet = true;
     }
 
     bool VulkanRendererBackend::EnsureDrawPass() {
@@ -349,10 +346,8 @@ namespace BECore {
 
         VkCommandBuffer cmd = _commandBuffers[_currentFrame];
 
-        // The slot is taken either way: a Clear() made for the swapchain pass must not tint a later offscreen one
-        const VkClearColorValue slotColor = _clearColor.Take();
         VkClearValue clearValue{};
-        clearValue.color = _frameClearColorSet ? _frameClearColor : slotColor;
+        clearValue.color = _frameClearColor;
 
         VkRenderPassBeginInfo rpBegin{};
         rpBegin.sType       = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -490,7 +485,6 @@ namespace BECore {
         if (_frameAcquired && !_inSwapchainPass && !_inOffscreenPass) {
             OpenSwapchainPass();
         }
-        _frameClearColorSet = false;
         EndFrame();
 
         // A skipped frame (minimized, swapchain out of date) acquired no image and submitted nothing: there is
@@ -856,17 +850,8 @@ namespace BECore {
         _currentExtent     = _swapchain.GetExtent();  // the output size is the back buffer's again, also before its pass opens
     }
 
-    void VulkanRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
-        Clear(event.color);
-    }
-
     void VulkanRendererBackend::OnNewFrame() {
         AcquireFrame();
-    }
-
-    void VulkanRendererBackend::OnRenderClear() {
-        Flush();
-        OpenSwapchainPass();
     }
 
     void VulkanRendererBackend::OnRenderPresent() {

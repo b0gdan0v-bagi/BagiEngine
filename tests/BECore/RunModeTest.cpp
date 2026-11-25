@@ -126,7 +126,7 @@ namespace BECore::Tests {
 
     TEST_F(RunModeConfigTest, GameModeDrawsTheSceneWithoutImGui) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Game));
-        EXPECT_TRUE(Contains(types, "ClearScreenWidget"));
+        EXPECT_FALSE(Contains(types, "ClearScreenWidget"));
         EXPECT_TRUE(Contains(types, "SceneRenderWidget"));
         EXPECT_FALSE(Contains(types, "ImGuiWidget"));
         EXPECT_FALSE(Contains(types, "ViewportWidget"));

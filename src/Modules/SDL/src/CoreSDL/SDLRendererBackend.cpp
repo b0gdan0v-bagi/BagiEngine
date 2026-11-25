@@ -89,9 +89,7 @@ namespace BECore {
         }
 #endif
 
-        Subscribe<RenderEvents::RenderClearEvent, &SDLRendererBackend::OnRenderClear>(this);
         Subscribe<RenderEvents::RenderPresentEvent, &SDLRendererBackend::OnRenderPresent>(this);
-        Subscribe<RenderEvents::SetRenderDrawColorEvent, &SDLRendererBackend::OnSetRenderDrawColor>(this);
         Subscribe<RenderEvents::ImGuiInitEvent, &SDLRendererBackend::OnImGuiInit>(this);
         Subscribe<RenderEvents::ImGuiShutdownEvent, &SDLRendererBackend::OnImGuiShutdown>(this);
         Subscribe<RenderEvents::ImGuiNewFrameEvent, &SDLRendererBackend::OnImGuiNewFrame>(this);
@@ -476,13 +474,6 @@ namespace BECore {
         return static_cast<float>(height);
     }
 
-    void SDLRendererBackend::OnRenderClear() {
-        Flush();
-        if (_renderer) {
-            SDL_RenderClear(_renderer);
-        }
-    }
-
     void SDLRendererBackend::OnRenderPresent() {
         PresentFrame();
     }
@@ -537,12 +528,6 @@ namespace BECore {
         }
         SDL_DestroySurface(rgba);
         callback(std::move(image));
-    }
-
-    void SDLRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
-        if (_renderer) {
-            SDL_SetRenderDrawColor(_renderer, event.color.r, event.color.g, event.color.b, event.color.a);
-        }
     }
 
     void SDLRendererBackend::OnImGuiInit() {

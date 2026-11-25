@@ -90,6 +90,24 @@ namespace BECore::Tests {
         EXPECT_EQ(list->widgets[1]->Cast<ProbeWidget>()->id, kLastId);
     }
 
+    /// A game config written before the application opened the frame still names the removed widget: one error, the rest loads
+    TEST_F(WidgetListTest, TheRemovedClearScreenWidgetIsReportedOnceAndTheNeighboursLoad) {
+        XmlDeserializer deserializer;
+        const auto list = Load<WidgetList>(deserializer,
+                                           R"(<root><widgets>
+                                                <widget type="ProbeWidget" id="1"/>
+                                                <widget type="ClearScreenWidget"><clearColor r="30" g="30" b="30" a="255"/></widget>
+                                                <widget type="ProbeWidget" id="4"/>
+                                              </widgets></root>)");
+
+        ASSERT_EQ(deserializer.GetErrors().size(), 1u);
+        const StringView message = deserializer.GetErrors()[0].errorMessage;
+        EXPECT_TRUE(Contains(message, "'ClearScreenWidget'")) << message.data();
+        ASSERT_EQ(list->widgets.size(), 2u);
+        EXPECT_EQ(list->widgets[0]->Cast<ProbeWidget>()->id, kFirstId);
+        EXPECT_EQ(list->widgets[1]->Cast<ProbeWidget>()->id, kLastId);
+    }
+
     TEST_F(WidgetListTest, AWidgetWithoutATypeIsDroppedWithoutAMessage) {
         XmlDeserializer deserializer;
         const auto list = Load<WidgetList>(deserializer,
@@ -153,18 +171,18 @@ namespace BECore::Tests {
 
     /// The widget classes live in RuntimeModule (not registered in this executable) and the Editor ones build ImGui,
     /// so the types of the files are compared. BagiStressControlSmoke runs the Game set for real.
-    TEST_F(WidgetListTest, GameModeConfigListsTheClearScreenSceneRenderAndOverlayWidgetsInOrder) {
+    TEST_F(WidgetListTest, GameModeConfigListsTheSceneRenderAndOverlayWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Game));
 
-        const Vector<String> expected{"ClearScreenWidget", "SceneRenderWidget", "ProfilerOverlayWidget"};
+        const Vector<String> expected{"SceneRenderWidget", "ProfilerOverlayWidget"};
         EXPECT_EQ(types, expected);
     }
 
     TEST_F(WidgetListTest, EditorModeConfigListsTheEditorWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Editor));
 
-        const Vector<String> expected{"ImGuiWidget",         "EditorLayoutWidget", "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget", "SceneEditorWidget",
-                                      "TextureEditorWidget", "ProfilerWidget",     "ConsoleWidget",  "FileChangesWidget", "GamePanelWidget",    "ArtGenWidget"};
+        const Vector<String> expected{"ImGuiWidget",    "EditorLayoutWidget", "ViewportWidget",    "ConfigEditorWidget", "SceneEditorWidget", "TextureEditorWidget",
+                                      "ProfilerWidget", "ConsoleWidget",      "FileChangesWidget", "GamePanelWidget",    "ArtGenWidget"};
         EXPECT_EQ(types, expected);
     }
 
