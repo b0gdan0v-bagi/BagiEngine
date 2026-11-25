@@ -21,7 +21,8 @@
     <widget
       type="TextureEditorWidget" />
     <widget
-      type="ProfilerWidget" />
+      type="AssetPanelWidget"
+      asset="ProfilerPanel" />
     <widget
       type="AssetPanelWidget"
       asset="ConsolePanel" />

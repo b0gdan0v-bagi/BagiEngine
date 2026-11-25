@@ -10,17 +10,11 @@ namespace BECore {
     namespace {
 
         constexpr float kTableHeight = 240.0f;
-        constexpr float kWindowComboWidth = 190.0f;
-        constexpr float kFilterWidth = 160.0f;
         constexpr float kNameColumnWidth = 190.0f;
         constexpr float kNumberColumnWidth = 66.0f;
         constexpr float kAllocColumnWidth = 110.0f;
         constexpr float kButtonColumnWidth = 74.0f;
         constexpr int kColumnCount = 10;
-
-        const char* const kWindowLabels = "Selected frame\0"
-                                          "Last 60 frames\0"
-                                          "All frames in the ring\0";
 
         void SetupNumberColumn(const char* label, ZoneStatColumn column) {
             ImGui::TableSetupColumn(label, ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthFixed, kNumberColumnWidth, static_cast<ImGuiID>(+column));
@@ -72,18 +66,6 @@ namespace BECore {
             _rows = FilterZoneStats(_stats, filterText);
             SortZoneStats(_rows, _sortColumn, _sortAscending);
         }
-    }
-
-    const ProfileSite* ProfilerZoneTablePanel::Draw(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame) {
-        int window = static_cast<int>(_window);
-        ImGui::SetNextItemWidth(kWindowComboWidth);
-        if (ImGui::Combo("Window", &window, kWindowLabels)) {
-            _window = static_cast<Window>(window);
-        }
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(kFilterWidth);
-        ImGui::InputTextWithHint("##zoneFilter", "filter by name or file", _filter, sizeof(_filter));
-        return DrawTable(snapshot, version, selectedFrame, window, _filter);
     }
 
     const ProfileSite* ProfilerZoneTablePanel::DrawTable(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame, int windowIndex, StringView filterText) {

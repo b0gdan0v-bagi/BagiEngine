@@ -21,6 +21,7 @@
     <widget
       type="TextureEditorWidget" />
     <widget
-      type="ProfilerWidget" />
+      type="AssetPanelWidget"
+      asset="ProfilerPanel" />
   </widgets>
 </root>

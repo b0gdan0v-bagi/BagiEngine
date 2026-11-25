@@ -14,10 +14,6 @@ namespace BECore {
         constexpr float kPlotHeight = 90.0f;
         constexpr float kMaxBarWidth = 12.0f;
         constexpr float kBarGap = 1.0f;
-        constexpr float kBudgetComboWidth = 170.0f;
-        constexpr float kCustomFieldWidth = 80.0f;
-        constexpr float kCustomMinMs = 1.0f;
-        constexpr float kCustomMaxMs = 1000.0f;
         constexpr double kScaleInBudgets = 2.5;  // the top of the plot, so the budget line and its double always fit
         constexpr double kScaleHeadroom = 1.1;
         constexpr double kOverBudgetFactor = 2.0;  // a frame over this many budgets is the red one
@@ -31,7 +27,6 @@ namespace BECore {
         constexpr ImU32 kSelectedColor = IM_COL32(255, 255, 255, 255);
         constexpr ImU32 kHoverColor = IM_COL32(255, 255, 255, 60);
 
-        constexpr float kBarModeComboWidth = 140.0f;
         constexpr float kCounterGraphHeight = 40.0f;
         constexpr float kStageSwatchSize = 10.0f;
         constexpr float kStageSwatchOffsetY = 2.0f;  // centres the swatch on the text line
@@ -41,13 +36,6 @@ namespace BECore {
         constexpr Array<ImU32, kExclusiveStageCount> kStageColors{IM_COL32(90, 140, 220, 255),  IM_COL32(60, 200, 210, 255),  IM_COL32(220, 130, 60, 255), IM_COL32(230, 200, 70, 255),
                                                                   IM_COL32(170, 100, 210, 255), IM_COL32(130, 130, 130, 255), IM_COL32(190, 205, 225, 255)};
         constexpr Array<const char*, kExclusiveStageCount> kStageNames{"Update", "Scene update", "Render", "Scene draw", "Present", "Other", "Wait"};
-
-        const char* const kBarModeLabels = "Frame time\0"
-                                           "Stage split\0";
-
-        const char* const kBudgetLabels = "16.6 ms (60 fps)\0"
-                                          "33.3 ms (30 fps)\0"
-                                          "Custom\0";
 
         /// A held frame (the game stood still) is drawn in the theme's muted fill, so it is not read as a cheap game frame
         ImU32 PausedBarColor() {
@@ -75,10 +63,6 @@ namespace BECore {
 
     }  // namespace
 
-    double ProfilerFramePlot::GetBudgetMs() const {
-        return BudgetOf(_budget, _customBudgetMs);
-    }
-
     double BudgetMs(const ProfilerPanelView& view) {
         return BudgetOf(static_cast<ProfilerBudget>(view.budget), view.customBudgetMs);
     }
@@ -100,31 +84,6 @@ namespace BECore {
             return std::nullopt;
         }
         return ringFrameCount - 1 - fromNewest;
-    }
-
-    Optional<uint64_t> ProfilerFramePlot::Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
-        int budgetChoice = static_cast<int>(+_budget);
-        ImGui::SetNextItemWidth(kBudgetComboWidth);
-        if (ImGui::Combo("Budget", &budgetChoice, kBudgetLabels)) {
-            _budget = static_cast<ProfilerBudget>(budgetChoice);
-        }
-        if (_budget == ProfilerBudget::Custom) {
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(kCustomFieldWidth);
-            ImGui::DragFloat("ms##budget", &_customBudgetMs, 0.1f, kCustomMinMs, kCustomMaxMs, "%.1f");
-        }
-
-        ImGui::SameLine();
-        int modeChoice = static_cast<int>(+_barMode);
-        ImGui::SetNextItemWidth(kBarModeComboWidth);
-        if (ImGui::Combo("Bars", &modeChoice, kBarModeLabels)) {
-            _barMode = static_cast<ProfilerBarMode>(modeChoice);
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("Work only", &_workOnly);
-        ImGui::SetItemTooltip("Leave out the time the backend waited for the display (the Wait stage), so a bar is what the CPU did");
-
-        return DrawBars(history, snapshot, selectedFrame, Settings{GetBudgetMs(), _barMode, _workOnly});
     }
 
     Optional<uint64_t> ProfilerFramePlot::DrawBars(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame, const Settings& settings) {

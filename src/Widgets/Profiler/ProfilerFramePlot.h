@@ -23,7 +23,7 @@ namespace BECore {
      * display) out of the bar and of its scale, and a line under the plot gives the mean work and the mean wait. The counters a frame
      * carries (FrameStats::counters) can be picked and drawn as line graphs over the same frames.
      *
-     * Editor only. The budget (16.6 ms, 33.3 ms or a custom value) is a field of the plot for the run, not saved.
+     * Editor only. The budget, the bar mode and "Work only" are the panel asset's controls (`ProfilerPanelView`); the plot is handed them as `Settings`.
      */
     class ProfilerFramePlot {
     public:
@@ -38,19 +38,11 @@ namespace BECore {
         };
 
         /**
-         * @brief Draws the bars with the stage legend, the work / wait summary and the counters, with the budget and the bar mode given.
-         * Arguments as @c Draw.
-         */
-        [[nodiscard]] Optional<uint64_t> DrawBars(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame, const Settings& settings);
-
-        /**
-         * @brief Draws the budget controls and the bars. @p history is the collector's history (oldest first) and @p snapshot the ring
-         * taken together with it; @p selectedFrame (a RingFrame::index) is outlined.
+         * @brief Draws the bars with the stage legend, the work / wait summary and the counters. @p history is the collector's history (oldest first)
+         * and @p snapshot the ring taken together with it; @p selectedFrame (a RingFrame::index) is outlined.
          * @return The RingFrame::index of the frame that was clicked, none when the click missed or the bar has no frame in the ring
          */
-        [[nodiscard]] Optional<uint64_t> Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
-
-        [[nodiscard]] double GetBudgetMs() const;
+        [[nodiscard]] Optional<uint64_t> DrawBars(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame, const Settings& settings);
 
         /**
          * @brief The position in RingSnapshot::frames of the frame that bar @p barIndex of @p barCount stands for, none when the ring is
@@ -66,11 +58,6 @@ namespace BECore {
         void DrawStageLegend(bool workOnly) const;
         void DrawWorkWaitSummary(const Vector<FrameStats>& history);
         void DrawCounters(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
-
-        ProfilerBudget _budget = ProfilerBudget::Fps60;
-        float _customBudgetMs = 20.0f;
-        ProfilerBarMode _barMode = ProfilerBarMode::FrameTime;
-        bool _workOnly = false;
 
         // Kept as members so a steady panel allocates nothing: the names are rebuilt when the newest frame number moves
         Vector<PoolString> _counterNames;

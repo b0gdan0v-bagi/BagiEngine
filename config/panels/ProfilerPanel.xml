@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<PanelAsset id="Profiler" title="Profiler" command="view.profiler" open="false" width="560" height="520">
+  <sources>
+    <item name="profiler" model="ProfilerPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelText" id="noFrame" text="No frame yet" visible="!profiler.hasFrames"/>
+    <element type="PanelRow" id="pauseRow" visible="profiler.hasFrames">
+      <elements>
+        <element type="PanelCheckbox" id="pause" bind="profiler.paused" text="Pause"/>
+        <element type="PanelText" id="pauseHint" text="(click a bar to open the frame)" style="Disabled"/>
+      </elements>
+    </element>
+    <element type="PanelRow" id="budgetRow" visible="profiler.hasFrames">
+      <elements>
+        <element type="PanelCombo" id="budget" bind="profiler.budget" items="profiler.budgetLabels" width="11"/>
+        <element type="PanelNumber" id="customBudget" bind="profiler.customBudgetMs" text="ms" min="1" max="1000" step="0.1" width="5" visible="profiler.budget == 2"/>
+        <element type="PanelText" id="budgetLabel" text="Budget"/>
+        <element type="PanelCombo" id="barMode" bind="profiler.barMode" items="profiler.barModeLabels" width="10"/>
+        <element type="PanelText" id="barModeLabel" text="Bars"/>
+        <element type="PanelCheckbox" id="workOnly" bind="profiler.workOnly" text="Work only" tooltip="Leave out the time the backend waited for the display (the Wait stage), so a bar is what the CPU did"/>
+      </elements>
+    </element>
+    <element type="PanelSlot" id="frames" name="profilerFrames" visible="profiler.hasFrames"/>
+    <element type="PanelSection" id="timeline" title="Timeline">
+      <elements>
+        <element type="PanelText" id="timelineNote" text="Zones are recorded with ENGINE_PROFILER=ON (preset macos-profile-editor)" visible="!profiler.zonesRecorded"/>
+        <element type="PanelText" id="openedFrame" bind="profiler.openedText" visible="profiler.zonesRecorded and profiler.spikeOpened"/>
+        <element type="PanelSlot" id="timelineSlot" name="profilerTimeline" visible="profiler.zonesRecorded"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="zones" title="Zones" visible="profiler.zonesRecorded">
+      <elements>
+        <element type="PanelRow" id="zoneControls">
+          <elements>
+            <element type="PanelCombo" id="zoneWindow" bind="profiler.zoneWindow" items="profiler.zoneWindowLabels" width="13"/>
+            <element type="PanelText" id="zoneWindowLabel" text="Window"/>
+            <element type="PanelInput" id="zoneFilter" bind="profiler.zoneFilter" hint="filter by name or file" width="11"/>
+          </elements>
+        </element>
+        <element type="PanelSlot" id="zonesSlot" name="profilerZones"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="spikes" title="Spikes" defaultOpen="false" visible="profiler.zonesRecorded">
+      <elements>
+        <element type="PanelRow" id="spikeSettings">
+          <elements>
+            <element type="PanelCombo" id="spikeMode" bind="profiler.spikeMode" items="profiler.spikeModeLabels" width="10"/>
+            <element type="PanelNumber" id="spikeThreshold" bind="profiler.spikeThresholdMs" text="ms" min="1" max="10000" step="0.5" width="6" visible="profiler.spikeMode == 0"/>
+            <element type="PanelNumber" id="spikeFactor" bind="profiler.spikeFactor" text="x median" min="1.1" max="100" step="0.1" width="6" visible="profiler.spikeMode == 1"/>
+            <element type="PanelNumber" id="spikeKeep" bind="profiler.spikeKeep" text="keep" min="1" max="64" width="5"/>
+          </elements>
+        </element>
+        <element type="PanelRow" id="spikeButtons">
+          <elements>
+            <element type="PanelButton" id="spikeLive" text="Live" command="profiler.spikeLive" enableWhen="profiler.spikeOpened"/>
+            <element type="PanelButton" id="spikeClear" text="Clear" command="profiler.spikeClear"/>
+            <element type="PanelText" id="spikeCount" bind="profiler.spikeText"/>
+          </elements>
+        </element>
+        <element type="PanelSlot" id="spikesSlot" name="profilerSpikes"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="memory" title="Memory">
+      <elements>
+        <element type="PanelText" id="memoryNote" text="Allocations are counted with ENGINE_PROFILER_ALLOC=ON (preset macos-profile-editor)" visible="!profiler.allocTracked"/>
+        <element type="PanelSlot" id="memorySlot" name="profilerMemory" visible="profiler.allocTracked"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="zoneAllocs" title="Allocations per zone" defaultOpen="false" visible="profiler.allocTracked">
+      <elements>
+        <element type="PanelButton" id="resetZoneAllocs" text="Reset" command="profiler.resetZoneAllocs"/>
+        <element type="PanelSlot" id="zoneAllocsSlot" name="profilerZoneAllocs"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="trace" title="Chrome trace" defaultOpen="false">
+      <elements>
+        <element type="PanelText" id="traceNote" text="Zones are recorded with ENGINE_PROFILER=ON (preset macos-profile-editor)" visible="!profiler.zonesRecorded"/>
+        <element type="PanelButton" id="traceRecord" text="Record" command="profiler.trace" argument="record" width="6" visible="profiler.zonesRecorded and !profiler.recording"/>
+        <element type="PanelButton" id="traceRestart" text="Restart" command="profiler.trace" argument="restart" width="6" visible="profiler.recording"/>
+        <element type="PanelRow" id="traceFile" visible="profiler.zonesRecorded">
+          <elements>
+            <element type="PanelInput" id="tracePath" bind="profiler.tracePath" width="14"/>
+            <element type="PanelText" id="traceFileLabel" text="File"/>
+          </elements>
+        </element>
+        <element type="PanelButton" id="traceWrite" text="Write" command="profiler.trace" argument="write" width="6" visible="profiler.recording"/>
+        <element type="PanelButton" id="traceWriteFrame" text="Write selected frame" command="profiler.trace" argument="writeFrames" width="13" visible="profiler.zonesRecorded and !profiler.hasSpikes"/>
+        <element type="PanelButton" id="traceWriteFrozen" text="Write frozen frames" command="profiler.trace" argument="writeFrames" width="13" visible="profiler.zonesRecorded and profiler.hasSpikes"/>
+        <element type="PanelText" id="traceMessage" bind="profiler.traceMessage" wrap="true"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>
