@@ -20,6 +20,10 @@ namespace BECore::PanelAssetLimits {
     /// Sources of one asset
     inline constexpr size_t kMaxSources = 32;
 
+    /// Lines of a scrolling text (`PanelText::maxLines`) and rows of a scrolling table (`PanelTable::scrollRows`): the height of the region a file may ask for
+    inline constexpr size_t kMaxScrollLines = 64;
+    inline constexpr size_t kMaxScrollRows = 64;
+
     /// Bytes of one text field (a title, a text, a binding, a command)
     inline constexpr size_t kMaxTextBytes = 512;
 

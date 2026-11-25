@@ -1,0 +1,19 @@
+<PanelAsset id="GamePanelBad" title="Game" command="view.game">
+  <elements>
+    <element type="PanelFields" id="noSource" bind=""/>
+    <element type="PanelFields" id="negated" bind="!game"/>
+    <element type="PanelFields" id="badName" bind="1game"/>
+    <element type="PanelFields" id="badPath" bind="game.a["/>
+    <element type="PanelText" id="tooTall" text="x" maxLines="65"/>
+    <element type="PanelText" id="huge" text="x" maxLines="4000000000"/>
+    <element type="PanelText" id="negative" text="x" maxLines="-1"/>
+    <element type="PanelTable" id="tooManyRows" source="p.rows" scrollRows="65">
+      <columns>
+        <column type="Input" id="noField"/>
+        <column type="Input" id="badEnable" field="a" enableField="b["/>
+        <column type="Button" id="badLabel" command="c.d" field="a[" enableField="x["/>
+        <column type="Text" id="enabledText" field="a" enableField="ok" hint="fine"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>

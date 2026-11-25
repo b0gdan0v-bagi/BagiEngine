@@ -24,7 +24,7 @@ namespace BECore {
         BE_CLASS(PanelRow)
     };
 
-    /// A literal `text` or the text of the field `bind`
+    /// A literal `text` or the text of the field `bind`; `maxLines` > 0 shows that many lines and scrolls, also sideways (0: not in a scroll region)
     class PanelText : public PanelElement {
         BE_CLASS(PanelText)
     public:
@@ -33,6 +33,7 @@ namespace BECore {
         BE_REFLECT_FIELD PanelTextStyle style = PanelTextStyle::Normal;
         BE_REFLECT_FIELD bool wrap = false;
         BE_REFLECT_FIELD bool mono = false;
+        BE_REFLECT_FIELD uint32_t maxLines = 0;
     };
 
     /// One top-level field of the object `bind` names, drawn as the inspector draws it
@@ -43,7 +44,7 @@ namespace BECore {
         BE_REFLECT_FIELD String label;
     };
 
-    /// Every field of the object `bind` names
+    /// Every field of the object `bind` names: `source.path`, or a `source` alone for the whole object
     class PanelFields : public PanelElement {
         BE_CLASS(PanelFields)
     public:
@@ -71,7 +72,7 @@ namespace BECore {
         BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
     };
 
-    /// The rows of the list `source` names, one cell per column; `maxRows` 0 shows every row
+    /// The rows of the list `source` names, one cell per column; `maxRows` 0 shows every row; `scrollRows` > 0 shows that many rows and scrolls (0: no scroll region)
     class PanelTable : public PanelElement {
         BE_CLASS(PanelTable)
     public:
@@ -80,6 +81,7 @@ namespace BECore {
         BE_REFLECT_FIELD bool header = true;
         BE_REFLECT_FIELD bool borders = false;
         BE_REFLECT_FIELD uint32_t maxRows = 0;
+        BE_REFLECT_FIELD uint32_t scrollRows = 0;
     };
 
     class PanelSeparator : public PanelElement {

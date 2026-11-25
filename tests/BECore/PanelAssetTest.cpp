@@ -26,19 +26,21 @@ namespace BECore::Tests {
             <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
           </elements>
         </element>
-        <element type="PanelText" id="status" bind="files.status" style="Warning" wrap="true" mono="true"/>
+        <element type="PanelText" id="status" bind="files.status" style="Warning" wrap="true" mono="true" maxLines="12"/>
         <element type="PanelText" id="caption" text="Pending changes" style="Disabled"/>
         <element type="PanelSeparator" id="line" title="Fields"/>
         <element type="PanelField" id="one" bind="files.count" label="Count"/>
-        <element type="PanelFields" id="all" bind="files.options"/>
+        <element type="PanelFields" id="all" bind="files"/>
         <element type="PanelSlot" id="custom" name="DiffView"/>
       </elements>
     </element>
-    <element type="PanelTable" id="pending" source="files.pending" header="false" borders="true" maxRows="20" visible="files.hasPending">
+    <element type="PanelTable" id="pending" source="files.pending" header="false" borders="true" maxRows="20" scrollRows="10" visible="files.hasPending">
       <columns>
         <column id="path" type="Text" title="Path" field="path"/>
         <column id="pick" type="Selectable" field="name"/>
         <column id="apply" type="Button" icon="check" tooltip="Apply this change" command="fileChanges.apply" argument="path"/>
+        <column id="call" type="Button" field="label" command="fileChanges.apply" argument="index" enableField="callable"/>
+        <column id="args" type="Input" field="arguments" hint="name=value" enableField="hasParams"/>
       </columns>
     </element>
   </elements>
@@ -97,14 +99,24 @@ namespace BECore::Tests {
         ASSERT_NE(status, nullptr);
         EXPECT_EQ(status->style, PanelTextStyle::Warning);
         EXPECT_TRUE(status->mono);
+        EXPECT_EQ(status->maxLines, 12u);
+        const auto* all = ElementAs<PanelFields>(section->elements[5]);
+        ASSERT_NE(all, nullptr);
+        EXPECT_EQ(all->bind, "files");
 
         const auto* table = ElementAs<PanelTable>(again->elements[2]);
         ASSERT_NE(table, nullptr);
         EXPECT_FALSE(table->header);
         EXPECT_EQ(table->maxRows, 20u);
-        ASSERT_EQ(table->columns.size(), 3u);
+        EXPECT_EQ(table->scrollRows, 10u);
+        ASSERT_EQ(table->columns.size(), 5u);
         EXPECT_EQ(table->columns[1].type, PanelColumnType::Selectable);
         EXPECT_EQ(table->columns[2].argument, "path");
+        EXPECT_EQ(table->columns[3].field, "label");
+        EXPECT_EQ(table->columns[3].enableField, "callable");
+        EXPECT_EQ(table->columns[4].type, PanelColumnType::Input);
+        EXPECT_EQ(table->columns[4].hint, "name=value");
+        EXPECT_EQ(table->columns[4].enableField, "hasParams");
     }
 
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {

@@ -119,6 +119,52 @@ namespace BECore::Tests {
         EXPECT_TRUE(HasIssue(bad.issues, "t.x", "styleField: bad path")) << Joined(bad.issues);
     }
 
+    TEST(PanelAssetLoadTest, AnInputColumnAndALabelledButtonColumnAreChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelTable" id="t" source="a.b"><columns>
+                 <column id="call" type="Button" field="label" command="c.d" argument="index" enableField="callable"/>
+                 <column id="plain" type="Button" command="c.d"/>
+                 <column id="args" type="Input" field="arguments" hint="h" enableField="hasParams"/>
+               </columns></element>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        const PanelLoadResult bad = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelTable" id="t" source="a.b"><columns>
+                 <column id="noField" type="Input"/>
+                 <column id="badEnable" type="Input" field="a" enableField="b["/>
+                 <column id="badLabel" type="Button" command="c.d" field="a["/>
+               </columns></element>)")));
+        EXPECT_TRUE(HasIssue(bad.issues, "t.noField", "field is required")) << Joined(bad.issues);
+        EXPECT_TRUE(HasIssue(bad.issues, "t.badEnable", "enableField: bad path")) << Joined(bad.issues);
+        EXPECT_TRUE(HasIssue(bad.issues, "t.badLabel", "field: bad path")) << Joined(bad.issues);
+        EXPECT_EQ(bad.issues.size(), 3u) << Joined(bad.issues);
+    }
+
+    TEST(PanelAssetLoadTest, FieldsTakesAWholeObjectAndTheOthersNeedAPath) {
+        const PanelLoadResult whole = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelFields" id="f" bind="game"/>)")));
+        EXPECT_TRUE(whole.issues.empty()) << Joined(whole.issues);
+        const PanelLoadResult path = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelFields" id="f" bind="game.fields"/>)")));
+        EXPECT_TRUE(path.issues.empty()) << Joined(path.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelFields" id="f"/>)", "f", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelFields" id="f" bind="!game"/>)", "f", "'!' is allowed in a condition only");
+        ExpectSingleIssue(R"(<element type="PanelFields" id="f" bind="1game"/>)", "f", "source name");
+        ExpectSingleIssue(R"(<element type="PanelField" id="f" bind="game"/>)", "f", "bind: expected 'source.path'");
+    }
+
+    TEST(PanelAssetLoadTest, ScrollRegionsAreBounded) {
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(Format(
+            R"(<element type="PanelText" id="t" text="x" maxLines="{}"/><element type="PanelTable" id="r" source="a.b" scrollRows="{}"><columns><column id="c" type="Text" field="p"/></columns></element>)",
+            PanelAssetLimits::kMaxScrollLines, PanelAssetLimits::kMaxScrollRows))));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelText" id="t" text="x" maxLines="{}"/>)", PanelAssetLimits::kMaxScrollLines + 1)), "t", "maxLines must be at most");
+        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" maxLines="4000000000"/>)", "t", "maxLines must be at most");
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelTable" id="r" source="a.b" scrollRows="{}"><columns><column id="c" type="Text" field="p"/></columns></element>)",
+                                            PanelAssetLimits::kMaxScrollRows + 1)),
+                          "r", "scrollRows must be at most");
+    }
+
     TEST(PanelAssetLoadTest, BindingSyntaxIsChecked) {
         ExpectSingleIssue(R"(<element type="PanelText" id="t" bind="files"/>)", "t", "bind: expected 'source.path'");
         ExpectSingleIssue(R"(<element type="PanelText" id="t" bind="!files.x"/>)", "t", "'!' is allowed in a condition only");

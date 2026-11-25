@@ -166,10 +166,11 @@ namespace BECore {
                         _issues.Add(where, "a text needs 'text' or 'bind'");
                     }
                     Binding(where, "bind", text->bind, false);
+                    ScrollLimit(where, "maxLines", text->maxLines, PanelAssetLimits::kMaxScrollLines);
                 } else if (const auto* field = element.Cast<PanelField>()) {
                     Binding(where, "bind", field->bind, true);
                 } else if (const auto* fields = element.Cast<PanelFields>()) {
-                    Binding(where, "bind", fields->bind, true);
+                    ObjectBinding(where, "bind", fields->bind);
                 } else if (const auto* input = element.Cast<PanelInput>()) {
                     Binding(where, "bind", input->bind, true);
                     if (input->width < 0.0f) {
@@ -181,6 +182,7 @@ namespace BECore {
                     RelativePath(where, "argument", button->argument);
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Binding(where, "source", table->source, true);
+                    ScrollLimit(where, "scrollRows", table->scrollRows, PanelAssetLimits::kMaxScrollRows);
                     CheckColumns(*table, where);
                 } else if (const auto* slot = element.Cast<PanelSlot>()) {
                     if (slot->name.empty()) {
@@ -210,12 +212,14 @@ namespace BECore {
                     }
                     if (column.type == PanelColumnType::Button) {
                         Command(where, "command", column.command);
+                        RelativePath(where, "field", column.field);
                     } else if (column.field.empty()) {
                         _issues.Add(where, "field is required");
                     } else {
                         RelativePath(where, "field", column.field);
                     }
                     RelativePath(where, "styleField", column.styleField);
+                    RelativePath(where, "enableField", column.enableField);
                     RelativePath(where, "argument", column.argument);
                 }
             }
@@ -247,6 +251,22 @@ namespace BECore {
                 }
                 if (const auto parsed = ParseBinding(text); !parsed) {
                     _issues.Add(where, Format("{}: {}", field, parsed.error()));
+                }
+            }
+
+            void ObjectBinding(StringView where, StringView field, const String& text) {
+                if (text.empty()) {
+                    _issues.Add(where, Format("{} is required", field));
+                    return;
+                }
+                if (const auto parsed = ParseObjectBinding(text); !parsed) {
+                    _issues.Add(where, Format("{}: {}", field, parsed.error()));
+                }
+            }
+
+            void ScrollLimit(StringView where, StringView field, uint32_t value, size_t limit) {
+                if (value > limit) {
+                    _issues.Add(where, Format("{} must be at most {}", field, limit));
                 }
             }
 
