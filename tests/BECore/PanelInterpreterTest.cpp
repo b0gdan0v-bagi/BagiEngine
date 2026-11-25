@@ -132,6 +132,42 @@ namespace BECore::Tests {
   </elements>
 </PanelAsset>)";
 
+        constexpr const char* kInput = R"(
+<PanelAsset id="Input" title="Input">
+  <elements>
+    <element type="PanelInput" id="filter" bind="probe.filter" hint="Filter" icon="check"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kInputColumn = R"(
+<PanelAsset id="Notes" title="Notes">
+  <elements>
+    <element type="PanelTable" id="rows" source="probe.rows" header="false">
+      <columns>
+        <column type="Input" id="note" field="note" enableField="enabled" hint="note"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kWholeObject = R"(
+<PanelAsset id="Whole" title="Whole">
+  <elements><element type="PanelFields" id="all" bind="probe"/></elements>
+</PanelAsset>)";
+
+        constexpr const char* kInputAndInputColumn = R"(
+<PanelAsset id="Mixed" title="Mixed">
+  <elements>
+    <element type="PanelInput" id="filter" bind="probe.filter" hint="Filter" icon="check"/>
+    <element type="PanelTable" id="rows" source="probe.rows">
+      <columns>
+        <column type="Text" id="name" field="name"/>
+        <column type="Input" id="note" field="note" enableField="enabled" hint="note"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>)";
+
     }  // namespace
 
     /// The interpreter in an ImGui context of its own with no backend, driven by the mouse like a person; the host window is `##Host`
@@ -250,6 +286,12 @@ namespace BECore::Tests {
             io.AddMouseButtonEvent(0, false);
             clicks = 0;
             Frame();
+        }
+
+        /// Characters typed into the text field that is active
+        void Type(const char* text) {
+            ImGui::GetIO().AddInputCharactersUTF8(text);
+            Settle();
         }
 
         ImGuiFontBuffers buffers;
@@ -417,6 +459,84 @@ namespace BECore::Tests {
             probe.rows.push_back(MakeRow(Format("row {}", i), i % 2 == 0 ? PanelTextStyle::Success : PanelTextStyle::Error));
         }
         Load(kBig);
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            Frame();
+        }
+
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                Frame();
+            }
+        });
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputHasTheIdOfItsElementAndTypingChangesTheBoundText) {
+        probe.filter = "ab";
+        Load(kInput);
+
+        ClickAt(Locate(Chain(HostId(), {"filter", "##filter"})));
+        Type("cd");
+        EXPECT_EQ(probe.filter.size(), 4u);
+        EXPECT_NE(probe.filter.find("cd"), String::npos);
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputOverATextLongerThanItsBufferShowsACutAtACharacterAndKeepsTheTextValid) {
+        // 'é' is two bytes: the buffer holds 255 bytes, so the cut falls inside the 128th character
+        probe.filter.clear();
+        for (size_t i = 0; i < PanelInterpreter::kInputBufferSize; ++i) {
+            probe.filter.append("\xC3\xA9");
+        }
+        Load(kInput);
+        const String before = probe.filter;
+        Settle();
+        EXPECT_EQ(probe.filter, before) << "drawing alone must not write";
+
+        ClickAt(Locate(Chain(HostId(), {"filter", "##filter"})));
+        Type("x");
+        ASSERT_NE(probe.filter.find('x'), String::npos);
+        EXPECT_EQ(probe.filter.size(), PanelInterpreter::kInputBufferSize - 1);
+        // Every 'é' that is left is whole: two bytes, the second a continuation
+        size_t whole = 0;
+        for (size_t i = 0; i + 1 < probe.filter.size(); ++i) {
+            if (static_cast<uint8_t>(probe.filter[i]) == 0xC3) {
+                EXPECT_EQ(static_cast<uint8_t>(probe.filter[i + 1]), 0xA9);
+                ++whole;
+            }
+        }
+        EXPECT_EQ(whole, (PanelInterpreter::kInputBufferSize - 2) / 2);
+    }
+
+    TEST_F(PanelInterpreterTest, AnInputColumnEditsItsOwnRowAndStaysOffWhenItsEnableFieldIsFalse) {
+        probe.rows[2].enabled = false;
+        Load(kInputColumn);
+
+        ClickAt(Locate(Chain(TableCellChain("rows", 1, "note"), {"##note"})));
+        Type("hi");
+        EXPECT_EQ(probe.rows[1].note, "hi");
+        EXPECT_TRUE(probe.rows[0].note.empty());
+        EXPECT_TRUE(probe.rows[2].note.empty());
+
+        ClickAt(Locate(Chain(TableCellChain("rows", 2, "note"), {"##note"})));
+        Type("no");
+        EXPECT_TRUE(probe.rows[2].note.empty());
+    }
+
+    TEST_F(PanelInterpreterTest, FieldsWithASourceAloneDrawTheWholeObjectAndAnEditChangesItsFirstField) {
+        Load(kWholeObject);
+        ASSERT_FALSE(probe.flag);
+
+        ClickAt(Locate(0));
+        EXPECT_TRUE(probe.flag);
+    }
+
+    TEST_F(PanelInterpreterTest, ASteadyFrameOfAnInputAndAnInputColumnAllocatesNothing) {
+        probe.rows.clear();
+        for (size_t i = 0; i < kManyRows; ++i) {
+            probe.rows.push_back(MakeRow(Format("row {}", i), PanelTextStyle::Normal));
+            probe.rows.back().note = "a note";
+        }
+        probe.filter = "a filter long enough to want its own text scratch";
+        Load(kInputAndInputColumn);
         for (int i = 0; i < kWarmUpFrames; ++i) {
             Frame();
         }

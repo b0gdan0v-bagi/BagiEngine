@@ -225,6 +225,19 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(ContentHeight(), clean);
     }
 
+    TEST_F(PanelAssetHotReloadTest, AFailureToldAfterAGoodEditWithinOneFrameStillShowsTheBanner) {
+        ASSERT_NO_FATAL_FAILURE(Start(Asset("Good title", "Go")));
+
+        // Both events arrive before the panel's next Update: the load of the good file must not wipe the failure that came after it
+        WriteFile(_dir / "HotPanel.xml", Asset("Newer title", "Run"));
+        ASSERT_TRUE(_manager.ReloadConfig(kConfig));
+        ConfigEvents::ConfigReloadFailedEvent::Emit(kConfig, String("not well-formed"));
+        Settle();
+
+        EXPECT_EQ(_widget->GetHolder().Failure(), "not well-formed");
+        EXPECT_TRUE(TryLocate(ButtonId("Run")).has_value()) << "the good edit was lost";
+    }
+
     TEST_F(PanelAssetHotReloadTest, AFirstLoadThatFailedShowsTheBannerAloneAndAFixedFileDrawsTheAsset) {
         ASSERT_NO_FATAL_FAILURE(Start(kBadAsset));
         // Without an asset the window has no asset id to be named by: the config name stands in

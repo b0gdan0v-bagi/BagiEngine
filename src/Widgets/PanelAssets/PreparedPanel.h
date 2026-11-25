@@ -25,6 +25,8 @@ namespace BECore {
         const PanelColumn* column = nullptr;
         /// The glyph of `column->icon`, null when it names none
         const char* glyph = nullptr;
+        /// The hint of an `Input` cell with the glyph of the icon in front of it
+        String hint;
     };
 
     /// One element of the asset with what a frame needs already resolved. `element` and every view into it belong to the asset the interpreter holds
@@ -34,10 +36,12 @@ namespace BECore {
         PreparedBinding visible;
         /// A button's `enableWhen`
         PreparedBinding enableWhen;
-        /// The `bind` of a text, field or fields, the `source` of a table
+        /// The `bind` of a text, field, fields or input, the `source` of a table
         PreparedBinding bind;
-        /// The glyph of a button's or an empty state's `icon`, null when it names none
+        /// The glyph of a button's, an input's or an empty state's `icon`, null when it names none
         const char* glyph = nullptr;
+        /// The hint of an input with the glyph of its icon in front of it
+        String hint;
         Vector<PreparedElement> children;
         Vector<PreparedColumn> columns;
     };

@@ -86,6 +86,9 @@ namespace BECore {
         bool _open = false;
         bool _openDecided = false;
         bool _reloadPending = false;
+        /// A reload failure told while a reload is pending: shown after that load, which clears the failure
+        bool _failurePending = false;
+        String _pendingFailure;
     };
 
 }  // namespace BECore
