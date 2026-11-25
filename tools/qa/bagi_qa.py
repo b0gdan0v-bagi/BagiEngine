@@ -297,6 +297,10 @@ class QaSession:
         """`GameSession.imgui_find`, recorded and counted; the log is checked after it (an ImGui assertion shows at once)."""
         return self._imgui(self._game.imgui_find, label, **filters)
 
+    def editor_state(self) -> dict[str, Any]:
+        """`GameSession.editor_state` (the unsaved changes of the editor panels), recorded and counted, then the log check; a game that is not an editor is a SessionError."""
+        return self._imgui(self._game.editor_state)
+
     def imgui_click(self, label: str | None = None, **target: Any) -> dict[str, Any]:
         """`GameSession.imgui_click`: the one visible item called `label` (in `window`), or a point `x`, `y`. An item that is not there, or is there
         several times, is a SessionError kept in `session_errors`, and nothing is clicked."""

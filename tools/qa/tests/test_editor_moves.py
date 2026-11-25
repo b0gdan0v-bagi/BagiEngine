@@ -2,28 +2,20 @@
 
 `FakeEditor` stands in for a QaSession: the same `imgui_*` methods, answering like `imgui_find` and `imgui_input`, with the traps of the real editor in it: a
 header takes a press only when the pointer was over it in an earlier call, a number is typed after Ctrl+click only, the inspector is clipped (no items)
-until the left dock is widened, and "(unsaved changes)" is drawn text, no item.
+until the left dock is widened, and the unsaved changes are no item: `editor_state` answers them, as the engine does.
 """
-
-import base64
-from types import SimpleNamespace
 
 import pytest
 
 import bagi_qa_editor as editor
-import png_ops
 from bagi_session import SessionError
-from png_reader import PngImage
 
 DISPLAY = {"width": 1920.0, "height": 1080.0, "scaleX": 1.0, "scaleY": 1.0}
-SHOT_SCALE = 0.5
 VIEW_ITEM = {"x": 94.0, "y": 0.0, "width": 40.0, "height": 24.0}
 MENU_ROW_HEIGHT = 20.0
 SAVE = {"x": 10.0, "y": 96.0, "width": 63.0, "height": 24.0}
 ROW_HEIGHT = 30.0
 FIELD_HEIGHT = 29.0
-WARNING = (242, 184, 75)
-BACKGROUND = (30, 34, 48)
 SPLITTER_X = 211.0
 WIDE_DOCK = 400.0
 PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console": "Console (1 errors)###Console", "Game Panel": "Game###GamePanel", "Profiler": "Profiler"}
@@ -55,6 +47,9 @@ class FakeEditor:
         self.names = {"Field": "Field", "Run": "Run"}
         self.selected = None
         self.dirty_flag = False
+        self.scene_rows = 1
+        self.extra_documents = []
+        self.not_editor = False
         self.sections = set()
         self.values = {}
         self.dock_width = SPLITTER_X - 1
@@ -179,18 +174,16 @@ class FakeEditor:
     def step(self, frames=1, dt=None):
         self.steps += frames
 
-    def call(self, method, params=None):
-        assert method == "screenshot"
-        width, height = int(DISPLAY["width"] * SHOT_SCALE), int(DISPLAY["height"] * SHOT_SCALE)
-        rows = [bytes(BACKGROUND) * width for _ in range(height)]
-        if self.dirty_flag:
-            x0, y0 = int((SAVE["x"] + SAVE["width"] + 8) * SHOT_SCALE), int(SAVE["y"] * SHOT_SCALE) + 4
-            for y in range(y0, y0 + 6):
-                row = bytearray(rows[y])
-                row[x0 * 3 : (x0 + 20) * 3] = bytes(WARNING) * 20
-                rows[y] = bytes(row)
-        png = png_ops.encode_png(PngImage(width, height, 3, rows))
-        return SimpleNamespace(accepted=True, result={"png_base64": base64.b64encode(png).decode()}, error_code=None, error_message="")
+    def editor_state(self):
+        if self.not_editor:
+            raise SessionError("the game does not run in the editor run mode: launch it with editor=True")
+        documents = [dict(document) for document in self.extra_documents]
+        if self.scene_rows >= 1:
+            documents.append({"id": "scene:Main", "kind": "scene", "name": "Main", "dirty": self.dirty_flag, "path": "config/SceneConfig.xml", "file": "/overlay/config/SceneConfig.xml"})
+        if self.scene_rows >= 2:
+            documents.append({"id": "scene:Other", "kind": "scene", "name": "Other", "dirty": False, "path": "config/Other.xml", "file": "/overlay/config/Other.xml"})
+        documents.sort(key=lambda document: document["id"])
+        return {"anyDirty": any(document["dirty"] for document in documents), "documents": documents}
 
     # -- what a click or a key does
 
@@ -316,7 +309,7 @@ def test_a_text_field_replaces_its_text_and_the_row_follows(ed):
     assert ("A", ("ctrl",)) in ed.keys
 
 
-def test_the_dirty_marker_is_read_from_the_picture_and_save_clears_it(ed):
+def test_dirty_is_the_scene_document_of_editor_state_and_save_clears_it(ed):
     editor.widen_left_dock(ed)
     editor.select_node(ed, "Run")
     assert not editor.dirty(ed)
@@ -334,7 +327,7 @@ def test_save_of_a_clean_scene_is_an_error_and_a_marker_that_stays_is_one_too():
     editor.widen_left_dock(stuck)
     editor.select_node(stuck, "Run")
     editor.set_number_field(stuck, editor.LAYER_FIELD, 3)
-    with pytest.raises(SessionError, match="still shows"):
+    with pytest.raises(SessionError, match="still has unsaved changes"):
         editor.save(stuck)
 
 
@@ -394,3 +387,28 @@ def test_a_palette_that_does_not_open_is_an_error(ed):
     ed.key = lambda event: None
     with pytest.raises(SessionError, match="did not open"):
         editor.open_palette(ed)
+
+
+def test_any_dirty_counts_a_dirty_node_file_row_that_dirty_leaves_out(ed):
+    ed.extra_documents = [{"id": "nodeFile:ui/Hud.xml", "kind": "nodeFile", "name": "Hud", "dirty": True, "path": "ui/Hud.xml", "file": "/overlay/ui/Hud.xml"}]
+    assert not editor.dirty(ed)
+    assert editor.any_dirty(ed)
+
+
+def test_scene_document_names_the_file_the_save_writes(ed):
+    assert editor.scene_document(ed)["file"] == "/overlay/config/SceneConfig.xml"
+
+
+def test_no_scene_row_or_two_are_errors_that_name_the_ids(ed):
+    ed.scene_rows = 0
+    with pytest.raises(SessionError, match=r"0 scene documents"):
+        editor.dirty(ed)
+    ed.scene_rows = 2
+    with pytest.raises(SessionError, match=r"2 scene documents.*scene:Main.*scene:Other"):
+        editor.scene_document(ed)
+
+
+def test_a_game_that_is_not_the_editor_passes_its_error_through(ed):
+    ed.not_editor = True
+    with pytest.raises(SessionError, match="editor run mode"):
+        editor.dirty(ed)
