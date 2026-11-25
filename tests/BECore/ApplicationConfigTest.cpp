@@ -54,6 +54,27 @@ namespace BECore::Tests {
         EXPECT_FALSE(load.config._headless);
         EXPECT_DOUBLE_EQ(load.config._taskFrameBudgetMs, kNoTaskFrameBudget);
         EXPECT_EQ(load.config._fileWatch, FileWatchSetting::Auto);
+        EXPECT_EQ(load.config._clearColor.r, 20);
+        EXPECT_EQ(load.config._clearColor.g, 20);
+        EXPECT_EQ(load.config._clearColor.b, 100);
+        EXPECT_EQ(load.config._clearColor.a, 255);
+    }
+
+    TEST(ApplicationConfigTest, ReadsTheClearColorFromAChildElement) {
+        const auto load = Load(R"(<root><clearColor r="1" g="2" b="3" a="4"/></root>)");
+        EXPECT_TRUE(load.errors.empty());
+        EXPECT_EQ(load.config._clearColor.r, 1);
+        EXPECT_EQ(load.config._clearColor.g, 2);
+        EXPECT_EQ(load.config._clearColor.b, 3);
+        EXPECT_EQ(load.config._clearColor.a, 4);
+    }
+
+    TEST(ApplicationConfigTest, ABadClearColorChannelKeepsItsDefaultAndIsReported) {
+        const auto load = Load(R"(<root><clearColor r="red" g="2" b="3" a="4"/></root>)");
+        ASSERT_EQ(load.errors.size(), 1u);
+        EXPECT_NE(load.errors[0].path.find("clearColor"), StringView::npos) << load.errors[0].path.c_str();
+        EXPECT_EQ(load.config._clearColor.r, 20);
+        EXPECT_EQ(load.config._clearColor.g, 2) << "the channels that are fine are read";
     }
 
     TEST(ApplicationConfigTest, BadFileWatchKeepsAutoAndIsReported) {

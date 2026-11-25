@@ -16,10 +16,6 @@ struct SDL_Window;
 
 namespace BECore {
 
-    namespace RenderEvents {
-        struct SetRenderDrawColorEvent;
-    }
-
     namespace SDLEvents {
         struct WindowEvent;
     }
@@ -30,9 +26,11 @@ namespace BECore {
      * Frame lifecycle:
      *   NewFrameEvent      -> AcquireFrame(): follow the window (rebuild the swapchain when its pixel size changed),
      *                         acquire the image, open the command buffer; a minimized window skips the frame
-     *   RenderClearEvent   -> BeginFrame(): begin the swapchain render pass
-     *   [widget Draw()]    -> widgets record commands into the active render pass
-     *   RenderPresentEvent -> Present(): end render pass + command buffer, submit, present
+     *   Application        -> BeginFrame(color): keep the frame colour (the pass is not opened yet)
+     *   [widget Draw()]    -> widgets record commands; the swapchain render pass opens at the first draw, batch submit or ImGui
+     *                         render into the back buffer (an offscreen pass may come first: SetRenderTarget() needs no open pass)
+     *   RenderPresentEvent -> Present(): open the pass when nothing did (an empty frame still clears), end the pass and the command
+     *                         buffer, submit, present
      * A skipped frame records nothing: every draw, SetRenderTarget and the ImGui render check that a frame is open.
      */
     class VulkanRendererBackend : public IRenderer {
@@ -50,7 +48,7 @@ namespace BECore {
         }
         void Destroy() override;
         void WaitIdle() override;
-        void BeginFrame() override;
+        void BeginFrame(const Color& clearColor) override;
         void EndFrame() override;
         void Clear(const Color& color) override;
         void Present() override;
@@ -150,11 +148,17 @@ namespace BECore {
         // rebuilt, logs a failure, and returns what the frame does next (VulkanSwapchainPolicy::ActionAfter)
         VulkanSwapchainPolicy::SwapchainAction HandleSwapchainStatus(SwapchainStatus status, VulkanSwapchainPolicy::SwapchainStage stage);
 
+        // true when a draw into the current pass can be recorded: opens the swapchain pass when the frame is acquired and no pass is open
+        // (an offscreen pass counts as open). False in a skipped frame.
+        bool EnsureDrawPass();
+        // Begins the swapchain render pass with the colour of BeginFrame(), when the frame is acquired
+        void OpenSwapchainPass();
+        // An engine colour (sRGB) in the colour space of the attachment
+        VkClearColorValue ToClearValue(const Color& color) const;
+
         void OnNewFrame();
-        void OnRenderClear();
         void OnRenderPresent();
         void OnWindowEvent(const SDLEvents::WindowEvent& event);
-        void OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event);
 
         void OnImGuiInit();
         void OnImGuiShutdown();
@@ -209,7 +213,7 @@ namespace BECore {
         bool _frameAcquired = false;
         // true when the command buffer of the frame was submitted and the image waits to be presented
         bool _frameSubmitted = false;
-        // true when inside the swapchain render pass (between OnRenderClear and OnRenderPresent)
+        // true when inside the swapchain render pass (until Present)
         bool _inSwapchainPass = false;
         // The device is lost, or the sync objects of a slot could not be made again: AcquireFrame() skips every frame
         // (sleeping, so the loop does not spin) and only Destroy() is left to do
@@ -225,8 +229,10 @@ namespace BECore {
         // Image handle of the current offscreen target (needed for the barrier in UnsetRenderTarget)
         VkImage _lastOffscreenImage = VK_NULL_HANDLE;
 
-        // The colour of Clear() for the pass that opens next (BeginFrame or SetRenderTarget), in the colour space of the attachment (_linearColors)
+        // The colour of Clear() for the offscreen pass that opens next, in the colour space of the attachment (_linearColors)
         VulkanFramePolicy::ClearColorSlot _clearColor;
+        // The colour BeginFrame() named for the swapchain pass; opaque black until the first BeginFrame()
+        VkClearColorValue _frameClearColor{{0.0f, 0.0f, 0.0f, 1.0f}};
         bool _linearColors = false;  // the swapchain is sRGB: every colour of the engine (an sRGB value) is made linear before it is written
     };
 

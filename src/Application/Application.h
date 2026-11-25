@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Math/Color.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/Singleton.h>
@@ -80,7 +81,8 @@ namespace BECore {
         bool _isRunning = false;
         bool _finished = false;  // Finish() has run: it must run once
         int _exitCode = 0;
-        bool _headless = false;  // a headless window gets no keys: the switch chord is ignored
+        bool _headless = false;               // a headless window gets no keys: the switch chord is ignored
+        Color _clearColor{20, 20, 100, 255};  // ApplicationConfig::_clearColor: what IRenderer::BeginFrame() opens each frame with
         // The key of the title last applied: the active game's name and the editor mode
         PoolString _titleGame;
         bool _titleEditor = false;
