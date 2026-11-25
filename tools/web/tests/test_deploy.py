@@ -4,6 +4,7 @@ commands are printed (--dry-run) or handed to a fake runner. Run: python -m unit
 import contextlib
 import functools
 import io
+import json
 import re
 import tempfile
 import unittest
@@ -180,6 +181,83 @@ class DryRunTest(DeployTestCase):
         self.assertIn(f"package.py {build} ", out.replace("'", ""))
         package_line = next(line for line in out.splitlines() if "package.py" in line)
         self.assertNotIn("web-release-single-thread", package_line)
+
+
+class TargetTest(DeployTestCase):
+    """--target: game, preset and service come from <source>/web/targets.json, and nothing else may be typed."""
+
+    def write_targets(self, **changes):
+        entry = {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev", **changes}
+        path = self.source / "web" / "targets.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"format": 1, "targets": {"mahjong-editor": entry}}), encoding="utf-8")
+
+    def test_a_dry_run_prints_the_steps_of_the_target(self):
+        self.write_targets()
+        code, out, err, runner = self.run_script("--target", "mahjong-editor", "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("target mahjong-editor: BagiMahjong, web-editor, studio-mahjong, studio-mahjong.bagiz.dev", out)
+        lines = [line for line in out.splitlines() if line.startswith("+ ")]
+        self.assertEqual(len(lines), 3, out)
+        self.assertIn("cmake --preset web-editor", lines[0])
+        self.assertIn("cmake --build --preset web-editor --target BagiMahjong", lines[1])
+        self.assertIn("--game BagiMahjong", lines[2])
+        self.assertEqual(runner.calls, [])
+
+    def test_with_deploy_railway_up_names_the_service_of_the_target(self):
+        self.write_targets()
+        code, out, err, _ = self.run_script("--target", "mahjong-editor", "--dry-run", "--deploy", which=have_railway)
+        self.assertEqual(code, 0, err)
+        self.assertIn("--path-as-root --service studio-mahjong --detach", out)
+
+    def test_a_single_thread_preset_of_the_target_packages_a_single_thread_page(self):
+        self.write_targets(preset="web-editor-single-thread")
+        _, out, _, _ = self.run_script("--target", "mahjong-editor", "--dry-run")
+        self.assertIn("--preset web-editor-single-thread", out)
+        self.assertIn("--single-thread", out.splitlines()[-1])
+
+    def test_the_free_options_are_refused_and_nothing_starts(self):
+        self.write_targets()
+        refused = [("--game", "X"), ("--preset", "web-x"), ("--service", "x"), ("--single-thread",), ("--build-dir", "b"), ("--app", "a.json"),
+                   ("--dist", "d"), ("--stage-dir", "s"), ("--skip-alltests",), ("--alltests-results", "r.json")]
+        for option in refused:
+            with self.subTest(option=option[0]):
+                code, out, err, runner = self.run_script("--target", "mahjong-editor", *option, which=have_railway)
+                self.assertEqual(code, 2)
+                self.assertIn(option[0], err)
+                self.assertEqual((out, runner.calls), ("", []))
+
+    def test_the_allowed_options_go_with_a_target(self):
+        self.write_targets()
+        status, checkout = self.source / "status.json", self.source / "checkout"
+        code, _, err, _ = self.run_script("--target", "mahjong-editor", "--dry-run", "--deploy", "--status-file", str(status),
+                                          "--checkout-dir", str(checkout), which=have_railway)
+        self.assertEqual(code, 0, err)
+
+    def test_an_unknown_name_lists_the_known_ones_and_starts_nothing(self):
+        self.write_targets()
+        code, out, err, runner = self.run_script("--target", "nope", "--dry-run")
+        self.assertEqual(code, 2)
+        self.assertIn("mahjong-editor", err)
+        self.assertEqual((out, runner.calls), ("", []))
+
+    def test_a_missing_or_bad_file_and_a_bad_value_are_exit_2(self):
+        code, _, err, runner = self.run_script("--target", "mahjong-editor", "--dry-run")
+        self.assertEqual(code, 2)
+        self.assertIn("targets.json", err)
+        for changes in ({"service": "--x"}, {"address": "https://h/"}, {"game": "a b"}, {"preset": "release"}):
+            with self.subTest(changes=changes):
+                self.write_targets(**changes)
+                code, out, err, runner = self.run_script("--target", "mahjong-editor")
+                self.assertEqual(code, 2)
+                self.assertEqual((out, runner.calls), ("", []))
+
+    def test_without_target_the_defaults_stay(self):
+        self.write_targets()
+        _, out, _, _ = self.run_script("--dry-run", "--deploy", which=have_railway)
+        self.assertIn("--preset web-release", out)
+        self.assertIn("--service bagi-web", out)
+        self.assertFalse([line for line in out.splitlines() if line.startswith("target ")])
 
 
 class PreconditionTest(DeployTestCase):

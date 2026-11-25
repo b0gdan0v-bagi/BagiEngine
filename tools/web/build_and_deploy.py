@@ -4,6 +4,7 @@
     python tools/web/build_and_deploy.py --game BagiStress                       # build and package into dist/
     python tools/web/build_and_deploy.py --game BagiStress --single-thread       # the page without threads (no COOP / COEP needed)
     python tools/web/build_and_deploy.py --game BagiStress --deploy --service bagi-web
+    python tools/web/build_and_deploy.py --target mahjong-editor --dry-run       # game, preset and service of web/targets.json
 
 Run it from the root of the project that has the web presets (the engine, or a game that carries it); `--source-dir` names another.
 The steps, in order:
@@ -16,6 +17,8 @@ The steps, in order:
      dist/ in one folder and run `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
      `railway link`, or RAILWAY_TOKEN of the project; the service must exist and its settings (builder Dockerfile, health check
      /healthz) come from the game's Railway IaC file, not from the upload: tools/web/CLAUDE.md).
+--target NAME takes the game, preset and service from <source>/web/targets.json (deploy_targets.py) and refuses every free option of
+the command line (REFUSED_WITH_TARGET); only --deploy, --dry-run, --source-dir, --status-file and --checkout-dir go with it.
 Standard library only. Nothing here reads or writes a secret.
 """
 
@@ -32,6 +35,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS_DIR.parent / "alltests"))
 
 import alltests_results  # noqa: E402
+import deploy_targets  # noqa: E402
 
 PACKAGE_SCRIPT = TOOLS_DIR / "package.py"
 STAGED_FILES = ("Dockerfile", "serve.py")
@@ -52,6 +56,12 @@ SINGLE_THREAD_SUFFIX = "-single-thread"
 BIN_FOLDER = "bin"
 STAGE_FOLDER = Path("build") / "web-deploy"
 DIST_FOLDER = Path("dist")
+# The options of a hand run that --target refuses: a target is the whole description of a deploy, and an agent that starts it must not
+# be able to add arguments (attribute of the parsed arguments -> the flag)
+REFUSED_WITH_TARGET = {
+    "game": "--game", "preset": "--preset", "service": "--service", "single_thread": "--single-thread", "build_dir": "--build-dir",
+    "app": "--app", "dist": "--dist", "stage_dir": "--stage-dir", "skip_alltests": "--skip-alltests", "alltests_results": "--alltests-results",
+}
 # The game's own web app settings (package.py --app); the file is optional
 APP_FILE = Path("web") / "app.json"
 
@@ -65,6 +75,22 @@ class Step(NamedTuple):
     cwd: Path
     # The deploy step: the files it needs are staged just before it
     is_deploy: bool = False
+
+
+def resolve_target(args: argparse.Namespace, source_dir: Path) -> None:
+    """Fills game, preset and service: from the target of --target (refusing the free options), else from the options and defaults."""
+    if args.target is None:
+        args.game = args.game or DEFAULT_GAME
+        args.preset = args.preset or DEFAULT_PRESET
+        args.service = args.service or DEFAULT_SERVICE
+        return
+    refused = [flag for name, flag in REFUSED_WITH_TARGET.items() if getattr(args, name)]
+    if refused:
+        raise DeployError(f"--target takes no free options (the target holds them), remove: {', '.join(refused)}")
+    target = deploy_targets.find(source_dir, args.target)
+    args.game, args.preset, args.service = target.game, target.preset, target.service
+    args.fetch = True
+    print(f"target {target.name}: {target.game}, {target.preset}, {target.service}, {target.address}", flush=True)
 
 
 def resolve_preset(args: argparse.Namespace) -> str:
@@ -140,8 +166,9 @@ def stage(dist: Path, stage_dir: Path, source_dir: Path) -> None:
 
 def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run, gate=alltests_results.check) -> int:
     parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to Railway.")
-    parser.add_argument("--game", default=DEFAULT_GAME, help=f"the game target (default: {DEFAULT_GAME})")
-    parser.add_argument("--preset", default=DEFAULT_PRESET, help=f"the web preset (default: {DEFAULT_PRESET})")
+    parser.add_argument("--target", help="a named target of <source>/web/targets.json: game, preset and service come from it, and no free option is allowed")
+    parser.add_argument("--game", help=f"the game target (default: {DEFAULT_GAME})")
+    parser.add_argument("--preset", help=f"the web preset (default: {DEFAULT_PRESET})")
     parser.add_argument("--source-dir", type=Path, help="the project with CMakePresets.json (default: the current folder)")
     parser.add_argument("--single-thread", action="store_true", help=f"build the page without threads: the preset gets the suffix {SINGLE_THREAD_SUFFIX}, the page is built into build/<preset>/bin")
     parser.add_argument("--build-dir", type=Path, help="the folder the build writes the page to (default: <source>/build/<preset>/bin, e.g. build/web-release/bin)")
@@ -149,12 +176,21 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     parser.add_argument("--dist", type=Path, help=f"the packaged folder (default: <source>/{DIST_FOLDER.as_posix()})")
     parser.add_argument("--stage-dir", type=Path, help=f"the folder `railway up` runs in (default: <source>/{STAGE_FOLDER.as_posix()})")
     parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`")
-    parser.add_argument("--service", default=DEFAULT_SERVICE, help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE})")
+    parser.add_argument("--service", help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE})")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and run nothing")
     parser.add_argument("--skip-alltests", action="store_true", help="deploy even when HEAD of the source has no green full test run or the tree has uncommitted changes (tools/alltests)")
     parser.add_argument("--alltests-results", type=Path, help="the results file of tools/alltests (default: the one of the source's repository)")
+    parser.add_argument("--fetch", action="store_true", help="build in a checkout of its own at origin/<base> (implied by --target)")
+    parser.add_argument("--checkout-dir", type=Path, help="the folder of that checkout (default: under ~/.cache/bagi-web-deploy)")
+    parser.add_argument("--status-file", type=Path, help="a JSON file rewritten at every stage: the progress of the run")
     args = parser.parse_args(argv)
     source_dir = (args.source_dir or Path.cwd()).resolve()
+
+    try:
+        resolve_target(args, source_dir)
+    except (deploy_targets.TargetsError, DeployError) as error:
+        print(f"build_and_deploy.py: {error}", file=sys.stderr)
+        return 2
 
     try:
         check_environment(args, emsdk_dir, which)
