@@ -27,7 +27,7 @@ Exit code 0 green, 3 red, 1 an error (nothing recorded). `--preset` is the confi
 
 `alltests_results.py` owns `results.json`: per commit `status` (`green` / `red`), `preset`, `finished`, `failed`, `flaky`, `skipped`, the entries filed; and `failing`, each failing test with the commit it was first seen failing at. It is written through a rename, so a deploy never reads half of it. `--dry-run` does not write it.
 
-`tools/web/build_and_deploy.py` and `tools/rooms/build_and_deploy.py` import it: `--deploy` stops (exit 2, before any build) unless HEAD of `--source-dir` has a green result, and the message says how to get one; `--skip-alltests` deploys anyway and prints that it did; `--dry-run` only reports the gate; `--alltests-results` names another file. The scripts build the working tree, so a tree that `git status` shows changed is refused too, except the untracked files inside the folders the script writes itself (its stage, the web's `dist/`).
+`tools/web/build_and_deploy.py` and `tools/rooms/build_and_deploy.py` import it: `--deploy` stops (exit 2, before any build) unless HEAD of `--source-dir` has a green result, and the message says how to get one; `--skip-alltests` deploys anyway and prints that it did; `--dry-run` only reports the gate; `--alltests-results` names another file. The exception is the web deploy in checkout mode (`--fetch`, `--target`): a commit without a green result there makes it start `alltests.py` for that commit itself and deploy only on green (`tools/web/DEPLOY.md`). The scripts build the working tree, so a tree that `git status` shows changed is refused too, except the untracked files inside the folders the script writes itself (its stage, the web's `dist/`).
 
 ## The todo entries
 

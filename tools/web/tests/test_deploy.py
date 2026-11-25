@@ -4,7 +4,11 @@ commands are printed (--dry-run) or handed to a fake runner. Run: python -m unit
 import contextlib
 import functools
 import io
+import json
+import os
 import re
+import subprocess
+import sys
 import tempfile
 import unittest
 import unittest.mock
@@ -14,6 +18,7 @@ from types import SimpleNamespace
 import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
 
 import build_and_deploy
+import deploy_checkout
 
 TOOLS_WEB = Path(build_and_deploy.__file__).resolve().parent
 ENGINE_DIR = TOOLS_WEB.parents[1]
@@ -59,6 +64,22 @@ class FakeRunner:
         return SimpleNamespace(returncode=3 if command[0] == self.fail_on else 0)
 
 
+class FakeCheckout:
+    """Stands in for deploy_checkout.prepare: records what it was asked and hands back a folder that needs no git. A `failure` is
+    raised as the CheckoutError a real fetch that went wrong would raise."""
+
+    def __init__(self, checkout: deploy_checkout.Checkout, failure: str | None = None):
+        self.checkout = checkout
+        self.failure = failure
+        self.calls: list[tuple[Path, str, Path, bool]] = []
+
+    def __call__(self, project, base, checkout_dir, *, dry_run):
+        self.calls.append((Path(project), base, Path(checkout_dir), dry_run))
+        if self.failure:
+            raise deploy_checkout.CheckoutError(self.failure)
+        return self.checkout
+
+
 class DeployTestCase(unittest.TestCase):
     def setUp(self):
         self._temp = tempfile.TemporaryDirectory()
@@ -68,6 +89,14 @@ class DeployTestCase(unittest.TestCase):
         # A fake emsdk folder with the files the SDK check looks for (the real SDK is not needed)
         self.emsdk = Path(self._temp.name) / "emsdk"
         self.install_sdk(self.emsdk)
+        # The checkout of --fetch and --target: a folder of its own with an engine that has its own tool files and SDK
+        self.checkout_dir = Path(self._temp.name).resolve() / "work" / "checkout"
+        self.engine = self.checkout_dir / "engine"
+        for name in build_and_deploy.STAGED_FILES:
+            (self.engine / "tools" / "web").mkdir(parents=True, exist_ok=True)
+            (self.engine / "tools" / "web" / name).write_text(f"checkout {name}", encoding="utf-8")
+        self.install_sdk(self.engine / build_and_deploy.EMSDK_RELATIVE)
+        self.fake_checkout = FakeCheckout(deploy_checkout.Checkout(self.checkout_dir, GREEN_COMMIT, self.engine, OTHER_COMMIT))
 
     @staticmethod
     def install_sdk(emsdk: Path):
@@ -75,12 +104,15 @@ class DeployTestCase(unittest.TestCase):
             (emsdk / name).parent.mkdir(parents=True, exist_ok=True)
             (emsdk / name).write_text("", encoding="utf-8")
 
-    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None, gate=green_gate):
+    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None, gate=green_gate, checkout=None, changes=lambda *_: []):
         out, err = io.StringIO(), io.StringIO()
         runner = runner or FakeRunner()
         arguments = ["--source-dir", str(self.source), *argv]
+        if ("--target" in argv or "--fetch" in argv) and "--checkout-dir" not in argv:
+            arguments += ["--checkout-dir", str(self.checkout_dir)]
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner, gate=gate)
+            code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner, gate=gate,
+                                     checkout=checkout or self.fake_checkout, changes=changes)
         return code, out.getvalue(), err.getvalue(), runner
 
 
@@ -180,6 +212,458 @@ class DryRunTest(DeployTestCase):
         self.assertIn(f"package.py {build} ", out.replace("'", ""))
         package_line = next(line for line in out.splitlines() if "package.py" in line)
         self.assertNotIn("web-release-single-thread", package_line)
+
+
+class TargetTest(DeployTestCase):
+    """--target: game, preset and service come from <source>/web/targets.json, and nothing else may be typed."""
+
+    def write_targets(self, **changes):
+        entry = {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev", **changes}
+        path = self.source / "web" / "targets.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"format": 1, "targets": {"mahjong-editor": entry}}), encoding="utf-8")
+
+    def test_a_dry_run_prints_the_steps_of_the_target(self):
+        self.write_targets()
+        code, out, err, runner = self.run_script("--target", "mahjong-editor", "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("target mahjong-editor: BagiMahjong, web-editor, studio-mahjong, studio-mahjong.bagiz.dev", out)
+        lines = [line for line in out.splitlines() if line.startswith("+ ")]
+        self.assertEqual(len(lines), 3, out)
+        self.assertIn("cmake --preset web-editor", lines[0])
+        self.assertIn("cmake --build --preset web-editor --target BagiMahjong", lines[1])
+        self.assertIn("--game BagiMahjong", lines[2])
+        self.assertEqual(runner.calls, [])
+
+    def test_with_deploy_railway_up_names_the_service_of_the_target(self):
+        self.write_targets()
+        code, out, err, _ = self.run_script("--target", "mahjong-editor", "--dry-run", "--deploy", which=have_railway)
+        self.assertEqual(code, 0, err)
+        self.assertIn("--path-as-root --service studio-mahjong --detach", out)
+
+    def test_a_single_thread_preset_of_the_target_packages_a_single_thread_page(self):
+        self.write_targets(preset="web-editor-single-thread")
+        _, out, _, _ = self.run_script("--target", "mahjong-editor", "--dry-run")
+        self.assertIn("--preset web-editor-single-thread", out)
+        self.assertIn("--single-thread", out.splitlines()[-1])
+
+    def test_the_free_options_are_refused_and_nothing_starts(self):
+        self.write_targets()
+        refused = [("--game", "X"), ("--preset", "web-x"), ("--service", "x"), ("--single-thread",), ("--build-dir", "b"), ("--app", "a.json"),
+                   ("--dist", "d"), ("--stage-dir", "s"), ("--skip-alltests",), ("--alltests-results", "r.json")]
+        for option in refused:
+            with self.subTest(option=option[0]):
+                code, out, err, runner = self.run_script("--target", "mahjong-editor", *option, which=have_railway)
+                self.assertEqual(code, 2)
+                self.assertIn(option[0], err)
+                self.assertEqual((out, runner.calls), ("", []))
+
+    def test_the_allowed_options_go_with_a_target(self):
+        self.write_targets()
+        status, checkout = self.source / "status.json", self.source / "checkout"
+        code, _, err, _ = self.run_script("--target", "mahjong-editor", "--dry-run", "--deploy", "--status-file", str(status),
+                                          "--checkout-dir", str(checkout), which=have_railway)
+        self.assertEqual(code, 0, err)
+
+    def test_an_unknown_name_lists_the_known_ones_and_starts_nothing(self):
+        self.write_targets()
+        code, out, err, runner = self.run_script("--target", "nope", "--dry-run")
+        self.assertEqual(code, 2)
+        self.assertIn("mahjong-editor", err)
+        self.assertEqual((out, runner.calls), ("", []))
+
+    def test_a_missing_or_bad_file_and_a_bad_value_are_exit_2(self):
+        code, _, err, runner = self.run_script("--target", "mahjong-editor", "--dry-run")
+        self.assertEqual(code, 2)
+        self.assertIn("targets.json", err)
+        for changes in ({"service": "--x"}, {"address": "https://h/"}, {"game": "a b"}, {"preset": "release"}):
+            with self.subTest(changes=changes):
+                self.write_targets(**changes)
+                code, out, err, runner = self.run_script("--target", "mahjong-editor")
+                self.assertEqual(code, 2)
+                self.assertEqual((out, runner.calls), ("", []))
+
+    def test_without_target_the_defaults_stay(self):
+        self.write_targets()
+        _, out, _, _ = self.run_script("--dry-run", "--deploy", which=have_railway)
+        self.assertIn("--preset web-release", out)
+        self.assertIn("--service bagi-web", out)
+        self.assertFalse([line for line in out.splitlines() if line.startswith("target ")])
+
+
+class CommitsInPackageTest(DeployTestCase):
+    """package.py gets `--commit engine=<sha> --commit game=<sha>` when git answers for the project and its engine."""
+
+    def setUp(self):
+        super().setUp()
+        empty = Path(self._temp.name) / "empty.gitconfig"
+        empty.write_text("", encoding="utf-8")
+        environment = {"GIT_CONFIG_GLOBAL": str(empty), "GIT_CONFIG_SYSTEM": str(empty), "GIT_AUTHOR_NAME": "Tester",
+                       "GIT_AUTHOR_EMAIL": "tester@example.com", "GIT_COMMITTER_NAME": "Tester", "GIT_COMMITTER_EMAIL": "tester@example.com"}
+        patcher = unittest.mock.patch.dict(os.environ, environment)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def make_repository(folder: Path, name: str) -> str:
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_text(name, encoding="utf-8")
+        for command in (["init", "-q", "-b", "main"], ["add", name], ["commit", "-q", "-m", name]):
+            subprocess.run(["git", "-C", str(folder), *command], check=True, capture_output=True)
+        return subprocess.run(["git", "-C", str(folder), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+
+    def package_line(self) -> str:
+        code, out, err, _ = self.run_script("--dry-run")
+        self.assertEqual(code, 0, err)
+        return next(line for line in out.splitlines() if "package.py" in line)
+
+    def test_a_project_that_is_a_repository_names_its_commit_as_engine_and_as_game(self):
+        commit = self.make_repository(self.source, "a.txt")
+        line = self.package_line()
+        self.assertIn(f"--commit engine={commit} --commit game={commit}", line)
+
+    def test_the_commits_come_after_the_app_file_and_before_the_single_thread_switch(self):
+        self.make_repository(self.source, "a.txt")
+        (self.source / "web").mkdir()
+        (self.source / "web" / "app.json").write_text("{}", encoding="utf-8")
+        code, out, err, _ = self.run_script("--dry-run", "--single-thread")
+        self.assertEqual(code, 0, err)
+        line = next(line for line in out.splitlines() if "package.py" in line)
+        self.assertRegex(line, r"--app .* --commit engine=\w+ --commit game=\w+ --single-thread")
+
+    def test_a_game_with_the_engine_as_a_second_repository_names_two_different_commits(self):
+        game = self.make_repository(self.source, "game.txt")
+        engine = self.make_repository(self.source / "engine", "tools/web/package.py")
+        self.assertNotEqual(game, engine)
+        line = self.package_line()
+        self.assertIn(f"--commit engine={engine} --commit game={game}", line)
+
+    def test_a_folder_that_is_not_a_repository_adds_nothing(self):
+        self.assertNotIn("--commit", self.package_line())
+
+    def test_a_folder_inside_another_repository_is_not_named_by_that_repository(self):
+        self.make_repository(self.source, "a.txt")
+        inner = self.source / "inner"
+        inner.mkdir()
+        self.assertIsNone(build_and_deploy.head_commit(inner))
+
+    def test_a_repository_without_a_commit_adds_nothing(self):
+        subprocess.run(["git", "-C", str(self.source), "init", "-q", "-b", "main"], check=True, capture_output=True)
+        self.assertNotIn("--commit", self.package_line())
+
+
+class StatusFileTest(DeployTestCase):
+    """--status-file: the progress of the run, written by deploy_status.py."""
+
+    def status(self) -> dict:
+        return json.loads((self.source / "status.json").read_text(encoding="utf-8"))
+
+    def test_a_successful_build_ends_done_in_the_package_stage_and_lists_no_deploy_stage(self):
+        code, _, err, _ = self.run_script("--status-file", str(self.source / "status.json"))
+        self.assertEqual(code, 0, err)
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"], data["stages"]), ("done", "package", ["build", "package"]))
+
+    def test_a_failing_cmake_is_failed_at_build_with_the_error(self):
+        code, _, err, _ = self.run_script("--status-file", str(self.source / "status.json"), runner=FakeRunner(fail_on="cmake"))
+        self.assertEqual(code, 3)
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"]), ("failed", "build"))
+        self.assertIn("`cmake` failed with exit code 3", data["error"])
+        self.assertIn("`cmake` failed with exit code 3", err)
+
+    def test_a_failing_package_step_is_failed_at_package(self):
+        code, _, _, _ = self.run_script("--status-file", str(self.source / "status.json"), runner=FakeRunner(fail_on=sys.executable))
+        self.assertEqual(code, 3)
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("failed", "package"))
+
+    def test_a_deploy_ends_done_in_the_deploy_stage_and_a_missing_dist_is_failed_there(self):
+        status_file = str(self.source / "status.json")
+        code, _, _, _ = self.run_script("--deploy", "--status-file", status_file, which=have_railway)
+        self.assertEqual(code, 2)
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("failed", "deploy"))
+        (self.source / "dist").mkdir()
+        (self.source / "dist" / "index.html").write_bytes(b"<html></html>")
+        code, _, err, _ = self.run_script("--deploy", "--status-file", status_file, which=have_railway)
+        self.assertEqual(code, 0, err)
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("done", "deploy"))
+
+    def test_a_refused_gate_a_missing_sdk_and_a_program_that_cannot_start_are_failed(self):
+        status_file = str(self.source / "status.json")
+        red = lambda *args: alltests_results.Verdict(False, GREEN_COMMIT, "no green run of this commit")
+        code, _, _, _ = self.run_script("--deploy", "--status-file", status_file, which=have_railway, gate=red)
+        self.assertEqual(code, 2)
+        self.assertEqual((self.status()["state"], self.status()["error"]), ("failed", "no green run of this commit"))
+        code, _, _, _ = self.run_script("--status-file", status_file, emsdk=self.source / "none")
+        self.assertEqual(code, 2)
+        self.assertIn("Emscripten SDK", self.status()["error"])
+        code, _, _, _ = self.run_script("--status-file", status_file, runner=FakeRunner(cannot_start="cmake"))
+        self.assertEqual(code, 2)
+        self.assertIn("cannot start `cmake`", self.status()["error"])
+
+    def test_a_dry_run_and_a_run_without_the_option_write_no_status(self):
+        self.run_script("--dry-run", "--status-file", str(self.source / "status.json"))
+        self.run_script()
+        self.assertEqual([entry.name for entry in self.source.iterdir()], [])
+
+    def test_the_target_and_its_service_and_address_are_in_the_file(self):
+        (self.source / "web").mkdir()
+        (self.source / "web" / "targets.json").write_text(json.dumps({"format": 1, "targets": {"t": {
+            "game": "G", "preset": "web-editor", "service": "svc", "address": "svc.example.dev"}}}), encoding="utf-8")
+        code, _, err, _ = self.run_script("--target", "t", "--status-file", str(self.source / "status.json"))
+        self.assertEqual(code, 0, err)
+        data = self.status()
+        self.assertEqual((data["target"], data["service"], data["url"]), ("t", "svc", "https://svc.example.dev"))
+        self.assertEqual(data["stages"], ["fetch", "build", "package"])
+
+
+class CheckoutRunTest(DeployTestCase):
+    """--fetch: the build runs in the folder `prepare` returned, with the tool files and the SDK of its engine."""
+
+    def status(self) -> dict:
+        return json.loads((self.source / "status.json").read_text(encoding="utf-8"))
+
+    def test_the_steps_run_in_the_checkout_and_package_py_is_the_one_of_its_engine(self):
+        code, _, err, runner = self.run_script("--fetch")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.fake_checkout.calls, [(self.source.resolve(), "main", self.checkout_dir, False)])
+        self.assertEqual({cwd for _, cwd in runner.calls}, {self.checkout_dir})
+        self.assertEqual(Path(runner.calls[-1][0][1]), self.engine / "tools" / "web" / "package.py")
+        self.assertIn(str(self.checkout_dir / "build" / "web-release" / "bin"), runner.calls[-1][0])
+        self.assertEqual(list(self.source.iterdir()), [])
+
+    def test_the_base_of_the_target_is_the_branch_that_is_fetched(self):
+        (self.source / "web").mkdir()
+        (self.source / "web" / "targets.json").write_text(json.dumps({"format": 1, "targets": {"t": {
+            "game": "G", "preset": "web-editor", "service": "svc", "address": "svc.example.dev", "base": "release"}}}), encoding="utf-8")
+        self.run_script("--target", "t")
+        self.assertEqual(self.fake_checkout.calls[0][1], "release")
+
+    def test_the_staged_files_and_the_gate_are_the_checkouts(self):
+        gated = []
+
+        def gate(project, results, ignored):
+            gated.append((project, tuple(ignored)))
+            return green_gate(project, results)
+
+        (self.checkout_dir / "dist").mkdir()
+        (self.checkout_dir / "dist" / "index.html").write_bytes(b"<html></html>")
+        code, _, err, runner = self.run_script("--fetch", "--deploy", which=have_railway, gate=gate)
+        self.assertEqual(code, 0, err)
+        stage_dir = self.checkout_dir / "build" / "web-deploy"
+        self.assertEqual(runner.calls[-1], ([RAILWAY_PATH, "up", str(stage_dir), "--path-as-root", "--service", "bagi-web", "--detach"], stage_dir))
+        for name in build_and_deploy.STAGED_FILES:
+            self.assertEqual((stage_dir / name).read_text(encoding="utf-8"), f"checkout {name}")
+        self.assertEqual(gated, [(self.checkout_dir, (self.checkout_dir / "dist", stage_dir))])
+
+    def test_a_failing_checkout_is_exit_2_failed_at_fetch_and_nothing_else_runs(self):
+        failing = FakeCheckout(self.fake_checkout.checkout, failure="origin has no branch main")
+        code, out, err, runner = self.run_script("--fetch", "--status-file", str(self.source / "status.json"), checkout=failing)
+        self.assertEqual(code, 2)
+        self.assertIn("origin has no branch main", err)
+        self.assertEqual((out, runner.calls), ("", []))
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"]), ("failed", "fetch"))
+        self.assertIn("origin has no branch main", data["error"])
+
+    def test_the_commits_of_the_checkout_are_in_the_status(self):
+        code, _, err, _ = self.run_script("--fetch", "--status-file", str(self.source / "status.json"))
+        self.assertEqual(code, 0, err)
+        data = self.status()
+        self.assertEqual((data["commit"], data["engineCommit"], data["stages"]), (GREEN_COMMIT, OTHER_COMMIT, ["fetch", "build", "package"]))
+
+    def test_a_checkout_without_the_sdk_installs_it_first_instead_of_refusing(self):
+        (self.engine / build_and_deploy.EMSDK_RELATIVE / ".emscripten").unlink()
+        code, _, err, runner = self.run_script("--fetch", "--status-file", str(self.source / "status.json"))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(runner.calls[0], ([sys.executable, str(self.engine / "CI" / "scripts" / "setup_emsdk.py")], self.checkout_dir))
+        self.assertEqual([call[0][0] for call in runner.calls[1:3]], ["cmake", "cmake"])
+        code, out, _, runner = self.run_script("--fetch", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertRegex(out.splitlines()[0], r"^\+ \(.*checkout\) .*setup_emsdk\.py")
+
+    def test_the_sdk_step_is_not_planned_when_the_checkout_has_the_sdk(self):
+        _, _, _, runner = self.run_script("--fetch")
+        self.assertNotIn("setup_emsdk.py", " ".join(" ".join(call[0]) for call in runner.calls))
+
+    def test_a_dry_run_asks_for_the_checkout_dry_and_starts_nothing(self):
+        def no_gate(*_):
+            raise AssertionError("the gate was asked before the fetch")
+
+        code, out, err, runner = self.run_script("--fetch", "--deploy", "--dry-run", which=have_railway, gate=no_gate)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.fake_checkout.calls, [(self.source.resolve(), "main", self.checkout_dir, True)])
+        self.assertIn("alltests gate: asked after the fetch, on origin/main", out)
+        self.assertEqual(runner.calls, [])
+        self.assertFalse(deploy_checkout.lock_path(self.checkout_dir).exists())
+
+    def test_the_lock_is_held_during_the_run_and_a_second_run_is_refused(self):
+        lock = deploy_checkout.lock_path(self.checkout_dir)
+        seen = []
+        original = self.fake_checkout.__call__
+
+        def checking(*args, **kwargs):
+            seen.append(lock.exists())
+            code, _, err, _ = self.run_script("--fetch")
+            seen.append((code, err))
+            return original(*args, **kwargs)
+
+        code, _, err, _ = self.run_script("--fetch", checkout=checking)
+        self.assertEqual(code, 0, err)
+        self.assertTrue(seen[0])
+        self.assertEqual(seen[1][0], 2)
+        self.assertIn(str(lock), seen[1][1])
+        self.assertFalse(lock.exists())
+
+
+class AlltestsRunner(FakeRunner):
+    """A fake runner that answers `alltests.py` as the real one would: it records `status` for the commit in the results file (or
+    records nothing and exits `code`), so the gate reads what the run left."""
+
+    def __init__(self, results: Path, commit: str, status: str | None = "green", failed=(), code: int | None = None):
+        super().__init__()
+        self.results, self.commit, self.status, self.failed, self.code = results, commit, status, list(failed), code
+
+    def __call__(self, command, cwd, check):
+        if len(command) > 1 and Path(command[1]).name == "alltests.py":
+            self.calls.append((list(command), Path(cwd)))
+            if self.status:
+                data = alltests_results.load(self.results, "checkout")
+                data["results"][self.commit] = {"status": self.status, "preset": "macos-debug-all", "finished": "2026-11-25T10:00:00Z", "failed": self.failed}
+                alltests_results.save(self.results, data)
+            return SimpleNamespace(returncode=self.code if self.code is not None else (0 if self.status == "green" else 3))
+        return super().__call__(command, cwd, check)
+
+
+class GateRunsTestsTest(DeployTestCase):
+    """--fetch --deploy: a commit of the checkout without a green record gets the full test run started by the script itself."""
+
+    def setUp(self):
+        super().setUp()
+        self.results = Path(self._temp.name) / "results.json"
+        self.checkout_dir.joinpath("dist").mkdir(parents=True)
+        self.checkout_dir.joinpath("dist", "index.html").write_bytes(b"<html></html>")
+        self.changes = []
+
+    def record(self, commit: str, status: str, failed=()):
+        data = alltests_results.load(self.results, "checkout")
+        data["results"][commit] = {"status": status, "preset": "macos-debug-all", "finished": "2026-11-25T09:00:00Z", "failed": list(failed)}
+        alltests_results.save(self.results, data)
+
+    def deploy(self, runner: FakeRunner, *argv: str):
+        gate = functools.partial(alltests_results.check, head=lambda _: GREEN_COMMIT, changes=lambda *_: self.changes)
+        return self.run_script("--fetch", "--deploy", "--alltests-results", str(self.results), "--status-file", str(self.source / "status.json"),
+                               *argv, which=have_railway, runner=runner, gate=gate, changes=lambda *_: self.changes)
+
+    def status(self) -> dict:
+        return json.loads((self.source / "status.json").read_text(encoding="utf-8"))
+
+    def test_a_commit_without_a_record_starts_alltests_once_with_those_arguments_and_then_the_build(self):
+        runner = AlltestsRunner(self.results, GREEN_COMMIT)
+        code, out, err, _ = self.deploy(runner)
+        self.assertEqual(code, 0, err)
+        expected = [sys.executable, str(self.engine / "tools" / "alltests" / "alltests.py"), "--repo", str(self.checkout_dir), "--commit", GREEN_COMMIT,
+                    "--area", "engine"]
+        self.assertEqual(runner.calls[0], (expected, self.checkout_dir))
+        self.assertEqual([call[0][0] for call in runner.calls[1:3]], ["cmake", "cmake"])
+        self.assertEqual(runner.calls[-1][0][:2], [RAILWAY_PATH, "up"])
+        self.assertEqual(sum(Path(call[0][1]).name == "alltests.py" for call in runner.calls if len(call[0]) > 1), 1)
+        self.assertIn("alltests gate: alltests is green", out)
+        self.assertEqual((self.status()["state"], self.status()["stages"]), ("done", ["fetch", "tests", "build", "package", "deploy"]))
+
+    def test_a_green_record_of_the_commit_starts_no_run(self):
+        self.record(GREEN_COMMIT, "green")
+        runner = AlltestsRunner(self.results, GREEN_COMMIT, status=None, code=1)
+        code, _, err, _ = self.deploy(runner)
+        self.assertEqual(code, 0, err)
+        self.assertFalse([call for call in runner.calls if len(call[0]) > 1 and Path(call[0][1]).name == "alltests.py"])
+
+    def test_a_red_record_is_run_again_and_a_green_result_deploys(self):
+        self.record(GREEN_COMMIT, "red", ["Core.Flaky"])
+        runner = AlltestsRunner(self.results, GREEN_COMMIT)
+        code, _, err, _ = self.deploy(runner)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(Path(runner.calls[0][0][1]).name, "alltests.py")
+
+    def test_a_red_run_stops_before_any_cmake_step_and_names_the_failing_tests(self):
+        runner = AlltestsRunner(self.results, GREEN_COMMIT, status="red", failed=["Core.Sorts", "Scene.Adds"])
+        code, _, err, _ = self.deploy(runner)
+        self.assertEqual(code, 2)
+        self.assertEqual(len(runner.calls), 1)
+        self.assertIn(f"alltests is red for commit {GREEN_COMMIT[:12]} (failed: Core.Sorts, Scene.Adds)", err)
+        self.assertNotIn("--skip-alltests", err)
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"], data["failedTests"]), ("failed", "tests", ["Core.Sorts", "Scene.Adds"]))
+
+    def test_an_alltests_error_is_exit_2_with_its_code_and_nothing_else_runs(self):
+        runner = AlltestsRunner(self.results, GREEN_COMMIT, status=None, code=1)
+        code, _, err, _ = self.deploy(runner)
+        self.assertEqual(code, 2)
+        self.assertIn("exit code 1", err)
+        self.assertEqual(len(runner.calls), 1)
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("failed", "tests"))
+
+    def test_a_run_that_recorded_nothing_is_not_a_green_commit(self):
+        runner = AlltestsRunner(self.results, GREEN_COMMIT, status=None, code=0)
+        code, _, err, _ = self.deploy(runner)
+        self.assertEqual(code, 2)
+        self.assertIn("has no alltests result", err)
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_an_uncommitted_change_is_refused_without_a_run_and_without_the_skip_hint(self):
+        self.record(GREEN_COMMIT, "green")
+        self.changes = [" M src/Game.cpp"]
+        runner = AlltestsRunner(self.results, GREEN_COMMIT)
+        code, _, err, _ = self.deploy(runner)
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assertIn("uncommitted changes ( M src/Game.cpp)", err)
+        self.assertNotIn("--skip-alltests", err)
+
+    def test_an_uncommitted_change_without_a_record_is_refused_without_a_run(self):
+        self.changes = [" M src/Game.cpp"]
+        runner = AlltestsRunner(self.results, GREEN_COMMIT)
+        code, _, err, _ = self.deploy(runner)
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assertIn("uncommitted changes ( M src/Game.cpp)", err)
+        self.assertNotIn("--skip-alltests", err)
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"]), ("failed", "tests"))
+
+    def test_the_area_of_the_target_goes_to_alltests(self):
+        (self.source / "web").mkdir()
+        (self.source / "web" / "targets.json").write_text(json.dumps({"format": 1, "targets": {"t": {
+            "game": "G", "preset": "web-editor", "service": "svc", "address": "svc.example.dev", "area": "mahjong"}}}), encoding="utf-8")
+        verdicts = iter([alltests_results.Verdict(False, GREEN_COMMIT, "no result"), alltests_results.Verdict(True, GREEN_COMMIT, "green")])
+        runner = FakeRunner()
+        code, _, err, _ = self.run_script("--target", "t", "--deploy", which=have_railway, runner=runner, gate=lambda *_: next(verdicts))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(runner.calls[0][0][-2:], ["--area", "mahjong"])
+
+    def test_a_dry_run_starts_nothing_and_says_when_the_gate_is_asked(self):
+        runner = AlltestsRunner(self.results, GREEN_COMMIT)
+        code, out, err, _ = self.deploy(runner, "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("alltests gate: asked after the fetch, on origin/main", out)
+        self.assertEqual(runner.calls, [])
+
+    def test_skip_alltests_by_hand_runs_no_tests(self):
+        runner = AlltestsRunner(self.results, GREEN_COMMIT)
+        code, out, err, _ = self.deploy(runner, "--skip-alltests")
+        self.assertEqual(code, 0, err)
+        self.assertIn("skipped (--skip-alltests)", out)
+        self.assertFalse([call for call in runner.calls if len(call[0]) > 1 and Path(call[0][1]).name == "alltests.py"])
+        self.assertNotIn("tests", self.status()["stages"])
+
+    def test_a_target_refuses_skip_alltests_and_the_results_file(self):
+        (self.source / "web").mkdir()
+        (self.source / "web" / "targets.json").write_text(json.dumps({"format": 1, "targets": {"t": {
+            "game": "G", "preset": "web-editor", "service": "svc", "address": "svc.example.dev"}}}), encoding="utf-8")
+        for option in ("--skip-alltests", "--alltests-results=x.json"):
+            code, _, err, runner = self.run_script("--target", "t", "--deploy", option, which=have_railway)
+            self.assertEqual(code, 2)
+            self.assertEqual(runner.calls, [])
 
 
 class PreconditionTest(DeployTestCase):

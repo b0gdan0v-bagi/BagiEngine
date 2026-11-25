@@ -175,6 +175,42 @@ class PackageTest(unittest.TestCase):
         self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], True)
         self.assertIn("threaded", out.getvalue())
 
+    def manifest_on_disk(self) -> dict:
+        return json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+
+    def test_commits_are_written_into_the_manifest_with_sorted_keys(self):
+        manifest = self.run_package(commits={"game": "b" * 40, "engine": "abc1234"})
+        self.assertEqual(manifest["commits"], {"engine": "abc1234", "game": "b" * 40})
+        text = (self.out / "manifest.json").read_text(encoding="utf-8")
+        self.assertLess(text.index('"engine"'), text.index('"game"'))
+        self.assertEqual(self.manifest_on_disk()["commits"], manifest["commits"])
+
+    def test_without_commits_the_manifest_has_no_such_key(self):
+        self.assertNotIn("commits", self.run_package())
+        self.assertNotIn("commits", self.run_package(commits={}))
+        self.assertNotIn("commits", self.manifest_on_disk())
+
+    def test_a_bad_commit_name_or_sha_is_an_error_that_names_it_and_writes_nothing(self):
+        for commits, text in (({"Engine": "abc1234"}, "Engine=abc1234"), ({"1e": "abc1234"}, "1e=abc1234"), ({"engine": "abc123"}, "engine=abc123"),
+                              ({"engine": "ABC1234"}, "engine=ABC1234"), ({"engine": "g" * 40}, "engine=" + "g" * 40),
+                              ({"engine": "a" * 65}, "engine=" + "a" * 65), ({"engine": ""}, "engine=")):
+            with self.subTest(text=text):
+                with self.assertRaises(package.PackageError) as caught:
+                    self.run_package(commits=commits)
+                self.assertIn(text, str(caught.exception))
+        self.assertFalse(self.out.exists())
+
+    def test_the_command_line_takes_commits_and_refuses_a_repeated_name(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(package.main([str(self.build), str(self.out), "--commit", "engine=abc1234", "--commit", "game=def5678"]), 0)
+        self.assertEqual(self.manifest_on_disk()["commits"], {"engine": "abc1234", "game": "def5678"})
+        for bad in (["--commit", "engine=abc1234", "--commit", "engine=def5678"], ["--commit", "engine"]):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(package.main([str(self.build), str(self.root / "other"), *bad]), 1)
+            self.assertIn("--commit engine", err.getvalue())
+        self.assertFalse((self.root / "other").exists())
+
     def test_the_command_line_returns_0_and_1(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
