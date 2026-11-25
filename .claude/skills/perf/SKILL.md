@@ -24,7 +24,7 @@ Terms: `<engine>` is `.` in the engine and `engine` in a game; the benchmark set
 
 ## Rules
 
-- Measure only Release builds (the set's `preset`); the profile build is for `/perf-investigate`, its numbers carry the profiler's cost and are never compared with a baseline.
+- Measure only Release builds (the set's `preset`, or the `preset` a benchmark names for itself); the profile build is for `/perf-investigate`, its numbers carry the profiler's cost and are never compared with a baseline.
 - One machine, one baseline: never compare with the baseline of another machine, never copy numbers between machines.
 - Never edit the baseline plan by hand and never write it without the owner's word. Never commit a report or a trace.
 - The benchmark set is the owner's: propose a change to `.claude/rules/perf-project.md`, make it only when asked.

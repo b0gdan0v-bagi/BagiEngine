@@ -9,6 +9,7 @@ The benchmark runner of the skills `perf` and `perf-investigate` (`.claude/skill
 | `perf_baseline.py` | the machine fingerprint, the baseline plan (read, merge, append), the todo store through `tools/todo/todo.py` |
 | `headless_frames.py` | a game's benchmark command (the engine's own set uses `stress_frames.py`): a game `--headless --manual-clock`, N frames stepped over the control API, one JSON line of `frame_stats` means |
 | `stress_frames.py` | a benchmark command: `BagiStress` `--headless --control --manual-clock` with the `--stress-*` flags, stepped in chunks until the game quits by itself, then the game's own JSON line (fixed run or `--ramp`) printed unchanged; no line, a non-zero exit code, the step bound or the time limit is an error with the game's log tail. `--backend sdl-gpu|vulkan` runs in a hidden window instead of `--headless` (`--no-batching` turns the batcher off); a machine without the backend ends in `skip: <reason>` and exit code 77 |
+| `editor_frames.py` | the command of `editor-frame`: `BagiStress` as a headless editor (`--editor`, 1920x1080, a temporary `BAGI_EDITOR_DIR`) on the scene `sprites`, the Viewport, Scene Editor (node `Run`, `TransformComponent`) and Game panels open, the pointer parked; stepped from outside in chunks with `frame_stats` read after each (the game's own `--stress-frames` would count the frames that open the panels), one JSON line of `workMs` / `cpuMs` nearest-rank p50 and p99 and the counter means. Never clicks Save. A missing executable or a build without the editor (`status.runMode` not `Editor`) ends in `skip: <reason>` and exit code 77; a move of the editor that fails (a renamed label) is exit code 1, never a skip |
 | `trace_summary.py` | a Chrome trace of the profiler: zones by self / total time and allocations (with `otherData.allocNames` and `allocSizes`: by name, by size bucket), the frame-time distribution, the counters; a window of the ring (`WriteRingTraceJson`: `Frame` instants, `otherData.ringFrames`) reads the same way |
 | `tests/` | pytest of all of it (a whole run over a fake benchmark and a fake store; no build) |
 
@@ -23,7 +24,7 @@ python3 <engine>/tools/perf/trace_summary.py trace.json [--top N] [--json]
 .venv/bin/python -m pytest tools/perf/tests                  # in the engine
 ```
 
-Exit code of `perf.py`: 0 (no regression), 3 (a regression), 1 (a failed build or run, a bad set, the store unreachable). A command that exits 77 after printing a `skip: <reason>` line (a backend the machine lacks) is **skipped**, not failed: `skipped: <name>: <reason>` on stderr, `SKIPPED` in the report, a `skipped` map in `--json`; it has no verdict, no `results` and no baseline record, and does not change the exit code. A failed run prints the tails of its stdout and stderr apart and writes the whole output to `build/perf/<name>-failed.log`, the next failure of that benchmark overwriting it.
+Exit code of `perf.py`: 0 (no regression), 3 (a regression), 1 (a failed build or run, a bad set, the store unreachable). A command that exits 77 after printing a `skip: <reason>` line (a backend or an editor build the machine lacks; `stress_frames.py`, `editor_frames.py`) is **skipped**, not failed: `skipped: <name>: <reason>` on stderr, `SKIPPED` in the report, a `skipped` map in `--json`; it has no verdict, no `results` and no baseline record, and does not change the exit code. A failed run prints the tails of its stdout and stderr apart and writes the whole output to `build/perf/<name>-failed.log`, the next failure of that benchmark overwriting it.
 
 ## The benchmark set
 
@@ -32,10 +33,10 @@ A fenced `json` block under `## Benchmark set` of `.claude/rules/perf-project.md
 | Key | Meaning |
 |-----|---------|
 | `area` | the todo area: names the baseline plan `perf-baseline-<area>-<machine>.md` |
-| `preset`, `targets` | what is built and measured (a Release preset: no profiler, no asserts) |
+| `preset`, `targets` | what is built and measured (a Release preset: no profiler, no asserts); also under `benchmarks[]` (below) |
 | `profilePreset` | the build of `--trace` (default `macos-profile`) |
 | `repetitions`, `thresholdPercent` | runs per benchmark (default 5) and the smallest change that counts (default 3) |
-| `benchmarks[]` | `name`, `about`, `fast` (in the sentinel's subset), `command`, `traceCommand` (optional: the same work writing a trace into `{trace}`), `repetitions`, `warmup` (runs thrown away first, default 1), `timeoutSeconds` (600), `metrics` |
+| `benchmarks[]` | `name`, `about`, `fast` (in the sentinel's subset), `preset`, `profilePreset`, `targets` (a benchmark that needs another build, such as the editor's: its `{bin}` is that preset's, and so is its `--trace`; the set's preset is built only when a selected benchmark has none of its own, each own preset once with the union of its benchmarks' targets; `--list` shows it in brackets and a `--json` result carries it), `command`, `traceCommand` (optional: the same work writing a trace into `{trace}`), `repetitions`, `warmup` (runs thrown away first, default 1), `timeoutSeconds` (600), `metrics` |
 | `metrics.<name>` | `source`: `regex` (`pattern`, group 1 of the first match, multiline), `json` (`key` of the last stdout line that starts with `{`) or `wall` (the wall seconds of the command); `unit`; `better` `lower` / `higher`; `gate` (default true; false: shown, never a verdict); `thresholdPercent` |
 
 Placeholders in a command: `{bin}` (`<root>/build/<preset>/bin`), `{root}`, `{engine}` (the engine folder), `{python}` (the interpreter of the runner), `{trace}`. Anything else in braces stays as written (JSON parameters are safe).
@@ -58,4 +59,4 @@ A token reads and writes the baselines of the areas it holds. `--update-baseline
 
 - Headless frames are mostly the software renderer's present (`SDLRenderer::PresentFrame`): `workMs` (`cpuMs` minus the `Present` stage) is the part that follows the scene, and it is small and noisy in an idle scene. The software renderer also rasterizes the queued sprites inside the present, so for `BagiStress` `sprites` `workMs` is the scene and the `IRenderer` calls only; a ramp that must see the pixels takes `--measure cpu`.
 - The runner measures one machine against itself. Other load on the machine (a build of a worker) makes noise or false regressions: the skill checks the load first.
-- Allocation counts need `ENGINE_PROFILER_ALLOC` (the profile preset); Release reports 0, so allocations are read through `--trace` (the `E` events' `allocs`) and `zone_allocs`, not gated in the Release set.
+- Allocation counts need `ENGINE_PROFILER_ALLOC` (the profile preset); Release reports 0, so allocations are read through `--trace` (the `E` events' `allocs`) and `zone_allocs`, not gated in the Release set; the editor benchmark's trace is its own `profilePreset`, `macos-profile-editor`.
