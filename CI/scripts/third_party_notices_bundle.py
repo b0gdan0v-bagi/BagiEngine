@@ -9,7 +9,7 @@ line saying so; a missing licence file is an error, except inside a submodule th
 its content changed, so a build that finds nothing new does not touch it.
 
 `verify` checks a bundle against the tables: every path that is not build only is in it, and so is the first line of each licence
-text. Both exit 0, or 1 with one line per problem.
+text. Both exit 0, or 1 with one line per problem; `verify --skip-missing` exits 77 when there is no bundle yet.
 
     python3 CI/scripts/third_party_notices_bundle.py build --root <engine> --out <file> [--game-notices <file> [--game-root <dir>]]
     python3 CI/scripts/third_party_notices_bundle.py verify --root <engine> --bundle <file> [--game-notices <file> [--game-root <dir>]]
@@ -39,6 +39,7 @@ TAIL_FALLBACK_LINES = 60
 COMMENT_OPEN = "/*"
 COMMENT_CLOSE = "*/"
 LINE_COMMENT = "//"
+SKIPPED = 77
 RULE = "=" * 78
 SUB_RULE = "-" * 78
 NO_LICENCE_FILE = "no licence file in the folder (the owner has to add one)"
@@ -233,12 +234,16 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--root", default=Path(__file__).resolve().parents[2], type=Path, help="the engine folder")
     parser.add_argument("--out", type=Path, help="build: the file to write")
     parser.add_argument("--bundle", type=Path, help="verify: the file to check")
+    parser.add_argument("--skip-missing", action="store_true", help="verify: exit 77 (a ctest skip) when the bundle was not built")
     parser.add_argument("--game-notices", type=Path, help="the game's own table, the format of THIRD_PARTY_NOTICES.md")
     parser.add_argument("--game-root", type=Path, help="the folder the game's paths are relative to (default: where its table is)")
     args = parser.parse_args(argv)
     target = args.out if args.command == "build" else args.bundle
     if target is None:
         parser.error("build needs --out, verify needs --bundle")
+    if args.skip_missing and not target.is_file():
+        print(f"{target}: not built, skipped")
+        return SKIPPED
     if args.command == "build":
         problems = build(args.root, target, args.game_notices, args.game_root)
     else:
