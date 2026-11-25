@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<PanelAsset id="FileChanges" title="File changes" command="view.fileChanges" open="false" width="640" height="320">
+  <sources>
+    <item name="files" model="FileChangesPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelEmptyState" id="notRunning" icon="file-diff" text="The file watcher is not running: set fileWatch to On or Auto in ApplicationConfig.xml" visible="files.notRunning"/>
+    <element type="PanelRow" id="toolbar" visible="files.running">
+      <elements>
+        <element type="PanelButton" id="rescan" icon="refresh-cw" text="Rescan" command="fileChanges.rescan" tooltip="Look at the disk now and list the files that changed since the engine last knew them"/>
+        <element type="PanelButton" id="applyAll" icon="check-check" text="Apply all" command="fileChanges.applyAll" enableWhen="files.canApplyAll" tooltip="Deliver every listed change to the files' consumers (a config is read again)"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="pressRescan" text="Press Rescan to look for files changed on disk" style="Disabled" visible="files.showPressRescan"/>
+    <element type="PanelText" id="nothingChanged" text="Nothing changed" style="Disabled" visible="files.showNothingChanged"/>
+    <element type="PanelTable" id="pending" source="files.pending" header="false" visible="files.showPending">
+      <columns>
+        <item type="Text" id="path" field="path"/>
+        <item type="Text" id="kind" field="kind"/>
+        <item type="Text" id="consumers" field="consumers"/>
+        <item type="Button" id="apply" icon="check" tooltip="Apply this change" command="fileChanges.apply" argument="path"/>
+      </columns>
+    </element>
+    <element type="PanelSeparator" id="appliedTitle" title="Last apply" visible="files.showApplied"/>
+    <element type="PanelTable" id="applied" source="files.applied" header="false" visible="files.showApplied">
+      <columns>
+        <item type="Text" id="path" field="path" styleField="style"/>
+        <item type="Text" id="error" field="error" styleField="style"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>

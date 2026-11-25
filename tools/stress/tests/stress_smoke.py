@@ -55,6 +55,7 @@ EDITOR_DIR_VARIABLE = "BAGI_EDITOR_DIR"  # where the editor keeps its per-user f
 NO_EDITOR_WARNING = "this build has no editor"  # the one Warning a build without the editor logs for --editor
 RUN_NUMBER_MAX = 1000  # the range of the field `runNumber` of StressGame
 ENGINE_CONFIG_DIR = ENGINE_DIR / "config"
+ENGINE_PANELS_DIR = ENGINE_CONFIG_DIR / "panels"  # panel assets: the root element names the type, so no binding is needed
 # The engine's config files whose reflected type is not named like their stem (tools/schema/CLAUDE.md, "What the XSD says")
 ENGINE_CONFIG_BINDINGS = {
     "LoggerConfig": Binding("LoggerManager"),
@@ -383,6 +384,12 @@ def check_config_files(schema: dict) -> None:
         findings = check_files(checked, ENGINE_CONFIG_DIR)
         for stem, lines in findings.items():
             raise SmokeFailure(f"config/{stem}.xml does not match its XSD: {lines[0]}")
+        # A panel asset is a pure class, reflected in every build, so none of the files is left out here
+        panels = convert_config_dir(schema, ENGINE_PANELS_DIR, Path(temp_dir) / "panels")
+        uncovered_panels = [result for result in panels if result.xsd is None]
+        check(panels and not uncovered_panels, "config/panels has no file or one without an XSD: " + "; ".join(f"{result.stem}: {result.reason}" for result in uncovered_panels))
+        for stem, lines in check_files(panels, ENGINE_PANELS_DIR).items():
+            raise SmokeFailure(f"config/panels/{stem}.xml does not match its XSD: {lines[0]}")
 
 
 def scenario_reflection(client: BagiControlClient) -> None:

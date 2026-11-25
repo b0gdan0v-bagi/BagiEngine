@@ -59,6 +59,9 @@ namespace BECore {
         /// Draws the prepared asset. @p slots is where a `PanelSlot` finds its drawer (null: the global `PanelSlots`, when it exists). Clears @p result first
         void Draw(const PanelDataSources& sources, PanelDrawResult& result, PanelSlots* slots = nullptr);
 
+        /// Whether @p element is a kind the interpreter really draws (not an unknown class, and not a `PanelInput` while that draws only a `?`)
+        [[nodiscard]] static bool CanDraw(const PanelElement& element);
+
         [[nodiscard]] bool IsPrepared() const {
             return static_cast<bool>(_asset);
         }

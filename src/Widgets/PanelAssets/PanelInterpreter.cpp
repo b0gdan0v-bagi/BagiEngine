@@ -139,6 +139,11 @@ namespace BECore {
 
     }  // namespace
 
+    bool PanelInterpreter::CanDraw(const PanelElement& element) {
+        const PreparedKind kind = KindOf(element);
+        return kind != PreparedKind::Unknown && kind != PreparedKind::Input;
+    }
+
     PanelInterpreter::PanelInterpreter() : _single(_inspector, StringView{}) {}
 
     void PanelInterpreter::Prepare(IntrusivePtr<PanelAsset> asset) {
