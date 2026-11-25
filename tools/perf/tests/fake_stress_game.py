@@ -6,7 +6,8 @@
 It counts the stepped frames; when they reach warmup + frames (a ramp: RAMP_FRAMES) it prints a log line and its JSON line (the flags it
 was given, so a test sees what the script passed) and exits in the middle of the step, as the real game does after its QuitEvent.
 FAKE_STRESS_MODE changes the end: `noline` (exits 0 without a line), `crash` (a line, then exit code 4), `never` (never quits),
-`torn` (a line that is not JSON). Runs until the watchdog at the latest.
+`torn` (a line that is not JSON); `unavailable` exits 1 before it listens, after the line a game logs when a backend is missing, and
+`earlyexit` does the same without that line. Runs until the watchdog at the latest.
 """
 
 import json
@@ -32,6 +33,12 @@ def main() -> int:
     args = sys.argv[1:]
     mode = os.environ.get("FAKE_STRESS_MODE", "")
     port = int(flag_value(args, "--control-port", "0"))
+    if mode == "unavailable":
+        print("[Error] [12:00:00.000] Backend 'vulkan' is not available on this machine: no Vulkan loader", flush=True)
+        return 1
+    if mode == "earlyexit":
+        print("[Error] [12:00:00.000] something else broke", flush=True)
+        return 1
     ramp = "--stress-ramp" in args
     run_frames = RAMP_FRAMES if ramp else int(flag_value(args, "--stress-warmup", "0")) + int(flag_value(args, "--stress-frames", "0"))
     stepped = {"frames": 0}
@@ -43,7 +50,7 @@ def main() -> int:
         if mode == "torn":
             print('{"scene":"sprites","frames":', flush=True)
             os._exit(0)
-        print(json.dumps({"flags": [arg for arg in args if arg.startswith("--stress-") or arg.startswith("--trace=")], "mode": "ramp" if ramp else "fixed"}, sort_keys=True), flush=True)
+        print(json.dumps({"flags": [arg for arg in args if arg.startswith(("--stress-", "--trace=", "--backend=", "--hidden-window", "--headless"))], "mode": "ramp" if ramp else "fixed"}, sort_keys=True), flush=True)
         print("[Info] [12:00:00.001] after the line", flush=True)
         os._exit(4 if mode == "crash" else 0)
 

@@ -224,6 +224,34 @@ def test_a_whole_run_compares_with_a_local_baseline_and_exits_3_on_a_regression(
     assert run("--only", "missing").returncode == 1
 
 
+def test_a_skipped_benchmark_is_reported_and_leaves_the_verdicts_and_the_results_alone(tmp_path):
+    skipping = "import sys; print('skip: no such backend'); sys.exit(77)"
+    bench_set = {
+        "area": "test",
+        "preset": "none",
+        "repetitions": 2,
+        "benchmarks": [
+            {"name": "gone", "warmup": 0, "command": ["{python}", "-c", skipping], "metrics": {"ms": {"source": "json", "key": "ms"}}},
+            {"name": "here", "warmup": 0, "command": ["{python}", "-c", "print('{\"ms\": 5}')"], "metrics": {"ms": {"source": "json", "key": "ms"}}},
+        ],
+    }
+    rules = write_rules(tmp_path / "perf-project.md", bench_set)
+    base = [sys.executable, str(PERF_DIR / "perf.py"), "--rules", str(rules), "--no-build", "--baseline-file", str(tmp_path / "baseline.md")]
+    done = subprocess.run([*base, "--json", str(tmp_path / "report.json"), "--update-baseline", "--allow-dirty"], cwd=tmp_path, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert "skipped: gone: no such backend" in done.stderr and "gone: SKIPPED (no such backend)" in done.stdout
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    assert report["skipped"] == {"gone": "no such backend"}
+    assert set(report["results"]) == {"here"} and set(report["report"]) == {"here"}
+    assert "gone" not in (tmp_path / "baseline.md").read_text(encoding="utf-8")
+
+
+def test_an_exit_code_77_without_a_skip_line_is_a_failed_run(tmp_path):
+    bench = {"name": "plain77", "command": ["{python}", "-c", "import sys; sys.exit(77)"], "metrics": {}}
+    with pytest.raises(perf.PerfError):
+        perf.run_once(bench, tmp_path, "any")
+
+
 FAKE_TODO = """
 import os, sys
 args = sys.argv[1:]
