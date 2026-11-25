@@ -13,6 +13,12 @@ namespace BECore {
 
     CORE_ENUM(PanelCheckLook, uint8_t, Check, Toggle)
 
+    /// Where a `PanelRow` puts its children on the free width: from the start, or centred as one group
+    CORE_ENUM(PanelRowAlign, uint8_t, Start, Center)
+
+    /// The fill of a `PanelButton`: the palette's accent or its muted accent (`None`: the plain button)
+    CORE_ENUM(PanelButtonFill, uint8_t, None, Accent, Muted)
+
     /// A collapsing header over its `elements`
     class PanelSection : public PanelElement {
         BE_CLASS(PanelSection)
@@ -21,9 +27,11 @@ namespace BECore {
         BE_REFLECT_FIELD bool defaultOpen = true;
     };
 
-    /// Its `elements` on one line
+    /// Its `elements` on one line; with `align` `Center` the children are centred as one group on the width that is free
     class PanelRow : public PanelElement {
         BE_CLASS(PanelRow)
+    public:
+        BE_REFLECT_FIELD PanelRowAlign align = PanelRowAlign::Start;
     };
 
     /// A bordered or plain region with its own scroll, holding its `elements`; `width` and `height` are in em, 0 fills what is left
@@ -171,7 +179,8 @@ namespace BECore {
 
     /// Runs the editor command `command` with `argument` as a literal text (a button has no row to read a path from; a column of a table has its own `argument`, a path relative to the row).
     /// `width` is in em, 0 is the label's own width. `navigable` false keeps the button out of the keyboard navigation: a dialog that reads Space or Enter itself (a key capture)
-    /// must not have them press its focused Cancel
+    /// must not have them press its focused Cancel. `fill` paints the button with the accent while the condition `fillWhen` reads true (empty: always; it needs a `fill`); `repeat` makes
+    /// a held button click again on every frame. A button with an `icon` and no `text` is a square icon button
     class PanelButton : public PanelElement {
         BE_CLASS(PanelButton)
     public:
@@ -182,6 +191,9 @@ namespace BECore {
         BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
         BE_REFLECT_FIELD float width = 0.0f;
         BE_REFLECT_FIELD bool navigable = true;
+        BE_REFLECT_FIELD PanelButtonFill fill = PanelButtonFill::None;
+        BE_REFLECT_FIELD String fillWhen;
+        BE_REFLECT_FIELD bool repeat = false;
     };
 
     /// The rows of the list `source` names, one cell per column; `maxRows` 0 shows every row; `scrollRows` > 0 shows that many rows and scrolls (0: no scroll region)

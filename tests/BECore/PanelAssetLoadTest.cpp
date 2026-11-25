@@ -184,6 +184,20 @@ namespace BECore::Tests {
         ExpectSingleIssue(R"(<element type="PanelTable" id="t" source="a.b"><columns><column id="c" type="Button" command="c.d" argument="a["/></columns></element>)", "t.c", "argument: bad path");
     }
 
+    TEST(PanelAssetLoadTest, AButtonFillAndItsConditionAreChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelRow" id="r" align="Center"><elements>
+                 <element type="PanelButton" id="a" icon="pause" command="c.d" fill="Muted" fillWhen="files.paused and files.n &gt; 1" repeat="true"/>
+                 <element type="PanelButton" id="b" icon="play" command="c.d" fill="Accent"/>
+               </elements></element>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" fill="Accent" fillWhen="files.a and"/>)", "b", "fillWhen: a term is missing after 'and'");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" fillWhen="files.a"/>)", "b", "fillWhen needs a fill");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" fill="Primary"/>)", "elements[0].fill", "Invalid enum value: 'Primary'");
+        ExpectSingleIssue(R"(<element type="PanelRow" id="r" align="Middle"/>)", "elements[0].align", "Invalid enum value: 'Middle'");
+    }
+
     TEST(PanelAssetLoadTest, ConditionExpressionsAreChecked) {
         const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
             R"(<element type="PanelText" id="a" text="x" visible="files.running and files.count &gt;= 2 or files.mode == Busy"/>

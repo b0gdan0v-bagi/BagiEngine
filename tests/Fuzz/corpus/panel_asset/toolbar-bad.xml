@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<PanelAsset id="ToolbarBad" title="Bad" window="Bar" open="true">
+  <elements>
+    <element type="PanelRow" id="row" align="Middle">
+      <elements>
+        <element type="PanelButton" id="noFill" icon="pause" fillWhen="play.paused" command="game.pause"/>
+        <element type="PanelButton" id="badCondition" icon="pause" fill="Accent" fillWhen="play.paused and" command="game.pause"/>
+        <element type="PanelButton" id="badFill" icon="pause" fill="Primary" repeat="maybe" command="game.pause"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

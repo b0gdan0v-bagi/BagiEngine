@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<PanelAsset id="Toolbar" title="Toolbar" window="Bar" open="true">
+  <sources>
+    <item name="play" model="MainToolbarModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="row" align="Center">
+      <elements>
+        <element type="PanelButton" id="play" icon="play" visible="play.stopped" fill="Accent" command="game.play" tooltip="Play"/>
+        <element type="PanelButton" id="pause" icon="pause" enableWhen="play.canPause" fill="Muted" fillWhen="play.paused" command="game.pause"/>
+        <element type="PanelButton" id="step" icon="step-forward" enableWhen="play.canStep" repeat="true" command="game.step"/>
+      </elements>
+    </element>
+    <element type="PanelRow" id="plain" align="Start">
+      <elements>
+        <element type="PanelButton" id="both" text="Both" fill="Accent" fillWhen="play.paused or !play.stopped" command="game.step"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

@@ -20,9 +20,9 @@ namespace BECore::Tests {
     <element type="PanelEmptyState" id="idle" icon="file-diff" text="Nothing to show" visible="!files.running"/>
     <element type="PanelSection" id="section" title="Details" defaultOpen="false" tooltip="A section">
       <elements>
-        <element type="PanelRow" id="toolbar">
+        <element type="PanelRow" id="toolbar" align="Center">
           <elements>
-            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" argument="all files" width="9" enableWhen="files.hasPending" navigable="false"/>
+            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" argument="all files" width="9" enableWhen="files.hasPending" navigable="false" fill="Muted" fillWhen="files.running" repeat="true"/>
             <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5" focus="true" submitCommand="files.apply" commitCommand="files.save"/>
             <element type="PanelCheckbox" id="errors" bind="files.showErrors" text="Errors" labelBind="files.errorsText" look="Toggle" style="Error"/>
             <element type="PanelCombo" id="category" bind="files.category" items="files.categories" itemField="name" width="11"/>
@@ -122,6 +122,10 @@ namespace BECore::Tests {
         EXPECT_EQ(rescan->argument, "all files");
         EXPECT_FLOAT_EQ(rescan->width, 9.0f);
         EXPECT_FALSE(rescan->navigable);
+        EXPECT_EQ(rescan->fill, PanelButtonFill::Muted);
+        EXPECT_EQ(rescan->fillWhen, "files.running");
+        EXPECT_TRUE(rescan->repeat);
+        EXPECT_EQ(row->align, PanelRowAlign::Center);
         const auto* input = ElementAs<PanelInput>(row->elements[1]);
         ASSERT_NE(input, nullptr);
         EXPECT_FLOAT_EQ(input->width, 12.5f);
@@ -242,6 +246,24 @@ namespace BECore::Tests {
         EXPECT_EQ(items->command, "layouts.load");
         EXPECT_EQ(items->icon, "layout");
         EXPECT_NE(ElementAs<PanelMenu>(menu->elements[3]), nullptr);
+    }
+
+    TEST(PanelAssetTest, RowAlignAndButtonFillDefaultToTheOldLook) {
+        XmlDeserializer deserializer;
+        const auto asset = Read(R"(<PanelAsset id="A"><elements>
+                                     <element type="PanelRow" id="r"/>
+                                     <element type="PanelButton" id="b" command="c.d"/>
+                                   </elements></PanelAsset>)",
+                                deserializer);
+        ASSERT_FALSE(deserializer.HasErrors());
+        const auto* row = ElementAs<PanelRow>(asset->elements[0]);
+        const auto* button = ElementAs<PanelButton>(asset->elements[1]);
+        ASSERT_NE(row, nullptr);
+        ASSERT_NE(button, nullptr);
+        EXPECT_EQ(row->align, PanelRowAlign::Start);
+        EXPECT_EQ(button->fill, PanelButtonFill::None);
+        EXPECT_TRUE(button->fillWhen.empty());
+        EXPECT_FALSE(button->repeat);
     }
 
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {

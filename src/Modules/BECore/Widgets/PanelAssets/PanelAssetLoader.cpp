@@ -208,6 +208,10 @@ namespace BECore {
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Command(where, "command", button->command);
                     Condition(where, "enableWhen", button->enableWhen);
+                    Condition(where, "fillWhen", button->fillWhen);
+                    if (!button->fillWhen.empty() && button->fill == PanelButtonFill::None) {
+                        _issues.Add(where, "fillWhen needs a fill");
+                    }
                     Literal(where, "argument", button->argument);
                     Extent(where, "width", button->width);
                 } else if (const auto* menu = element.Cast<PanelMenu>()) {

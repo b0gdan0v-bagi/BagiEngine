@@ -258,10 +258,15 @@ namespace BECore::Fuzz {
                     Text(button->command);
                     Text(button->argument);
                     Text(button->enableWhen);
+                    Text(button->fillWhen);
                     if (button->command.empty()) {
                         Fail();
                     }
                     Condition(button->enableWhen);
+                    Condition(button->fillWhen);
+                    if (!button->fillWhen.empty() && button->fill == PanelButtonFill::None) {
+                        Fail();
+                    }
                     Literal(button->argument);
                     Extent(button->width);
                 } else if (const auto* menu = element.Cast<PanelMenu>()) {
