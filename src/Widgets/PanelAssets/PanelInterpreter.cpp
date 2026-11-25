@@ -501,6 +501,7 @@ namespace BECore {
         const PanelButton& button = *prepared.element->Cast<PanelButton>();
         const char* tooltip = OrNull(button.tooltip);
         ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
+        ImGui::PushItemFlag(ImGuiItemFlags_NoNav, !button.navigable);
         const float widthPixels = button.width * ImGui::GetFontSize();
         bool clicked = false;
         if (prepared.glyph != nullptr) {
@@ -509,6 +510,7 @@ namespace BECore {
             clicked = ImGui::Button(button.text.empty() ? "##button" : button.text.c_str(), ImVec2(widthPixels, 0.0f));
             ItemTooltip(tooltip);
         }
+        ImGui::PopItemFlag();
         ImGui::EndDisabled();
         if (clicked && !button.command.empty()) {
             NoteClick(button.command, button.argument);

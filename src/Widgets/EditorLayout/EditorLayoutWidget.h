@@ -11,7 +11,6 @@
 #include <Widgets/EditorLayout/IEditorLayoutHost.h>
 #include <Widgets/EditorLayout/LayoutStore.h>
 #include <Widgets/EditorLayout/MainToolbar.h>
-#include <Widgets/EditorLayout/PreferencesWindow.h>
 #include <Widgets/EditorLayout/StatusBar.h>
 #include <expected>
 #include <imgui.h>
@@ -26,7 +25,7 @@ namespace BECore {
     // windows dock into this space.
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
-    // (EditorCommandEvent): quit, switch mode, reset and save the layout, open the palette and the preferences. It also turns the chords
+    // (EditorCommandEvent): quit, switch mode, reset and save the layout and open the palette (`view.preferences` is the Preferences asset's own command). It also turns the chords
     // of the hotkey map into those events. The toolbar's Pause and Step and the commands game.pause and game.step drive the engine's
     // GamePause, which is the single truth: the model copies its flag every frame.
     //
@@ -96,7 +95,6 @@ namespace BECore {
         StatusBar _statusBar;
 
         CommandPalette _palette;
-        PreferencesWindow _preferencesWindow;
 
         String _pendingLayoutText;  // a named layout waiting for the next frame start
         char _layoutNameBuffer[kMaxLayoutNameLength + 1] = {};

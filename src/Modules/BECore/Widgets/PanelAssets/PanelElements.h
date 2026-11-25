@@ -138,7 +138,8 @@ namespace BECore {
     };
 
     /// Runs the editor command `command` with `argument` as a literal text (a button has no row to read a path from; a column of a table has its own `argument`, a path relative to the row).
-    /// `width` is in em, 0 is the label's own width
+    /// `width` is in em, 0 is the label's own width. `navigable` false keeps the button out of the keyboard navigation: a dialog that reads Space or Enter itself (a key capture)
+    /// must not have them press its focused Cancel
     class PanelButton : public PanelElement {
         BE_CLASS(PanelButton)
     public:
@@ -148,6 +149,7 @@ namespace BECore {
         BE_REFLECT_FIELD String argument;
         BE_REFLECT_FIELD String enableWhen;  ///< a condition like `visible`; `enabled` is the factory's own attribute of every element
         BE_REFLECT_FIELD float width = 0.0f;
+        BE_REFLECT_FIELD bool navigable = true;
     };
 
     /// The rows of the list `source` names, one cell per column; `maxRows` 0 shows every row; `scrollRows` > 0 shows that many rows and scrolls (0: no scroll region)

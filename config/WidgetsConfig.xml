@@ -6,6 +6,9 @@
     <widget
       type="EditorLayoutWidget" />
     <widget
+      type="AssetPanelWidget"
+      asset="PreferencesPanel" />
+    <widget
       type="ViewportWidget">
       <clearColor
         r="50"

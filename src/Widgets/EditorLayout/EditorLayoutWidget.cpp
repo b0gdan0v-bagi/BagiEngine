@@ -87,8 +87,6 @@ namespace BECore {
             _openSaveLayoutPopup = _layouts.has_value();
         } else if (event.commandId == kViewCommandPalette) {
             _palette.Open();
-        } else if (event.commandId == kViewPreferences) {
-            _preferencesWindow.Open();
         } else if (event.commandId == kGamePause) {
             TogglePause();
         } else if (event.commandId == kGameStep) {
@@ -210,8 +208,7 @@ namespace BECore {
         // The panels' Initialize ran before the first Update, so they hear the stored preferences now
         bool preferencesChanged = !_preferencesAnnounced;
         _preferencesAnnounced = true;
-        const bool windowChanged = _preferencesWindow.Draw(*_settings);
-        if (windowChanged || _preferencesNotified) {
+        if (_preferencesNotified) {
             _preferencesNotified = false;
             ApplyPreferences(_settings->GetPreferences());
             preferencesChanged = true;
