@@ -118,6 +118,11 @@ namespace BECore {
         inline constexpr auto kPreferencesResetAll = "preferences.resetAll"_intern;
         inline constexpr auto kPreferencesSwap = "preferences.swap"_intern;
         inline constexpr auto kPreferencesCancelRebind = "preferences.cancelRebind"_intern;
+        /// The Save Layout dialog (config/panels/EditorDialogsPanel.xml names them). EditorDialogsModel owns them and `view.saveLayout` opens it; none takes an argument.
+        /// save is both the Save and the Overwrite button, enter the name field's `submitCommand` (saves a new name only), cancel also the popup's `closeCommand`
+        inline constexpr auto kLayoutsSaveDialogSave = "layouts.saveDialog.save"_intern;
+        inline constexpr auto kLayoutsSaveDialogEnter = "layouts.saveDialog.enter"_intern;
+        inline constexpr auto kLayoutsSaveDialogCancel = "layouts.saveDialog.cancel"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

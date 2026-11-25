@@ -9,6 +9,9 @@
       type="AssetPanelWidget"
       asset="PreferencesPanel" />
     <widget
+      type="AssetPanelWidget"
+      asset="EditorDialogsPanel" />
+    <widget
       type="ViewportWidget">
       <clearColor
         r="50"

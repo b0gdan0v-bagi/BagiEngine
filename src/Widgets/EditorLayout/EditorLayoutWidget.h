@@ -25,9 +25,9 @@ namespace BECore {
     // windows dock into this space.
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
-    // (EditorCommandEvent): quit, switch mode, reset and save the layout and open the palette (`view.preferences` is the Preferences asset's own command). It also turns the chords
-    // of the hotkey map into those events. The toolbar's Pause and Step and the commands game.pause and game.step drive the engine's
-    // GamePause, which is the single truth: the model copies its flag every frame.
+    // (EditorCommandEvent): quit, switch mode, reset the layout and open the palette (`view.preferences` is the Preferences asset's own command, `view.saveLayout` is run by `EditorDialogsModel`). It
+    // also turns the chords of the hotkey map into those events. The toolbar's Pause and Step and the commands game.pause and game.step drive the engine's GamePause, which is the single truth: the
+    // model copies its flag every frame.
     //
     // It is the IEditorLayoutHost of the editor (registered in Initialize, for its lifetime): the models of the panel assets reach the
     // settings and the layouts through it. A NotifyPreferencesChanged is applied and announced in the next Update.
@@ -67,7 +67,6 @@ namespace BECore {
 
         void DrawMenuBar();
         void DrawLayoutsMenu();
-        void DrawSaveLayoutPopup();
         /// Emits the command of every chord pressed this frame
         void DispatchHotkeys();
         /// Pause / Resume through the model, written to the engine's GamePause (the pause of a manual clock is not lifted)
@@ -97,9 +96,6 @@ namespace BECore {
         CommandPalette _palette;
 
         String _pendingLayoutText;  // a named layout waiting for the next frame start
-        char _layoutNameBuffer[kMaxLayoutNameLength + 1] = {};
-        String _saveLayoutError;
-        bool _openSaveLayoutPopup = false;
 
         EditorLayoutHostHandle _hostHandle;
         bool _preferencesNotified = false;  // NotifyPreferencesChanged waits here for the next Update

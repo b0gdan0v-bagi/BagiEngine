@@ -75,6 +75,9 @@ namespace BECore {
                 {kPreferencesResetAll, "Preferences: Reset All Shortcuts", std::nullopt, false},
                 {kPreferencesSwap, "Preferences: Swap Shortcut", std::nullopt, false},
                 {kPreferencesCancelRebind, "Preferences: Cancel Rebind", std::nullopt, false},
+                {kLayoutsSaveDialogSave, "Save Layout Dialog: Save", std::nullopt, false},
+                {kLayoutsSaveDialogEnter, "Save Layout Dialog: Enter", std::nullopt, false},
+                {kLayoutsSaveDialogCancel, "Save Layout Dialog: Cancel", std::nullopt, false},
             };
             return table;
         }

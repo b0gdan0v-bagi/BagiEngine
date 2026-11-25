@@ -20,9 +20,6 @@ namespace BECore {
 
     namespace {
 
-        constexpr const char* kSaveLayoutPopupId = "Save Layout As";
-        constexpr float kSaveLayoutFieldWidth = 280.0f;
-
         /// Where the search for the engine's repository starts: the folder above the lowest layer of the `config` mount (the engine's own
         /// content), else the working directory
         Path BranchSearchStart() {
@@ -83,8 +80,6 @@ namespace BECore {
             CoreManager::GetWidgetManager().RequestToggle();
         } else if (event.commandId == kViewResetLayout) {
             _forceResetLayout = true;
-        } else if (event.commandId == kViewSaveLayout) {
-            _openSaveLayoutPopup = _layouts.has_value();
         } else if (event.commandId == kViewCommandPalette) {
             _palette.Open();
         } else if (event.commandId == kGamePause) {
@@ -178,7 +173,6 @@ namespace BECore {
         }
         CloseItemGap();
         DispatchHotkeys();
-        DrawSaveLayoutPopup();
         if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys()); !chosen.Empty()) {
             EditorCommandEvent::Emit(chosen);
         }
@@ -340,60 +334,6 @@ namespace BECore {
                 EditorCommandEvent::Emit(command.id);
             }
         }
-    }
-
-    void EditorLayoutWidget::DrawSaveLayoutPopup() {
-        if (_openSaveLayoutPopup) {
-            _openSaveLayoutPopup = false;
-            _layoutNameBuffer[0] = '\0';
-            _saveLayoutError.clear();
-            ImGui::OpenPopup(kSaveLayoutPopupId);
-        }
-
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (!ImGui::BeginPopupModal(kSaveLayoutPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            return;
-        }
-
-        ImGui::TextUnformatted("Name of the layout:");
-        if (ImGui::IsWindowAppearing()) {
-            ImGui::SetKeyboardFocusHere();
-        }
-        ImGui::SetNextItemWidth(kSaveLayoutFieldWidth);
-        const bool enterPressed = ImGui::InputText("##LayoutName", _layoutNameBuffer, sizeof(_layoutNameBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
-
-        const StringView name = _layoutNameBuffer;
-        const bool isEmpty = name.empty();
-        const bool isValid = IsValidLayoutName(name);
-        const bool exists = isValid && _layouts->Exists(name);
-
-        // The button names what it will do, so replacing a layout is never a surprise
-        if (!isEmpty && !isValid) {
-            ImGui::TextColored(GetImGuiPalette().warning, "Use letters, digits, space, - and _ (no space at the ends)");
-        } else if (exists) {
-            ImGui::TextColored(GetImGuiPalette().warning, "A layout with this name exists; saving replaces it");
-        }
-        if (!_saveLayoutError.empty()) {
-            ImGui::TextColored(GetImGuiPalette().warning, "%s", _saveLayoutError.c_str());
-        }
-
-        ImGui::BeginDisabled(!isValid);
-        const bool savePressed = ImGui::Button(exists ? "Overwrite" : "Save");
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        const bool cancelPressed = ImGui::Button("Cancel");
-
-        // Enter saves a new name; replacing a layout needs a click on "Overwrite"
-        if (savePressed || (enterPressed && isValid && !exists)) {
-            if (const auto result = SaveCurrentLayoutAs(name); result) {
-                ImGui::CloseCurrentPopup();
-            } else {
-                _saveLayoutError = result.error();
-            }
-        } else if (cancelPressed) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
     }
 
     void EditorLayoutWidget::CommandMenuItem(PoolString id, const char* label, bool enabled) {
