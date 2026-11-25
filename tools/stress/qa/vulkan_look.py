@@ -6,10 +6,10 @@
 The backend has no `RequestCapture()` (src/Modules/Vulkan/CLAUDE.md, "No capture"), so a screenshot of the control API does not work there and the loop's
 headless tests never reach the Vulkan paths. This script is the documented way to reach them by hand: it starts the game **not headless** with `--control
 --manual-clock`, `reset`s to the scene and count, `step`s frames so the layer has seen the frame it was asked for, `quit`s, and prints the validation
-lines of the game's log (the known finding is marked, any other makes exit code 1) and the `.ppm` files the screenshot layer wrote. It needs a window and a
+lines of the game's log (any of them makes exit code 1) and the `.ppm` files the screenshot layer wrote. It needs a window and a
 display, so it is not a ctest; it never writes inside a git work tree.
 
-Exit codes: 0 the run is clean (only the known finding, at most), 1 a new validation line, no picture, or a failed run, 77 the executable, the layer folder
+Exit codes: 0 the run is clean, 1 a validation line, no picture, or a failed run, 77 the executable, the layer folder
 or the screenshot layer is missing. `--dry-run` prints the environment and the command and starts nothing.
 Standard library only (and tools/control, tools/shots).
 """
@@ -45,8 +45,6 @@ DEFAULT_SHOT_FRAMES = "30"  # a frame below the steps, so the layer has seen it 
 STARTUP_TIMEOUT = 60.0  # a window and a Vulkan device come up slower than the headless game
 SHUTDOWN_TIMEOUT = 20.0
 PORT_TAKEN_RETRIES = 1
-# The one finding that is known: the render-finished semaphores are per frame in flight, not per swapchain image (src/Modules/Vulkan/CLAUDE.md)
-KNOWN_FINDINGS = ("VUID-vkQueueSubmit-pSignalSemaphores-00067",)
 # A message of the validation layer starts with "Validation Error: [ VUID-... ]"; the spec text of one may follow on the same line
 VALIDATION_LINE = re.compile(r"Validation (?:Error|Warning|Performance Warning)|VUID-|UNASSIGNED-")
 PPM_MAGIC = b"P6"
@@ -110,15 +108,9 @@ def read_ppm_size(path: Path) -> tuple[int, int]:
     return width, height
 
 
-def split_validation_lines(lines: Sequence[str]) -> tuple[list[str], list[str]]:
-    """The validation lines of a log as (known, new): known are those that name a finding of KNOWN_FINDINGS."""
-    known: list[str] = []
-    new: list[str] = []
-    for line in lines:
-        if not VALIDATION_LINE.search(line):
-            continue
-        (known if any(finding in line for finding in KNOWN_FINDINGS) else new).append(line)
-    return known, new
+def validation_lines(lines: Sequence[str]) -> list[str]:
+    """The validation lines of a log; there is no known finding to leave out, every one is a failure."""
+    return [line for line in lines if VALIDATION_LINE.search(line)]
 
 
 def written_pictures(shot_dir: Path) -> list[Path]:
@@ -195,14 +187,12 @@ def main() -> int:
     if process.log_path.is_file():
         shutil.copyfile(process.log_path, log_copy)
     lines = log_copy.read_text(errors="replace").splitlines() if log_copy.is_file() else []
-    known, new = split_validation_lines(lines)
+    findings = validation_lines(lines)
     pictures = written_pictures(shot_dir)
 
     print(f"scene {args.scene}, count {args.count}, {args.steps} frames; the game's log is {log_copy}")
-    for line in known:
-        print(f"known   {line}")
-    for line in new:
-        print(f"NEW     {line}")
+    for line in findings:
+        print(f"FINDING {line}")
     for picture in pictures:
         try:
             width, height = read_ppm_size(picture)
@@ -215,8 +205,8 @@ def main() -> int:
     if failure is not None:
         print(f"FAILED: {failure}\n--- game log (tail) ---\n{process.log_tail()}")
         return EXIT_FAILED
-    print(f"{len(known)} known and {len(new)} new validation lines, {len(pictures)} pictures")
-    return EXIT_FAILED if new else EXIT_CLEAN
+    print(f"{len(findings)} validation lines, {len(pictures)} pictures")
+    return EXIT_FAILED if findings else EXIT_CLEAN
 
 
 if __name__ == "__main__":

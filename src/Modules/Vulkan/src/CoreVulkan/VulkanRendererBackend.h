@@ -122,6 +122,8 @@ namespace BECore {
         bool CreateCommandPool();
         bool CreateCommandBuffers();
         bool CreateSyncObjects();
+        /// Makes one render-finished semaphore per image of the current swapchain; the old ones go only after the new ones exist
+        bool RemakeRenderFinishedSemaphores();
         // A fresh image-available semaphore and a signaled fence for one frame slot (see AbandonFrame())
         bool RemakeSlotSyncObjects(uint32_t frameIdx);
 
@@ -201,10 +203,12 @@ namespace BECore {
         VkCommandPool _commandPool = VK_NULL_HANDLE;
         Vector<VkCommandBuffer> _commandBuffers;
 
-        // One set of sync objects per in-flight frame
+        // Per in-flight frame
         Vector<VkSemaphore> _imageAvailableSemaphores;
-        Vector<VkSemaphore> _renderFinishedSemaphores;
         Vector<VkFence> _inFlightFences;
+        // Per swapchain image, indexed by _currentImageIndex: the presentation engine holds the wait semaphore of a
+        // present until the image is acquired again, so a semaphore per frame slot may be signaled while still pending
+        Vector<VkSemaphore> _renderFinishedSemaphores;
 
         uint32_t _currentFrame = 0;
         uint32_t _currentImageIndex = 0;

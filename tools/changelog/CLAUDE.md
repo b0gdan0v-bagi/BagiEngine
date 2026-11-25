@@ -5,6 +5,7 @@ The engine's changelog and version. Standard library only, Python 3.10+. `change
 ```bash
 python3 <engine>/tools/changelog/changelog.py current                         # the version of the header
 python3 <engine>/tools/changelog/changelog.py propose --draft FILE            # minor when the draft has a non-empty Breaking, else patch
+python3 <engine>/tools/changelog/changelog.py key --entry ID                  # the key of the entry's next merge: ID, or ID@<n> ("Fragments")
 python3 <engine>/tools/changelog/changelog.py add --draft FILE --bump minor|patch|auto [--version X] [--date D] [--content-version N] [--dry-run]
 python3 <engine>/tools/changelog/changelog.py render [--check]                # regenerate CHANGELOG.md (--check: only compare)
 python3 <engine>/tools/changelog/changelog.py check                           # ctest BagiChangelogCheck
@@ -18,13 +19,14 @@ Every command takes `--root E` (the engine folder; default the one the tool is i
 
 ## Fragments
 
-One fragment per merged engine entry, `changelog/<entry id>.md`, a file of its own so that two `games/*` branches that each merge an entry never touch the same lines. It is never edited by hand after the merge; `CHANGELOG.md` is generated from the fragments (newest version first) and `check` holds it to them.
+One fragment per merge of an engine entry, `changelog/<key>.md`, a file of its own so that two `games/*` branches that each merge an entry never touch the same lines. It is never edited by hand after the merge; `CHANGELOG.md` is generated from the fragments (newest version first) and `check` holds it to them.
 
 ```
 # <entry title>
 
 - Version: 0.4.0
 - Entry: <id>
+- Merge: 2                      (only for a later merge of the entry)
 - Date: 2026-11-15
 - Bump: minor | patch
 - Content version: 6            (only when the entry bumped kContentVersion)
@@ -35,6 +37,8 @@ One fragment per merged engine entry, `changelog/<entry id>.md`, a file of its o
 ## Migration        (what a game runs: the migrate command and the step)
 ```
 
+The **key** is the entry id for its first merge and `<id>@<n>` for its n-th (an entry merged in slices, each slice a change of its own): the file name, and the key `todo.py version next --entry` gives its number under, so the repeat of one merge keeps its number and a later merge gets a new one. `key --entry <id>` prints the next one; a draft of a later merge carries its `Merge` line, so a repeated `add` of a merge already written is refused, never written as the next merge.
+
 A **draft** is the same without the `Version` and `Date` lines (`add` fills them and refuses a draft that has them). The numbers are `0.MINOR.PATCH` while the engine is young: a non-empty `Breaking` forces `minor`, anything else is `patch`, and a minor bump resets the patch to 0. The tool never bumps MAJOR.
 
 ## What a version means
@@ -43,13 +47,13 @@ The number comes from the store's counter (`tools/todo/CLAUDE.md`, "Commands"), 
 
 ## What `add` refuses (exit 1, nothing written)
 
-A `--version` that is not above every fragment of the tree (the bump is not compared with it); `Bump: patch` with a Breaking section; a Breaking bullet without `Adapt:`; an `Entry` that already has a fragment; a draft without `Content version` while `kContentVersion` (`Config/ContentVersion.h`) is higher than every `Content version` of the fragments (the entry bumped it and forgot its Migration section); a `Content version` above `kContentVersion` or not above the log's; a broken log, or a header whose version is not the highest fragment's.
+A `--version` that is not above every fragment of the tree (the bump is not compared with it); `Bump: patch` with a Breaking section; a Breaking bullet without `Adapt:`; a key that already has a fragment, or a `Merge` that is not the entry's next (`key`); a draft without `Content version` while `kContentVersion` (`Config/ContentVersion.h`) is higher than every `Content version` of the fragments (the entry bumped it and forgot its Migration section); a `Content version` above `kContentVersion` or not above the log's; a broken log, or a header whose version is not the highest fragment's.
 
 The first fragment of an empty log (`baseline.md`) takes the header's version as it is: it records where the log starts and moves nothing. Then `add` writes the fragment, rewrites the three `#define BE_ENGINE_VERSION_*` lines (nothing else of the header, line endings kept) and regenerates `CHANGELOG.md`. `--dry-run` runs every refusal and prints what it would write. `--content-version N` stands for `kContentVersion` in the comparison: `todo-merge` dry-runs on the base, before the merge, where the header still holds the old number while the draft describes the branch, so it passes the branch's value; the real `add` after the merge never passes it. `--date` must be a calendar date.
 
 ## What `check` reports (exit 1, one line per problem naming the file)
 
-Ctest `BagiChangelogCheck` (`tests/CMakeLists.txt`) and `tests/test_real_tree.py` run it on the real tree. It reports: a malformed fragment; a fragment not named after its `Entry`; a repeated version; the highest fragment version differing from the header; `CHANGELOG.md` missing or differing from the rendering. Gaps between versions are allowed. It does **not** compare `kContentVersion` with the fragments: a branch that bumped it has no fragment until `todo-merge` adds one after the merge, and the ctest would fail the branch.
+Ctest `BagiChangelogCheck` (`tests/CMakeLists.txt`) and `tests/test_real_tree.py` run it on the real tree. It reports: a malformed fragment; a fragment not named after its key; a repeated version; the highest fragment version differing from the header; `CHANGELOG.md` missing or differing from the rendering. Gaps between versions are allowed. It does **not** compare `kContentVersion` with the fragments: a branch that bumped it has no fragment until `todo-merge` adds one after the merge, and the ctest would fail the branch.
 
 ## Merging: the two generated files never conflict
 

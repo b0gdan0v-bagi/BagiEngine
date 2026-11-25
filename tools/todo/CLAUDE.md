@@ -17,7 +17,19 @@ Each run asks the service `GET /api/v1/cli?layout=tree` for the version it hands
 
 ## Settings
 
-- `TODO_API_URL` (the service, no `/api/v1`) and `TODO_API_TOKEN`: from the environment, then `--env-file`, then the first `.env` from the current folder upwards that has `TODO_API_URL` (git-ignored; `.env.example`). The token is the checkout's own, limited to its areas, and issued by the owner; it is never printed or committed.
+- `TODO_API_URL` (the service, no `/api/v1`) and `TODO_API_TOKEN`: from the environment, then `--env-file`, then the first `.env` from the current folder upwards that has `TODO_API_URL` (git-ignored; `.env.example`), then, when neither is set, the sign-in `todo.py login` saved (`TODO_LOGIN_FILE`, default `~/.config/bagitodo/login.json`, readable by its owner only). The token of a `.env` is the checkout's own, limited to its areas, and issued by the owner; it is never printed or committed. A `.env` with `TODO_API_URL` always wins over the sign-in, so the owner's checkouts change nothing.
+
+## A new contributor
+
+A person the owner approved in BagiTodo (page Settings, People) needs no `.env` for the todo store:
+
+```bash
+git clone --recurse-submodules <the repository>
+python3 tools/todo/todo.py login https://<todo address>   # the address from the owner; in a game: engine/tools/todo/todo.py
+python3 tools/todo/todo.py ping
+```
+
+`login` prints a page and a code (and opens the browser; `--no-browser` does not): sign in with Google there and allow the code. The address and the token are saved in `~/.config/bagitodo/login.json` for every checkout of this machine; `todo.py logout` revokes the token and forgets it. `login` is run by the loader itself, before any download.
 - `BAGITODO_CACHE`: the cache of the downloaded versions (default `~/.cache/bagitodo`, readable by its owner only: it holds code that runs).
 - `TODO_ACTOR` (or `--actor`) names the writer in the history (`todo-loop`, `owner`, ...; default `cli`).
 - Every accepted write also rewrites the signal file `TODO_CHANGED_FILE` (default `~/.claude/todo/changed.json`), so a viewer (the Todo Workers panel) reads the store again at once.
