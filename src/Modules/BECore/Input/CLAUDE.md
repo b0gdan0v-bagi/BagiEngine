@@ -31,8 +31,12 @@
 
 `wheel_at {x, y, dx?, dy?, flipped?, which?}` (`InputControl.h`) sends one `SDL_MouseWheelEvent` through `DispatchMouseWheel` at an output pixel, `dx` / `dy` as SDL gives them (`dy` positive away from the user), `flipped` as `SDL_MOUSEWHEEL_FLIPPED`. It sends no motion first: the event carries its own position, and a handler that needs the pointer there (a document) moves it itself. "consumed" says whether a handler took it; otherwise game code gets the raw event. No `dx` and no `dy` is `invalid_params`.
 
+## The ImGui item index
+
+`ImGuiItemIndex` records the windows and items one ImGui frame submitted (id, label as given, window, rect in ImGui units, visible, hovered rect) for `imgui_find`; ImGui keeps no such list. It is filled by ImGui's test-engine hooks: `IMGUI_ENABLE_TEST_ENGINE` is a private define of the `imgui` target (`BECore/CMakeLists.txt`; the vendored sources stay untouched) and the hook functions are defined in `ImGuiItemIndex.cpp`, in BECore because every executable links it and a missing definition would be a link error. While no index is armed `TestEngineHookItems` is false and ImGui pays one branch per item. The list is cleared when the next frame starts, so a read after a frame is that frame's whole list (`Frame()` says which; an index armed mid-frame holds a partial one and reports `kNoFrame` until the next frame starts). An item exists only in a frame that drew it, and ImGui reports an item's label only when the widget gets that far: a clipped `Button` has a rect and no label (a clipped `Checkbox` has both). `Disarm()` is safe after the context was destroyed; the index never asserts on ImGui's state.
+
 ## Rules
 
 - Register and unregister inside a handler are safe: a registration joins after the dispatch in progress, an unregistered handler is not called again, not even by that dispatch, and is never called to leave. A handler that unregisters itself while answering `true` starts no capture.
 - **A dispatch allocates nothing:** no container per event; `PointerTracker` holds `kMaxEntries` captures and hovers inline (a further one is refused and the dispatcher then simply holds nothing).
-- Tests: `PointerTrackerTest`, `UIInputTest`, `UIInputPointerTest`, `SceneInputOrderTest`, `PointerTargetComponentTest`, `ClickableComponentTest`, `ClipRectComponentTest`, `FingerPointersTest`, `ClickAtControlTest`, `WheelAtControlTest`.
+- Tests: `PointerTrackerTest`, `UIInputTest`, `UIInputPointerTest`, `SceneInputOrderTest`, `PointerTargetComponentTest`, `ClickableComponentTest`, `ClipRectComponentTest`, `FingerPointersTest`, `ClickAtControlTest`, `WheelAtControlTest`, `ImGuiItemIndexTest`.
