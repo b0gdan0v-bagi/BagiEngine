@@ -28,6 +28,15 @@ namespace BECore::PanelDraw {
         ImGui::TextDisabled("%s", kUnreadable);
     }
 
+    /// The label a control draws after itself (`text` of a number, a combo or an input), on its line; nothing for an empty one
+    inline void DrawTrailingText(const String& text) {
+        if (text.empty()) {
+            return;
+        }
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TextUnformatted(text.c_str(), text.c_str() + text.size());
+    }
+
     /// The colour of a text style; null for the normal one, which keeps the theme's text colour
     inline const ImVec4* ColorOf(PanelTextStyle style) {
         const ImGuiPalette& palette = GetImGuiPalette();

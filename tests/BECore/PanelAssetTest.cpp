@@ -364,6 +364,108 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(add->width, kPanelFillLineWidth);
     }
 
+    TEST(PanelAssetTest, GenerateKindsRoundTrip) {
+        constexpr const char* xml = R"(
+<PanelAsset id="Generate" title="Generate">
+  <elements>
+    <element type="PanelSection" id="settings" title="Settings" look="Tree" tooltip="Settings" tooltipBind="art.settingsTip">
+      <elements>
+        <element type="PanelText" id="service" bind="art.status" icon="plug"/>
+        <element type="PanelInput" id="name" bind="art.name" text="Name" fill="false"/>
+        <element type="PanelCombo" id="workflow" bind="art.workflow" items="art.workflows" itemField="name" enableField="usable" tooltipField="error" previewBind="art.workflowName" text="Workflow"/>
+        <element type="PanelNumber" id="padding" bind="art.padding" min="0" max="50" slider="true" unit=" %" decimals="2"/>
+        <element type="PanelProgress" id="download" bind="art.fraction" textBind="art.overlay" width="12"/>
+        <element type="PanelDropdown" id="saveAs" icon="save-all" openCommand="art.saveAsOpened">
+          <elements>
+            <element type="PanelButton" id="save" text="Save" command="art.save" closePopup="true"/>
+          </elements>
+        </element>
+        <element type="PanelTable" id="plan" source="art.plan">
+          <columns>
+            <column id="what" type="Text" field="what" tooltipField="licence"/>
+          </columns>
+        </element>
+        <element type="PanelTabs" id="tabs">
+          <elements>
+            <element type="PanelTab" id="run" title="Generate" icon="image"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        XmlDeserializer first;
+        const auto asset = Read(xml, first);
+        ASSERT_FALSE(first.HasErrors());
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+
+        ASSERT_EQ(again->elements.size(), 1u);
+        const auto* section = ElementAs<PanelSection>(again->elements[0]);
+        ASSERT_NE(section, nullptr);
+        EXPECT_EQ(section->look, PanelSectionLook::Tree);
+        EXPECT_EQ(section->tooltipBind, "art.settingsTip");
+        ASSERT_EQ(section->elements.size(), 8u);
+        const auto* service = ElementAs<PanelText>(section->elements[0]);
+        ASSERT_NE(service, nullptr);
+        EXPECT_EQ(service->icon, "plug");
+        const auto* name = ElementAs<PanelInput>(section->elements[1]);
+        ASSERT_NE(name, nullptr);
+        EXPECT_EQ(name->text, "Name");
+        EXPECT_FALSE(name->fill);
+        const auto* workflow = ElementAs<PanelCombo>(section->elements[2]);
+        ASSERT_NE(workflow, nullptr);
+        EXPECT_EQ(workflow->enableField, "usable");
+        EXPECT_EQ(workflow->tooltipField, "error");
+        EXPECT_EQ(workflow->previewBind, "art.workflowName");
+        EXPECT_EQ(workflow->text, "Workflow");
+        const auto* padding = ElementAs<PanelNumber>(section->elements[3]);
+        ASSERT_NE(padding, nullptr);
+        EXPECT_EQ(padding->unit, " %");
+        EXPECT_EQ(padding->decimals, 2u);
+        const auto* download = ElementAs<PanelProgress>(section->elements[4]);
+        ASSERT_NE(download, nullptr);
+        EXPECT_EQ(download->bind, "art.fraction");
+        EXPECT_EQ(download->textBind, "art.overlay");
+        EXPECT_FLOAT_EQ(download->width, 12.0f);
+        const auto* saveAs = ElementAs<PanelDropdown>(section->elements[5]);
+        ASSERT_NE(saveAs, nullptr);
+        EXPECT_EQ(saveAs->openCommand, "art.saveAsOpened");
+        ASSERT_EQ(saveAs->elements.size(), 1u);
+        const auto* save = ElementAs<PanelButton>(saveAs->elements[0]);
+        ASSERT_NE(save, nullptr);
+        EXPECT_TRUE(save->closePopup);
+        const auto* plan = ElementAs<PanelTable>(section->elements[6]);
+        ASSERT_NE(plan, nullptr);
+        ASSERT_EQ(plan->columns.size(), 1u);
+        EXPECT_EQ(plan->columns[0].tooltipField, "licence");
+        const auto* tabs = ElementAs<PanelTabs>(section->elements[7]);
+        ASSERT_NE(tabs, nullptr);
+        ASSERT_EQ(tabs->elements.size(), 1u);
+        const auto* run = ElementAs<PanelTab>(tabs->elements[0]);
+        ASSERT_NE(run, nullptr);
+        EXPECT_EQ(run->icon, "image");
+    }
+
+    TEST(PanelAssetTest, ASectionLooksAndAnInputFillsAsBeforeWhenTheFileSaysNothing) {
+        XmlDeserializer deserializer;
+        const auto asset = Read(R"(<PanelAsset id="A"><elements>
+                                     <element type="PanelSection" id="s"/>
+                                     <element type="PanelInput" id="i" bind="a.b"/>
+                                   </elements></PanelAsset>)",
+                                deserializer);
+        ASSERT_FALSE(deserializer.HasErrors());
+        const auto* section = ElementAs<PanelSection>(asset->elements[0]);
+        const auto* input = ElementAs<PanelInput>(asset->elements[1]);
+        ASSERT_NE(section, nullptr);
+        ASSERT_NE(input, nullptr);
+        EXPECT_EQ(section->look, PanelSectionLook::Header);
+        EXPECT_TRUE(input->fill);
+    }
+
     TEST(PanelAssetTest, RowAlignAndButtonFillDefaultToTheOldLook) {
         XmlDeserializer deserializer;
         const auto asset = Read(R"(<PanelAsset id="A"><elements>
@@ -385,7 +487,7 @@ namespace BECore::Tests {
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {
         for (const char* name : {"PanelSection", "PanelRow",    "PanelText",  "PanelField",     "PanelFields",     "PanelInput",    "PanelCheckbox", "PanelCombo",
                                  "PanelNumber",  "PanelButton", "PanelTable", "PanelSeparator", "PanelEmptyState", "PanelSlot",     "PanelChild",    "PanelPopup",
-                                 "PanelTabs",    "PanelTab",    "PanelMenu",  "PanelMenuItem",  "PanelMenuItems",  "PanelDropdown", "PanelRadio"}) {
+                                 "PanelTabs",    "PanelTab",    "PanelMenu",  "PanelMenuItem",  "PanelMenuItems",  "PanelDropdown", "PanelRadio",    "PanelProgress"}) {
             const IntrusivePtr<PanelElement> element = AbstractFactory<PanelElement>::GetInstance().Create(StringView{name});
             ASSERT_NE(element, nullptr) << name;
             EXPECT_EQ(element->GetTypeMeta().typeName, StringView{name});

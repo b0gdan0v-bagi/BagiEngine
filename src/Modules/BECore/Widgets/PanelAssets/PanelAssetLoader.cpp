@@ -166,6 +166,7 @@ namespace BECore {
                     _issues.Add(where, Format("id '{}' is used twice", element.id));
                 }
                 Condition(where, "visible", element.visible);
+                Binding(where, "tooltipBind", element.tooltipBind, false);
 
                 // An element with no `type` loads as the base class without a reader finding, and writes `type="PanelElement"`, which is no kind
                 if (element.GetTypeMeta().typeName == kBaseElementType) {
@@ -228,6 +229,13 @@ namespace BECore {
                     if (button->width != kPanelFillLineWidth && !IsExtent(button->width)) {
                         _issues.Add(where, Format("width must be {} (the rest of the line) or from 0 to {}", kPanelFillLineWidth, PanelAssetLimits::kMaxChildExtent));
                     }
+                    if (button->closePopup && _dropdownDepth == 0) {
+                        _issues.Add(where, "closePopup is for a button inside a dropdown");
+                    }
+                } else if (const auto* progress = element.Cast<PanelProgress>()) {
+                    Binding(where, "bind", progress->bind, true);
+                    Binding(where, "textBind", progress->textBind, false);
+                    Extent(where, "width", progress->width);
                 } else if (const auto* menu = element.Cast<PanelMenu>()) {
                     CheckMenu(*menu, where);
                 } else if (const auto* item = element.Cast<PanelMenuItem>()) {
@@ -343,6 +351,15 @@ namespace BECore {
                     _issues.Add(where, "separatorField needs items");
                 }
                 RelativePath(where, "separatorField", combo.separatorField);
+                if (combo.items.empty() && !combo.enableField.empty()) {
+                    _issues.Add(where, "enableField needs items");
+                }
+                RelativePath(where, "enableField", combo.enableField);
+                if (combo.items.empty() && !combo.tooltipField.empty()) {
+                    _issues.Add(where, "tooltipField needs items");
+                }
+                RelativePath(where, "tooltipField", combo.tooltipField);
+                Binding(where, "previewBind", combo.previewBind, false);
                 Extent(where, "width", combo.width);
                 Condition(where, "enableWhen", combo.enableWhen);
             }
@@ -377,6 +394,10 @@ namespace BECore {
                 } else if (number.stepFast != 0.0f && !number.stepper) {
                     _issues.Add(where, "stepFast needs stepper");
                 }
+                if (number.decimals > PanelAssetLimits::kMaxNumberDecimals) {
+                    _issues.Add(where, Format("decimals must be at most {}", PanelAssetLimits::kMaxNumberDecimals));
+                }
+                Literal(where, "unit", number.unit);
             }
 
             void CheckRadio(const PanelRadio& radio, StringView where) {
@@ -419,6 +440,7 @@ namespace BECore {
                     _issues.Add(where, "a dropdown needs 'text' or 'icon'");
                 }
                 Condition(where, "enableWhen", dropdown.enableWhen);
+                OptionalCommand(where, "openCommand", dropdown.openCommand);
                 if (_dropdownDepth > 0) {
                     _issues.Add(where, "a dropdown is not nested in a dropdown");
                 }
@@ -468,6 +490,7 @@ namespace BECore {
                     }
                     RelativePath(where, "labelField", column.labelField);
                     RelativePath(where, "argument", column.argument);
+                    RelativePath(where, "tooltipField", column.tooltipField);
                 }
             }
 

@@ -1,6 +1,7 @@
 #include "PanelInterpreter.h"
 
 #include <BECore/Reflection/TypedRef.h>
+#include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/IconTable.h>
@@ -16,6 +17,10 @@ namespace BECore {
     namespace {
 
         constexpr const char* kSelectableSuffix = "##select";
+        /// Between a number and its `unit`, as the hand-written sliders put it
+        constexpr const char* kUnitGap = " ";
+        /// What a `%` of a unit becomes in a format, so it prints itself
+        constexpr const char* kLiteralPercent = "%%";
         /// The popup of a dropdown, under the element's own id
         constexpr const char* kDropdownPopup = "##dropdown";
 
@@ -103,6 +108,45 @@ namespace BECore {
 
         void TextOf(StringView text) {
             ImGui::TextUnformatted(text.data(), text.data() + text.size());
+        }
+
+        /// A number's `unit` after the value as a literal: a `%` is doubled, so a file never adds a conversion of its own
+        void AppendUnit(String& format, StringView unit) {
+            if (unit.empty()) {
+                return;
+            }
+            format.append(kUnitGap);
+            for (const char c : unit) {
+                if (c == '%') {
+                    format.append(kLiteralPercent);
+                } else {
+                    format.push_back(c);
+                }
+            }
+        }
+
+        /// The formats of a number for a float and for an integer field, made from `decimals` and `unit`; both stay empty (ImGui's default) when the number has neither
+        void PrepareNumberFormats(const PanelNumber& number, PreparedElement& prepared) {
+            if (number.decimals == 0 && number.unit.empty()) {
+                return;
+            }
+            // A file with issues is still drawn, so a count past the limit is held to it here too
+            prepared.format = Format("%.{}f", eastl::min(number.decimals, PanelAssetLimits::kMaxNumberDecimals));
+            AppendUnit(prepared.format, number.unit);
+            // The integer form is over `ImGuiDataType_S64`, which wants the 64-bit conversion
+            prepared.integerFormat.assign("%" IM_PRId64);
+            AppendUnit(prepared.integerFormat, number.unit);
+        }
+
+        /// Whether the last item is hovered for a tooltip, also while it is disabled (`ItemTooltip`'s test)
+        bool TooltipHovered() {
+            return ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_AllowWhenDisabled);
+        }
+
+        void ShowTooltip(StringView text) {
+            if (!text.empty()) {
+                ImGui::SetTooltip("%.*s", static_cast<int>(text.size()), text.data());
+            }
         }
 
         /// An id of the walk: `PushID` of a text or an index, popped when the scope ends
@@ -197,6 +241,9 @@ namespace BECore {
             if (element.Is<PanelRadio>()) {
                 return PreparedKind::Radio;
             }
+            if (element.Is<PanelProgress>()) {
+                return PreparedKind::Progress;
+            }
             return PreparedKind::Unknown;
         }
 
@@ -227,6 +274,7 @@ namespace BECore {
             prepared.element = element.Get();
             prepared.kind = KindOf(*element);
             prepared.visible = PrepareCondition(element->visible);
+            prepared.tooltip = PrepareBinding(element->tooltipBind, BindingForm::Field);
             switch (prepared.kind) {
                 case PreparedKind::Section: {
                     const PanelSection& section = *element->Cast<PanelSection>();
@@ -238,7 +286,10 @@ namespace BECore {
                 case PreparedKind::Row:
                 case PreparedKind::Child:
                 case PreparedKind::Tabs:
+                    PrepareElements(element->elements, prepared.children);
+                    break;
                 case PreparedKind::Tab:
+                    prepared.glyph = GlyphOf(element->Cast<PanelTab>()->icon);
                     PrepareElements(element->elements, prepared.children);
                     break;
                 case PreparedKind::Menu:
@@ -259,6 +310,12 @@ namespace BECore {
                     prepared.open = PrepareCondition(element->Cast<PanelPopup>()->open);
                     PrepareElements(element->elements, prepared.children);
                     break;
+                case PreparedKind::Progress: {
+                    const PanelProgress& progress = *element->Cast<PanelProgress>();
+                    prepared.bind = PrepareBinding(progress.bind, BindingForm::Field);
+                    prepared.label = PrepareBinding(progress.textBind, BindingForm::Field);
+                    break;
+                }
                 case PreparedKind::Dropdown: {
                     const PanelDropdown& dropdown = *element->Cast<PanelDropdown>();
                     prepared.enableWhen = PrepareCondition(dropdown.enableWhen);
@@ -268,6 +325,7 @@ namespace BECore {
                 }
                 case PreparedKind::Text:
                     prepared.bind = PrepareBinding(element->Cast<PanelText>()->bind, BindingForm::Field);
+                    prepared.glyph = GlyphOf(element->Cast<PanelText>()->icon);
                     break;
                 case PreparedKind::Field:
                     prepared.bind = PrepareBinding(element->Cast<PanelField>()->bind, BindingForm::Field);
@@ -294,6 +352,7 @@ namespace BECore {
                     const PanelCombo& combo = *element->Cast<PanelCombo>();
                     prepared.bind = PrepareBinding(combo.bind, BindingForm::Field);
                     prepared.items = PrepareBinding(combo.items, BindingForm::Field);
+                    prepared.label = PrepareBinding(combo.previewBind, BindingForm::Field);
                     prepared.enableWhen = PrepareCondition(combo.enableWhen);
                     break;
                 }
@@ -301,6 +360,7 @@ namespace BECore {
                     const PanelNumber& number = *element->Cast<PanelNumber>();
                     prepared.bind = PrepareBinding(number.bind, BindingForm::Field);
                     prepared.enableWhen = PrepareCondition(number.enableWhen);
+                    PrepareNumberFormats(number, prepared);
                     break;
                 }
                 case PreparedKind::Radio: {
@@ -380,6 +440,30 @@ namespace BECore {
         _result->argument.assign(argument.data(), argument.size());
     }
 
+    void PanelInterpreter::ElementTooltip(const PreparedElement& prepared) {
+        if (!TooltipHovered()) {
+            return;
+        }
+        StringView text = prepared.element->tooltip;
+        StringView bound;
+        if (prepared.tooltip.state == PreparedBindingState::Ok && _reader.ReadText(*_sources, prepared.tooltip.binding, _tooltipScratch, bound) == PanelReadStatus::Ok) {
+            text = bound;
+        }
+        ShowTooltip(text);
+    }
+
+    void PanelInterpreter::RowTooltip(StringView literal, const PanelBinding& list, size_t row, StringView path) {
+        if (!TooltipHovered()) {
+            return;
+        }
+        StringView text = literal;
+        StringView bound;
+        if (!path.empty() && _reader.ReadRowText(*_sources, list, row, path, _tooltipScratch, bound) == PanelReadStatus::Ok) {
+            text = bound;
+        }
+        ShowTooltip(text);
+    }
+
     void PanelInterpreter::DrawElement(const PreparedElement& prepared) {
         const PanelElement& element = *prepared.element;
         const ScopedId id(element.id.c_str());
@@ -444,6 +528,9 @@ namespace BECore {
             case PreparedKind::Dropdown:
                 DrawDropdown(prepared);
                 break;
+            case PreparedKind::Progress:
+                DrawProgress(prepared);
+                break;
             case PreparedKind::Tabs:
                 DrawTabs(prepared);
                 break;
@@ -481,14 +568,20 @@ namespace BECore {
         _label.append(kStableIdSuffix);
         _label.append(section.id);
         const ImGuiTreeNodeFlags flags = section.defaultOpen ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None;
-        const bool open = ImGui::CollapsingHeader(_label.c_str(), flags);
-        ItemTooltip(OrNull(section.tooltip));
+        const bool tree = section.look == PanelSectionLook::Tree;
+        // An open tree node has pushed its id and indents until `TreePop`; a header does neither
+        const bool open = tree ? ImGui::TreeNodeEx(_label.c_str(), flags) : ImGui::CollapsingHeader(_label.c_str(), flags);
+        ElementTooltip(prepared);
         bool held = false;
         if (prepared.bind.state == PreparedBindingState::Ok && _reader.ReadBool(*_sources, prepared.bind.binding, held) == PanelReadStatus::Ok && held != open) {
             static_cast<void>(_writer.WriteBool(*_sources, prepared.bind.binding, open));
         }
-        if (open) {
-            DrawElements(prepared.children);
+        if (!open) {
+            return;
+        }
+        DrawElements(prepared.children);
+        if (tree) {
+            ImGui::TreePop();
         }
     }
 
@@ -561,12 +654,11 @@ namespace BECore {
 
     void PanelInterpreter::DrawDropdown(const PreparedElement& prepared) {
         const PanelDropdown& dropdown = *prepared.element->Cast<PanelDropdown>();
-        const char* tooltip = OrNull(dropdown.tooltip);
         const bool enabled = ReadCondition(prepared.enableWhen);
         ImGui::BeginDisabled(!enabled);
         bool clicked = false;
         if (prepared.glyph != nullptr && dropdown.text.empty()) {
-            clicked = IconButton(prepared.glyph, tooltip, dropdown.id.c_str());
+            clicked = IconButton(prepared.glyph, nullptr, dropdown.id.c_str());
         } else {
             _label.clear();
             if (prepared.glyph != nullptr) {
@@ -577,8 +669,8 @@ namespace BECore {
             _label.append(kIdSuffix);
             _label.append(dropdown.id);
             clicked = ImGui::Button(_label.c_str());
-            ItemTooltip(tooltip);
         }
+        ElementTooltip(prepared);
         ImGui::EndDisabled();
         const ImVec2 below(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y);
         if (clicked) {
@@ -589,11 +681,36 @@ namespace BECore {
         if (!ImGui::BeginPopup(kDropdownPopup)) {
             return;
         }
+        if (prepared.menuOpened.Opened(ImGui::GetFrameCount()) && !dropdown.openCommand.empty()) {
+            NoteClick(dropdown.openCommand, StringView{});
+        }
         // A condition that turns false while the popup is open disables what it holds, so nothing in it writes
         ImGui::BeginDisabled(!enabled);
+        _inDropdown = true;
         DrawElements(prepared.children);
+        _inDropdown = false;
         ImGui::EndDisabled();
         ImGui::EndPopup();
+    }
+
+    void PanelInterpreter::DrawProgress(const PreparedElement& prepared) {
+        const PanelProgress& progress = *prepared.element->Cast<PanelProgress>();
+        double value = 0.0;
+        const bool readable = prepared.bind.state == PreparedBindingState::Ok && _reader.ReadNumber(*_sources, prepared.bind.binding, value) == PanelReadStatus::Ok;
+        // Written so a NaN is an empty bar
+        const float fraction = readable && value > 0.0 ? static_cast<float>(eastl::min(value, 1.0)) : 0.0f;
+        const char* overlay = nullptr;
+        StringView text;
+        if (!readable) {
+            overlay = kUnreadable;
+        } else if (prepared.label.state == PreparedBindingState::Ok && _reader.ReadText(*_sources, prepared.label.binding, _scratch, text) == PanelReadStatus::Ok) {
+            // `ProgressBar` wants a C string, which a bound text is not promised to be
+            _label.assign(text.data(), text.size());
+            overlay = _label.c_str();
+        }
+        const float width = progress.width > 0.0f ? progress.width * ImGui::GetFontSize() : kFillWidth;
+        ImGui::ProgressBar(fraction, ImVec2(width, 0.0f), overlay);
+        ElementTooltip(prepared);
     }
 
     void PanelInterpreter::DrawTabs(const PreparedElement& prepared) {
@@ -613,7 +730,14 @@ namespace BECore {
 
     void PanelInterpreter::DrawTab(const PreparedElement& prepared) {
         const PanelTab& tab = *prepared.element->Cast<PanelTab>();
-        _label.assign(tab.title.c_str(), tab.title.size());
+        _label.clear();
+        if (prepared.glyph != nullptr) {
+            _label.append(prepared.glyph);
+            if (!tab.title.empty()) {
+                _label.append(kGlyphGap);
+            }
+        }
+        _label.append(tab.title);
         _label.append(kStableIdSuffix);
         _label.append(tab.id);
         if (ImGui::BeginTabItem(_label.c_str())) {
@@ -656,7 +780,7 @@ namespace BECore {
         _label.append(kStableIdSuffix);
         _label.append(item.id);
         const bool clicked = ImGui::MenuItem(_label.c_str(), ChordOf(item.command), false, ReadCondition(prepared.enableWhen));
-        ItemTooltip(OrNull(item.tooltip));
+        ElementTooltip(prepared);
         if (clicked && !item.command.empty()) {
             NoteClick(item.command, item.argument);
         }
@@ -711,6 +835,13 @@ namespace BECore {
         if (text.text.empty() && (prepared.bind.state != PreparedBindingState::Ok || _reader.ReadText(*_sources, prepared.bind.binding, _scratch, shown) != PanelReadStatus::Ok)) {
             shown = kUnreadable;
         }
+        if (prepared.glyph != nullptr) {
+            // One text, so a wrapped or scrolled line keeps the glyph with its words
+            _label.assign(prepared.glyph);
+            _label.append(kGlyphGap);
+            _label.append(shown.data(), shown.size());
+            shown = _label;
+        }
         const ScopedTextStyle style(text.style);
         const auto draw = [&] {
             if (text.maxLines == 0) {
@@ -730,7 +861,7 @@ namespace BECore {
         } else {
             draw();
         }
-        ItemTooltip(OrNull(prepared.element->tooltip));
+        ElementTooltip(prepared);
     }
 
     void PanelInterpreter::DrawLines(bool wrap, StringView shown) {
@@ -745,7 +876,6 @@ namespace BECore {
 
     void PanelInterpreter::DrawButton(const PreparedElement& prepared) {
         const PanelButton& button = *prepared.element->Cast<PanelButton>();
-        const char* tooltip = OrNull(button.tooltip);
         ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
         ImGui::PushItemFlag(ImGuiItemFlags_NoNav, !button.navigable);
         ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, button.repeat);
@@ -753,16 +883,19 @@ namespace BECore {
         const float widthPixels = button.width == kPanelFillLineWidth ? kFillWidth : button.width * ImGui::GetFontSize();
         bool clicked = false;
         if (prepared.glyph != nullptr && button.text.empty()) {
-            clicked = IconButton(prepared.glyph, tooltip, button.id.c_str());
+            clicked = IconButton(prepared.glyph, nullptr, button.id.c_str());
         } else if (prepared.glyph != nullptr) {
-            clicked = IconTextButton(prepared.glyph, button.text.c_str(), tooltip, widthPixels);
+            clicked = IconTextButton(prepared.glyph, button.text.c_str(), nullptr, widthPixels);
         } else {
             clicked = ImGui::Button(button.text.empty() ? "##button" : button.text.c_str(), ImVec2(widthPixels, 0.0f));
-            ItemTooltip(tooltip);
         }
+        ElementTooltip(prepared);
         ImGui::PopItemFlag();
         ImGui::PopItemFlag();
         ImGui::EndDisabled();
+        if (clicked && button.closePopup && _inDropdown) {
+            ImGui::CloseCurrentPopup();
+        }
         if (clicked && !button.command.empty()) {
             NoteClick(button.command, button.argument);
         }
@@ -774,10 +907,12 @@ namespace BECore {
         _inputBuffer[size] = '\0';
     }
 
-    bool PanelInterpreter::DrawTextBox(const char* label, StringView current, const char* hint, float widthInEm, bool enterOnly) {
+    bool PanelInterpreter::DrawTextBox(const char* label, StringView current, const char* hint, float widthPixels, bool enterOnly) {
         const ImGuiInputTextFlags flags = enterOnly ? ImGuiInputTextFlags_EnterReturnsTrue : ImGuiInputTextFlags_None;
         FillInputBuffer(current);
-        ImGui::SetNextItemWidth(widthInEm > 0.0f ? widthInEm * ImGui::GetFontSize() : kFillWidth);
+        if (widthPixels != 0.0f) {
+            ImGui::SetNextItemWidth(widthPixels);
+        }
         if (hint != nullptr) {
             return ImGui::InputTextWithHint(label, hint, _inputBuffer, sizeof(_inputBuffer), flags);
         }
@@ -798,15 +933,18 @@ namespace BECore {
         }
         // `EnterReturnsTrue` turns the result into "Enter was pressed", so a change is asked of the item; the loader keeps a submit off a multiline field
         const bool submits = !input.submitCommand.empty() && input.lines == 0;
+        // A label after the field needs room on the line, so a field with one takes ImGui's default width (0) as one with `fill` false does
+        const bool fills = input.fill && input.text.empty();
+        const float width = input.width > 0.0f ? input.width * ImGui::GetFontSize() : (fills ? kFillWidth : 0.0f);
         bool result = false;
         if (input.lines > 0) {
             FillInputBuffer(shown);
             const ImGuiStyle& style = ImGui::GetStyle();
-            const ImVec2 size(input.width > 0.0f ? input.width * ImGui::GetFontSize() : kFillWidth, static_cast<float>(input.lines) * ImGui::GetTextLineHeight() + style.FramePadding.y * 2.0f);
+            const ImVec2 size(width, static_cast<float>(input.lines) * ImGui::GetTextLineHeight() + style.FramePadding.y * 2.0f);
             // `InputTextMultiline` takes no hint; this is the call it makes, with the hint
             result = ImGui::InputTextEx(_label.c_str(), OrNull(prepared.hint), _inputBuffer, static_cast<int>(sizeof(_inputBuffer)), size, ImGuiInputTextFlags_Multiline);
         } else {
-            result = DrawTextBox(_label.c_str(), shown, OrNull(prepared.hint), input.width, submits);
+            result = DrawTextBox(_label.c_str(), shown, OrNull(prepared.hint), width, submits);
         }
         if (submits ? ImGui::IsItemEdited() : result) {
             // A field that is not a `String` reads fine but refuses the write: the text then comes back as it was next frame
@@ -818,7 +956,8 @@ namespace BECore {
         if (submits && result) {
             NoteClick(input.submitCommand, StringView{});
         }
-        ItemTooltip(OrNull(input.tooltip));
+        ElementTooltip(prepared);
+        DrawTrailingText(input.text);
     }
 
     void PanelInterpreter::DrawField(const PreparedElement& prepared, bool openCompound) {
@@ -969,12 +1108,15 @@ namespace BECore {
         const ScopedTextStyle scoped(style);
         if (column.type != PanelColumnType::Selectable) {
             TextOf(text);
+            RowTooltip(column.tooltip, list, row, column.tooltipField);
             return;
         }
         // The label is the text of the cell and a suffix, so an empty cell is still an item
         _label.assign(text.data(), text.size());
         _label.append(kSelectableSuffix);
-        if (ImGui::Selectable(_label.c_str(), ReadRowFlag(list, row, column.selectedField)) && !column.command.empty()) {
+        const bool clicked = ImGui::Selectable(_label.c_str(), ReadRowFlag(list, row, column.selectedField));
+        RowTooltip(column.tooltip, list, row, column.tooltipField);
+        if (clicked && !column.command.empty()) {
             StringView argument;
             if (ReadArgument(list, row, column.argument, argument)) {
                 NoteClick(column.command, argument);
@@ -991,7 +1133,7 @@ namespace BECore {
         bool clicked = false;
         if (column.field.empty()) {
             const char* glyph = prepared.glyph != nullptr ? prepared.glyph : (column.title.empty() ? kUnreadable : column.title.c_str());
-            clicked = IconButton(glyph, OrNull(column.tooltip), column.id.c_str());
+            clicked = IconButton(glyph, nullptr, column.id.c_str());
         } else {
             // Its own scratch: `argument` may still view `_scratch`
             StringView text;
@@ -1008,8 +1150,8 @@ namespace BECore {
             _label.append(kIdSuffix);
             _label.append(column.id);
             clicked = ImGui::Button(_label.c_str());
-            ItemTooltip(OrNull(column.tooltip));
         }
+        RowTooltip(column.tooltip, list, row, column.tooltipField);
         ImGui::EndDisabled();
         if (clicked && readable && !column.command.empty()) {
             NoteClick(column.command, argument);
@@ -1026,11 +1168,11 @@ namespace BECore {
         _label.assign(kIdSuffix);
         _label.append(column.id);
         ImGui::BeginDisabled(!ReadRowCondition(list, row, column.enableField));
-        if (DrawTextBox(_label.c_str(), text, OrNull(prepared.hint), 0.0f)) {
+        if (DrawTextBox(_label.c_str(), text, OrNull(prepared.hint), kFillWidth)) {
             static_cast<void>(_writer.WriteRowText(*_sources, list, row, column.field, StringView(_inputBuffer)));
         }
         ImGui::EndDisabled();
-        ItemTooltip(OrNull(column.tooltip));
+        RowTooltip(column.tooltip, list, row, column.tooltipField);
     }
 
     void PanelInterpreter::DrawCheckboxCell(const PreparedColumn& prepared, const PanelBinding& list, size_t row) {
@@ -1056,7 +1198,7 @@ namespace BECore {
             static_cast<void>(_writer.WriteRowBool(*_sources, list, row, column.field, value));
         }
         ImGui::EndDisabled();
-        ItemTooltip(OrNull(column.tooltip));
+        RowTooltip(column.tooltip, list, row, column.tooltipField);
     }
 
     void PanelInterpreter::DrawSlot(const PreparedElement& prepared) {

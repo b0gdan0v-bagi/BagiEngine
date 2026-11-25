@@ -86,7 +86,7 @@ namespace BECore {
             next = value;
             changed = ImGui::Checkbox(_label.c_str(), &next);
         }
-        ItemTooltip(OrNull(checkbox.tooltip));
+        ElementTooltip(prepared);
         ImGui::EndDisabled();
         if (changed) {
             static_cast<void>(_writer.WriteBool(*_sources, prepared.bind.binding, next));
@@ -114,7 +114,7 @@ namespace BECore {
 
         ImGui::BeginDisabled(!ReadCondition(prepared.enableWhen));
         const bool clicked = ImGui::RadioButton(_label.c_str(), selected);
-        ItemTooltip(OrNull(radio.tooltip));
+        ElementTooltip(prepared);
         ImGui::EndDisabled();
         if (clicked && !selected) {
             WriteRadioValue(prepared);
@@ -159,8 +159,18 @@ namespace BECore {
         } else {
             DrawListCombo(combo, prepared);
         }
-        ItemTooltip(OrNull(combo.tooltip));
+        ElementTooltip(prepared);
+        DrawTrailingText(combo.text);
         ImGui::EndDisabled();
+    }
+
+    const char* PanelInterpreter::ComboPreview(const PreparedElement& prepared, const String& chosen) {
+        StringView bound;
+        if (prepared.label.state != PreparedBindingState::Ok || _reader.ReadText(*_sources, prepared.label.binding, _scratch, bound) != PanelReadStatus::Ok) {
+            return chosen.c_str();
+        }
+        _boundPreview.assign(bound.data(), bound.size());
+        return _boundPreview.c_str();
     }
 
     void PanelInterpreter::DrawEnumCombo(const PanelCombo& /*combo*/, const PreparedElement& prepared) {
@@ -172,7 +182,7 @@ namespace BECore {
         size_t current = 0;
         const bool known = _reader.ReadEnumIndex(*_sources, prepared.bind.binding, current) == PanelReadStatus::Ok && current < names.size();
         _preview.assign(known ? names[current].data() : kUnreadable, known ? names[current].size() : std::strlen(kUnreadable));
-        if (!ImGui::BeginCombo(_label.c_str(), _preview.c_str())) {
+        if (!ImGui::BeginCombo(_label.c_str(), ComboPreview(prepared, _preview))) {
             return;
         }
         for (size_t index = 0; index < names.size(); ++index) {
@@ -215,7 +225,7 @@ namespace BECore {
             DrawUnreadable();
             return;
         }
-        if (!ImGui::BeginCombo(_label.c_str(), _preview.c_str())) {
+        if (!ImGui::BeginCombo(_label.c_str(), ComboPreview(prepared, _preview))) {
             return;
         }
         for (size_t row = 0; row < count; ++row) {
@@ -230,7 +240,12 @@ namespace BECore {
             // The label is a copy: a row's text is no C string, and `_scratch` is read again for the next row
             _cellScratch.assign(item.data(), item.size());
             ImGui::PushID(static_cast<int>(row));
-            if (ImGui::Selectable(_cellScratch.c_str(), isSelected)) {
+            // A disabled row is shown but never picked; one whose flag cannot be read stays a choice, so a broken binding is seen
+            ImGui::BeginDisabled(!ReadRowCondition(prepared.items.binding, row, combo.enableField));
+            const bool picked = ImGui::Selectable(_cellScratch.c_str(), isSelected);
+            RowTooltip(StringView{}, prepared.items.binding, row, combo.tooltipField);
+            ImGui::EndDisabled();
+            if (picked) {
                 static_cast<void>(byIndex ? _writer.WriteNumber(*_sources, prepared.bind.binding, static_cast<double>(row)) : _writer.WriteText(*_sources, prepared.bind.binding, item));
             }
             ImGui::PopID();
@@ -258,11 +273,8 @@ namespace BECore {
         } else {
             DrawDraggedNumber(prepared, value, integer);
         }
-        ItemTooltip(OrNull(number.tooltip));
-        if (!number.text.empty()) {
-            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-            ImGui::TextUnformatted(number.text.c_str(), number.text.c_str() + number.text.size());
-        }
+        ElementTooltip(prepared);
+        DrawTrailingText(number.text);
         ImGui::EndDisabled();
     }
 
@@ -280,13 +292,15 @@ namespace BECore {
                 int64_t held = FieldPresentation::FromDouble<int64_t>(value);
                 const int64_t low = FieldPresentation::FromDouble<int64_t>(number.min);
                 const int64_t high = FieldPresentation::FromDouble<int64_t>(number.max);
-                changed = slider ? ImGui::SliderScalar(_label.c_str(), ImGuiDataType_S64, &held, &low, &high, nullptr, flags)
-                                 : ImGui::DragScalar(_label.c_str(), ImGuiDataType_S64, &held, speed, bounded ? &low : nullptr, bounded ? &high : nullptr, nullptr, flags);
+                const char* format = OrNull(prepared.integerFormat);
+                changed = slider ? ImGui::SliderScalar(_label.c_str(), ImGuiDataType_S64, &held, &low, &high, format, flags)
+                                 : ImGui::DragScalar(_label.c_str(), ImGuiDataType_S64, &held, speed, bounded ? &low : nullptr, bounded ? &high : nullptr, format, flags);
                 written = static_cast<double>(held);
             } else {
                 float held = static_cast<float>(value);
-                changed = slider ? ImGui::SliderScalar(_label.c_str(), ImGuiDataType_Float, &held, &number.min, &number.max, nullptr, flags)
-                                 : ImGui::DragScalar(_label.c_str(), ImGuiDataType_Float, &held, speed, bounded ? &number.min : nullptr, bounded ? &number.max : nullptr, nullptr, flags);
+                const char* format = OrNull(prepared.format);
+                changed = slider ? ImGui::SliderScalar(_label.c_str(), ImGuiDataType_Float, &held, &number.min, &number.max, format, flags)
+                                 : ImGui::DragScalar(_label.c_str(), ImGuiDataType_Float, &held, speed, bounded ? &number.min : nullptr, bounded ? &number.max : nullptr, format, flags);
                 written = static_cast<double>(held);
             }
         }
@@ -309,11 +323,11 @@ namespace BECore {
             const ScopedMonoFont mono;
             if (integer) {
                 int64_t held = FieldPresentation::FromDouble<int64_t>(shown);
-                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_S64, &held);
+                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_S64, &held, nullptr, nullptr, OrNull(prepared.integerFormat));
                 typed = static_cast<double>(held);
             } else {
                 float held = static_cast<float>(shown);
-                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_Float, &held);
+                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_Float, &held, nullptr, nullptr, OrNull(prepared.format));
                 typed = static_cast<double>(held);
             }
         }
@@ -350,12 +364,12 @@ namespace BECore {
                 // A fraction of a step would round to a button that does nothing, so an integer steps by at least one
                 const int64_t step = eastl::max<int64_t>(1, FieldPresentation::FromDouble<int64_t>(StepOf(number)));
                 const int64_t stepFast = eastl::max<int64_t>(1, FieldPresentation::FromDouble<int64_t>(number.stepFast));
-                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_S64, &held, &step, hasFastStep ? &stepFast : nullptr);
+                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_S64, &held, &step, hasFastStep ? &stepFast : nullptr, OrNull(prepared.integerFormat));
                 written = static_cast<double>(held);
             } else {
                 float held = static_cast<float>(value);
                 const float step = static_cast<float>(StepOf(number));
-                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_Float, &held, &step, hasFastStep ? &number.stepFast : nullptr);
+                changed = ImGui::InputScalar(_label.c_str(), ImGuiDataType_Float, &held, &step, hasFastStep ? &number.stepFast : nullptr, OrNull(prepared.format));
                 written = static_cast<double>(held);
             }
         }

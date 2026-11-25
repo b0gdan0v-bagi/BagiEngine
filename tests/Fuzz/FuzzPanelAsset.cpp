@@ -204,6 +204,8 @@ namespace BECore::Fuzz {
                 Text(element.id);
                 Text(element.visible);
                 Text(element.tooltip);
+                Text(element.tooltipBind);
+                Binding(element.tooltipBind, false);
                 if (!IsWellFormedId(element.id) || !_ids.insert(element.id).second) {
                     Fail();
                 }
@@ -221,6 +223,7 @@ namespace BECore::Fuzz {
                 } else if (const auto* text = element.Cast<PanelText>()) {
                     Text(text->text);
                     Text(text->bind);
+                    Text(text->icon);
                     if (text->text.empty() && text->bind.empty()) {
                         Fail();
                     }
@@ -239,6 +242,7 @@ namespace BECore::Fuzz {
                     Text(input->icon);
                     Text(input->submitCommand);
                     Text(input->commitCommand);
+                    Text(input->text);
                     Binding(input->bind, true);
                     if (input->focus && _popupDepth == 0) {
                         Fail();
@@ -268,13 +272,20 @@ namespace BECore::Fuzz {
                     Text(combo->itemField);
                     Text(combo->separatorField);
                     Text(combo->enableWhen);
+                    Text(combo->enableField);
+                    Text(combo->tooltipField);
+                    Text(combo->previewBind);
+                    Text(combo->text);
                     Binding(combo->bind, true);
                     Binding(combo->items, false);
-                    if (combo->items.empty() && (!combo->itemField.empty() || !combo->separatorField.empty())) {
+                    Binding(combo->previewBind, false);
+                    if (combo->items.empty() && (!combo->itemField.empty() || !combo->separatorField.empty() || !combo->enableField.empty() || !combo->tooltipField.empty())) {
                         Fail();
                     }
                     RelativePath(combo->itemField);
                     RelativePath(combo->separatorField);
+                    RelativePath(combo->enableField);
+                    RelativePath(combo->tooltipField);
                     Extent(combo->width);
                     Condition(combo->enableWhen);
                 } else if (const auto* number = element.Cast<PanelNumber>()) {
@@ -282,6 +293,9 @@ namespace BECore::Fuzz {
                     Text(number->text);
                     Text(number->commitCommand);
                     Text(number->enableWhen);
+                    Text(number->unit);
+                    Literal(number->unit);
+                    AtMost(number->decimals, PanelAssetLimits::kMaxNumberDecimals);
                     Binding(number->bind, true);
                     Extent(number->width);
                     Number(*number);
@@ -320,6 +334,15 @@ namespace BECore::Fuzz {
                     if (button->width != kPanelFillLineWidth) {
                         Extent(button->width);
                     }
+                    if (button->closePopup && _dropdownDepth == 0) {
+                        Fail();
+                    }
+                } else if (const auto* progress = element.Cast<PanelProgress>()) {
+                    Text(progress->bind);
+                    Text(progress->textBind);
+                    Binding(progress->bind, true);
+                    Binding(progress->textBind, false);
+                    Extent(progress->width);
                 } else if (const auto* menu = element.Cast<PanelMenu>()) {
                     Menu(*menu);
                 } else if (const auto* item = element.Cast<PanelMenuItem>()) {
@@ -372,6 +395,7 @@ namespace BECore::Fuzz {
                     Text(dropdown->text);
                     Text(dropdown->icon);
                     Text(dropdown->enableWhen);
+                    Text(dropdown->openCommand);
                     if ((dropdown->text.empty() && dropdown->icon.empty()) || _dropdownDepth > 0 || _popupDepth > 0 || ++_dropdownCount > PanelAssetLimits::kMaxDropdowns) {
                         Fail();
                     }
@@ -380,6 +404,7 @@ namespace BECore::Fuzz {
                     Tabs(*tabs);
                 } else if (const auto* tab = element.Cast<PanelTab>()) {
                     Text(tab->title);
+                    Text(tab->icon);
                     if (parent == nullptr || !parent->Is<PanelTabs>() || tab->title.empty() || ++_tabCount > PanelAssetLimits::kMaxTabs) {
                         Fail();
                     }
@@ -422,7 +447,7 @@ namespace BECore::Fuzz {
                         return;
                     }
                     for (const String* text : {&column.id, &column.title, &column.field, &column.styleField, &column.enableField, &column.selectedField, &column.labelField, &column.hint,
-                                               &column.command, &column.argument, &column.icon, &column.tooltip}) {
+                                               &column.command, &column.argument, &column.icon, &column.tooltip, &column.tooltipField}) {
                         Text(*text);
                     }
                     if (!IsWellFormedId(column.id) || !ids.insert(column.id).second) {
@@ -449,6 +474,7 @@ namespace BECore::Fuzz {
                     }
                     RelativePath(column.labelField);
                     RelativePath(column.argument);
+                    RelativePath(column.tooltipField);
                 }
             }
 
