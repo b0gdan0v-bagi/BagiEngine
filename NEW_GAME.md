@@ -118,6 +118,7 @@ The entries, plans and reviews of every area live in the todo store, the service
    TODO_API_TOKEN=
    ```
    `.env` (git-ignored): the address of the service and the game's own token, limited to its areas (the game's and `engine`), both from the owner. Do not print the token or write it anywhere else.
+   A person the owner approved in BagiTodo needs no `.env`: `python3 engine/tools/todo/todo.py login https://<todo address>` (the address from the owner) saves a sign-in for the machine ([tools/todo/CLAUDE.md](tools/todo/CLAUDE.md), "A new contributor"); a `.env` with `TODO_API_URL` still comes first.
 2. `python3 engine/tools/todo/todo.py ping` must answer.
 3. The area is the owner's step in the store (with the token that may reach it). Check it is there:
    ```bash
