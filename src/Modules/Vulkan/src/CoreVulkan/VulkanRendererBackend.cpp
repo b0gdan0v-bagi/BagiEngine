@@ -488,6 +488,15 @@ namespace BECore {
     void VulkanRendererBackend::Present() {
         BE_PROFILE_SCOPE("Vulkan::Present");
         Flush();
+        // A pass left open would keep the frame acquired for good: no swapchain pass opens, EndFrame() submits nothing and
+        // every later AcquireFrame() returns early. Closing it lets the frame end as an ordinary one.
+        if (_inOffscreenPass) {
+            if (!_loggedOpenPassAtPresent) {
+                _loggedOpenPassAtPresent = true;
+                LOG_ERROR("VulkanRendererBackend: Present() found an offscreen pass still open (SetRenderTarget() without UnsetRenderTarget()), it is closed");
+            }
+            UnsetRenderTarget();
+        }
         // A frame that was acquired but nothing drew into the back buffer still owns a signaled semaphore: it is submitted with an empty pass,
         // which also clears it to the colour of BeginFrame()
         if (_frameAcquired && !_inSwapchainPass && !_inOffscreenPass) {
