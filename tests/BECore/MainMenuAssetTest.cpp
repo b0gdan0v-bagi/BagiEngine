@@ -359,12 +359,12 @@ namespace BECore::Tests {
     }
 
     TEST_F(EditorChordTextTest, InstallsItselfForThePanelsAndUninstallsWhenItEnds) {
-        EXPECT_EQ(PanelChordText::Installed(), nullptr);
+        EXPECT_EQ(PanelChordTextRegistry::GetInstance().Get(), nullptr);
         {
             EditorChordText chords;
-            EXPECT_EQ(PanelChordText::Installed(), &chords);
+            EXPECT_EQ(PanelChordTextRegistry::GetInstance().Get(), &chords);
         }
-        EXPECT_EQ(PanelChordText::Installed(), nullptr);
+        EXPECT_EQ(PanelChordTextRegistry::GetInstance().Get(), nullptr);
     }
 
 }  // namespace BECore::Tests

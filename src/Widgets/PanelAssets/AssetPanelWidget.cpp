@@ -252,7 +252,7 @@ namespace BECore {
         if (ImGui::Begin(_windowTitle.c_str(), dialogs ? nullptr : &_open, flags)) {
             DrawBanner();
             if (_interpreter.IsPrepared()) {
-                _interpreter.SetChordText(PanelChordText::Installed());
+                _interpreter.SetChordText(PanelChordTextRegistry::GetInstance().Get());
                 _interpreter.Draw(_sources, _result);
             }
         }
@@ -297,7 +297,7 @@ namespace BECore {
         }
         DrawBarBanner();
         _result.Clear();
-        _interpreter.SetChordText(PanelChordText::Installed());
+        _interpreter.SetChordText(PanelChordTextRegistry::GetInstance().Get());
         _interpreter.Draw(_sources, _result);
         EndBarFrame();
         EmitClick();

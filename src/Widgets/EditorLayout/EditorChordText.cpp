@@ -7,11 +7,14 @@
 namespace BECore {
 
     EditorChordText::EditorChordText() {
-        PanelChordText::Install(this);
+        PanelChordTextRegistry::GetInstance().Install(this);
     }
 
     EditorChordText::~EditorChordText() {
-        PanelChordText::Uninstall(this);
+        // The registry may be gone already (a test destroys it)
+        if (PanelChordTextRegistry::IsInstanceCreated()) {
+            PanelChordTextRegistry::GetInstance().Uninstall(this);
+        }
     }
 
     StringView EditorChordText::ChordOf(StringView command) {

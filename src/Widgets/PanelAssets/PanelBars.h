@@ -58,7 +58,7 @@ namespace BECore {
     public:
         PanelBarsRegistry() = default;
 
-        /// Makes @p bar the one `Draw(name)` finds; it must outlive the handle. A bar registered under the name before is replaced (logged once)
+        /// Makes @p bar the one `Draw(name)` finds; it must outlive the handle. A bar registered under the name before is replaced (logged)
         [[nodiscard]] PanelBarHandle Register(StringView name, IPanelBar& bar);
 
         /// Draws the bar of @p name into the current window; false, and nothing drawn, when none is registered
