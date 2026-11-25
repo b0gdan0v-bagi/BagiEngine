@@ -1,0 +1,278 @@
+#include <BECore/Config/ConfigManager.h>
+#include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
+#include <BECore/PanelHotReloadProbe.h>
+#include <BECore/RefCounted/New.h>
+#include <Common/EngineEnvironment.h>
+#include <Common/Printers.h>
+#include <Common/Require.h>
+#include <Common/TempPath.h>
+#include <Common/TestFiles.h>
+#include <Events/ConfigEvents.h>
+#include <Generated/PanelHotReloadProbe.gen.hpp>
+#include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/ImGuiFonts.h>
+#include <Widgets/ImGuiTheme.h>
+#include <Widgets/PanelAssets/AssetPanelWidget.h>
+#include <gtest/gtest.h>
+#include <imgui.h>
+#include <imgui_internal.h>
+
+namespace BECore::Tests {
+
+    namespace {
+
+        constexpr ImVec2 kDisplaySize{1280.0f, 900.0f};
+        constexpr float kFrameSeconds = 1.0f / 60.0f;
+        constexpr float kSearchStep = 6.0f;
+        constexpr const char* kWindowName = "###Hot";
+        constexpr const char* kBannerWindowName = "###HotPanel";
+        constexpr StringView kConfigName = "HotPanel";
+        const PoolString kConfig = "HotPanel"_intern;
+
+        /// `{}` slots: the window title, the button text, the model class of the source, the name of the source
+        constexpr const char* kAsset = R"(<PanelAsset id="Hot" title="{}" command="view.fileChanges" open="true" width="300" height="200">
+  <sources><source name="{}" model="{}"/></sources>
+  <elements>
+    <element type="PanelButton" id="go" text="{}" command="fileChanges.rescan"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kBadAsset = R"(<PanelAsset id="Hot" title="Broken" command="view.fileChanges" open="true">
+  <elements>
+    <element type="PanelNobody" id="go"/>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kClosedAsset = R"(<PanelAsset id="Hot" title="Closed" command="view.fileChanges" open="false">
+  <sources><source name="a" model="CountingPanelModel"/></sources>
+  <elements>
+    <element type="PanelButton" id="go" text="Go" command="fileChanges.rescan"/>
+  </elements>
+</PanelAsset>)";
+
+        String Asset(StringView title, StringView button, StringView model = "CountingPanelModel", StringView source = "a") {
+            return Format(kAsset, title, source, model, button);
+        }
+
+    }  // namespace
+
+    /// The widget in an ImGui context of its own with no backend, reading a config folder of its own through a `ConfigManager` of its own
+    class PanelAssetHotReloadTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        void SetUp() override {
+            CountingPanelModel::Reset();
+            _dir = TestTempDirectory("panel_hot");
+            MakeEmptyDirectory(_dir);
+            ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO();
+            io.DisplaySize = kDisplaySize;
+            io.IniFilename = nullptr;
+            io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+            _fonts = LoadImGuiFonts(io, _buffers);
+            SetActiveImGuiFonts(_fonts);
+            ApplyImGuiTheme(ImGui::GetStyle(), 1.0f);
+        }
+
+        void TearDown() override {
+            _widget.Reset();
+            ImGui::DestroyContext();
+            SetActiveImGuiFonts({});
+            RemoveDirectory(_dir);
+        }
+
+        /// Writes the file, then starts the manager and the widget over it
+        void Start(StringView text) {
+            WriteFile(_dir / "HotPanel.xml", text);
+            ASSERT_TRUE(_fileSystem.Mount(MountPoints::config, _dir));
+            _manager.Initialize();
+            _widget = New<AssetPanelWidget>();
+            _widget->SetConfigManager(_manager);
+            _widget->SetAsset(kConfigName);
+            const UniquePtr<IDeserializer> deserializer = _manager.CreateDeserializer(kConfigName);
+            ASSERT_TRUE(deserializer);
+            ASSERT_TRUE(_widget->Initialize(*deserializer));
+            Settle();
+        }
+
+        /// A saved edit of the file, as the file watcher would deliver it
+        void Edit(StringView text) {
+            WriteFile(_dir / "HotPanel.xml", text);
+            ASSERT_TRUE(_manager.ReloadConfig(kConfig));
+            Settle();
+        }
+
+        void Settle() {
+            Frame();
+            Frame();
+        }
+
+        void Frame() {
+            ImGui::GetIO().DeltaTime = kFrameSeconds;
+            ImGui::NewFrame();
+            _widget->Update();
+            ImGui::Render();
+        }
+
+        static ImGuiWindow* Window() {
+            return ImGui::FindWindowByName(kWindowName);
+        }
+
+        static float ContentHeight() {
+            const ImGuiWindow* window = Window();
+            return window != nullptr ? window->ContentSize.y : 0.0f;
+        }
+
+        /// The id of a control: the element id and the label hashed onto the id of the window
+        static ImGuiID ButtonId(const char* label) {
+            const ImGuiWindow* window = Window();
+            if (window == nullptr) {
+                return 0;
+            }
+            return ImHashStr(label, 0, ImHashStr("go", 0, window->ID));
+        }
+
+        /// A point of the window where the mouse is over the control @p id, found by moving it over the window; none when no point is
+        Optional<ImVec2> TryLocate(ImGuiID id) {
+            const ImGuiWindow* window = Window();
+            if (window == nullptr || id == 0) {
+                return std::nullopt;
+            }
+            const ImVec2 from = window->Pos;
+            const ImVec2 to(from.x + window->Size.x, from.y + window->Size.y);
+            ImGuiIO& io = ImGui::GetIO();
+            for (float y = from.y; y < to.y; y += kSearchStep) {
+                for (float x = from.x; x < to.x; x += kSearchStep) {
+                    io.AddMousePosEvent(x, y);
+                    Settle();
+                    if (ImGui::GetCurrentContext()->HoveredId == id) {
+                        return ImVec2(x, y);
+                    }
+                }
+            }
+            return std::nullopt;
+        }
+
+        void ClickAt(ImVec2 point) {
+            ImGuiIO& io = ImGui::GetIO();
+            io.AddMousePosEvent(point.x, point.y);
+            Frame();
+            io.AddMouseButtonEvent(0, true);
+            Frame();
+            io.AddMouseButtonEvent(0, false);
+            Frame();
+        }
+
+        static void Command(PoolString id) {
+            EditorCommandEvent::Emit(id);
+        }
+
+        Path _dir;
+        FileSystem _fileSystem;
+        ConfigManager _manager{_fileSystem};
+        ImGuiFontBuffers _buffers;
+        ImGuiFonts _fonts;
+        IntrusivePtr<AssetPanelWidget> _widget;
+    };
+
+    TEST_F(PanelAssetHotReloadTest, AGoodFileIsDrawnAndAClickReachesTheModelThroughTheCommand) {
+        ASSERT_NO_FATAL_FAILURE(Start(Asset("Good title", "Go")));
+        ASSERT_NE(Window(), nullptr);
+        EXPECT_TRUE(_widget->GetHolder().Issues().empty());
+        EXPECT_EQ(CountingPanelModel::created, 1);
+
+        const Optional<ImVec2> point = TryLocate(ButtonId("Go"));
+        ASSERT_TRUE(point.has_value()) << "the button is not at the id of its asset's ids";
+        ClickAt(*point);
+
+        EXPECT_EQ(CountingPanelModel::commands, 1);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AChangedFileShowsTheNewTextAfterTheChangeEvent) {
+        ASSERT_NO_FATAL_FAILURE(Start(Asset("Old title", "Go")));
+        ASSERT_NE(Window(), nullptr);
+        EXPECT_TRUE(TryLocate(ButtonId("Go")).has_value());
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Asset("New title", "Run")));
+
+        ASSERT_NE(Window(), nullptr);
+        EXPECT_TRUE(TryLocate(ButtonId("Run")).has_value());
+        EXPECT_FALSE(TryLocate(ButtonId("Go")).has_value());
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ABrokenFileShowsTheBannerAndTheOldContentBelowItAndARestoredOneClearsIt) {
+        const String good = Asset("Good title", "Go");
+        ASSERT_NO_FATAL_FAILURE(Start(good));
+        const float clean = ContentHeight();
+
+        ASSERT_NO_FATAL_FAILURE(Edit(kBadAsset));
+        EXPECT_FALSE(_widget->GetHolder().Issues().empty());
+        EXPECT_GT(ContentHeight(), clean) << "no banner";
+        EXPECT_TRUE(TryLocate(ButtonId("Go")).has_value()) << "the last good asset is not drawn below the banner";
+
+        // A file that could not be read at all: the manager tells the panel why
+        ConfigEvents::ConfigReloadFailedEvent::Emit(kConfig, String("not well-formed"));
+        EXPECT_EQ(_widget->GetHolder().Failure(), "not well-formed");
+
+        ASSERT_NO_FATAL_FAILURE(Edit(good));
+        EXPECT_TRUE(_widget->GetHolder().Issues().empty());
+        EXPECT_TRUE(_widget->GetHolder().Failure().empty());
+        EXPECT_FLOAT_EQ(ContentHeight(), clean);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AFirstLoadThatFailedShowsTheBannerAloneAndAFixedFileDrawsTheAsset) {
+        ASSERT_NO_FATAL_FAILURE(Start(kBadAsset));
+        // Without an asset the window has no asset id to be named by: the config name stands in
+        EXPECT_NE(ImGui::FindWindowByName(kBannerWindowName), nullptr);
+        EXPECT_TRUE(_widget->IsOpen());
+        EXPECT_FALSE(_widget->GetHolder().Current());
+        EXPECT_FALSE(TryLocate(ButtonId("Go")).has_value());
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Asset("Fixed", "Go")));
+        EXPECT_TRUE(TryLocate(ButtonId("Go")).has_value());
+    }
+
+    TEST_F(PanelAssetHotReloadTest, AModelOfAnUnchangedSourceKeepsItsInstanceAcrossAReload) {
+        ASSERT_NO_FATAL_FAILURE(Start(Asset("One", "Go")));
+        ASSERT_EQ(CountingPanelModel::created, 1);
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Asset("Two", "Go")));
+        EXPECT_EQ(CountingPanelModel::created, 1) << "the model was made again";
+        EXPECT_EQ(CountingPanelModel::alive, 1);
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Asset("Two", "Go", "CountingPanelModel", "renamed")));
+        EXPECT_EQ(CountingPanelModel::created, 2);
+        EXPECT_EQ(CountingPanelModel::alive, 1) << "the model of the old source name lives on";
+
+        ASSERT_NO_FATAL_FAILURE(Edit(Asset("Two", "Go", "ProbePanelModel", "renamed")));
+        EXPECT_EQ(CountingPanelModel::alive, 0);
+    }
+
+    TEST_F(PanelAssetHotReloadTest, ClosedDrawsNothingAndNoCommandReachesAModelButTheOpenCommandOpens) {
+        ASSERT_NO_FATAL_FAILURE(Start(kClosedAsset));
+        EXPECT_FALSE(_widget->IsOpen());
+        EXPECT_EQ(Window(), nullptr);
+        EXPECT_EQ(CountingPanelModel::updates, 0);
+
+        Command(EditorCommandIds::kFileChangesRescan);
+        EXPECT_EQ(CountingPanelModel::commands, 0);
+
+        Command(EditorCommandIds::kViewFileChanges);
+        Settle();
+        EXPECT_TRUE(_widget->IsOpen());
+        EXPECT_NE(Window(), nullptr);
+        EXPECT_GT(CountingPanelModel::updates, 0);
+        Command(EditorCommandIds::kFileChangesRescan);
+        EXPECT_EQ(CountingPanelModel::commands, 1);
+
+        Command(EditorCommandIds::kViewFileChanges);
+        EXPECT_FALSE(_widget->IsOpen());
+        Command(EditorCommandIds::kFileChangesRescan);
+        EXPECT_EQ(CountingPanelModel::commands, 1);
+    }
+
+}  // namespace BECore::Tests
