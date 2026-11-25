@@ -23,7 +23,8 @@
     <widget
       type="ProfilerWidget" />
     <widget
-      type="ConsoleWidget" />
+      type="AssetPanelWidget"
+      asset="ConsolePanel" />
     <widget
       type="AssetPanelWidget"
       asset="FileChangesPanel" />

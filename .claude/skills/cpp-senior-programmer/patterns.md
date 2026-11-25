@@ -4,7 +4,7 @@ Each idiom is a shape that already exists in the code: open the file and copy it
 
 ## Rebuild only when the key moved
 
-`src/Widgets/EditorLayout/StatusBar.cpp` (`StatusBar::Refresh`), `src/Widgets/Console/ConsoleWidget.cpp` (`RefreshMethods`).
+`src/Widgets/EditorLayout/StatusBar.cpp` (`StatusBar::Refresh`), `src/Widgets/Console/ConsoleSlots.cpp` (`RefreshMethods`).
 
 The source keeps a revision that only grows; the consumer keeps the last one it saw and compares for equality. A frame with nothing new costs the comparison.
 

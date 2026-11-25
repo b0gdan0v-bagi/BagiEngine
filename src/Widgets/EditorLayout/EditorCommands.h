@@ -65,7 +65,7 @@ namespace BECore {
         /// Shows and hides the Profiler panel. Fixed like mode.toggle: ProfilerWidget reads Ctrl+Shift+P from the raw SDL event
         /// (Profiler/ProfilerToggle.h), the palette runs it through this command
         inline constexpr auto kViewProfiler = "view.profiler"_intern;
-        /// Shows and hides the Console panel (the log). ConsoleWidget owns the action
+        /// Shows and hides the Console panel (the log). The asset's `command` (config/panels/ConsolePanel.xml) owns the action
         inline constexpr auto kViewConsole = "view.console"_intern;
         /// The Console panel's buttons (config/panels/ConsolePanel.xml names them). ConsolePanelModel owns them and runs them only while its panel is open; none takes an argument
         inline constexpr auto kConsolePause = "console.pause"_intern;
@@ -208,7 +208,7 @@ namespace BECore {
         explicit ViewportInputModeChangedEvent(ViewportInputMode inputMode) : mode(inputMode) {}
     };
 
-    /// The Console ran a command line that parsed: sent by ConsoleWidget. EditorLayoutWidget keeps it in the saved history and does not
+    /// The Console ran a command line that parsed: sent by the Console's command line slot. EditorLayoutWidget keeps it in the saved history and does not
     /// answer with an EditorPreferencesChangedEvent (the Console already holds its own history).
     struct ConsoleCommandSubmittedEvent : public EventBase<ConsoleCommandSubmittedEvent> {
         BE_EVENT(ConsoleCommandSubmittedEvent)

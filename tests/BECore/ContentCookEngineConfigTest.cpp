@@ -19,7 +19,7 @@ namespace BECore::Tests {
         };
 
         /// Files a cook copies: no reflected type reads them, so there is no cooker
-        constexpr Array<ListedConfig, 7> kCopied = {{
+        constexpr Array<ListedConfig, 8> kCopied = {{
             {"TextConfig", "read by hand: the font and text settings of the text system (entry config-xmlnode-by-hand)"},
             {"UIConfig", "read by hand: the UI environment (entry config-xmlnode-by-hand)"},
             {"WidgetsConfig", "the editor widgets start their runtime in Initialize (ImGui, the user's preferences folder, a hardware monitor thread), which a cook would run; Game mode never reads "
@@ -27,6 +27,7 @@ namespace BECore::Tests {
             {"FileChangesPanel", "an editor-only panel asset read from XML so that its hot reload works (`WidgetsConfig` is the precedent); a pure `PanelAsset` has no cooker"},
             {"GamePanel", "an editor-only panel asset, like FileChangesPanel"},
             {"ConfigEditorPanel", "an editor-only panel asset, like FileChangesPanel"},
+            {"ConsolePanel", "an editor-only panel asset, like FileChangesPanel"},
             {"SDLWindowConfig", "the path in ApplicationConfig names the .xml, and the window config is read by SDLWindowConfig::Deserialize from that file"},
         }};
 

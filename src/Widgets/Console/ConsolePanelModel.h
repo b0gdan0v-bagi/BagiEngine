@@ -5,6 +5,7 @@
 #include <Events/SubscriptionHolder.h>
 #include <Widgets/Console/ConsoleLogView.h>
 #include <Widgets/Console/ConsoleSession.h>
+#include <Widgets/Console/ConsoleSlots.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <cstdint>
@@ -52,7 +53,8 @@ namespace BECore {
      *
      * The model owns the `ConsoleSession` (the output area and the command history) and takes the external editor and the stored history from
      * `EditorPreferencesChangedEvent` (the history from the first one only, so a later change does not reset a walk). The widget that hosts the model
-     * makes it in its `Initialize`, before the first `Update` of `EditorLayoutWidget`, which is what sends the first event.
+     * makes it in its `Initialize`, before the first `Update` of `EditorLayoutWidget`, which is what sends the first event. `Initialize` also registers the
+     * slots `consoleRows`, `consoleOutput` and `consoleCommandLine` (`ConsoleSlots`), which draw the parts of the panel the format cannot say.
      *
      * Commands (`EditorCommandIds`, run only while the panel is open): `console.pause` toggles the pause, `console.clear` empties the log history and
      * `console.clearOutput` the output area of the command line.
@@ -103,6 +105,7 @@ namespace BECore {
         ConsoleLogFilter _filter;
         ConsoleLogView _logView;
         ConsoleSession _session;
+        ConsoleSlots _slots{*this};
         LogHistory* _history = nullptr;
         String _externalEditor;
         bool _historyLoaded = false;  // the stored history is taken once, so a later preference change does not reset a walk

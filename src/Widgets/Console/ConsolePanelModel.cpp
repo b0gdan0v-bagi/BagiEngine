@@ -73,6 +73,7 @@ namespace BECore {
 
     void ConsolePanelModel::Initialize() {
         Subscribe<EditorPreferencesChangedEvent, &ConsolePanelModel::OnPreferencesChanged>(this);
+        _slots.Register();
     }
 
     TypedRef ConsolePanelModel::GetObject() {
