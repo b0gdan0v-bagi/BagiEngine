@@ -70,7 +70,7 @@ namespace BECore {
         BE_REFLECT_FIELD String bind;
     };
 
-    /// A text field bound to a `String` field; `width` is in em, 0 is ImGui's default item width, which leaves room for the label
+    /// A text field bound to a `String` field; `width` is in em, 0 fills the line
     class PanelInput : public PanelElement {
         BE_CLASS(PanelInput)
     public:

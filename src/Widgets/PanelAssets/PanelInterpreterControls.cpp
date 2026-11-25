@@ -1,9 +1,8 @@
-#include "PanelInterpreter.h"
-
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelDrawSupport.h>
+#include <Widgets/PanelAssets/PanelInterpreter.h>
 #include <Widgets/SceneEditor/FieldPresentation.h>
 #include <cmath>
 #include <imgui.h>
