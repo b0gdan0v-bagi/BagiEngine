@@ -14,7 +14,7 @@ from typing import Iterator, Sequence, Set
 
 SOURCE_SUFFIXES = {".h", ".hpp", ".inl", ".cpp"}
 # Folders never walked, at any depth (the vendored zones of the engine and the build and tool folders)
-SKIPPED_FOLDERS = {"EABase", "EnTT", "fmt", "imgui", "pugixml", "RmlUi", "stb", "tracy", "external", ".venv", ".git", "node_modules", "__pycache__"}
+SKIPPED_FOLDERS = {"EABase", "fmt", "imgui", "pugixml", "RmlUi", "stb", "tracy", "external", ".venv", ".git", "node_modules", "__pycache__"}
 SKIPPED_FOLDER_PREFIXES = ("build",)
 # Paths (relative to the root, `/` separated) that are skipped: a folder prefix as a segment run, or a file
 SKIPPED_PATH_RUNS = ("src/Widgets/Icons", "BECore/Types", "BECore/Format")

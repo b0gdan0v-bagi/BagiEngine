@@ -22,7 +22,6 @@ These are included directly via `add_subdirectory()`:
 | Library | Path | Purpose |
 |---------|------|---------|
 | EABase/EASTL | `src/Modules/EABase/` | EA's STL containers |
-| EnTT | `src/Modules/EnTT/` | ECS framework |
 | pugixml | `src/Modules/pugixml/` | XML parsing |
 | ImGui | `src/Modules/imgui/` | Immediate mode GUI |
 | fmt | `src/Modules/fmt/` | Formatting library |
@@ -59,7 +58,7 @@ These are included directly via `add_subdirectory()`:
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EABase)
 
 # 2. SDL3 (git submodule), then SDL_image, then Vulkan-Headers
-# 3. Other vendored libraries: EnTT, pugixml, imgui, fmt, stb, dr_libs
+# 3. Other vendored libraries: pugixml, imgui, fmt, stb, dr_libs
 # 4. GoogleTest (if ENGINE_BUILD_TESTS) -- after the ENGINE_NO_EXCEPTIONS block, see below
 # 5. Reflection functions (add_reflection_target, be_add_game_reflection)
 # 6. Engine modules (BECore first!)
