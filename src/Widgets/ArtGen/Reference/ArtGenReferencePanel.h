@@ -39,6 +39,10 @@ namespace BECore {
         /// the slot into it or removes it. A static function: it keeps nothing, the form is the state
         static void DrawPresetReference(ArtGenSession& session, ArtGenPresetForm& form);
 
+        /// The slot's picture alone, its real path as the tooltip (the asset's slot `artgenReferencePicture`); an empty slot draws nothing and gives the
+        /// picture back
+        void DrawPicture(ArtGenSession& session);
+
         /// Evicts the loaded picture (the section is hidden, the slot is empty, the panel dies)
         void DropThumbnail();
 
@@ -48,6 +52,8 @@ namespace BECore {
 
         /// Loads the picture of the slot when it is not the loaded one; the strings are compared, nothing is made in a steady frame
         void SyncThumbnail(const String& gameRoot, const String& image);
+        /// The loaded picture on its checkerboard, or an empty frame while it loads
+        void DrawLoadedPicture();
 
         String _root;  // the game root and the slot's image the loaded picture was made from
         String _image;

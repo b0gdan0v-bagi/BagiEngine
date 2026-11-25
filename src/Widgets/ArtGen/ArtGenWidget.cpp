@@ -45,7 +45,6 @@ namespace BECore {
         constexpr double kBytesPerMegabyte = 1e6;
         constexpr float kPromptLines = 4.5f;
         constexpr float kNegativeLines = 2.5f;
-        constexpr int32_t kMaxImageSide = 8192;
         constexpr size_t kInputTextSize = 512;
         constexpr float kWaveformWidth = 220.0f;
         constexpr float kWaveformHeight = 40.0f;
@@ -53,12 +52,6 @@ namespace BECore {
         constexpr int32_t kPreviewRow = -2;
         constexpr int32_t kSetTabRow = -3;  // the sound of the Set tab
         constexpr float kFieldWidth = 140.0f;
-        constexpr float kMinTrimDb = -90.0f;
-        constexpr float kMinPeakDb = -24.0f;
-        constexpr float kMaxFadeMs = 1000.0f;
-        constexpr float kMaxSeconds = 60.0f;
-        constexpr Array<uint32_t, 5> kRates{0, 22050, 32000, 44100, 48000};
-        constexpr Array<int32_t, 7> kMaxSizes{0, 64, 128, 256, 512, 1024, 2048};  // 0: no downscale
 
         DecodedAudio DecodedOf(const AudioClip& clip) {
             DecodedAudio audio;
@@ -677,7 +670,7 @@ namespace BECore {
         FormatMaxSize(settings.maxSize, current, sizeof(current));
         ImGui::SetNextItemWidth(kFieldWidth);
         if (ImGui::BeginCombo("Max size", current)) {
-            for (const int32_t option : kMaxSizes) {
+            for (const int32_t option : ArtGenImageSettings::kMaxSizeOptions) {
                 char label[32];
                 FormatMaxSize(option, label, sizeof(label));
                 if (ImGui::Selectable(label, option == settings.maxSize)) {
@@ -748,8 +741,8 @@ namespace BECore {
             changed = ImGui::InputInt2("Size", size);
         }
         if (changed) {
-            _form.width = std::clamp(size[0], 1, kMaxImageSide);
-            _form.height = std::clamp(size[1], 1, kMaxImageSide);
+            _form.width = std::clamp(size[0], 1, ArtGenPresetForm::kMaxImageSide);
+            _form.height = std::clamp(size[1], 1, ArtGenPresetForm::kMaxImageSide);
             _form.Touch();
         }
         DrawResetButton(_form.width > 0, "##ResetSize", [this] {
@@ -1009,12 +1002,12 @@ namespace BECore {
         if (settings.trimDb) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(kFieldWidth);
-            changed |= ImGui::SliderFloat("##trim", &*settings.trimDb, kMinTrimDb, -1.0f, "%.0f dB");
+            changed |= ImGui::SliderFloat("##trim", &*settings.trimDb, ArtGenSoundSettings::kMinTrimDb, ArtGenSoundSettings::kMaxTrimDb, "%.0f dB");
         }
         ImGui::SetNextItemWidth(kFieldWidth);
-        changed |= ImGui::SliderFloat("Fade in", &settings.fadeInMs, 0.0f, kMaxFadeMs, "%.0f ms");
+        changed |= ImGui::SliderFloat("Fade in", &settings.fadeInMs, 0.0f, ArtGenSoundSettings::kMaxFadeMs, "%.0f ms");
         ImGui::SetNextItemWidth(kFieldWidth);
-        changed |= ImGui::SliderFloat("Fade out", &settings.fadeOutMs, 0.0f, kMaxFadeMs, "%.0f ms");
+        changed |= ImGui::SliderFloat("Fade out", &settings.fadeOutMs, 0.0f, ArtGenSoundSettings::kMaxFadeMs, "%.0f ms");
         bool normalise = settings.peakDb.has_value();
         changed |= ImGui::Checkbox("Normalise the peak to", &normalise);
         if (normalise != settings.peakDb.has_value()) {
@@ -1023,15 +1016,15 @@ namespace BECore {
         if (settings.peakDb) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(kFieldWidth);
-            changed |= ImGui::SliderFloat("##peak", &*settings.peakDb, kMinPeakDb, 0.0f, "%.1f dB");
+            changed |= ImGui::SliderFloat("##peak", &*settings.peakDb, ArtGenSoundSettings::kMinPeakDb, ArtGenSoundSettings::kMaxPeakDb, "%.1f dB");
         }
         ImGui::SetNextItemWidth(kFieldWidth);
-        changed |= ImGui::SliderFloat("Max length", &settings.maxSeconds, 0.0f, kMaxSeconds, settings.maxSeconds > 0.0f ? "%.2f s" : "no limit");
+        changed |= ImGui::SliderFloat("Max length", &settings.maxSeconds, 0.0f, ArtGenSoundSettings::kMaxSeconds, settings.maxSeconds > 0.0f ? "%.2f s" : "no limit");
         char rate[32];
         std::snprintf(rate, sizeof(rate), settings.sampleRate == 0 ? "the file's" : "%u Hz", static_cast<unsigned>(settings.sampleRate));
         ImGui::SetNextItemWidth(kFieldWidth);
         if (ImGui::BeginCombo("Sample rate", rate)) {
-            for (const uint32_t option : kRates) {
+            for (const uint32_t option : ArtGenSoundSettings::kRates) {
                 char label[32];
                 std::snprintf(label, sizeof(label), option == 0 ? "the file's" : "%u Hz", static_cast<unsigned>(option));
                 if (ImGui::Selectable(label, option == settings.sampleRate)) {
