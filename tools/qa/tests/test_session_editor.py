@@ -160,10 +160,11 @@ def test_the_imgui_calls_are_in_the_recording_and_counted(qa_game_exe, out_dir, 
     session.imgui_click("Save", window="Scene Editor")
     session.imgui_type("abc")
     session.imgui_key("Escape")
-    assert session.calls == before + 5
+    session.imgui_input([{"type": "move", "x": 1.0, "y": 2.0}, {"type": "down"}])
+    assert session.calls == before + 6
     session.finish()
     steps = scenario.load(session.scenario_path)[1]
-    assert [step.method for step in steps[-5:]] == ["imgui_find", "imgui_find", "imgui_input", "imgui_input", "imgui_input"] and len(steps) == session.calls
+    assert [step.method for step in steps[-6:]] == ["imgui_find", "imgui_find", "imgui_input", "imgui_input", "imgui_input", "imgui_input"] and len(steps) == session.calls
 
 
 def test_the_executable_must_belong_to_the_checkout_of_the_content_files(qa_game_exe, out_dir, tmp_path, content_file):

@@ -302,6 +302,10 @@ class QaSession:
         several times, is a SessionError kept in `session_errors`, and nothing is clicked."""
         return self._imgui(self._game.imgui_click, label, **target)
 
+    def imgui_input(self, events: Sequence[dict[str, Any]], space: str | None = None) -> dict[str, Any]:
+        """`GameSession.imgui_input` (raw events: a drag, a key held), recorded, counted and followed by the log check."""
+        return self._imgui(self._game.imgui_input, events, space)
+
     def imgui_type(self, text: str) -> dict[str, Any]:
         """`GameSession.imgui_type`, recorded, counted and followed by the log check."""
         return self._imgui(self._game.imgui_type, text)
@@ -343,10 +347,12 @@ class QaSession:
             self._check_ui()
         self._check_log()
 
-    def shot(self, label: str) -> Path:
-        """A PNG of the next frame, `shots/<NN>-<label>.png` in the out folder, after a couple of frames so it shows the state; the path."""
+    def shot(self, label: str, max_size: int = SHOT_MAX_SIZE) -> Path:
+        """A PNG of the next frame, `shots/<NN>-<label>.png` in the out folder, after a couple of frames so it shows the state; the path.
+
+        `max_size` is the longer side: the editor's panels are unreadable at the default, so an editor charter asks for more."""
         self._call(STEP_METHOD, {"frames": SHOT_SETTLE_FRAMES})
-        answer = self._call("screenshot", {"maxSize": SHOT_MAX_SIZE})
+        answer = self._call("screenshot", {"maxSize": max_size})
         folder = self.out_dir / SHOTS_FOLDER
         folder.mkdir(exist_ok=True)
         name = f"{len(self.shots) + 1:0{SHOT_NUMBER_DIGITS}d}-{SHOT_LABEL_UNSAFE.sub('-', label).strip('-') or 'shot'}.png"

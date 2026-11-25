@@ -20,7 +20,8 @@ An edit is a dict with `kind` and `path` (the node's names from the scene down, 
 `attribute` (`name`, `value`: an attribute of the node), `component-attribute` (`component`, a type, `name`, `value`), `node-name` (`new_name`) and
 `node-added` (the node with its subtree is taken from the saved file; `path` is the new node). Edits apply in order and a path follows the earlier
 renames of the list. A path that names nothing in the file before is a `SceneFileError`: that is a bug of the request, not of the editor.
-Tolerances are strict: an attribute the file before lacks and Save adds is a change.
+Tolerances are strict: an attribute the file before lacks and Save adds is a change, unless `added_defaults` (component type to `{attribute: value}`, the
+game's allow list) names it with that value: the writer adds the defaults of a component it saves.
 
 `ContentGuard` promises: `arm()` copies the bytes of each existing file into `backup_dir` (never inside a git work tree) before anything can write,
 `release()` writes the bytes back where the file differs (removing a file that did not exist), checks the result byte by byte and answers the files it had to
@@ -33,7 +34,7 @@ import xml.etree.ElementTree as ElementTree
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 QA_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(QA_DIR.parent / "shots"))
@@ -125,6 +126,7 @@ def compare_scene_files(
     scene: str,
     edits: Sequence[dict[str, Any]],
     ignore_children_of: Iterable[str] = (),
+    added_defaults: Mapping[str, Mapping[str, str]] | None = None,
 ) -> list[Violation]:
     """What the saved file `after` shows against the file `before` (a `SceneFile`, a path or the bytes): see the module's docstring for the findings.
 
@@ -142,9 +144,10 @@ def compare_scene_files(
     if not new.scenes:
         return [Violation(NAME_FILE_UNREADABLE, f"{new.path} holds no <scene>: the saved file does not load")]
     ignore = frozenset(ignore_children_of)
+    defaults = added_defaults or {}
     found = _compare_root(old, new, ignore)
     found += _compare_scene_list(old, new, scene, ignore)
-    found += _compare_edited_scene(old_scene, new.scene(scene), scene, edits, ignore)
+    found += _compare_edited_scene(old_scene, new.scene(scene), scene, edits, ignore, defaults)
     return found
 
 
@@ -266,7 +269,7 @@ def _compare_scene_list(old: SceneFile, new: SceneFile, edited: str, ignore: fro
     return found
 
 
-def _compare_edited_scene(old_scene: ElementTree.Element, new_scene: ElementTree.Element | None, name: str, edits: Sequence[dict[str, Any]], ignore: frozenset[str]) -> list[Violation]:
+def _compare_edited_scene(old_scene: ElementTree.Element, new_scene: ElementTree.Element | None, name: str, edits: Sequence[dict[str, Any]], ignore: frozenset[str], defaults: Mapping[str, Mapping[str, str]]) -> list[Violation]:
     if new_scene is None:
         return [Violation(NAME_EDIT_MISSING, f"the scene '{name}' is not in the saved file: {_edit_text(edit)}") for edit in edits]
     found: list[Violation] = []
@@ -280,7 +283,7 @@ def _compare_edited_scene(old_scene: ElementTree.Element, new_scene: ElementTree
         else:
             found.append(Violation(NAME_EDIT_MISSING, f"scene '{name}': {_edit_text(edit)}: {problem}"))
     differences: list[tuple[str, str | None, str | None]] = []
-    _diff_element(model, new_scene, "", ignore, differences)
+    _diff_element(model, new_scene, "", ignore, differences, defaults)
     for path, before, after in differences[:MAX_DIFFERENCES]:
         found.append(Violation(NAME_SCENE_CHANGED, f"scene '{name}': {_difference_text(path, before, after)}"))
     if len(differences) > MAX_DIFFERENCES:
@@ -379,13 +382,22 @@ def _component(node: ElementTree.Element, type_name: str) -> ElementTree.Element
     return next((component for component in wrapper if component.get(TYPE_ATTRIBUTE) == type_name), None)
 
 
-def _diff_attributes(old: ElementTree.Element, new: ElementTree.Element, path: str, out: list[tuple[str, str | None, str | None]]) -> None:
+def _diff_attributes(old: ElementTree.Element, new: ElementTree.Element, path: str, out: list[tuple[str, str | None, str | None]], defaults: Mapping[str, str] | None = None) -> None:
     for key in sorted(set(old.attrib) | set(new.attrib)):
+        if old.get(key) is None and defaults is not None and defaults.get(key) == new.get(key):
+            continue
         if old.get(key) != new.get(key):
             out.append((f"{path}@{key}", old.get(key), new.get(key)))
 
 
-def _diff_element(old: ElementTree.Element | None, new: ElementTree.Element | None, path: str, ignore: frozenset[str], out: list[tuple[str, str | None, str | None]]) -> None:
+def _diff_element(
+    old: ElementTree.Element | None,
+    new: ElementTree.Element | None,
+    path: str,
+    ignore: frozenset[str],
+    out: list[tuple[str, str | None, str | None]],
+    defaults: Mapping[str, Mapping[str, str]] | None = None,
+) -> None:
     """Appends (path, before, after) for every difference of two elements: attributes, text, and the children matched by their identity.
 
     The `children` of a node named in `ignore` are left out on both sides. A child that is in one only, or in another order, is a difference at its path.
@@ -397,7 +409,8 @@ def _diff_element(old: ElementTree.Element | None, new: ElementTree.Element | No
     if old.tag != new.tag:
         out.append((path, f"<{old.tag}>", f"<{new.tag}>"))
         return
-    _diff_attributes(old, new, path, out)
+    allowed = defaults.get(old.get(TYPE_ATTRIBUTE) or "") if defaults and old.tag == COMPONENT_TAG else None
+    _diff_attributes(old, new, path, out, allowed)
     old_text, new_text = (old.text or "").strip(), (new.text or "").strip()
     if old_text != new_text:
         out.append((f"{path}#text", old_text or None, new_text or None))
@@ -417,7 +430,7 @@ def _diff_element(old: ElementTree.Element | None, new: ElementTree.Element | No
     if common_old != common_new:
         out.append((f"{path or '<scene>'} (order)", ", ".join(common_old), ", ".join(common_new)))
     for key in common_old:
-        _diff_element(by_old[key], by_new[key], _child_path(path, by_old[key], key), ignore, out)
+        _diff_element(by_old[key], by_new[key], _child_path(path, by_old[key], key), ignore, out, defaults)
 
 
 def _element_key(element: ElementTree.Element) -> str:

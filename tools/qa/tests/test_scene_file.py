@@ -62,6 +62,15 @@ def test_a_component_attribute_names_the_path_of_the_node():
     assert "Field/TransformComponent@x" in violation.message
 
 
+def test_a_default_the_writer_adds_is_tolerated_only_with_the_allowed_value():
+    plain = '<component type="TransformComponent" x="0" y="0" />'
+    written = base().replace(plain, plain.replace("/>", 'rotation="0" />'), 1)
+    assert names(compare(written)) == ["editor.saved_scene_changed"]
+    assert compare(written, added_defaults={"TransformComponent": {"rotation": "0"}}) == []
+    (violation,) = compare(written.replace('rotation="0"', 'rotation="9"'), added_defaults={"TransformComponent": {"rotation": "0"}})
+    assert "@rotation" in violation.message and "'9'" in violation.message
+
+
 def test_a_lost_component_is_a_scene_change():
     after = base().replace('        <component type="StressComponent" />\n', "", 1)
     (violation,) = compare(after)
