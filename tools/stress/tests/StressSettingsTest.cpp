@@ -34,6 +34,7 @@ namespace BECore::Stress::Tests {
         EXPECT_FALSE(result->IsMeasuring());
         EXPECT_EQ(result->measure, StressMeasure::Work);
         EXPECT_FALSE(result->interleave);
+        EXPECT_FALSE(result->noBatching);
         EXPECT_EQ(result->atlases, 4u);
         EXPECT_EQ(result->language, StressLanguage::En);
     }
@@ -46,7 +47,7 @@ namespace BECore::Stress::Tests {
 
     TEST(StressSettingsTest, EveryFlagIsRead) {
         const auto result = Parse({"--stress-scene=ui", "--stress-count=300", "--stress-frames=600", "--stress-warmup=0", "--stress-ramp", "--stress-measure=cpu", "--stress-interleave",
-                                   "--stress-atlases=8", "--stress-language=ru"});
+                                   "--stress-no-batching", "--stress-atlases=8", "--stress-language=ru"});
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->scene, StressScene::Ui);
         EXPECT_EQ(result->count, 300u);
@@ -55,6 +56,7 @@ namespace BECore::Stress::Tests {
         EXPECT_TRUE(result->ramp);
         EXPECT_EQ(result->measure, StressMeasure::Cpu);
         EXPECT_TRUE(result->interleave);
+        EXPECT_TRUE(result->noBatching);
         EXPECT_EQ(result->atlases, 8u);
         EXPECT_EQ(result->language, StressLanguage::Ru);
     }
@@ -134,6 +136,7 @@ namespace BECore::Stress::Tests {
     TEST(StressSettingsTest, ABareFlagWithAValueIsAnError) {
         ExpectErrorNaming({"--stress-ramp=1"}, "--stress-ramp");
         ExpectErrorNaming({"--stress-interleave=yes"}, "--stress-interleave");
+        ExpectErrorNaming({"--stress-no-batching=1"}, "--stress-no-batching");
     }
 
     TEST(StressSettingsTest, TheFirstOfARepeatedFlagWins) {

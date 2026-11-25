@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/SceneEvents.h>
 #include <Generated/StressRunComponent.gen.hpp>
@@ -20,6 +21,7 @@ namespace BECore::Stress {
             return;
         }
         game->SyncStateVersion();
+        ApplyBatchingChoice(game->GetSettings());
         FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
         frameStats.SetCounter(_counterName, game->GetState().GetCount());
 
@@ -31,6 +33,17 @@ namespace BECore::Stress {
             UpdateRamp(*game);
         } else {
             UpdateFixed(*game);
+        }
+    }
+
+    void StressRunComponent::ApplyBatchingChoice(const StressSettings& settings) {
+        if (!settings.noBatching || _batchingOff) {
+            return;
+        }
+        // The first update comes after the application has made the renderer and its backend has turned the batcher on
+        if (const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer()) {
+            renderer->SetBatchingEnabled(false);
+            _batchingOff = true;
         }
     }
 
@@ -95,6 +108,8 @@ namespace BECore::Stress {
         context.warmup = settings.warmup;
         context.interleave = settings.interleave;
         context.atlases = settings.atlases;
+        const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer();
+        context.batching = renderer && renderer->IsBatchingEnabled();
         context.manualClock = IsManualClock();
         context.allocTracking = AllocTracker::kEnabled;
         Print(FormatJsonLine(_recorder.Summarize(), context));
