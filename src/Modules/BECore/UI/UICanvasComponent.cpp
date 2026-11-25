@@ -211,43 +211,9 @@ namespace BECore {
         ++_windowVersion;
     }
 
-    void UICanvasComponent::DrawElement(IRenderer& renderer, UIElement& element, const UIStateLook::State* inheritedState, float inheritedDuration) const {
-        if (!element.active.visible) {
-            return;
-        }
-        const ScopedOpacity opacity(renderer, element.opacity);  // the element and its subtree, nested by multiplying
-        Optional<ScopedTransitionDraw> transitionDraw;
-        if (const UITransitionComponent* transition = element.GetComponent<UITransitionComponent>()) {
-            const double now = CoreManager::GetTime().GetTotalTime();
-            if (transition->run.IsTransitioning(now)) {
-                transitionDraw.emplace(renderer, UITransition::Evaluate(transition->MakeSpec(), transition->run.Progress(now)), CentreOf(element.rect));
-            }
-        }
-        element.ResolveTheme(CoreManager::GetUIThemes());
-        // An element with a clicker is drawn in its own state and hands it to its descendants; one without is drawn in the state it was given
-        element.SetInheritedState(inheritedState, inheritedDuration);
-        UIStateLook::State ownState;
-        if (element.OwnsState()) {
-            ownState = element.GetVisualState();
-            inheritedState = &ownState;
-            inheritedDuration = element.GetStateDuration();
-        }
-        element.DrawSelf(renderer);
-        element.DrawComponents(renderer);
-        if (element.HasPopupChildren()) {
-            return;  // drawn by DrawPopups() after the whole tree
-        }
-        for (const auto& child : element.children) {
-            DrawElement(renderer, *child, inheritedState, inheritedDuration);
-        }
-    }
-
-    void UICanvasComponent::DrawPopups(IRenderer& renderer) const {
-        _layout.ForEachOpenPopup([&](UIElement& popup) {
-            for (const auto& child : popup.children) {
-                DrawElement(renderer, *child);
-            }
-        });
+    bool UICanvasComponent::NeedsDrawListRebuild() const {
+        // Every edit that changes the list reaches a layout run: a tree or component edit by Invalidate(), a popup by SyncPopups(), a transition by its Sync() or AdvanceTransitions()
+        return _drawListBuilds == 0 || _drawListRoot != _layout.root.Get() || _drawListLayoutRuns != _layout.GetLayoutRuns();
     }
 
     void UICanvasComponent::UpdateTooltip(UIElement* under, bool touch) {
@@ -418,8 +384,13 @@ namespace BECore {
             if (_transition.IsTransitioning(now)) {
                 transitionDraw.emplace(*renderer, UITransition::Evaluate(spec, _transition.Progress(now)), CentreOf(_layout.GetResolved().bounds));
             }
-            DrawElement(*renderer, *_layout.root);
-            DrawPopups(*renderer);
+            if (NeedsDrawListRebuild()) {
+                _drawList.Rebuild(*_layout.root);
+                _drawListRoot = _layout.root.Get();
+                _drawListLayoutRuns = _layout.GetLayoutRuns();
+                ++_drawListBuilds;
+            }
+            _drawList.Draw(*renderer, now, CoreManager::GetUIThemes());
         }
         RefreshTooltip();
         DrawTooltip(*renderer);

@@ -9,6 +9,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIAmbient.h>
 #include <BECore/UI/UICanvasLayout.h>
+#include <BECore/UI/UIDrawList.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UITooltip.h>
 #include <BECore/UI/UITransition.h>
@@ -25,6 +26,8 @@ namespace BECore {
      * The reflected fields choose the space and the scaler (UICanvasScaler); the element tree, the variants and the cached layout are a UICanvasLayout, which
      * the component feeds with the context of each frame (output size, window metrics, the scene's view size, the node's box for a World canvas).
      * `OnDraw()` runs in the scene's draw order (node layer, then scene order), sets the canvas's own view transform for its elements and restores the scene's afterwards.
+     * It draws from a flat list of the visible elements (`UIDrawList`), made again when the layout ran since: **after an edit of the tree or of the `components` of an element, call
+     * `Invalidate()`** (an edit with no call leaves the old list, which draws a removed element once more but never a dangling one). `OnDraw()` itself adds or removes no nodes or components.
      *
      * **Input** (the rules: `UI/CLAUDE.md`, "Canvases"). The canvas registers as a UIInput handler, with the draw rank of its node as the order, uses the layout of its
      * last draw, and follows a press that it consumed to the release. The press of an element that `IsInteractive()` and the motion while it is held reach the element
@@ -134,6 +137,11 @@ namespace BECore {
         /// Lays the canvas out for an output of this size now, as the next draw would. Draw() does it itself; this is for a caller that needs the rects before one
         void UpdateLayout(float outputWidth, float outputHeight);
 
+        /// How many times the draw list was made: a steady canvas makes it once, a tree edit with `Invalidate()` once more (tests read it)
+        [[nodiscard]] uint32_t GetDrawListBuilds() const {
+            return _drawListBuilds;
+        }
+
         /// The window metrics of the last layout and the counter that moves exactly when its `UILayoutContext` changes (the first layout counts): the `window` level of a game's
         /// `Context` (`UIAmbient::Fill`). A steady frame touches neither
         [[nodiscard]] const UIWindowView& GetWindowView() const {
@@ -171,8 +179,8 @@ namespace BECore {
         /// Takes the window metrics of @p context into the view and moves the counter when the layout is about to be made for another context than its last
         void NoteWindow(const UILayoutContext& context);
         void AdoptDocument();
-        void DrawElement(IRenderer& renderer, UIElement& element, const UIStateLook::State* inheritedState = nullptr, float inheritedDuration = 0.0f) const;
-        void DrawPopups(IRenderer& renderer) const;
+        /// The list is of another layout run than the tree is now, or of another root, or was never made
+        [[nodiscard]] bool NeedsDrawListRebuild() const;
         void DrawTooltip(IRenderer& renderer);
         void RefreshInputOrder();
 
@@ -204,6 +212,10 @@ namespace BECore {
         [[nodiscard]] bool ConsumeButtonUp(const SDL_MouseButtonEvent& event);
 
         UICanvasLayout _layout;
+        UIDrawList _drawList;                      // what OnDraw draws; made again when `_layout` ran since (a layout run is the key of every edit that matters)
+        const UIElement* _drawListRoot = nullptr;  // the root it was made for: the list holds it, so it stays alive and the address is not reused
+        uint32_t _drawListLayoutRuns = 0;
+        uint32_t _drawListBuilds = 0;
         UIWindowView _windowView;     // the metrics of the context the layout was last made for; runtime, not saved
         uint64_t _windowVersion = 0;  // bumped with _windowView
         int _inputOrder = 0;

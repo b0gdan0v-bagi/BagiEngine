@@ -168,7 +168,8 @@ namespace BECore {
             return nullptr;
         }
 
-        /// The component of type T, made and appended when the element has none: an element holds one of each type
+        /// The component of type T, made and appended when the element has none: an element holds one of each type. Like an edit of the tree, an edit of `components` of an element on a live
+        /// canvas needs `UICanvasComponent::Invalidate()`: the canvas keeps its transition component and whether it owns the pointer state until the next layout
         template <typename T>
         T& AddComponent() {
             if (T* existing = GetComponent<T>()) {
