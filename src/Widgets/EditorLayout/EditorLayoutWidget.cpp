@@ -12,6 +12,7 @@
 #include <Events/RenderEvents.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
 #include <Widgets/EditorLayout/GitBranch.h>
+#include <Widgets/ImGuiLayoutText.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -402,7 +403,8 @@ namespace BECore {
             LOG_WARNING("Editor: layout '{}' has no dock tree; the current layout stays", name);
             return;
         }
-        _pendingLayoutText = *text;
+        // a layout saved before a window was renamed would float the window
+        _pendingLayoutText = MigrateLegacyWindowNames(*text);
     }
 
     std::expected<void, String> EditorLayoutWidget::SaveCurrentLayout(StringView name) {

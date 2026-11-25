@@ -1,5 +1,7 @@
 #include <Common/Printers.h>
 #include <Widgets/ImGuiLayoutText.h>
+#include <imgui.h>
+#include <imgui_internal.h>
 
 namespace BECore::Tests {
 
@@ -53,6 +55,52 @@ Collapsed=0
 DockId=0x00000004,0
 
 )";
+
+        constexpr ImGuiID kDockSpaceId = 0x283A2638;
+        constexpr ImGuiID kConfigDockNodeId = 0x00000006;
+        constexpr const char* kConfigEditorTitle = "Config Editor###ConfigEditor";
+        constexpr ImVec2 kDisplaySize{1920.0f, 1080.0f};
+        constexpr int kSettleFrames = 4;
+
+        /// A context with no backend: it lays out the dock tree and the windows, which is all the ids need
+        class ImGuiLayoutTextContextTest : public ::testing::Test {
+        protected:
+            void SetUp() override {
+                ImGui::CreateContext();
+                ImGuiIO& io = ImGui::GetIO();
+                io.DisplaySize = kDisplaySize;
+                io.IniFilename = nullptr;
+                io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+                io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+            }
+
+            void TearDown() override {
+                ImGui::DestroyContext();
+            }
+
+            /// What ImGuiWidget does with the text of imgui.ini, then frames that draw the dock space and the two windows of the editor
+            ImGuiID ConfigEditorDockId(const String& ini) {
+                ImGui::LoadIniSettingsFromMemory(ini.c_str(), ini.size());
+                ImGui::GetCurrentContext()->SettingsLoaded = true;
+                for (int frame = 0; frame < kSettleFrames; ++frame) {
+                    ImGui::GetIO().DeltaTime = 1.0f / 60.0f;
+                    ImGui::NewFrame();
+                    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+                    ImGui::SetNextWindowSize(kDisplaySize);
+                    constexpr ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground;
+                    ImGui::Begin("##Host", nullptr, hostFlags);
+                    ImGui::DockSpace(kDockSpaceId, ImVec2(0.0f, 0.0f));
+                    ImGui::End();
+                    ImGui::Begin("Scene Editor");
+                    ImGui::End();
+                    ImGui::Begin(kConfigEditorTitle);
+                    ImGui::End();
+                    ImGui::Render();
+                }
+                const ImGuiWindow* window = ImGui::FindWindowByName(kConfigEditorTitle);
+                return window != nullptr ? window->DockId : 0;
+            }
+        };
 
         String Joined(std::initializer_list<StringView> parts) {
             String text;
@@ -114,6 +162,17 @@ DockId=0x00000004,0
 
     TEST(ImGuiLayoutTextTest, LegacySectionAtTheEndWithoutNewlineIsRenamed) {
         EXPECT_EQ(MigrateLegacyWindowNames("[Window][Config Editor]\nDockId=0x6,0"), String("[Window][ConfigEditor]\nDockId=0x6,0"));
+    }
+
+    TEST_F(ImGuiLayoutTextContextTest, MigratedIniDocksTheConfigEditorWhereTheOldOneWas) {
+        const String stale = Joined({kSceneEditor, kLegacyConfigEditor, kViewport, kFloatingConfigEditor, kStaleDockTree});
+        EXPECT_EQ(ConfigEditorDockId(MigrateLegacyWindowNames(stale)), kConfigDockNodeId);
+    }
+
+    /// The bug: ImGui finds no settings for the renamed window, so the old ini leaves it floating
+    TEST_F(ImGuiLayoutTextContextTest, StaleIniWithoutTheMigrationLeavesTheConfigEditorFloating) {
+        const String stale = Joined({kSceneEditor, kLegacyConfigEditor, kViewport, kFloatingConfigEditor, kStaleDockTree});
+        EXPECT_EQ(ConfigEditorDockId(stale), 0u);
     }
 
 }  // namespace BECore::Tests
