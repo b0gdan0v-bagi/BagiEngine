@@ -47,20 +47,16 @@ namespace BECore {
     /**
      * @brief The "Atlas" section of the Sprite Library panel: the atlas group of the selected sprite, the pack settings, a summary of the
      * group, Pack and Unpack. The rules and the files are SpriteAtlas's; this holds the section's state over them, the refresh of what showed the old
-     * pixels (the texture cache and the sprites of the active scene), and takes its fields from `Render` (the ImGui form of `TextureEditorWidget`) or
-     * from `Sync` (the asset's `SpriteAtlasView`).
+     * pixels (the texture cache and the sprites of the active scene), and takes its fields from `Sync` (the asset's `SpriteAtlasView`); it draws nothing.
      *
      * The fields are the pack settings; Pack records them in the group's entries and the section loads them back when the selected
      * sprite's group changes, so a repack here and an Accept of the Generate panel make the same file.
-     * Numbers and the summary are formatted by ImGui into its own buffers and the texts are fixed buffers, so a steady frame allocates nothing.
      */
     class SpriteAtlasPanel {
     public:
-        /**
-         * @brief Draws the section for the selected sprite @p entry (a copy taken this frame).
-         * @return Whether the library changed; the caller drops its copy of the entry and marks the library unsaved.
-         */
-        bool Render(TextureLibrary& library, const SpriteEntry& entry);
+        /// The click and Ctrl-click steps of the padding field, which the asset's stepper must repeat
+        static constexpr int kPaddingStep = 1;
+        static constexpr int kPaddingStepFast = 4;
 
         /**
          * @brief Takes the fields of @p view for the selected sprite @p entry and writes what the section shows.
@@ -96,11 +92,9 @@ namespace BECore {
         bool SyncNameField(const TextureLibrary& library, const SpriteEntry& entry, PoolString group);
         void SetStatus(StringView text, bool isError);
 
-        static constexpr size_t kNameSize = 65;
         static constexpr size_t kStatusSize = 256;
 
         PackSettings _settings;
-        char _name[kNameSize] = {};
         PoolString _boundSprite;
         PoolString _boundGroup;
         bool _hasError = false;

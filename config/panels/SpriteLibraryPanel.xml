@@ -1,0 +1,189 @@
+<?xml version="1.0"?>
+<PanelAsset id="SpriteLibrary" title="Sprite Library" command="view.spriteLibrary" open="true" width="700" height="500">
+  <sources>
+    <item name="sprites" model="SpriteLibraryPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="saveRow">
+      <elements>
+        <element type="PanelButton" id="save" icon="save" text="Save" command="texture.save" enableWhen="sprites.dirty" tooltip="Write the sprite library to its file"/>
+        <element type="PanelText" id="unsaved" text="(unsaved changes)" style="Warning" visible="sprites.dirty"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="dropAnswer" bind="sprites.dropMessage" style="Success" wrap="true" visible="sprites.hasDropMessage and !sprites.dropFailed"/>
+    <element type="PanelText" id="dropError" bind="sprites.dropMessage" style="Error" wrap="true" visible="sprites.hasDropMessage and sprites.dropFailed"/>
+    <element type="PanelSeparator" id="saveLine"/>
+    <element type="PanelRow" id="panes">
+      <elements>
+        <element type="PanelChild" id="list" width="21.4" border="true">
+          <elements>
+            <element type="PanelSlot" id="sprites" name="spriteList"/>
+            <element type="PanelSeparator" id="listLine"/>
+            <element type="PanelButton" id="add" icon="circle-plus" text="Add" command="spriteLibrary.add" width="-1" tooltip="Add a sprite entry to the library"/>
+          </elements>
+        </element>
+        <element type="PanelChild" id="edit" border="true">
+          <elements>
+            <element type="PanelEmptyState" id="noSelection" icon="image" text="Select a sprite from the list" visible="!sprites.hasSelection"/>
+            <element type="PanelRow" id="nameRow" visible="sprites.hasSelection">
+              <elements>
+                <element type="PanelText" id="nameLabel" text="Name:"/>
+                <element type="PanelInput" id="name" bind="sprites.name" width="14.3" commitCommand="spriteLibrary.rename"/>
+              </elements>
+            </element>
+            <element type="PanelText" id="renameRefused" bind="sprites.renameRefusedText" style="Warning" visible="sprites.hasSelection and sprites.renameRefused"/>
+            <element type="PanelSeparator" id="nameLine" visible="sprites.hasSelection"/>
+            <element type="PanelRow" id="textureRow" visible="sprites.hasSelection">
+              <elements>
+                <element type="PanelText" id="textureLabel" text="Texture:"/>
+                <element type="PanelCombo" id="texture" bind="sprites.texture" items="sprites.textures" width="21.4" enableWhen="!sprites.packed"/>
+                <element type="PanelButton" id="rescan" icon="refresh-cw" command="spriteLibrary.rescan" tooltip="Rescan the assets folder for textures"/>
+              </elements>
+            </element>
+            <element type="PanelText" id="packed" text="Packed into an atlas: Unpack (Atlas section) to change the texture or the rect" style="Disabled" visible="sprites.hasSelection and sprites.packed"/>
+            <element type="PanelSeparator" id="textureLine" visible="sprites.hasSelection"/>
+            <element type="PanelSlot" id="preview" name="spritePreview" visible="sprites.hasSelection"/>
+            <element type="PanelSeparator" id="previewLine" visible="sprites.hasSelection"/>
+            <element type="PanelText" id="rectTitle" text="Source Rect (precise adjustment):" visible="sprites.hasSelection"/>
+            <element type="PanelRow" id="rectPosition" visible="sprites.hasSelection">
+              <elements>
+                <element type="PanelNumber" id="rectX" bind="sprites.rectX" text="X" step="0.5" width="5" enableWhen="!sprites.packed"/>
+                <element type="PanelNumber" id="rectY" bind="sprites.rectY" text="Y" step="0.5" width="5" enableWhen="!sprites.packed"/>
+              </elements>
+            </element>
+            <element type="PanelRow" id="rectSize" visible="sprites.hasSelection">
+              <elements>
+                <element type="PanelNumber" id="rectW" bind="sprites.rectW" text="W" step="0.5" width="5" enableWhen="!sprites.packed"/>
+                <element type="PanelNumber" id="rectH" bind="sprites.rectH" text="H" step="0.5" width="5" enableWhen="!sprites.packed"/>
+              </elements>
+            </element>
+            <element type="PanelSeparator" id="rectLine" visible="sprites.hasSelection"/>
+            <element type="PanelSection" id="slice" title="Slice sheet" icon="grid-3x2" defaultOpen="false" openBind="sprites.slice.open" visible="sprites.hasSelection and sprites.slice.canSlice">
+              <elements>
+                <element type="PanelRow" id="sliceMode">
+                  <elements>
+                    <element type="PanelRadio" id="grid" bind="sprites.slice.mode" value="Grid" icon="grid-3x2" text="Grid" tooltip="Cut the sheet into equal cells"/>
+                    <element type="PanelRadio" id="islands" bind="sprites.slice.mode" value="Islands" icon="scan" text="Alpha islands" tooltip="Cut out what is drawn: each separate opaque shape of the file becomes a sprite"/>
+                  </elements>
+                </element>
+                <element type="PanelRow" id="gridCounts" visible="sprites.slice.mode == Grid">
+                  <elements>
+                    <element type="PanelText" id="columnsLabel" text="Columns"/>
+                    <element type="PanelNumber" id="columns" bind="sprites.slice.columns" stepper="true" min="1" max="64" step="1" stepFast="4" width="6.4"/>
+                    <element type="PanelText" id="rowsLabel" text="Rows"/>
+                    <element type="PanelNumber" id="rows" bind="sprites.slice.rows" stepper="true" min="1" max="64" step="1" stepFast="4" width="6.4"/>
+                  </elements>
+                </element>
+                <element type="PanelRow" id="gridInsets" visible="sprites.slice.mode == Grid">
+                  <elements>
+                    <element type="PanelText" id="marginLabel" text="Margin"/>
+                    <element type="PanelNumber" id="margin" bind="sprites.slice.margin" stepper="true" min="0" max="16384" step="1" stepFast="8" width="6.4"/>
+                    <element type="PanelText" id="spacingLabel" text="Spacing"/>
+                    <element type="PanelNumber" id="spacing" bind="sprites.slice.spacing" stepper="true" min="0" max="16384" step="1" stepFast="8" width="6.4" tooltip="Pixels between neighbouring cells"/>
+                  </elements>
+                </element>
+                <element type="PanelRow" id="islandAlpha" visible="sprites.slice.mode == Islands">
+                  <elements>
+                    <element type="PanelText" id="alphaLabel" text="Alpha above"/>
+                    <element type="PanelNumber" id="alphaThreshold" bind="sprites.slice.alphaThreshold" stepper="true" min="0" max="254" step="1" stepFast="16" width="6.4" tooltip="A pixel is part of a shape when its alpha is above this (0 to 254)"/>
+                    <element type="PanelText" id="minSizeLabel" text="Min size"/>
+                    <element type="PanelNumber" id="minSize" bind="sprites.slice.minSize" stepper="true" min="1" max="16384" step="1" stepFast="8" width="6.4" tooltip="Shapes narrower or lower than this many pixels are dropped as specks"/>
+                  </elements>
+                </element>
+                <element type="PanelRow" id="islandBoxes" visible="sprites.slice.mode == Islands">
+                  <elements>
+                    <element type="PanelText" id="paddingLabel" text="Padding"/>
+                    <element type="PanelNumber" id="padding" bind="sprites.slice.padding" stepper="true" min="0" max="64" step="1" stepFast="8" width="6.4" tooltip="Pixels added around each shape; the boxes of neighbours may overlap"/>
+                    <element type="PanelText" id="mergeGapLabel" text="Merge gap"/>
+                    <element type="PanelNumber" id="mergeGap" bind="sprites.slice.mergeGap" stepper="true" min="0" max="64" step="1" stepFast="8" width="6.4" tooltip="Shapes at most this many empty pixels apart become one (the dot of an i)"/>
+                  </elements>
+                </element>
+                <element type="PanelButton" id="findIslands" icon="scan-search" text="Find islands" command="spriteLibrary.sliceFindIslands" visible="sprites.slice.mode == Islands" tooltip="Read the file and find the shapes; they are drawn over the preview"/>
+                <element type="PanelRow" id="prefixRow">
+                  <elements>
+                    <element type="PanelText" id="prefixLabel" text="Name prefix"/>
+                    <element type="PanelInput" id="prefix" bind="sprites.slice.prefix" width="11.4"/>
+                    <element type="PanelText" id="startLabel" text="from"/>
+                    <element type="PanelNumber" id="startIndex" bind="sprites.slice.startIndex" stepper="true" min="0" max="100000" step="1" stepFast="4" width="6.4" tooltip="The number of the first sprite: &lt;prefix&gt;_&lt;number&gt;"/>
+                  </elements>
+                </element>
+                <element type="PanelText" id="namesLabel" text="Names (optional, in order, separated by spaces or commas)"/>
+                <element type="PanelInput" id="names" bind="sprites.slice.names" lines="3" tooltip="A sprite without a name here is called &lt;prefix&gt;_&lt;number&gt;"/>
+                <element type="PanelRow" id="policyRow">
+                  <elements>
+                    <element type="PanelText" id="policyLabel" text="A name the library already has:"/>
+                    <element type="PanelRadio" id="overwrite" bind="sprites.slice.policy" value="Overwrite" text="Overwrite"/>
+                    <element type="PanelRadio" id="skip" bind="sprites.slice.policy" value="Skip" text="Skip"/>
+                  </elements>
+                </element>
+                <element type="PanelText" id="sliceSummary" bind="sprites.slice.summary" visible="!sprites.slice.hasError"/>
+                <element type="PanelText" id="sliceError" bind="sprites.slice.summary" style="Error" visible="sprites.slice.hasError"/>
+                <element type="PanelButton" id="sliceAdd" icon="grid-2x2-plus" text="Add sprites" command="spriteLibrary.sliceAdd" enableWhen="sprites.slice.canAdd" tooltip="Add one sprite per cell or island to the library; Save writes the file"/>
+              </elements>
+            </element>
+            <element type="PanelSeparator" id="sliceLine" visible="sprites.hasSelection and sprites.slice.canSlice"/>
+            <element type="PanelSection" id="atlas" title="Atlas" icon="package" defaultOpen="false" visible="sprites.hasSelection">
+              <elements>
+                <element type="PanelRow" id="groupRow">
+                  <elements>
+                    <element type="PanelText" id="groupLabel" text="Atlas:"/>
+                    <element type="PanelInput" id="group" bind="sprites.atlas.name" width="14.3" commitCommand="spriteLibrary.atlasName" visible="!sprites.atlas.packed" tooltip="The atlas this sprite belongs to; sprites with the same name are packed into assets/atlases/&lt;name&gt;.png. Empty: none"/>
+                    <element type="PanelText" id="packedGroup" bind="sprites.atlas.name" style="Disabled" visible="sprites.atlas.packed"/>
+                  </elements>
+                </element>
+                <element type="PanelText" id="atlasPacked" bind="sprites.atlas.packedText" style="Disabled" visible="sprites.atlas.packed"/>
+                <element type="PanelRow" id="settingsRow">
+                  <elements>
+                    <element type="PanelText" id="atlasPaddingLabel" text="Padding"/>
+                    <element type="PanelNumber" id="atlasPadding" bind="sprites.atlas.padding" stepper="true" min="0" max="16" step="1" stepFast="4" width="6.4" tooltip="Empty pixels between two sprites, so a filtered edge does not take in a neighbour"/>
+                    <element type="PanelRadio" id="powerOfTwo" bind="sprites.atlas.sizeMode" value="PowerOfTwo" text="Power of two" tooltip="Both sides of the atlas round up to a power of two"/>
+                    <element type="PanelRadio" id="tight" bind="sprites.atlas.sizeMode" value="Tight" text="Tight" tooltip="The atlas is the bounding box of the sprites"/>
+                  </elements>
+                </element>
+                <element type="PanelText" id="noGroup" text="No atlas: name one to group this sprite with others" style="Disabled" visible="!sprites.atlas.hasGroup"/>
+                <element type="PanelText" id="atlasSummary" bind="sprites.atlas.summary" visible="sprites.atlas.hasGroup"/>
+                <element type="PanelRow" id="packRow">
+                  <elements>
+                    <element type="PanelButton" id="pack" icon="package-plus" text="Pack" command="spriteLibrary.pack" enableWhen="sprites.atlas.canPack" tooltip="Compose the group into assets/atlases/&lt;name&gt;.png from the sprites' sources; Save writes the library"/>
+                    <element type="PanelButton" id="unpack" icon="package-open" text="Unpack" command="spriteLibrary.unpack" enableWhen="sprites.atlas.canUnpack" tooltip="Point the packed sprites back at their own files; the atlas file stays on disk"/>
+                  </elements>
+                </element>
+                <element type="PanelText" id="atlasStatus" bind="sprites.atlas.status" wrap="true" visible="sprites.atlas.hasStatus and !sprites.atlas.statusError"/>
+                <element type="PanelText" id="atlasError" bind="sprites.atlas.status" style="Error" wrap="true" visible="sprites.atlas.hasStatus and sprites.atlas.statusError"/>
+              </elements>
+            </element>
+            <element type="PanelSeparator" id="atlasLine" visible="sprites.hasSelection"/>
+            <element type="PanelSection" id="atlasPreview" title="Atlas preview" icon="layout-grid" defaultOpen="false" visible="sprites.hasSelection">
+              <elements>
+                <element type="PanelText" id="noPreviewGroup" text="No atlas: name a group in the Atlas section to preview it" style="Disabled" visible="!sprites.preview.hasGroup"/>
+                <element type="PanelRow" id="previewMode" visible="sprites.preview.hasGroup">
+                  <elements>
+                    <element type="PanelRadio" id="current" bind="sprites.preview.mode" value="Current" text="Current" enableWhen="sprites.preview.anyPacked" tooltip="The packed sprites as the library has them, on the atlas file"/>
+                    <element type="PanelRadio" id="plan" bind="sprites.preview.mode" value="Plan" text="Pack plan" tooltip="What Pack would make with the settings above, from the sprites' sources; nothing is written"/>
+                  </elements>
+                </element>
+                <element type="PanelSlot" id="atlasPicture" name="spriteAtlasPreview" visible="sprites.preview.hasGroup"/>
+              </elements>
+            </element>
+            <element type="PanelSeparator" id="previewSectionLine" visible="sprites.hasSelection"/>
+            <element type="PanelButton" id="delete" icon="trash-2" text="Delete Entry" command="spriteLibrary.delete" visible="sprites.hasSelection" tooltip="Remove this sprite from the library"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="addSprite" title="Add sprite" open="sprites.dropOpen">
+      <elements>
+        <element type="PanelText" id="dropNameLabel" text="Name of the new sprite"/>
+        <element type="PanelInput" id="dropName" bind="sprites.dropName" focus="true"/>
+        <element type="PanelText" id="dropReason" bind="sprites.dropReason" style="Error" wrap="true" visible="sprites.dropRefused"/>
+        <element type="PanelText" id="dropTaken" bind="sprites.dropTakenText" style="Disabled" visible="!sprites.dropRefused and sprites.dropTaken"/>
+        <element type="PanelRow" id="dropButtons">
+          <elements>
+            <element type="PanelButton" id="dropAccept" icon="check" text="Accept" command="spriteLibrary.dropAccept" enableWhen="!sprites.dropRefused" tooltip="Accept the variant as this sprite"/>
+            <element type="PanelButton" id="dropCancel" icon="x" text="Cancel" command="spriteLibrary.dropCancel" tooltip="Drop nothing"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

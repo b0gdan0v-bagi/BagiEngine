@@ -5,25 +5,13 @@
 #include <BECore/Math/NumberUtils.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Generated/SpriteSheetSlicePanel.gen.hpp>
-#include <Widgets/EditorLayout/EditorControls.h>
-#include <Widgets/Icons/IconsLucide.h>
-#include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 
 namespace BECore {
 
     namespace {
 
-        constexpr float kNumberFieldWidth = 90.0f;
-        constexpr float kPrefixFieldWidth = 160.0f;
-        constexpr float kNamesFieldHeight = 56.0f;
         constexpr float kOverlayThickness = 1.0f;
-        constexpr int kCountStep = 1;
-        constexpr int kCountStepFast = 4;
-        constexpr int kPixelStep = 1;
-        constexpr int kPixelStepFast = 8;
-        constexpr int kAlphaStep = 1;
-        constexpr int kAlphaStepFast = 16;
         const char* const kPressFindIslands = "Press Find islands";
 
         /// Which names the library holds, order included: the plan depends on them, and nothing else in the library
@@ -73,127 +61,7 @@ namespace BECore {
             return true;
         }
 
-        /// A number field in the mono font with its name before it; true when the value was edited (and is clamped to the range)
-        bool NumberField(const char* label, const char* id, int& value, int step, int stepFast, int minimum, int maximum) {
-            ImGui::TextUnformatted(label);
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(kNumberFieldWidth);
-            bool changed = false;
-            {
-                const ScopedMonoFont mono;
-                changed = ImGui::InputInt(id, &value, step, stepFast);
-            }
-            value = eastl::clamp(value, minimum, maximum);
-            return changed;
-        }
-
     }  // namespace
-
-    PoolString SpriteSheetSlicePanel::Render(TextureLibrary& library, PoolString texturePath, int sheetWidth, int sheetHeight) {
-        _isOpen = ImGui::CollapsingHeader(ICON_LC_GRID_3X2 " Slice sheet");
-        if (!_isOpen) {
-            return {};
-        }
-
-        const PlanKey key{texturePath, sheetWidth, sheetHeight, NamesFingerprint(library)};
-        if (key.texturePath != _key.texturePath || key.width != _key.width || key.height != _key.height) {
-            ClearIslands();
-        }
-
-        bool changed = false;
-        if (ImGui::RadioButton(ICON_LC_GRID_3X2 " Grid##slice_mode", _mode == SheetSliceMode::Grid)) {
-            if (_mode != SheetSliceMode::Grid) {
-                _mode = SheetSliceMode::Grid;
-                ClearIslands();
-                changed = true;
-            }
-        }
-        ItemTooltip("Cut the sheet into equal cells");
-        ImGui::SameLine();
-        if (ImGui::RadioButton(ICON_LC_SCAN " Alpha islands##slice_mode", _mode == SheetSliceMode::Islands)) {
-            if (_mode != SheetSliceMode::Islands) {
-                _mode = SheetSliceMode::Islands;
-                ClearIslands();
-                changed = true;
-            }
-        }
-        ItemTooltip("Cut out what is drawn: each separate opaque shape of the file becomes a sprite");
-
-        if (_mode == SheetSliceMode::Grid) {
-            changed |= NumberField("Columns", "##slice_columns", _spec.columns, kCountStep, kCountStepFast, 1, kMaxSheetGridAxis);
-            ImGui::SameLine();
-            changed |= NumberField("Rows", "##slice_rows", _spec.rows, kCountStep, kCountStepFast, 1, kMaxSheetGridAxis);
-            changed |= NumberField("Margin", "##slice_margin", _spec.margin, kPixelStep, kPixelStepFast, 0, kMaxInsetPixels);
-            ImGui::SameLine();
-            changed |= NumberField("Spacing", "##slice_spacing", _spec.spacing, kPixelStep, kPixelStepFast, 0, kMaxInsetPixels);
-            ItemTooltip("Pixels between neighbouring cells");
-        } else {
-            bool islandsEdited = false;
-            islandsEdited |= NumberField("Alpha above", "##slice_alpha", _island.alphaThreshold, kAlphaStep, kAlphaStepFast, 0, kMaxIslandAlphaThreshold);
-            ItemTooltip("A pixel is part of a shape when its alpha is above this (0 to 254)");
-            ImGui::SameLine();
-            islandsEdited |= NumberField("Min size", "##slice_min_size", _island.minSize, kPixelStep, kPixelStepFast, 1, kMaxIslandMinSize);
-            ItemTooltip("Shapes narrower or lower than this many pixels are dropped as specks");
-            islandsEdited |= NumberField("Padding", "##slice_padding", _island.padding, kPixelStep, kPixelStepFast, 0, kMaxIslandPadding);
-            ItemTooltip("Pixels added around each shape; the boxes of neighbours may overlap");
-            ImGui::SameLine();
-            islandsEdited |= NumberField("Merge gap", "##slice_merge_gap", _island.mergeGap, kPixelStep, kPixelStepFast, 0, kMaxIslandMergeGap);
-            ItemTooltip("Shapes at most this many empty pixels apart become one (the dot of an i)");
-            if (islandsEdited) {
-                ClearIslands();
-                changed = true;
-            }
-
-            if (IconTextButton(ICON_LC_SCAN_SEARCH, "Find islands", "Read the file and find the shapes; they are drawn over the preview")) {
-                FindIslands(texturePath, sheetWidth, sheetHeight);
-                changed = true;
-            }
-        }
-
-        ImGui::TextUnformatted("Name prefix");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(kPrefixFieldWidth);
-        changed |= ImGui::InputText("##slice_prefix", _prefix, sizeof(_prefix));
-        ImGui::SameLine();
-        changed |= NumberField("from", "##slice_start", _startIndex, kCountStep, kCountStepFast, 0, kMaxStartIndex);
-        ItemTooltip("The number of the first sprite: <prefix>_<number>");
-
-        ImGui::TextUnformatted("Names (optional, in order, separated by spaces or commas)");
-        changed |= ImGui::InputTextMultiline("##slice_names", _names, sizeof(_names), ImVec2(-1.0f, kNamesFieldHeight));
-        ItemTooltip("A sprite without a name here is called <prefix>_<number>");
-
-        ImGui::TextUnformatted("A name the library already has:");
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Overwrite##slice_policy", _policy == SheetConflictPolicy::Overwrite)) {
-            _policy = SheetConflictPolicy::Overwrite;
-            changed = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Skip##slice_policy", _policy == SheetConflictPolicy::Skip)) {
-            _policy = SheetConflictPolicy::Skip;
-            changed = true;
-        }
-
-        if (changed || _inputsChanged || key != _key) {
-            _key = key;
-            _inputsChanged = false;
-            MakePlan(library);
-        }
-
-        if (_hasError) {
-            ImGui::TextColored(GetImGuiPalette().error, "%s", _summary);
-        } else {
-            ImGui::TextUnformatted(_summary);
-        }
-
-        PoolString firstAdded;
-        ImGui::BeginDisabled(!_hasPlan || _plan.entries.empty());
-        if (IconTextButton(ICON_LC_GRID_2X2_PLUS, "Add sprites", "Add one sprite per cell or island to the library; Save writes the file")) {
-            firstAdded = AddPlanned(library);
-        }
-        ImGui::EndDisabled();
-        return firstAdded;
-    }
 
     void SpriteSheetSlicePanel::Sync(SpriteSliceView& view, const TextureLibrary& library, PoolString texturePath, int sheetWidth, int sheetHeight) {
         _isOpen = view.open;

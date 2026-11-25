@@ -53,8 +53,8 @@ namespace BECore {
     /**
      * @brief The "Slice sheet" section of the Sprite Library panel: a mode (a grid, or the alpha islands of the file), the fields of
      * the mode, the names, the conflict choice, a summary of what a click would do and the button that does it. The math and the
-     * rules are SpriteSheetGrid's and SpriteSheetIslands'; this holds the section's state over them and takes its fields from `Render` (the ImGui form of `TextureEditorWidget`) or from `Sync` (the
-     * asset's `SpriteSliceView`).
+     * rules are SpriteSheetGrid's and SpriteSheetIslands'; this holds the section's state over them, takes its fields from `Sync` (the asset's
+     * `SpriteSliceView`) and draws only the overlay.
      *
      * Both modes end with a list of rects (`_cells`) and one plan made from it. The plan is made again only when an input, the
      * texture or the names in the library changed, so a steady frame allocates nothing. The islands are found only when their button
@@ -67,9 +67,16 @@ namespace BECore {
         static constexpr int kMaxInsetPixels = 16384;
         static constexpr int kMaxStartIndex = 100000;
         static constexpr int kMaxIslandMinSize = 16384;
+        /// The click and Ctrl-click steps of the fields, which the asset's steppers must repeat: counts (columns, rows, the first number), pixels, alpha
+        static constexpr int kCountStep = 1;
+        static constexpr int kCountStepFast = 4;
+        static constexpr int kPixelStep = 1;
+        static constexpr int kPixelStepFast = 8;
+        static constexpr int kAlphaStep = 1;
+        static constexpr int kAlphaStepFast = 16;
 
         /**
-         * @brief Takes the fields of @p view for the sheet @p texturePath of @p sheetWidth x @p sheetHeight pixels, the work of the ImGui form.
+         * @brief Takes the fields of @p view for the sheet @p texturePath of @p sheetWidth x @p sheetHeight pixels.
          *
          * The numbers are clamped and the prefix and the names cut to the old field sizes, in the view too. A change of the mode, of an island field, of
          * the texture or of its size clears the islands found. The plan is made again only when a field, the texture or the names in the library changed,
@@ -77,7 +84,7 @@ namespace BECore {
          */
         void Sync(SpriteSliceView& view, const TextureLibrary& library, PoolString texturePath, int sheetWidth, int sheetHeight);
 
-        /// Reads the file of @p texturePath and finds its islands (the Find islands button); the result is planned by the next `Sync` or `Render`
+        /// Reads the file of @p texturePath and finds its islands (the Find islands button); the result is planned by the next `Sync`
         void FindIslands(PoolString texturePath, int width, int height);
 
         /**
@@ -85,12 +92,6 @@ namespace BECore {
          * @return The name of the first sprite added, or an empty name when there was no plan to add.
          */
         PoolString AddPlanned(TextureLibrary& library);
-
-        /**
-         * @brief Draws the section for the sheet @p texturePath of @p sheetWidth x @p sheetHeight pixels.
-         * @return The name of the first sprite added when the button was pressed this frame, else an empty name.
-         */
-        PoolString Render(TextureLibrary& library, PoolString texturePath, int sheetWidth, int sheetHeight);
 
         /// Draws the cells of the open section over the preview of @p texturePath: @p origin is the image's corner, @p scaleX and
         /// @p scaleY the texture pixels per screen pixel. Nothing while the section is closed or its grid is not valid.

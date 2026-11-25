@@ -129,6 +129,15 @@ DockId=0x00000004,0
         EXPECT_EQ(MigrateLegacyWindowNames(stale), expected);
     }
 
+    TEST(ImGuiLayoutTextTest, TheSpriteLibraryIsRenamedBesideTheConfigEditorAndKeepsItsDockNode) {
+        constexpr StringView legacySpriteLibrary = "[Window][Sprite Library]\nPos=1493,64\nSize=427,982\nCollapsed=0\nDockId=0x00000002,0\n\n";
+        constexpr StringView renamedSpriteLibrary = "[Window][SpriteLibrary]\nPos=1493,64\nSize=427,982\nCollapsed=0\nDockId=0x00000002,0\n\n";
+        constexpr StringView floatingSpriteLibrary = "[Window][SpriteLibrary]\nPos=60,60\nSize=700,500\nCollapsed=0\n\n";
+        const String stale = Joined({kSceneEditor, kLegacyConfigEditor, legacySpriteLibrary, kViewport, floatingSpriteLibrary, kStaleDockTree});
+        const String expected = Joined({kSceneEditor, kRenamedConfigEditor, renamedSpriteLibrary, kViewport, kStaleDockTree});
+        EXPECT_EQ(MigrateLegacyWindowNames(stale), expected);
+    }
+
     TEST(ImGuiLayoutTextTest, CurrentNameAndEmptyTextComeBackEqual) {
         const String fresh = Joined({kSceneEditor, kRenamedConfigEditor, kViewport, kStaleDockTree});
         EXPECT_EQ(MigrateLegacyWindowNames(fresh), fresh);

@@ -72,7 +72,8 @@ namespace BECore {
     };
 
     /**
-     * @brief The model of the Sprite Library asset: the selection, the entry form, Save and the `editor_state` row of the library, with no ImGui
+     * @brief The model of the Sprite Library asset (`SpriteLibraryPanel.xml`): the selection, the entry form, the state of the Slice sheet, Atlas and
+     * Atlas preview sections (held by their panels), Save and the `editor_state` row of the library, with no ImGui
      *
      * Works on `CoreManager::GetTextureLibrary()` unless a test gives its own library (`UseLibrary`). `Update` reads the view: a changed `texture` or rect
      * is written into the selected entry and marks the library unsaved, only while the entry is not packed (a packed entry's fields go back to what the
@@ -88,9 +89,12 @@ namespace BECore {
      * `SpriteAtlasPanel::Sync` takes); a change of the library by them forgets the failed textures and marks it unsaved. The "Atlas preview" picture is
      * the slot `spriteAtlasPreview`, and the model keeps its mode.
      *
-     * `Initialize` registers the slots `spriteList`, `spritePreview` and `spriteAtlasPreview` (`SpriteLibrarySlots`). They note a clicked row, a drop, a
-     * finished drag and a clicked rect of the atlas preview, and `EndUpdate` applies them. A drop on a row replaces that sprite at once; a drop on the free area opens the dialog. The accept goes
-     * through `ArtGenVariantDropEvent` (the Generate panel owns the accept), and its answer is the view's drop message.
+     * `Initialize` registers the slots `spriteList` (the list drawer `SpriteLibraryPanel`), `spritePreview` (the texture, the slice overlay while the
+     * section is open, the rect and the drag-to-select) and `spriteAtlasPreview` (the picture of `SpriteAtlasPreviewPanel`) through `SpriteLibrarySlots`.
+     * **A slot notes, the model applies:** a clicked row, a drop, a finished drag and a clicked rect of the atlas preview are kept and applied by
+     * `EndUpdate`, after the walk, because applying them inside it would change the lists the interpreter is reading. A drop on a row replaces that
+     * sprite at once; a drop on the free area opens the dialog. The accept goes through `ArtGenVariantDropEvent` (the Generate panel owns the accept),
+     * and its answer is the view's drop message.
      */
     class SpriteLibraryPanelModel : public IPanelModel, public SubscriptionHolder {
         BE_CLASS(SpriteLibraryPanelModel)

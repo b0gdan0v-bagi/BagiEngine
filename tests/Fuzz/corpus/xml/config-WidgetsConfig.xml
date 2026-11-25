@@ -37,7 +37,8 @@
       type="AssetPanelWidget"
       asset="SceneDialogsPanel" />
     <widget
-      type="TextureEditorWidget" />
+      type="AssetPanelWidget"
+      asset="SpriteLibraryPanel" />
     <widget
       type="AssetPanelWidget"
       asset="ProfilerPanel" />

@@ -8,21 +8,11 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Generated/SpriteAtlasPanel.gen.hpp>
 #include <Widgets/ArtGen/ArtGenAccept.h>
-#include <Widgets/EditorLayout/EditorControls.h>
-#include <Widgets/Icons/IconsLucide.h>
-#include <Widgets/ImGuiFonts.h>
-#include <Widgets/ImGuiTheme.h>
 #include <Widgets/TextureEditor/SpriteAtlas.h>
-#include <imgui.h>
 
 namespace BECore {
 
     namespace {
-
-        constexpr float kNameFieldWidth = 200.0f;
-        constexpr float kNumberFieldWidth = 90.0f;
-        constexpr int kPaddingStep = 1;
-        constexpr int kPaddingStepFast = 4;
 
         PoolString GroupOf(const SpriteEntry& entry) {
             return entry.atlas.has_value() ? entry.atlas->name : PoolString{};
@@ -41,78 +31,6 @@ namespace BECore {
         }
 
     }  // namespace
-
-    bool SpriteAtlasPanel::Render(TextureLibrary& library, const SpriteEntry& entry) {
-        static_assert(kNameSize == kMaxSpriteNameLength + 1, "the name field holds the longest atlas name the model accepts");
-        if (!ImGui::CollapsingHeader(ICON_LC_PACKAGE " Atlas")) {
-            return false;
-        }
-
-        const PoolString group = GroupOf(entry);
-        const bool packed = IsPackedSprite(entry);
-        SyncNameField(library, entry, group);
-
-        ImGui::TextUnformatted("Atlas:");
-        ImGui::SameLine();
-        ImGui::BeginDisabled(packed);
-        ImGui::SetNextItemWidth(kNameFieldWidth);
-        ImGui::InputText("##atlas_name", _name, sizeof(_name));
-        const bool nameLeft = ImGui::IsItemDeactivatedAfterEdit();
-        ImGui::EndDisabled();
-        ItemTooltip("The atlas this sprite belongs to; sprites with the same name are packed into assets/atlases/<name>.png. Empty: none");
-        if (packed) {
-            ImGui::TextDisabled("Packed on '%s': Unpack to change", group.CStr());
-        } else if (nameLeft && ApplyGroupName(library, entry, StringView(_name))) {
-            return true;
-        }
-
-        {
-            ImGui::TextUnformatted("Padding");
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(kNumberFieldWidth);
-            const ScopedMonoFont mono;
-            ImGui::InputInt("##atlas_padding", &_settings.padding, kPaddingStep, kPaddingStepFast);
-            _settings.padding = eastl::clamp(_settings.padding, 0, kMaxAtlasPadding);
-        }
-        ItemTooltip("Empty pixels between two sprites, so a filtered edge does not take in a neighbour");
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Power of two##atlas_mode", _settings.sizeMode == AtlasSizeMode::PowerOfTwo)) {
-            _settings.sizeMode = AtlasSizeMode::PowerOfTwo;
-        }
-        ItemTooltip("Both sides of the atlas round up to a power of two");
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Tight##atlas_mode", _settings.sizeMode == AtlasSizeMode::Tight)) {
-            _settings.sizeMode = AtlasSizeMode::Tight;
-        }
-        ItemTooltip("The atlas is the bounding box of the sprites");
-
-        const AtlasCounts counts = group.Empty() ? AtlasCounts{} : AtlasSummary(library, group.ToStringView());
-        if (group.Empty()) {
-            ImGui::TextDisabled("No atlas: name one to group this sprite with others");
-        } else {
-            ImGui::Text("Atlas '%s': %u sprites, %u packed", group.CStr(), counts.members, counts.packed);
-        }
-
-        bool changed = false;
-        ImGui::BeginDisabled(counts.members == 0);
-        if (IconTextButton(ICON_LC_PACKAGE_PLUS, "Pack", "Compose the group into assets/atlases/<name>.png from the sprites' sources; Save writes the library")) {
-            changed = Pack(library, group);
-        }
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::BeginDisabled(counts.packed == 0);
-        if (IconTextButton(ICON_LC_PACKAGE_OPEN, "Unpack", "Point the packed sprites back at their own files; the atlas file stays on disk")) {
-            changed |= Unpack(library, group);
-        }
-        ImGui::EndDisabled();
-
-        if (_status[0] != '\0') {
-            ImGui::PushStyleColor(ImGuiCol_Text, _hasError ? GetImGuiPalette().error : GetImGuiPalette().text);
-            ImGui::TextWrapped("%s", _status);
-            ImGui::PopStyleColor();
-        }
-        return changed;
-    }
 
     void SpriteAtlasPanel::Sync(SpriteAtlasView& view, const TextureLibrary& library, const SpriteEntry& entry) {
         const PoolString group = GroupOf(entry);
@@ -162,7 +80,6 @@ namespace BECore {
         }
         _boundSprite = entry.name;
         _boundGroup = group;
-        snprintf(_name, sizeof(_name), "%s", group.CStr());
         return true;
     }
 

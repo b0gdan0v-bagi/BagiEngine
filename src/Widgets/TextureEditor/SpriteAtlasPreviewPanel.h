@@ -33,20 +33,14 @@ namespace BECore {
 
     /**
      * @brief The "Atlas preview" section of the Sprite Library panel: the atlas of the selected sprite's group drawn rect by rect with
-     * its names, its size and its fill ratio. The model is `SpriteAtlasPreview`; this draws what it says. `Render` is the whole section of
-     * `TextureEditorWidget` (its header, the mode radios and the body); the asset draws the body alone (`DrawBody`) and keeps the mode itself.
+     * its names, its size and its fill ratio. The model is `SpriteAtlasPreview`; this draws what it says: the body of the section (`DrawBody`,
+     * the slot `spriteAtlasPreview`); the asset draws the header and the mode radios, and the model keeps the mode.
      *
      * The preview is made again only when `AtlasPreviewKey`, the mode, the pack settings (Plan) or the size of a texture it read
      * moved, so a steady frame allocates nothing. `Plan` takes the sizes from the loaded textures and writes no pixel.
      */
     class SpriteAtlasPreviewPanel {
     public:
-        /**
-         * @brief Draws the section for the selected sprite @p entry; @p settings are the Atlas section's.
-         * @return The name of the sprite whose rect was clicked this frame, else empty
-         */
-        PoolString Render(const TextureLibrary& library, const SpriteEntry& entry, const PackSettings& settings, SpriteTextureCache& textures);
-
         /**
          * @brief Draws the error line, the picture, the size and the fill of the atlas of @p group in @p mode; @p settings are the Atlas section's.
          * @return The name of the sprite whose rect was clicked this frame, else empty
@@ -69,7 +63,6 @@ namespace BECore {
 
         static constexpr size_t kErrorSize = 256;
 
-        AtlasPreviewMode _mode = AtlasPreviewMode::Current;
         PoolString _group;
         PoolString _atlasPath;  // `AtlasTexturePath(_group)`, made when the group changes
         AtlasPreview _preview;

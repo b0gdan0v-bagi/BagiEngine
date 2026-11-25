@@ -316,7 +316,7 @@ namespace BECore {
         ImGui::DockBuilderDockWindow("Scene Editor", leftTop);
         ImGui::DockBuilderDockWindow("Config Editor###ConfigEditor", leftBottom);
         ImGui::DockBuilderDockWindow("Viewport", viewport);
-        ImGui::DockBuilderDockWindow("Sprite Library", right);
+        ImGui::DockBuilderDockWindow("Sprite Library###SpriteLibrary", right);
 
         ImGui::DockBuilderFinish(id);
     }
