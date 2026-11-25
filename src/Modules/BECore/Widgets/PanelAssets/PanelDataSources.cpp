@@ -1,6 +1,5 @@
 #include "PanelDataSources.h"
 
-
 namespace BECore {
 
     PanelSourceHandle::~PanelSourceHandle() {

@@ -29,9 +29,10 @@ namespace BECore {
     /**
      * @brief The asset and everything wrong with it
      *
-     * `issues.empty()` is the only meaning of "valid". An asset with issues is still safe to hold and to walk (every list is bounded
-     * by `PanelAssetLimits`, no pointer in it is null that the format allows to be set); `asset` is null only for a text that does
-     * not parse. Issues are short lines with no control character, so they can be shown in the panel and written to the log.
+     * `issues.empty()` is the only meaning of "valid". An asset with issues is still safe to hold and to walk (the tree is bounded by
+     * the reader's limits, and a breach of `PanelAssetLimits` is reported as an issue, never trimmed; no pointer in it is null that the
+     * format allows to be set); `asset` is null only for a text that does not
+     * parse. Issues are short lines with no control character, so they can be shown in the panel and written to the log.
      */
     struct PanelLoadResult {
         IntrusivePtr<PanelAsset> asset;
