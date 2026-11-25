@@ -68,6 +68,7 @@ namespace BECore {
                 {kConfigEditorReloadCancel, "Config Editor: Cancel Reload", std::nullopt, false},
                 {kConfigEditorSwitchDiscard, "Config Editor: Discard And Switch", std::nullopt, false},
                 {kConfigEditorSwitchCancel, "Config Editor: Cancel Switch", std::nullopt, false},
+                {kPreferencesCommit, "Preferences: Save", std::nullopt, false},
             };
             return table;
         }
