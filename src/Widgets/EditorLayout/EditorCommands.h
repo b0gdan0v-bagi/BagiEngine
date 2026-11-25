@@ -51,7 +51,7 @@ namespace BECore {
         inline constexpr auto kGamePause = "game.pause"_intern;
         /// One stepped frame while the game is paused; repeats while its hotkey is held
         inline constexpr auto kGameStep = "game.step"_intern;
-        /// Flips what a press in the viewport is for, Play (the game gets it) or Edit (the editor does). ViewportWidget owns the action.
+        /// Flips what a press in the viewport is for, Play (the game gets it) or Edit (the editor does). ViewportToolbarModel owns the action.
         inline constexpr auto kViewportInputMode = "viewport.inputMode"_intern;
         /// The gizmo tool, the World / Local space of the gizmo, the snap switches and the camera frame of the viewport. ViewportWidget owns them. No default chord:
         /// a bare letter is refused as a hotkey, the keys W / E / R / X / F are read by the viewport itself while it has the keys
@@ -198,7 +198,7 @@ namespace BECore {
         }
     };
 
-    /// The viewport's preview choice (size, rotation, safe area, overlays) changed: sent by ViewportWidget only on a real change (never every
+    /// The viewport's preview choice (size, rotation, safe area, overlays) changed: sent by ViewportToolbarModel only on a real change (never every
     /// frame, and not for what it just applied from EditorPreferencesChangedEvent). EditorLayoutWidget stores and saves it and does not
     /// answer with another EditorPreferencesChangedEvent.
     struct ViewportPreviewChangedEvent : public EventBase<ViewportPreviewChangedEvent> {
@@ -235,7 +235,7 @@ namespace BECore {
         }
     };
 
-    /// The viewport's input mode changed (the toolbar toggle or the command): sent by ViewportWidget only on a real change, not for what it
+    /// The viewport's input mode changed (the toolbar toggle or the command): sent by ViewportToolbarModel only on a real change, not for what it
     /// just applied from EditorPreferencesChangedEvent. EditorLayoutWidget stores and saves it and does not answer with another
     /// EditorPreferencesChangedEvent.
     struct ViewportInputModeChangedEvent : public EventBase<ViewportInputModeChangedEvent> {

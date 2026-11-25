@@ -148,13 +148,6 @@ namespace BECore {
         return overlays.elementRects || overlays.anchors || overlays.designRect || overlays.findings;
     }
 
-    void ViewportUIDebug::Collect(Scene* scene) {
-        if (scene && scene != _scene) {
-            _disabledNodes.clear();
-        }
-        Collect(scene, [this](const SceneNode* node) { return std::find(_disabledNodes.begin(), _disabledNodes.end(), node) == _disabledNodes.end(); });
-    }
-
     void ViewportUIDebug::Collect(Scene* scene, FunctionRef<bool(const SceneNode*)> isEnabled) {
         if (!scene) {
             Release();
@@ -192,28 +185,6 @@ namespace BECore {
         _canvasRows.clear();
         _hoverElement.reset();
         _hoverFinding.reset();
-    }
-
-    void ViewportUIDebug::DrawCanvasSwitches() {
-        if (_states.empty()) {
-            return;
-        }
-        ImGui::Separator();
-        ImGui::TextDisabled("Canvases");
-        for (CanvasState& state : _states) {
-            ImGui::PushID(state.node);
-            bool enabled = state.enabled;
-            if (ImGui::Checkbox(state.name.Empty() ? kUnnamed : state.name.CStr(), &enabled)) {
-                state.enabled = enabled;
-                const auto found = std::find(_disabledNodes.begin(), _disabledNodes.end(), state.node);
-                if (enabled && found != _disabledNodes.end()) {
-                    _disabledNodes.erase(found);
-                } else if (!enabled && found == _disabledNodes.end()) {
-                    _disabledNodes.push_back(state.node);
-                }
-            }
-            ImGui::PopID();
-        }
     }
 
     void ViewportUIDebug::RefreshElements(CanvasState& state) const {

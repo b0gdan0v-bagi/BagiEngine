@@ -112,6 +112,8 @@ namespace BECore {
         [[nodiscard]] TypedRef GetObject() override;
         void Initialize() override;
         void Update() override;
+        /// Reads what the bar's controls wrote in this frame's draw, so the viewport, which reads the choices after it draws the bar, uses them in the same frame
+        void EndUpdate() override;
         bool RunCommand(StringView id, StringView argument) override;
 
         [[nodiscard]] PreviewSettings GetPreview() const override;
@@ -126,6 +128,7 @@ namespace BECore {
         [[nodiscard]] bool IsLandscapeShapes() const override {
             return _view.landscape;
         }
+        void ClearFindingsOverlay() override;
 
         [[nodiscard]] const ViewportToolbarView& GetView() const {
             return _view;
@@ -133,6 +136,9 @@ namespace BECore {
 
     private:
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
+
+        /// Takes the view, makes the rows of the active scene again when they moved and tells the editor what changed
+        void Sync();
 
         /// Takes what the controls wrote into the view: a combo row that moved applies its rules, the other fields are read as they stand. @p scene is the
         /// active scene, whose variants the view combo lists

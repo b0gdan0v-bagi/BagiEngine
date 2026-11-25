@@ -56,6 +56,9 @@ namespace BECore {
 
         /// The shapes overlay lays the devices out in landscape
         [[nodiscard]] virtual bool IsLandscapeShapes() const = 0;
+
+        /// The user closed the "UI Findings" window, which is the Findings overlay: it is switched off as if its box were cleared
+        virtual void ClearFindingsOverlay() = 0;
     };
 
     /// The choices of a viewport whose editor has no toolbar model (a game's own `WidgetsConfig.xml` without the asset line): every default
@@ -88,6 +91,8 @@ namespace BECore {
         [[nodiscard]] bool IsLandscapeShapes() const override {
             return false;
         }
+
+        void ClearFindingsOverlay() override {}
     };
 
     class ViewportToolbarRegistry;

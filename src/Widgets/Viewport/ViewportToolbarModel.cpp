@@ -139,6 +139,14 @@ namespace BECore {
     }
 
     void ViewportToolbarModel::Update() {
+        Sync();
+    }
+
+    void ViewportToolbarModel::EndUpdate() {
+        Sync();
+    }
+
+    void ViewportToolbarModel::Sync() {
         const SceneManager* scenes = CoreManager::FindSceneManager();
         const Scene* scene = scenes != nullptr ? scenes->GetActiveScene() : nullptr;
         ReadView(scene);
@@ -203,6 +211,11 @@ namespace BECore {
 
     bool ViewportToolbarModel::IsCanvasEnabled(const SceneNode* node) const {
         return std::find(_disabledNodes.begin(), _disabledNodes.end(), node) == _disabledNodes.end();
+    }
+
+    void ViewportToolbarModel::ClearFindingsOverlay() {
+        _overlays.findings = false;
+        _view.overlayFindings = false;
     }
 
     uint64_t ViewportToolbarModel::GetShapeMask() const {

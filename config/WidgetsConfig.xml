@@ -10,6 +10,9 @@
       type="AssetPanelWidget"
       asset="MainMenuPanel" />
     <widget
+      type="AssetPanelWidget"
+      asset="ViewportToolbarPanel" />
+    <widget
       type="EditorLayoutWidget" />
     <widget
       type="AssetPanelWidget"

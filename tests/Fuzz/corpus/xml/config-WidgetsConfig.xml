@@ -4,7 +4,22 @@
     <widget
       type="ImGuiWidget" />
     <widget
+      type="AssetPanelWidget"
+      asset="MainToolbarPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="MainMenuPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="ViewportToolbarPanel" />
+    <widget
       type="EditorLayoutWidget" />
+    <widget
+      type="AssetPanelWidget"
+      asset="PreferencesPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="EditorDialogsPanel" />
     <widget
       type="ViewportWidget">
       <clearColor
@@ -19,9 +34,23 @@
     <widget
       type="SceneEditorWidget" />
     <widget
+      type="AssetPanelWidget"
+      asset="SceneDialogsPanel" />
+    <widget
       type="TextureEditorWidget" />
     <widget
       type="AssetPanelWidget"
       asset="ProfilerPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="ConsolePanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="FileChangesPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="GamePanel" />
+    <widget
+      type="ArtGenWidget" />
   </widgets>
 </root>
