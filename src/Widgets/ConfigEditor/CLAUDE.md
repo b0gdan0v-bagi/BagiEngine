@@ -8,7 +8,7 @@ Edits any loaded XML config. The panel is an asset, `config/panels/ConfigEditorP
 
 Commands are rows of the command table (`config.save` and `configEditor.select|reload|reloadDiscard|reloadCancel|switchDiscard|switchCancel`; the last six are not rebindable). Like every asset panel's commands they reach the model **only while the panel is open**, so `config.save` does not save the staged edits of a closed panel. `view.configEditor` is the asset's `command`. A popup is open while its bool in the view is true; its buttons run a command that clears the bool.
 
-`Initialize()` (the `IPanelModel` hook, once after registration) subscribes to `EditorCommandEvent` and `ConfigChangedEvent`, adds the `editor_state` source, registers the field-schema entries and the slot `configTree`. Tests reach the model through `SelectConfig`, `SaveSelectedConfig`, `GetStagedChanges`, `DropStagedForChange`, `ShowsChangedOnDiskNotice`, `AppendDocuments` and `UseConfigManager`.
+`Initialize()` (the `IPanelModel` hook, once after registration) subscribes to `ConfigChangedEvent` (commands are not an event: `AssetPanelWidget::OnCommand` calls the model's `RunCommand` while the panel is open), adds the `editor_state` source, registers the field-schema entries and the slot `configTree`. Tests reach the model through `SelectConfig`, `SaveSelectedConfig`, `GetStagedChanges`, `DropStagedForChange`, `ShowsChangedOnDiskNotice`, `AppendDocuments` and `UseConfigManager`.
 
 ## The tree stays C++
 
@@ -31,6 +31,6 @@ Field typing comes from `ConfigFieldSchema` (registered fields per config path, 
 
 `ConfigFieldSchemaTest` checks that the options are creatable by the factory and that the shipped `LoggerConfig.xml` uses only offered values. `ConfigEditorSaveTest` tests the save path without ImGui: the edit goes through `StagedChanges::Set` and `ApplyTo` on a copy, `XmlDocument::SaveToFile` writes a temporary file, and the file is loaded back into the real consumer; never test it through `ConfigManager::SaveConfig` on a shipped config, that overwrites the file in the repository. `ConfigEditorPanelModelTest` covers the model and `ConfigEditorAssetTest` draws the shipped asset through a real `AssetPanelWidget` over `ConfigEditorTestModel` (the model on a test's own `ConfigManager`).
 
-## The saved layout
+## The window id
 
-The window id changed from `Config Editor` to `###ConfigEditor`: ImGui keys `imgui.ini` and named layouts by it, so a user's saved position of this window was lost once. The default layout's dock builder and "Reset to Defaults" use the new name.
+The window is `Config Editor###ConfigEditor`: ImGui keys `imgui.ini` and named layouts by the `###` id, and the default layout's dock builder and "Reset to Defaults" name the window by it.
