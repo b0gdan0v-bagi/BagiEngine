@@ -12,6 +12,7 @@ The library behind the skill `/qa` (`.claude/skills/qa/SKILL.md`): a charter scr
 | `bagi_monkey_log.py` | the seed log of the QA loop as markdown (`parse`, `render`, `add_run`, `next_seeds`, `next_charter`): pure text, no file or store |
 | `bagi_monkey_dupes.py` | the signature of a reproduction (finding name, one string per call, last call) and `similar`: the rule of "already filed" |
 | `bagi_monkey_loop.py` | the command line of the QA loop: `next-seeds`, `log-add`, `dupes`, `sweep` (see "The loop") |
+| `bagi_qa_scene_file.py` | the saved `SceneConfig.xml` against the one before (`compare_scene_files`: the findings `editor.*`) and `ContentGuard`, which puts content files back after a session that may Save; pure files and bytes |
 | `bagi_qa_report.py` | the report (`report.md`, `report.json`) and the bug drafts; never calls the todo store |
 | `tests/` | pytest (`.venv/bin/python -m pytest tools/qa/tests`); `qa_fake_game.py` is the game of the session tests (knobs by environment variable, listed in its docstring) |
 
