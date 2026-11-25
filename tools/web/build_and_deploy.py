@@ -243,7 +243,7 @@ def fail(status: deploy_status.Status, message: str, code: int) -> int:
 
 
 def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run, gate=alltests_results.check,
-        checkout=deploy_checkout.prepare) -> int:
+        checkout=deploy_checkout.prepare, changes=alltests_results.uncommitted) -> int:
     parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to Railway.")
     parser.add_argument("--target", help="a named target of <source>/web/targets.json: game, preset and service come from it, and no free option is allowed")
     parser.add_argument("--game", help=f"the game target (default: {DEFAULT_GAME})")
@@ -299,7 +299,7 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
         plan = CheckoutPlan(None if is_sdk_installed(fetched.engine_dir / EMSDK_RELATIVE) else fetched.engine_dir / SETUP_EMSDK_SCRIPT,
                             f"alltests gate: asked after the fetch, on origin/{base}", fetched.engine_dir / alltests_results.SCRIPT,
                             target.area if target else deploy_targets.DEFAULT_AREA)
-        return build_and_package(args, fetched.path, fetched.engine_dir / "tools" / "web", status, which, runner, gate, plan)
+        return build_and_package(args, fetched.path, fetched.engine_dir / "tools" / "web", status, which, runner, gate, plan, changes)
 
 
 def recorded_result(results_file: Path | None, project: Path, commit: str) -> dict | None:
@@ -312,11 +312,20 @@ def recorded_result(results_file: Path | None, project: Path, commit: str) -> di
 
 
 def gate_with_tests(args: argparse.Namespace, project: Path, dist: Path, stage_dir: Path, status: deploy_status.Status, runner, gate,
-                    plan: CheckoutPlan) -> int | None:
+                    plan: CheckoutPlan, changes) -> int | None:
     """The deploy gate of checkout mode: a commit without a green record gets the full test run started here, and the deploy goes on
     only when the record is green. None: go on; else the exit code. A tree with uncommitted changes is refused without a run (the
     checkout is clean after the fetch, so that is a bug), and the message carries no --skip-alltests hint: this mode refuses it."""
     status.enter("tests")
+    # Before the run: a result of the full run is of a commit, and the build takes the tree, so a dirty tree gets no run at all
+    try:
+        changed = changes(project, (dist, stage_dir))
+    except alltests_results.GitError as error:
+        return fail(status, f"cannot read the working tree of {project}: {error}", 2)
+    if changed:
+        shown = "; ".join(changed[:alltests_results.CHANGES_SHOWN])
+        more = f" and {len(changed) - alltests_results.CHANGES_SHOWN} more" if len(changed) > alltests_results.CHANGES_SHOWN else ""
+        return fail(status, f"{project} has uncommitted changes ({shown}{more}), and the deploy builds the working tree", 2)
     verdict = gate(project, args.alltests_results, (dist, stage_dir))
     record = recorded_result(args.alltests_results, project, verdict.commit) if verdict.commit else None
     if not verdict.green and verdict.commit and (record is None or record.get("status") != alltests_results.GREEN):
@@ -342,7 +351,7 @@ def gate_with_tests(args: argparse.Namespace, project: Path, dist: Path, stage_d
 
 
 def build_and_package(args: argparse.Namespace, project: Path, tools_dir: Path, status: deploy_status.Status, which, runner, gate,
-                      plan: CheckoutPlan | None = None) -> int:
+                      plan: CheckoutPlan | None = None, changes=alltests_results.uncommitted) -> int:
     """Everything after the project is known: `project` is the folder that is built (the checkout in checkout mode) and `tools_dir` the folder of
     package.py, serve.py and the Dockerfile that travel with it. In checkout mode the gate runs after the fetch, so a dry run says
     so instead of asking it about a checkout that does not exist."""
@@ -350,7 +359,7 @@ def build_and_package(args: argparse.Namespace, project: Path, tools_dir: Path, 
     stage_dir = args.stage_dir or project / STAGE_FOLDER
     if args.deploy:
         if plan and not args.skip_alltests and not args.dry_run:
-            code = gate_with_tests(args, project, dist, stage_dir, status, runner, gate, plan)
+            code = gate_with_tests(args, project, dist, stage_dir, status, runner, gate, plan, changes)
             if code is not None:
                 return code
         elif plan and not args.skip_alltests:

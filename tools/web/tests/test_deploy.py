@@ -104,7 +104,7 @@ class DeployTestCase(unittest.TestCase):
             (emsdk / name).parent.mkdir(parents=True, exist_ok=True)
             (emsdk / name).write_text("", encoding="utf-8")
 
-    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None, gate=green_gate, checkout=None):
+    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None, gate=green_gate, checkout=None, changes=lambda *_: []):
         out, err = io.StringIO(), io.StringIO()
         runner = runner or FakeRunner()
         arguments = ["--source-dir", str(self.source), *argv]
@@ -112,7 +112,7 @@ class DeployTestCase(unittest.TestCase):
             arguments += ["--checkout-dir", str(self.checkout_dir)]
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner, gate=gate,
-                                     checkout=checkout or self.fake_checkout)
+                                     checkout=checkout or self.fake_checkout, changes=changes)
         return code, out.getvalue(), err.getvalue(), runner
 
 
@@ -553,7 +553,7 @@ class GateRunsTestsTest(DeployTestCase):
     def deploy(self, runner: FakeRunner, *argv: str):
         gate = functools.partial(alltests_results.check, head=lambda _: GREEN_COMMIT, changes=lambda *_: self.changes)
         return self.run_script("--fetch", "--deploy", "--alltests-results", str(self.results), "--status-file", str(self.source / "status.json"),
-                               *argv, which=have_railway, runner=runner, gate=gate)
+                               *argv, which=have_railway, runner=runner, gate=gate, changes=lambda *_: self.changes)
 
     def status(self) -> dict:
         return json.loads((self.source / "status.json").read_text(encoding="utf-8"))
@@ -619,6 +619,17 @@ class GateRunsTestsTest(DeployTestCase):
         self.assertEqual(runner.calls, [])
         self.assertIn("uncommitted changes ( M src/Game.cpp)", err)
         self.assertNotIn("--skip-alltests", err)
+
+    def test_an_uncommitted_change_without_a_record_is_refused_without_a_run(self):
+        self.changes = [" M src/Game.cpp"]
+        runner = AlltestsRunner(self.results, GREEN_COMMIT)
+        code, _, err, _ = self.deploy(runner)
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assertIn("uncommitted changes ( M src/Game.cpp)", err)
+        self.assertNotIn("--skip-alltests", err)
+        data = self.status()
+        self.assertEqual((data["state"], data["stage"]), ("failed", "tests"))
 
     def test_the_area_of_the_target_goes_to_alltests(self):
         (self.source / "web").mkdir()
