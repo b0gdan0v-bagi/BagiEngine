@@ -48,6 +48,11 @@ namespace BECore {
             _valid = false;
         }
 
+        /// The layout in the tree is current: no Invalidate() since the last Update() that laid out
+        [[nodiscard]] bool IsValid() const {
+            return _valid;
+        }
+
         /// False until the first Update()
         [[nodiscard]] bool HasLayout() const {
             return _hasContext;
