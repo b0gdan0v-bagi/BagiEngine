@@ -132,6 +132,9 @@ namespace BECore {
             return false;
         }
 
+        // The geometry pipeline draws a batch in one call; the clip is the scissor of that call (SubmitBatch)
+        SetBatchingEnabled(true);
+
         Subscribe<RenderEvents::NewFrameEvent, &VulkanRendererBackend::OnNewFrame>(this);
         Subscribe<RenderEvents::SetRenderDrawColorEvent, &VulkanRendererBackend::OnSetRenderDrawColor>(this);
         Subscribe<RenderEvents::RenderClearEvent, &VulkanRendererBackend::OnRenderClear>(this);
@@ -149,6 +152,7 @@ namespace BECore {
 
     void VulkanRendererBackend::WaitIdle() {
         BE_PROFILE_SCOPE("Vulkan::WaitIdle");
+        Flush();  // the caller wants everything it drew to have been submitted
         if (_device.GetDevice() != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(_device.GetDevice());
         }
@@ -161,6 +165,9 @@ namespace BECore {
         }
 
         vkDeviceWaitIdle(vkDevice);
+
+        // The pass is gone, so the open batch is not submitted; dropping it releases its texture while the descriptor pool is still there
+        DiscardBatch();
 
         for (int i = 0; i < kMaxFramesInFlight; ++i) {
             vkDestroySemaphore(vkDevice, _imageAvailableSemaphores[i], nullptr);
@@ -318,6 +325,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::BeginFrame() {
+        Flush();  // quads of an earlier pass never land in this one
         if (!_frameAcquired || _inSwapchainPass) {
             return;
         }
@@ -343,6 +351,7 @@ namespace BECore {
 
     void VulkanRendererBackend::EndFrame() {
         BE_PROFILE_SCOPE("Vulkan::EndFrame");
+        Flush();  // before the pass that holds them is closed
         if (!_inSwapchainPass) {
             return;
         }
@@ -452,6 +461,7 @@ namespace BECore {
 
     void VulkanRendererBackend::Present() {
         BE_PROFILE_SCOPE("Vulkan::Present");
+        Flush();
         // A frame that was acquired but never begun still owns a signaled semaphore: it is submitted with an empty pass
         if (_frameAcquired && !_inSwapchainPass && !_inOffscreenPass) {
             BeginFrame();
@@ -535,21 +545,25 @@ namespace BECore {
         return true;
     }
 
-    void VulkanRendererBackend::WarnIfBlendModeIgnored() {
-        if (_blendWarned || GetBlendMode() == BlendMode::Alpha) {
+    void VulkanRendererBackend::WarnIfBlendModeIgnored(BlendMode mode) {
+        if (_blendWarned || mode == BlendMode::Alpha) {
             return;
         }
         _blendWarned = true;
-        LOG_WARNING("VulkanRendererBackend: the blend mode {} is not implemented, so straight alpha is used", EnumUtils<BlendMode>::ToString(GetBlendMode()));
+        LOG_WARNING("VulkanRendererBackend: the blend mode {} is not implemented, so straight alpha is used", EnumUtils<BlendMode>::ToString(mode));
     }
 
     void VulkanRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
-        WarnIfBlendModeIgnored();
+        WarnIfBlendModeIgnored(GetBlendMode());
         VkRect2D scissor{};
         if (!ResolveScissor(scissor)) {
+            return;
+        }
+        if (IsBatchingEnabled()) {
+            BatchRect(x, y, w, h, color);
             return;
         }
         const Rect rect = GetViewTransform().ToOutput(x, y, w, h);
@@ -561,7 +575,7 @@ namespace BECore {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
-        WarnIfBlendModeIgnored();
+        WarnIfBlendModeIgnored(GetBlendMode());
 
         auto* vkTexture = dynamic_cast<VulkanTexture*>(&texture);
         if (!vkTexture || vkTexture->GetDescriptorSet() == VK_NULL_HANDLE) {
@@ -570,6 +584,10 @@ namespace BECore {
 
         VkRect2D scissor{};
         if (!ResolveScissor(scissor)) {
+            return;
+        }
+        if (IsBatchingEnabled()) {
+            BatchTexture(texture, srcRect, dstX, dstY, dstW, dstH, tint);
             return;
         }
 
@@ -618,11 +636,37 @@ namespace BECore {
         return white ? white->GetDescriptorSet() : VK_NULL_HANDLE;
     }
 
-    void VulkanRendererBackend::DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) {
+    bool VulkanRendererBackend::CanDrawTexture(const ITexture& texture) const {
+        const auto* vkTexture = dynamic_cast<const VulkanTexture*>(&texture);
+        return vkTexture != nullptr && vkTexture->GetDescriptorSet() != VK_NULL_HANDLE;
+    }
+
+    void VulkanRendererBackend::SubmitBatch(const RenderBatch& batch) {
+        // A skipped frame has no pass: the batch is dropped like every other draw of it
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
-        WarnIfBlendModeIgnored();
+        WarnIfBlendModeIgnored(batch.blend);
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        if (batch.texture) {
+            const auto* vkTexture = dynamic_cast<const VulkanTexture*>(batch.texture.Get());
+            descriptorSet = vkTexture ? vkTexture->GetDescriptorSet() : VK_NULL_HANDLE;
+        } else {
+            descriptorSet = GetWhiteTextureDescriptorSet();
+        }
+        if (descriptorSet == VK_NULL_HANDLE) {
+            return;
+        }
+        // The vertices are in output pixels with the opacity applied already
+        RecordGeometry(descriptorSet, {batch.vertices.data(), batch.vertices.size()}, {batch.indices.data(), batch.indices.size()}, 0.0f, 0.0f, ViewTransform{}, false);
+    }
+
+    void VulkanRendererBackend::DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) {
+        Flush();  // not batched, so the quads before it are drawn first
+        if (!_inSwapchainPass && !_inOffscreenPass) {
+            return;
+        }
+        WarnIfBlendModeIgnored(GetBlendMode());
         if (vertices.empty() || indices.size() < kIndicesPerTriangle) {
             return;
         }
@@ -647,23 +691,29 @@ namespace BECore {
             }
         }
 
+        if (const size_t triangles = RecordGeometry(descriptorSet, vertices, indices, translateX, translateY, GetViewTransform(), true); triangles > 0) {
+            CountDraw(texture, triangles);
+        }
+    }
+
+    size_t VulkanRendererBackend::RecordGeometry(VkDescriptorSet descriptorSet, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY,
+                                                 const ViewTransform& view, bool fade) {
         VkRect2D scissor{};
         if (!ResolveScissor(scissor)) {
-            return;
+            return 0;
         }
 
         // Only whole triangles are drawn, as in the SDL backend
         const size_t indexCount = indices.size() - indices.size() % kIndicesPerTriangle;
         VulkanGeometryBuffer::Allocation allocation;
         if (!_geometryBuffer.Allocate(_currentFrame, vertices.size() * sizeof(VulkanGeometryPipeline::Vertex), indexCount * sizeof(uint32_t), allocation)) {
-            return;
+            return 0;
         }
 
-        const ViewTransform& view = GetViewTransform();
         auto* out = static_cast<VulkanGeometryPipeline::Vertex*>(allocation.vertices);
         for (size_t i = 0; i < vertices.size(); ++i) {
             const GeometryVertex& vertex = vertices[i];
-            const Color color = ApplyOpacity(vertex.color);
+            const Color color = fade ? ApplyOpacity(vertex.color) : vertex.color;
             const float x = (vertex.x + translateX) * view.scale + view.offsetX;
             const float y = (vertex.y + translateY) * view.scale + view.offsetY;
             out[i] = {x, y, color.r, color.g, color.b, color.a, vertex.u, vertex.v};
@@ -675,7 +725,7 @@ namespace BECore {
 
         _geometryPipeline.Draw(_commandBuffers[_currentFrame], descriptorSet, allocation.buffer, allocation.vertexOffset, allocation.indexOffset, static_cast<uint32_t>(indexCount), _currentExtent,
                                scissor);
-        CountDraw(texture, indexCount / kIndicesPerTriangle);
+        return indexCount / kIndicesPerTriangle;
     }
 
     IntrusivePtr<ITexture> VulkanRendererBackend::CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) {
@@ -701,6 +751,7 @@ namespace BECore {
 
     void VulkanRendererBackend::SetRenderTarget(IRenderTarget* target) {
         BE_PROFILE_SCOPE("Vulkan::SetRenderTarget");
+        Flush();  // into the pass it was drawn in
         // The colour of a Clear() is for this pass even when it is skipped: it must not wait for a later pass of another target
         const VkClearColorValue clearColor = _clearColor.Take();
         // No open frame (minimized, swapchain out of date): the offscreen draws are skipped like everything else
@@ -746,6 +797,7 @@ namespace BECore {
 
     void VulkanRendererBackend::UnsetRenderTarget() {
         BE_PROFILE_SCOPE("Vulkan::UnsetRenderTarget");
+        Flush();  // before the offscreen pass is closed
         if (!_inOffscreenPass) {
             return;
         }
@@ -854,6 +906,7 @@ namespace BECore {
 
     void VulkanRendererBackend::OnImGuiRender() {
         BE_PROFILE_SCOPE("Vulkan::ImGuiRender");
+        Flush();  // ImGui's commands follow what the scene drew
         // Only into an open swapchain pass: a skipped frame has no command buffer to record into
         if (!_inSwapchainPass) {
             return;
