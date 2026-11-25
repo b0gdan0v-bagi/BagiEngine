@@ -68,11 +68,15 @@ namespace BECore {
     ArtGenPanelModel::ArtGenPanelModel() {
         InitPresetRows();
         InitRunRows();
+        InitSoundRows();
     }
 
     ArtGenPanelModel::~ArtGenPanelModel() {
+        StopSound();
         DropThumbnails();
+        DropSounds();
         _referencePanel.DropThumbnail();
+        _setPanel.DropThumbnails();
     }
 
     void ArtGenPanelModel::SetServices(ArtGenPanelServices services) {
@@ -132,6 +136,18 @@ namespace BECore {
         _runVersion = session.Version();
         UpdateRun(sessionMoved);
         UpdateAccept();
+        RefreshPlaying();
+        ApplySoundEdits();
+        if (_soundStale) {
+            _soundStale = false;
+            RefreshSoundView();
+        }
+        if (_view.run.hasSounds && !_view.run.isSetJob) {
+            SyncSounds(session.GetRun());
+        } else {
+            DropSounds();
+        }
+        UpdateSoundAccept();
 
         const ControlServerStatus control = ControlStatus();
         if (control.listening && _bridgeWaitsForControl) {
@@ -158,6 +174,15 @@ namespace BECore {
 
     void ArtGenPanelModel::EndUpdate() {
         ApplyNotedClicks();
+        if (!std::exchange(_setTabDrawn, false)) {
+            ReleaseSetTab();
+        }
+    }
+
+    void ArtGenPanelModel::OnOpenChanged(bool open) {
+        if (!open) {
+            ReleaseSetTab();
+        }
     }
 
     bool ArtGenPanelModel::IsStarting() {
@@ -313,6 +338,10 @@ namespace BECore {
         }
         if (is(EditorCommandIds::kArtGenAccept)) {
             RunAccept(argument);
+            return true;
+        }
+        if (is(EditorCommandIds::kArtGenListen)) {
+            RunListen();
             return true;
         }
         return false;

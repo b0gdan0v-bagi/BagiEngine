@@ -255,6 +255,10 @@ namespace BECore {
     }
 
     void ArtGenPanelModel::RunAccept(StringView argument) {
+        if (argument == ArtGenPanelArgs::kSound) {
+            AcceptSound();
+            return;
+        }
         if (argument != ArtGenPanelArgs::kImage || !_selectedSeed) {
             return;
         }
@@ -311,6 +315,9 @@ namespace BECore {
                 _acceptMessage.clear();
                 _acceptedSprite.clear();
                 _acceptStale = true;
+                _preview.Reset();
+                _previewError.clear();
+                _soundAcceptStale = true;
             }
             _selectedSeed = picked;
             if (_view.accept.sprite.empty()) {
@@ -321,6 +328,16 @@ namespace BECore {
         if (const Optional<int64_t> dice = std::exchange(_diceSeed, Optional<int64_t>())) {
             _view.run.randomSeed = false;
             _view.run.seed = *dice;
+        }
+        if (const Optional<int32_t> row = std::exchange(_playRow, Optional<int32_t>())) {
+            if (*row < 0) {
+                StopSound();
+            } else if (static_cast<size_t>(*row) < _sounds.size()) {
+                const SoundRow& sound = _sounds[*row];
+                if (sound.clip && sound.clip->GetState() == ResourceState::Loaded) {
+                    PlaySound(*sound.clip, *row);
+                }
+            }
         }
         if (const Optional<int64_t> seed = std::exchange(_referenceSeed, Optional<int64_t>())) {
             const ArtGenVariant* variant = session.FindVariant(*seed);

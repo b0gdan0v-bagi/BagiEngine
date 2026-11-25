@@ -1,4 +1,10 @@
+#include <BECore/Audio/AudioClip.h>
+#include <BECore/Audio/AudioDecode.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/File/File.h>
+#include <BECore/FileSystem/FileSystem.h>
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <Common/AllocCheck.h>
 #include <Common/ArtGenTestSupport.h>
 #include <Common/ControlTestSupport.h>
@@ -63,6 +69,30 @@ namespace BECore::Tests {
             return reply;
         }
 
+        /// What the fake sound acceptor was called with
+        struct SoundAcceptCall {
+            int64_t seed = -1;
+            ArtGenSoundTarget target;
+            ArtGenSoundSettings settings;
+            int calls = 0;
+        };
+        SoundAcceptCall gSoundAccepted;
+
+        std::expected<ArtGenAcceptAnswer, ControlError> FakeSoundAcceptor(const ArtGenVariant& variant, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, SceneNode* /*node*/) {
+            gSoundAccepted.seed = variant.seed;
+            gSoundAccepted.target = target;
+            gSoundAccepted.settings = settings;
+            ++gSoundAccepted.calls;
+            ArtGenAcceptAnswer reply;
+            reply.clip = target.clip.empty() ? Format("assets/artgen/{}.wav", target.name) : target.clip;
+            reply.reloadedSources = 0;
+            return reply;
+        }
+
+        constexpr uint32_t kSoundRate = 22050;
+        constexpr size_t kSoundFrames = 2205;
+        constexpr float kSoundLevel = 0.5f;
+
         /// A folder the session takes as the game root, removed with the object
         class TempGame {
         public:
@@ -90,10 +120,51 @@ namespace BECore::Tests {
                 return String(file.View());
             }
 
+            /// A short mono tone as a WAV at @p name; its real path
+            String SaveSound(StringView name) const {
+                Vector<float> samples(kSoundFrames, kSoundLevel);
+                for (size_t i = 1; i < samples.size(); i += 2) {
+                    samples[i] = -kSoundLevel;
+                }
+                const AudioFormat format{kSoundRate, 1};
+                auto bytes = EncodeWav(Span<const float>(samples.data(), samples.size()), format, WavSampleFormat::Pcm16);
+                EXPECT_TRUE(bytes.has_value());
+                const Path file = _root / name;
+                if (bytes) {
+                    EXPECT_TRUE(WriteFileAtomically(file.View(), Span<const uint8_t>(bytes->data(), bytes->size())).has_value());
+                }
+                return String(file.View());
+            }
+
             static constexpr uint32_t kSide = 8;
 
         private:
             Path _root;
+        };
+
+        /// A game folder mounted under a virtual path, so the resource manager loads the sound variants from it as the editor does from the service's
+        /// folder
+        class SoundFolder {
+        public:
+            SoundFolder() {
+                EXPECT_TRUE(CoreManager::GetFileSystem().Mount(kMount, _game.Root()));
+            }
+            ~SoundFolder() {
+                CoreManager::GetResourceManager().ClearCache();
+                CoreManager::GetFileSystem().Unmount(kMount);
+            }
+            SoundFolder(const SoundFolder&) = delete;
+            SoundFolder& operator=(const SoundFolder&) = delete;
+
+            /// A tone at @p name; its virtual path
+            String Save(StringView name) const {
+                _game.SaveSound(name);
+                return Format("{}/{}", kMount.ToStringView(), name);
+            }
+
+        private:
+            static inline const PoolString kMount = "artgen_panel_sounds"_intern;
+            TempGame _game;
         };
 
     }  // namespace
@@ -101,6 +172,10 @@ namespace BECore::Tests {
     /// The Generate panel's model over a session, a control service and a clock of its own; the bridge and the control API's start are fakes
     class ArtGenPanelModelTest : public ::testing::Test {
     protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
         ArtGenPanelModelTest() : session([this] { return now; }) {}
 
         void SetUp() override {
@@ -205,6 +280,21 @@ namespace BECore::Tests {
                 }
             }
             return -1;
+        }
+
+        /// A run of the preset `wood` to its end with the sound variants at @p files, seeds 1, 2, ...
+        void RunWithSounds(const Vector<String>& files) {
+            const uint32_t id = Require(session.Request("wood", "Knight Move", static_cast<int32_t>(files.size()), Optional<int64_t>(1)));
+            Call("artgen_poll", kCatalogPoll);
+            for (size_t i = 0; i < files.size(); ++i) {
+                Call("artgen_image", Report(id, Format(R"("kind":"audio","path":"{}","seed":{})", files[i], i + 1)));
+            }
+            Call("artgen_done", Report(id, R"("status":"ok")"));
+        }
+
+        const ArtGenSoundAcceptView& SoundAccept() {
+            model.Update();
+            return model.GetView().soundAccept;
         }
 
         /// A click of the variants slot on the tile of @p seed, applied at the end of the frame
@@ -779,6 +869,96 @@ namespace BECore::Tests {
         RunWithImages({game.SavePng("a.png", true)});
         Pick(1);
         model.GetMutableView().run.subject = "queen";
+        model.Update();
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < kSteadyFrames; ++frame) {
+                model.Update();
+                model.EndUpdate();
+            }
+        });
+    }
+
+    TEST_F(ArtGenPanelModelTest, TheSoundSettingsAreClampedAndAChangeDropsThePreview) {
+        const SoundFolder sounds;
+        Catalog();
+        RunWithSounds({sounds.Save("move_1.wav")});
+        EXPECT_TRUE(RunView().hasSounds);
+        Pick(1);
+        ASSERT_TRUE(SoundAccept().hasPick);
+        ASSERT_TRUE(SoundAccept().canListen) << "the picked sound is loaded";
+        EXPECT_TRUE(Run(EditorCommandIds::kArtGenListen, ""));
+        EXPECT_TRUE(SoundAccept().hasPreview);
+        EXPECT_NE(SoundAccept().previewText.find("Hz, mono"), String::npos);
+
+        ArtGenSoundView& sound = model.GetMutableView().sound;
+        sound.fadeIn = ArtGenSoundSettings::kMaxFadeMs + 1.0f;
+        model.Update();
+        EXPECT_FLOAT_EQ(model.GetView().sound.fadeIn, ArtGenSoundSettings::kMaxFadeMs);
+        EXPECT_FALSE(SoundAccept().hasPreview) << "what was heard is no longer what Accept writes";
+        EXPECT_NE(model.GetPlayingRow(), ArtGenPanelModel::kPreviewRow);
+
+        sound.trim = false;
+        sound.peakDb = ArtGenSoundSettings::kMaxPeakDb + 3.0f;
+        sound.rateIndex = 1;
+        model.Update();
+        EXPECT_FALSE(model.GetView().sound.trim);
+        EXPECT_FLOAT_EQ(model.GetView().sound.peakDb, ArtGenSoundSettings::kMaxPeakDb);
+        EXPECT_EQ(model.GetView().sound.rates[1], Format("{} Hz", ArtGenSoundSettings::kRates[1]));
+        sound.trim = true;
+        model.Update();
+        EXPECT_FLOAT_EQ(model.GetView().sound.trimDb, ArtGenSoundSettings::kDefaultTrimDb) << "switched on, the trim starts from the default";
+    }
+
+    TEST_F(ArtGenPanelModelTest, ASoundIsAcceptedUnderANameOrOverAClipOfTheGame) {
+        const SoundFolder sounds;
+        session.SetSoundAcceptor(&FakeSoundAcceptor);
+        gSoundAccepted = SoundAcceptCall{};
+        Catalog();
+        RunWithSounds({sounds.Save("move_1.wav")});
+        Pick(1);
+        EXPECT_EQ(Accept().sprite, "knight_move");
+        EXPECT_TRUE(SoundAccept().canAccept);
+        EXPECT_NE(SoundAccept().acceptTip.find("assets/artgen/<name>.wav"), String::npos);
+
+        model.GetMutableView().soundAccept.replaceClip = true;
+        model.GetMutableView().soundAccept.clipPath = "sounds/move.wav";
+        EXPECT_FALSE(SoundAccept().clipValid);
+        EXPECT_FALSE(SoundAccept().canAccept);
+        Run(EditorCommandIds::kArtGenAccept, ArtGenPanelArgs::kSound);
+        EXPECT_EQ(gSoundAccepted.calls, 0);
+
+        model.GetMutableView().soundAccept.clipPath = "assets/sounds/move.wav";
+        EXPECT_TRUE(SoundAccept().canAccept);
+        EXPECT_NE(SoundAccept().acceptTip.find("over the game's clip assets/sounds/move.wav"), String::npos);
+        Run(EditorCommandIds::kArtGenAccept, ArtGenPanelArgs::kSound);
+        EXPECT_EQ(gSoundAccepted.calls, 1);
+        EXPECT_EQ(gSoundAccepted.target.clip, "assets/sounds/move.wav");
+        EXPECT_EQ(Accept().message, "Accepted as assets/sounds/move.wav; 0 source(s) reloaded");
+    }
+
+    TEST_F(ArtGenPanelModelTest, TheSetTabsSoundStopsInAFrameThatDidNotDrawItAndOnClose) {
+        DecodedAudio audio;
+        audio.format = AudioFormat{kSoundRate, 1};
+        audio.samples.assign(kSoundFrames, kSoundLevel);
+        const IntrusivePtr<AudioClip> clip = AudioClip::Create("artgen-panel-test"_intern, std::move(audio));
+
+        model.PlaySetTabSound(*clip);
+        EXPECT_EQ(model.GetPlayingRow(), ArtGenPanelModel::kSetTabRow);
+        model.Update();
+        model.EndUpdate();
+        EXPECT_EQ(model.GetPlayingRow(), -1) << "another tab was shown";
+
+        model.PlaySetTabSound(*clip);
+        model.OnOpenChanged(false);
+        EXPECT_EQ(model.GetPlayingRow(), -1);
+    }
+
+    TEST_F(ArtGenPanelModelTest, ASteadyUpdateWithSoundsAllocatesNothing) {
+        const SoundFolder sounds;
+        Catalog();
+        RunWithSounds({sounds.Save("move_1.wav")});
+        Pick(1);
+        model.GetMutableView().soundAccept.replaceClip = true;
         model.Update();
         ExpectNoAllocations([&] {
             for (int frame = 0; frame < kSteadyFrames; ++frame) {

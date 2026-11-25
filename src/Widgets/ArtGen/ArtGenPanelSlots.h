@@ -17,6 +17,9 @@ namespace BECore {
      * with a reset button while the preset sets its own value; it edits the model's form in place. `artgenReferencePicture`: the picture of the
      * session's reference slot. `artgenVariants`: the grid of the run's variants (thumbnails on a checkerboard, the drag source of an image, the
      * verdict mark, the seed with its dice, Use as reference on the picked one); a click is noted in the model and applied in its `EndUpdate`.
+     * `artgenSounds`: a row per sound variant (Play / Stop, the waveform that picks it, its seed, length and peak, the dice), noted the same way.
+     * `artgenSetTab`: the Set tab (`ArtGenSetPanel::DrawSetTab`) with the model's form and player; the model gives the tab's pictures and sound back
+     * after a frame that did not draw it.
      */
     class ArtGenPanelSlots {
     public:
@@ -29,12 +32,16 @@ namespace BECore {
         void DrawWorkflowInputs();
         void DrawReferencePicture();
         void DrawVariants();
+        void DrawSounds();
+        void DrawSetTab();
         static void DrawInputField(ArtGenPresetForm& form, const ArtGenWorkflowInput& input);
 
         ArtGenPanelModel& _model;
         PanelSlotHandle _workflowInputs;
         PanelSlotHandle _referencePicture;
         PanelSlotHandle _variants;
+        PanelSlotHandle _sounds;
+        PanelSlotHandle _setTab;
     };
 
 }  // namespace BECore

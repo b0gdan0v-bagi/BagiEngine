@@ -19,7 +19,25 @@ namespace BECore {
         constexpr StringView kReferencePictureSlotName = "artgenReferencePicture";
         constexpr StringView kVariantsSlotName = "artgenVariants";
         constexpr float kThumbnailSize = 160.0f;
+        constexpr StringView kSoundsSlotName = "artgenSounds";
+        constexpr StringView kSetTabSlotName = "artgenSetTab";
         constexpr const char* kDiceTip = "Use this seed for the next Generate (with another subject, a close picture)";
+        constexpr const char* kSoundDiceTip = "Use this seed for the next Generate";
+        constexpr float kWaveformWidth = 220.0f;
+        constexpr float kWaveformHeight = 40.0f;
+
+        void DrawWaveform(ImDrawList* drawList, ImVec2 origin, const Vector<float>& waveform, ImU32 background, ImU32 color) {
+            drawList->AddRectFilled(origin, ImVec2(origin.x + kWaveformWidth, origin.y + kWaveformHeight), background);
+            const size_t buckets = waveform.size() / 2;
+            const float middle = origin.y + kWaveformHeight * 0.5f;
+            const float half = kWaveformHeight * 0.5f;
+            for (size_t i = 0; i < buckets; ++i) {
+                const float x = origin.x + kWaveformWidth * (static_cast<float>(i) + 0.5f) / static_cast<float>(buckets);
+                const float low = std::clamp(waveform[i * 2], -1.0f, 1.0f);
+                const float high = std::clamp(waveform[i * 2 + 1], -1.0f, 1.0f);
+                drawList->AddLine(ImVec2(x, middle - high * half), ImVec2(x, middle - low * half + 1.0f), color);
+            }
+        }
         constexpr size_t kChoiceTextSize = 160;
         constexpr size_t kInputTextSize = 512;
         constexpr const char* kNumberFormat = "%.3f";
@@ -31,6 +49,66 @@ namespace BECore {
         _workflowInputs = slots.Register(kWorkflowInputsSlotName, [this] { DrawWorkflowInputs(); });
         _referencePicture = slots.Register(kReferencePictureSlotName, [this] { DrawReferencePicture(); });
         _variants = slots.Register(kVariantsSlotName, [this] { DrawVariants(); });
+        _sounds = slots.Register(kSoundsSlotName, [this] { DrawSounds(); });
+        _setTab = slots.Register(kSetTabSlotName, [this] { DrawSetTab(); });
+    }
+
+    void ArtGenPanelSlots::DrawSetTab() {
+        ArtGenPanelModel& model = _model;
+        model._setTabDrawn = true;
+        const ArtGenSetPanelForm form{model._form, model.PresetMakesImages()};
+        const auto play = [&model](const AudioClip& clip) { model.PlaySetTabSound(clip); };
+        const auto stop = [&model] { model.StopSound(); };
+        model._setPanel.DrawSetTab(model.GetSession(), form, ArtGenSetPanelSound{play, stop, model.GetPlayingRow() == ArtGenPanelModel::kSetTabRow});
+    }
+
+    void ArtGenPanelSlots::DrawSounds() {
+        const ArtGenRun& run = _model.GetSession().GetRun();
+        const auto& palette = GetImGuiPalette();
+        const Optional<int64_t>& selected = _model.GetSelectedSeed();
+        ImGui::BeginChild("##sounds");
+        for (size_t i = 0; i < run.variants.size() && i < _model._sounds.size(); ++i) {
+            const ArtGenVariant& variant = run.variants[i];
+            const ArtGenPanelModel::SoundRow& row = _model._sounds[i];
+            ImGui::PushID(static_cast<int>(i));
+            const bool playing = _model.GetPlayingRow() == static_cast<int32_t>(i);
+            const bool loaded = row.clip && row.clip->GetState() == ResourceState::Loaded;
+            ImGui::BeginDisabled(!loaded);
+            if (IconButton(playing ? ICON_LC_SQUARE : ICON_LC_PLAY, playing ? "Stop" : "Listen (the editor's Ui bus)", "##play")) {
+                _model.NotePlayRow(playing ? -1 : static_cast<int32_t>(i));
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            const ImVec2 origin = ImGui::GetCursorScreenPos();
+            if (ImGui::InvisibleButton("##wave", ImVec2(kWaveformWidth, kWaveformHeight))) {
+                _model.NotePick(variant.seed);
+            }
+            ItemTooltip("Click to pick it for Accept");
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            const ImU32 waveColor = ImGui::GetColorU32(playing ? palette.accent : palette.text);
+            DrawWaveform(drawList, origin, row.waveform, ImGui::GetColorU32(palette.frameBg), waveColor);
+            if (selected == variant.seed) {
+                drawList->AddRect(origin, ImVec2(origin.x + kWaveformWidth, origin.y + kWaveformHeight), ImGui::GetColorU32(palette.accent), 0.0f, 0, kSelectedBorder);
+            }
+            ImGui::SameLine();
+            ImGui::BeginGroup();
+            {
+                ScopedMonoFont mono;
+                ImGui::TextDisabled("%lld", static_cast<long long>(variant.seed));
+                if (row.measured) {
+                    ImGui::Text("%.2f s  %.1f dB", row.stats.seconds, static_cast<double>(row.stats.PeakDb()));
+                } else if (row.clip && row.clip->GetState() == ResourceState::Failed) {
+                    ImGui::TextColored(palette.error, "does not decode");
+                }
+            }
+            ImGui::EndGroup();
+            ImGui::SameLine();
+            if (IconButton(ICON_LC_DICES, kSoundDiceTip, "##seed")) {
+                _model.NoteDice(variant.seed);
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
     }
 
     void ArtGenPanelSlots::DrawReferencePicture() {

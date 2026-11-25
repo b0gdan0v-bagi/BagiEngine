@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Audio/AudioClip.h>
+#include <BECore/Audio/AudioTypes.h>
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/ITexture.h>
@@ -11,8 +13,10 @@
 #include <Widgets/ArtGen/ArtGenPanelSlots.h>
 #include <Widgets/ArtGen/ArtGenPresetForm.h>
 #include <Widgets/ArtGen/ArtGenSession.h>
+#include <Widgets/ArtGen/ArtGenSound.h>
 #include <Widgets/ArtGen/ArtGenVerdict.h>
 #include <Widgets/ArtGen/Reference/ArtGenReferencePanel.h>
+#include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <cstdint>
 #include <expected>
@@ -47,6 +51,7 @@ namespace BECore {
         inline constexpr StringView kUseShape = "useShape";
         inline constexpr StringView kGenerate = "generate";
         inline constexpr StringView kImage = "image";
+        inline constexpr StringView kSound = "sound";
     }  // namespace ArtGenPanelArgs
 
     /// Which service line the panel shows: the control API is off, the bridge was started and has not polled yet, nothing polls, or a service polls
@@ -312,6 +317,50 @@ namespace BECore {
         BE_REFLECT_FIELD String note;
     };
 
+    /// What Accept does to a sound (`ArtGenSoundSettings`): a change stops the processed preview and drops it, since it is no longer what Accept writes
+    struct ArtGenSoundView {
+        BE_CLASS(ArtGenSoundView)
+
+        BE_REFLECT_FIELD bool mono = true;
+        BE_REFLECT_FIELD bool trim = true;
+        /// Kept while `trim` is off; switching it on starts from the default
+        BE_REFLECT_FIELD float trimDb = ArtGenSoundSettings::kDefaultTrimDb;
+        BE_REFLECT_FIELD float fadeIn = ArtGenSoundSettings::kDefaultFadeInMs;
+        BE_REFLECT_FIELD float fadeOut = ArtGenSoundSettings::kDefaultFadeOutMs;
+        BE_REFLECT_FIELD bool normalise = true;
+        BE_REFLECT_FIELD float peakDb = ArtGenSoundSettings::kDefaultPeakDb;
+        /// 0: no limit
+        BE_REFLECT_FIELD float maxSeconds = 0.0f;
+        /// An index into `rates` (`ArtGenSoundSettings::kRates`)
+        BE_REFLECT_FIELD int32_t rateIndex = 0;
+        BE_REFLECT_FIELD Vector<String> rates;
+    };
+
+    /// The Accept section of a sound; the name field is the image's (`art.accept.sprite`), as are the node check and the message
+    struct ArtGenSoundAcceptView {
+        BE_CLASS(ArtGenSoundAcceptView)
+
+        /// A sound variant is picked
+        BE_REFLECT_FIELD bool hasPick = false;
+        /// The picked sound is loaded: Listen as accepted can process it
+        BE_REFLECT_FIELD bool canListen = false;
+        BE_REFLECT_FIELD bool previewPlaying = false;
+        /// The processed preview's length, rate and channels
+        BE_REFLECT_FIELD String previewText;
+        BE_REFLECT_FIELD bool hasPreview = false;
+        BE_REFLECT_FIELD String previewError;
+        BE_REFLECT_FIELD bool hasPreviewError = false;
+        /// Accept writes over a clip path of the game instead of `assets/artgen/<name>.wav`
+        BE_REFLECT_FIELD bool replaceClip = false;
+        BE_REFLECT_FIELD String clipPath = "assets/sounds/";
+        BE_REFLECT_FIELD bool clipValid = false;
+        /// The name or the clip, whichever the target is, is valid
+        BE_REFLECT_FIELD bool canAccept = false;
+        BE_REFLECT_FIELD String useOnSelectedTip;
+        /// What Accept writes: the clip path when replacing one
+        BE_REFLECT_FIELD String acceptTip;
+    };
+
     /// What `GeneratePanel.xml` binds to, as `art.<section>.<field>`
     struct ArtGenPanelView {
         BE_CLASS(ArtGenPanelView)
@@ -323,6 +372,8 @@ namespace BECore {
         BE_REFLECT_FIELD ArtGenRefView ref;
         BE_REFLECT_FIELD ArtGenRunView run;
         BE_REFLECT_FIELD ArtGenAcceptView accept;
+        BE_REFLECT_FIELD ArtGenSoundView sound;
+        BE_REFLECT_FIELD ArtGenSoundAcceptView soundAccept;
     };
 
     /// What the model talks to. The editor keeps every default; a test replaces them before `Initialize`
@@ -355,10 +406,16 @@ namespace BECore {
      * files and evicted when the run replaces them or the model dies. A variant dragged into another panel is answered from `ArtGenVariantDropEvent`,
      * which the model subscribes to in `Initialize`, so also while the panel is closed.
      *
+     * Sounds: a run of sound variants is the slot `artgenSounds` (a waveform row per variant with Play / Stop and the dice; clicks noted, applied in
+     * `EndUpdate`), its settings and Accept are views. One sound plays at a time on the `Ui` bus: a row, the processed preview or the Set tab's. The Set
+     * tab is the slot `artgenSetTab` (`ArtGenSetPanel`); a frame in which it was not drawn (another tab, a collapsed window) and a close of the panel
+     * give its pictures and sound back. The model's death stops the sound and drops every picture and clip it loaded.
+     *
      * Commands (`EditorCommandIds`, run only while the panel is open): `artgen.service` (`start`: the control API first when it is off, the bridge once
      * it listens; `disconnect`), `artgen.setup` (`plan`, `install`, `start`, `stop`, `cancel`, `dismiss`), `artgen.preset` (`new`, `duplicate`, `save`,
      * `saveAs`, `revert`, `resetSize`, `acceptDefaults`, `takeSlot`, `removeReference`), `artgen.saveAsOpened` (fills the Save-as name from the form),
-     * `artgen.reference` (`useFile`, `clear`, `useSprite`, `useShape`), `artgen.run` (`generate`, `cancel`) and `artgen.accept` (`image`).
+     * `artgen.reference` (`useFile`, `clear`, `useSprite`, `useShape`), `artgen.run` (`generate`, `cancel`), `artgen.accept` (`image`, `sound`) and
+     * `artgen.listen` (plays the picked sound as Accept would write it, or stops it).
      */
     class ArtGenPanelModel : public IPanelModel, public SubscriptionHolder {
         BE_CLASS(ArtGenPanelModel)
@@ -376,6 +433,7 @@ namespace BECore {
         [[nodiscard]] TypedRef GetObject() override;
         void Update() override;
         void EndUpdate() override;
+        void OnOpenChanged(bool open) override;
         bool RunCommand(StringView id, StringView argument) override;
 
         [[nodiscard]] const ArtGenPanelView& GetView() const {
@@ -406,6 +464,26 @@ namespace BECore {
         void NoteUseAsReference(int64_t seed) {
             _referenceSeed = seed;
         }
+
+        /// The sounds slot's Play of the row @p row (an index of the run's variants), or Stop with -1; applied in `EndUpdate`
+        void NotePlayRow(int32_t row) {
+            _playRow = row;
+        }
+
+        /// The row that plays now: an index of the run's variants, `kPreviewRow` or `kSetTabRow`; -1 when nothing does
+        [[nodiscard]] int32_t GetPlayingRow() const {
+            return _playingRow;
+        }
+
+        /// The Set tab's player: one sound plays at a time, so a row's or the preview's stops
+        void PlaySetTabSound(const AudioClip& clip) {
+            PlaySound(clip, kSetTabRow);
+        }
+
+        void StopSound();
+
+        static constexpr int32_t kPreviewRow = -2;
+        static constexpr int32_t kSetTabRow = -3;
 
         /// The variant the Accept section works on
         [[nodiscard]] const Optional<int64_t>& GetSelectedSeed() const {
@@ -461,8 +539,25 @@ namespace BECore {
         void RefreshAcceptSummary(const ArtGenRun& run, const ArtGenVariant& variant);
         void SyncThumbnails(const ArtGenRun& run);
         void DropThumbnails();
-        /// The clicks the variants slot noted while it drew
+        /// The clicks the variants and sounds slots noted while they drew
         void ApplyNotedClicks();
+
+        void InitSoundRows();
+        /// The view's sound settings into the model's, before the view is made again
+        void ApplySoundEdits();
+        void RefreshSoundView();
+        void UpdateSoundAccept();
+        void RunListen();
+        void AcceptSound();
+        void PlaySound(const AudioClip& clip, int32_t row);
+        /// Forgets a sound that ended by itself
+        void RefreshPlaying();
+        /// The Set tab is not on screen: stops its sound and gives its pictures back
+        void ReleaseSetTab();
+        void SyncSounds(const ArtGenRun& run);
+        void DropSounds();
+        /// The loaded clip of the picked sound; null when none is picked, it is not a sound or it has not loaded
+        [[nodiscard]] const AudioClip* PickedClip() const;
 
         ArtGenPanelView _view;
         ArtGenPanelServices _services;
@@ -507,6 +602,28 @@ namespace BECore {
         Optional<int64_t> _pickedSeed;
         Optional<int64_t> _diceSeed;
         Optional<int64_t> _referenceSeed;
+
+        /// One sound variant: its clip (loaded from the FLAC the service wrote), and once loaded its waveform and numbers
+        struct SoundRow {
+            String path;
+            ResourceHandle<AudioClip> clip;
+            Vector<float> waveform;
+            ArtGenSoundStats stats;
+            bool measured = false;
+        };
+        Vector<SoundRow> _sounds;
+        AudioHandle _playing;
+        int32_t _playingRow = -1;
+        Optional<int32_t> _playRow;        // noted by the sounds slot
+        IntrusivePtr<AudioClip> _preview;  // the picked sound as Accept would write it
+        String _previewError;
+        ArtGenSoundSettings _soundSettings;
+        bool _soundStale = true;
+        bool _soundAcceptStale = true;
+        bool _tipReplaceClip = false;  // what the Accept tip of a sound was made for
+        String _tipClipPath;
+        ArtGenSetPanel _setPanel;
+        bool _setTabDrawn = false;
 
         String _acceptMessage;
         bool _acceptFailed = false;
