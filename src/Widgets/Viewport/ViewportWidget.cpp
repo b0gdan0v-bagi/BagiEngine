@@ -134,6 +134,7 @@ namespace BECore {
         Subscribe<EditorCommandEvent, &ViewportWidget::OnCommand>(this);
         Subscribe<SceneSelectionChangedEvent, &ViewportWidget::OnSelectionChanged>(this);
         Subscribe<UIElementSelectedEvent, &ViewportWidget::OnUIElementSelected>(this);
+        _panelHandle = EditorPanelRegistry::GetInstance().Register(EditorPanelIds::kViewport, *this);
         return true;
     }
 

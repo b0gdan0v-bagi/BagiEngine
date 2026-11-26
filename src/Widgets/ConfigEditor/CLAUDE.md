@@ -33,4 +33,4 @@ Field typing comes from `ConfigFieldSchema` (registered fields per config path, 
 
 ## The window id
 
-The window is `Config Editor###ConfigEditor`: ImGui keys `imgui.ini` and named layouts by the `###` id, and the default layout's dock builder and "Reset to Defaults" name the window by it. An ini or layout saved before the asset named the window `Config Editor`; `MigrateLegacyWindowNames` renames that section on load.
+The window is `Config Editor###ConfigEditor`: ImGui keys `imgui.ini` and named layouts by the `###` id, and the ready layouts of the workspaces dock the window by it. An ini or layout saved before the asset named the window `Config Editor`; `MigrateLegacyWindowNames` renames that section on load.

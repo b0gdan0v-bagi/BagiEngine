@@ -42,6 +42,11 @@ namespace BECore {
         inline constexpr auto kViewPreferences = "view.preferences"_intern;
         inline constexpr auto kViewResetLayout = "view.resetLayout"_intern;
         inline constexpr auto kViewSaveLayout = "view.saveLayout"_intern;
+        /// Each shows one workspace (Workspaces.h)
+        inline constexpr auto kWorkspaceScene = "workspace.scene"_intern;
+        inline constexpr auto kWorkspaceUI = "workspace.ui"_intern;
+        inline constexpr auto kWorkspaceAnimation = "workspace.animation"_intern;
+        inline constexpr auto kWorkspaceProfiling = "workspace.profiling"_intern;
         inline constexpr auto kSceneSave = "scene.save"_intern;
         /// The inspector's Add Component button: `SceneEditorWidget` asks for the Add Component dialog of the selected node (a locked one gets none)
         inline constexpr auto kSceneEditorAddComponent = "sceneEditor.addComponent"_intern;

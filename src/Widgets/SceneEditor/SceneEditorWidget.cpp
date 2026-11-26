@@ -89,6 +89,7 @@ namespace BECore {
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         _hostHandle = SceneEditorHostRegistry::GetInstance().Register(*this);
         _componentsSlot = PanelSlots::GetInstance().Register(kComponentsSlot, [this] { DrawComponents(); });
+        _panelHandle = EditorPanelRegistry::GetInstance().Register(EditorPanelIds::kSceneEditor, *this);
         return true;
     }
 

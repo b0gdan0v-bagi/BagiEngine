@@ -12,6 +12,7 @@
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorPanelRegistry.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportInput.h>
@@ -45,7 +46,7 @@ namespace BECore {
     // image has an editor camera (ViewportCamera), a drag on empty ground draws a rubber band, and the gizmo
     // (ViewportGizmos) moves, turns and scales the selected nodes; its keys are read here and handed to the toolbar's model, which runs its commands.
     // The selected canvas element (UIElementSelectedEvent) gets eight handles and an anchor widget (ViewportUIGizmos): a drag writes its style.rect and tells UIRectDragEvent.
-    class ViewportWidget : public IWidget {
+    class ViewportWidget : public IWidget, public IEditorPanel {
         BE_CLASS(ViewportWidget)
     public:
         ViewportWidget() = default;
@@ -57,6 +58,13 @@ namespace BECore {
         bool Initialize(IDeserializer& deserializer) override;
         void Update() override;
         void Draw() override;
+
+        [[nodiscard]] bool IsOpen() const override {
+            return _open;
+        }
+        void SetOpen(bool open) override {
+            _open = open;
+        }
 
     private:
         bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
@@ -140,6 +148,7 @@ namespace BECore {
         bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)
         ViewportBoxSelect _boxSelect;
         ViewportPointer _pointer;  // the held presses and where each goes
+        EditorPanelHandle _panelHandle;
     };
 
 }  // namespace BECore

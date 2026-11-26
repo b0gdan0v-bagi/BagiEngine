@@ -8,6 +8,7 @@
 #include <BECore/Widgets/EditorDocuments.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorPanelRegistry.h>
 #include <Widgets/PanelAssets/PanelSlots.h>
 #include <Widgets/SceneEditor/ComponentDefaults.h>
 #include <Widgets/SceneEditor/FieldHelp.h>
@@ -42,7 +43,7 @@ namespace BECore {
      * @brief ImGui panel for live scene editing: the hierarchy tree on the left, the inspector of the selected node
      * and its components on the right. Edits apply at once, without staging. It is the `ISceneEditorHost` of the models of its panel assets.
      */
-    class SceneEditorWidget : public IWidget, public ISceneEditorHost {
+    class SceneEditorWidget : public IWidget, public ISceneEditorHost, public IEditorPanel {
         BE_CLASS(SceneEditorWidget)
     public:
         SceneEditorWidget() = default;
@@ -55,6 +56,13 @@ namespace BECore {
         void AppendDocuments(Vector<EditorDocumentState>& out);
         void Update() override;
         void Draw() override;
+
+        [[nodiscard]] bool IsOpen() const override {
+            return _open;
+        }
+        void SetOpen(bool open) override {
+            _open = open;
+        }
 
         [[nodiscard]] SceneInspectedNode GetInspected() const override;
         void RenameInspected(StringView name) override;
@@ -190,6 +198,7 @@ namespace BECore {
         EditorDocumentsHandle _documents;   // the source of `editor_state`, ends with the widget
         SceneEditorHostHandle _hostHandle;  // ends with the widget, so a model never reaches a dead one
         PanelSlotHandle _componentsSlot;    // the same for the inspector bar's slot
+        EditorPanelHandle _panelHandle;     // the workspaces open and close the panel through it
     };
 
 }  // namespace BECore
