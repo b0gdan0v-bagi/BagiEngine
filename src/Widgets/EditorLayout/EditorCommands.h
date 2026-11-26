@@ -113,6 +113,12 @@ namespace BECore {
         inline constexpr auto kFileChangesApply = "fileChanges.apply"_intern;
         /// The Asset Browser's Rescan button: AssetBrowserPanelModel lists the content files again, only while its panel is open
         inline constexpr auto kAssetBrowserRescan = "assetBrowser.rescan"_intern;
+        /// Delete and rename of the selected asset: the first two open the dialog that names its users, confirm does it, cancel closes (AssetBrowserPanelModel, only
+        /// while its panel is open)
+        inline constexpr auto kAssetBrowserDelete = "assetBrowser.delete"_intern;
+        inline constexpr auto kAssetBrowserRename = "assetBrowser.rename"_intern;
+        inline constexpr auto kAssetBrowserConfirm = "assetBrowser.confirm"_intern;
+        inline constexpr auto kAssetBrowserCancel = "assetBrowser.cancel"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

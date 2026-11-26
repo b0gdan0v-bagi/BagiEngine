@@ -59,3 +59,13 @@ The window is an asset, `config/panels/AssetBrowserPanel.xml` (`Asset Browser###
 - **A new name** replaces the stem; the folder and the extension (`.ui.xml` and `.ui.html` whole, `AssetRenameStem`) stay. `A-Z a-z 0-9 _ -`, single inner dots too except for a node file, whose reference must stay valid. Refused: a name any layer has (ASCII case ignored, so content stays portable), one that differs from the old only by case, one that makes another kind of file, and a node name some layer holds cooked.
 - **The lower layer.** The answer says when the old path still leads somewhere (`lowerLayerShows`): the engine's file, or a node's cooked form.
 - A sidecar (`*.artgen.json`) stays where it is, and nothing rewrites the content that names the old path.
+
+## Delete and rename in the panel
+
+The toolbar's **Rename** and **Delete** act on the selected file through a modal of the asset (`assetBrowser.rename|delete|confirm|cancel`; `AssetBrowserPanelModelTest`).
+
+- **Off with the reason as the tooltip** while the file rules refuse it or any editor document is unsaved (`GetEditorDocuments`): the reference check reads saved files, and a later Save would write the old path back.
+- **When that is decided.** It reads the disk and `Collect()` allocates, so never per frame: on a new selection or catalog, after any editor command and when the pointer comes back over the panel (the tree slot says where it is). A button can therefore be stale for a while; the command and the confirm check again.
+- **The dialog** reads the users when it opens and lists them; with users, or files that could not be checked, the button says "anyway". Nothing is rewritten.
+- **Confirm** acts only on what the dialog showed: an unsaved document, a refusal, a changed file or a changed list of users is said in the dialog, which then shows the new state and waits for another confirm. Closing the panel drops the question.
+- **After it** the old path is evicted from the resource cache, the files are listed again and the renamed file is selected; a failure, or a file of a lower layer that shows through, is a line in the panel.

@@ -1,12 +1,14 @@
 #include <BECore/FileSystem/FakeFileWatchBackend.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/FileWatcher.h>
+#include <BECore/Widgets/EditorDocuments.h>
 #include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/AssetBrowser/AssetBrowserPanelModel.h>
+#include <Widgets/EditorLayout/EditorCommands.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -28,6 +30,13 @@ namespace BECore::Tests {
             _model.SetFileSystem(_fileSystem);
             _model.SetWatcher(_watcher);
             _model.SetEviction([this](StringView path) { _evicted.push_back(String(path)); });
+            _documentSource = _documents.Add([this](Vector<EditorDocumentState>& out) {
+                EditorDocumentState scene;
+                scene.id = "scene:Main";
+                scene.dirty = _sceneDirty;
+                out.push_back(std::move(scene));
+            });
+            _model.SetDocuments(_documents);
         }
 
         void TearDown() override {
@@ -66,7 +75,26 @@ namespace BECore::Tests {
             return paths;
         }
 
+        bool Command(PoolString command) {
+            return _model.RunCommand(command.ToStringView(), {});
+        }
+
+        [[nodiscard]] Vector<String> Users() const {
+            Vector<String> lines;
+            for (const AssetUseRow& row : _model.GetView().change.users) {
+                lines.push_back(row.text);
+            }
+            return lines;
+        }
+
+        [[nodiscard]] bool OnDisk(StringView file) const {
+            return IsFile(_dir / file);
+        }
+
         Path _dir;
+        EditorDocuments _documents;
+        EditorDocumentsHandle _documentSource;
+        bool _sceneDirty = false;
         FileSystem _fileSystem;
         FileWatcher _watcher{_fileSystem};
         IntrusivePtr<FakeFileWatchBackend> _backend;
@@ -222,6 +250,148 @@ namespace BECore::Tests {
         EXPECT_NE(_model.GetCatalog().Find("assets/added.png"), nullptr);
         EXPECT_EQ(Shown().size(), 3u);
         EXPECT_FALSE(_model.RunCommand("fileChanges.rescan", ""));
+    }
+
+    TEST_F(AssetBrowserPanelModelTest, TheButtonsAreOffWhileADocumentIsUnsaved) {
+        Open();
+        _sceneDirty = true;
+        _model.SelectAsset("assets/board.png");
+
+        EXPECT_FALSE(View().canChange);
+        EXPECT_NE(View().deleteHint.find("scene:Main"), String::npos) << View().deleteHint.c_str();
+        Command(EditorCommandIds::kAssetBrowserDelete);
+        EXPECT_FALSE(View().change.deleteOpen);
+        EXPECT_TRUE(View().hasMessage);
+
+        // A save by a hotkey: the command reaches the model, which looks again in its next update
+        _sceneDirty = false;
+        Command(EditorCommandIds::kSceneSave);
+        _model.Update();
+        EXPECT_TRUE(View().canChange);
+
+        // And a save with no command is seen when the pointer comes back to the panel
+        _sceneDirty = true;
+        _model.NotePointerOver(true);
+        _model.Update();
+        EXPECT_FALSE(View().canChange);
+    }
+
+    TEST_F(AssetBrowserPanelModelTest, AConfigIsOfferedNoDelete) {
+        Open();
+        _model.SelectFolder("config");
+        _model.SelectAsset("config/GameConfig.xml");
+
+        EXPECT_FALSE(View().canChange);
+        Command(EditorCommandIds::kAssetBrowserDelete);
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+
+        EXPECT_FALSE(View().change.deleteOpen);
+        EXPECT_TRUE(OnDisk("config/GameConfig.xml"));
+    }
+
+    TEST_F(AssetBrowserPanelModelTest, TheDialogListsTheUsersAndCancelChangesNothing) {
+        Write("config/GameConfig.xml", "<GameConfig\n  icon=\"assets/board.png\"/>");
+        Open();
+        _model.SelectAsset("assets/board.png");
+
+        Command(EditorCommandIds::kAssetBrowserDelete);
+
+        EXPECT_TRUE(View().change.deleteOpen);
+        EXPECT_TRUE(View().change.inUse);
+        EXPECT_FALSE(View().change.unused);
+        EXPECT_EQ(Users(), (Vector<String>{"config/GameConfig.xml, line 2"}));
+
+        Command(EditorCommandIds::kAssetBrowserCancel);
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+
+        EXPECT_FALSE(View().change.deleteOpen);
+        EXPECT_TRUE(OnDisk("assets/board.png"));
+        EXPECT_TRUE(_evicted.empty());
+    }
+
+    TEST_F(AssetBrowserPanelModelTest, AConfirmedDeleteRemovesTheFileFromTheDiskAndTheList) {
+        Open();
+        _model.SelectAsset("assets/board.png");
+
+        Command(EditorCommandIds::kAssetBrowserDelete);
+        ASSERT_TRUE(View().change.unused);
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+
+        EXPECT_FALSE(OnDisk("assets/board.png"));
+        EXPECT_FALSE(View().change.deleteOpen);
+        EXPECT_FALSE(View().hasSelection);
+        EXPECT_FALSE(View().hasMessage);
+        EXPECT_EQ(_evicted, (Vector<String>{"assets/board.png"}));
+        EXPECT_EQ(Shown(), (Vector<String>{"assets/click.wav"}));
+    }
+
+    TEST_F(AssetBrowserPanelModelTest, AConfirmedRenameSelectsTheRenamedFile) {
+        Open();
+        _model.SelectAsset("assets/board.png");
+
+        Command(EditorCommandIds::kAssetBrowserRename);
+        ASSERT_TRUE(View().change.renameOpen);
+        EXPECT_EQ(View().change.newName, "board");
+        EXPECT_FALSE(View().change.canConfirm);
+        EXPECT_FALSE(View().change.nameRefused);
+
+        View().change.newName = "click.x y";
+        _model.Update();
+        EXPECT_FALSE(View().change.canConfirm);
+        EXPECT_TRUE(View().change.nameRefused);
+
+        View().change.newName = "table";
+        _model.Update();
+        ASSERT_TRUE(View().change.canConfirm);
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+
+        EXPECT_FALSE(OnDisk("assets/board.png"));
+        EXPECT_TRUE(OnDisk("assets/table.png"));
+        EXPECT_FALSE(View().change.renameOpen);
+        EXPECT_EQ(View().selectedPath, "assets/table.png");
+        EXPECT_EQ(_evicted, (Vector<String>{"assets/board.png"}));
+    }
+
+    TEST_F(AssetBrowserPanelModelTest, AChangeBetweenTheDialogAndTheConfirmIsShownAndNothingHappens) {
+        Open();
+        _model.SelectAsset("assets/board.png");
+        Command(EditorCommandIds::kAssetBrowserDelete);
+        ASSERT_TRUE(View().change.unused);
+
+        _sceneDirty = true;
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+        EXPECT_TRUE(View().change.deleteOpen);
+        EXPECT_TRUE(View().change.hasProblem);
+        EXPECT_TRUE(OnDisk("assets/board.png"));
+
+        // The save that cleared it wrote a use of the file
+        _sceneDirty = false;
+        Write("config/GameConfig.xml", "<GameConfig icon=\"assets/board.png\"/>");
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+        EXPECT_TRUE(View().change.deleteOpen);
+        EXPECT_TRUE(View().change.inUse);
+        EXPECT_EQ(Users(), (Vector<String>{"config/GameConfig.xml, line 1"}));
+        EXPECT_TRUE(OnDisk("assets/board.png"));
+
+        // The file itself was written over
+        Write("assets/board.png", "another picture");
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+        EXPECT_TRUE(OnDisk("assets/board.png"));
+
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+        EXPECT_FALSE(OnDisk("assets/board.png"));
+    }
+
+    TEST_F(AssetBrowserPanelModelTest, ClosingThePanelDropsTheQuestion) {
+        Open();
+        _model.SelectAsset("assets/board.png");
+        Command(EditorCommandIds::kAssetBrowserDelete);
+
+        _model.OnOpenChanged(false);
+        Command(EditorCommandIds::kAssetBrowserConfirm);
+
+        EXPECT_FALSE(View().change.deleteOpen);
+        EXPECT_TRUE(OnDisk("assets/board.png"));
     }
 
     TEST_F(AssetBrowserPanelModelTest, ASteadyUpdateAllocatesNothing) {

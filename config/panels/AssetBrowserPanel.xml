@@ -9,6 +9,8 @@
         <element type="PanelInput" id="search" bind="browser.search" hint="Search" icon="search" width="16" tooltip="Files at any depth below the folder whose name holds this text"/>
         <element type="PanelCombo" id="type" bind="browser.typeFilter" width="9" tooltip="Show only the files of one type, at any depth below the folder"/>
         <element type="PanelButton" id="rescan" icon="refresh-cw" text="Rescan" command="assetBrowser.rescan" tooltip="List the content files again"/>
+        <element type="PanelButton" id="rename" icon="pencil" text="Rename" command="assetBrowser.rename" enableWhen="browser.canChange" tooltipBind="browser.renameHint"/>
+        <element type="PanelButton" id="delete" icon="trash-2" text="Delete" command="assetBrowser.delete" enableWhen="browser.canChange" tooltipBind="browser.deleteHint"/>
       </elements>
     </element>
     <element type="PanelRow" id="selection">
@@ -18,6 +20,7 @@
         <element type="PanelText" id="selectedPath" bind="browser.selectedPath" visible="browser.hasSelection"/>
       </elements>
     </element>
+    <element type="PanelText" id="message" bind="browser.message" style="Warning" wrap="true" visible="browser.hasMessage"/>
     <element type="PanelSeparator" id="selectionLine"/>
     <element type="PanelRow" id="panes">
       <elements>
@@ -30,6 +33,60 @@
           <elements>
             <element type="PanelSlot" id="grid" name="assetGrid" visible="browser.showFiles"/>
             <element type="PanelEmptyState" id="noMatch" icon="search" text="No file to show in this folder with this search and type" visible="browser.showEmpty"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="deleteAsset" title="Delete asset" open="browser.change.deleteOpen" closeCommand="assetBrowser.cancel">
+      <elements>
+        <element type="PanelText" id="deletePath" bind="browser.change.path" mono="true"/>
+        <element type="PanelText" id="deleteUnused" text="No content file uses it" visible="browser.change.unused"/>
+        <element type="PanelText" id="deleteUsedBy" text="Used by:" style="Warning" visible="browser.change.inUse"/>
+        <element type="PanelChild" id="deleteUsers" width="34" height="10" border="true" visible="browser.change.inUse">
+          <elements>
+            <element type="PanelTable" id="deleteUsersTable" source="browser.change.users" header="false">
+              <columns>
+                <item type="Text" id="text" field="text" styleField="style"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+        <element type="PanelText" id="deleteNote" text="C++ code is not checked. A delete is permanent." style="Disabled"/>
+        <element type="PanelText" id="deleteShows" text="A file of a lower layer shows through at the old path afterwards" style="Warning" visible="browser.change.lowerLayerShows"/>
+        <element type="PanelText" id="deleteProblem" bind="browser.change.problem" style="Error" visible="browser.change.hasProblem"/>
+        <element type="PanelRow" id="deleteButtons">
+          <elements>
+            <element type="PanelButton" id="deleteConfirm" icon="trash-2" text="Delete" command="assetBrowser.confirm" visible="browser.change.unused"/>
+            <element type="PanelButton" id="deleteAnyway" icon="trash-2" text="Delete anyway" command="assetBrowser.confirm" visible="browser.change.inUse"/>
+            <element type="PanelButton" id="deleteCancel" icon="x" text="Cancel" command="assetBrowser.cancel"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="renameAsset" title="Rename asset" open="browser.change.renameOpen" closeCommand="assetBrowser.cancel">
+      <elements>
+        <element type="PanelText" id="renamePath" bind="browser.change.path" mono="true"/>
+        <element type="PanelInput" id="renameName" bind="browser.change.newName" width="20" focus="true" text="New name" tooltip="The name without the extension; the folder and the extension stay"/>
+        <element type="PanelText" id="renameRefusal" bind="browser.change.nameRefusal" style="Error" visible="browser.change.nameRefused"/>
+        <element type="PanelText" id="renameUnused" text="No content file uses it" visible="browser.change.unused"/>
+        <element type="PanelText" id="renameUsedBy" text="Used by:" style="Warning" visible="browser.change.inUse"/>
+        <element type="PanelChild" id="renameUsers" width="34" height="10" border="true" visible="browser.change.inUse">
+          <elements>
+            <element type="PanelTable" id="renameUsersTable" source="browser.change.users" header="false">
+              <columns>
+                <item type="Text" id="text" field="text" styleField="style"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+        <element type="PanelText" id="renameNote" text="C++ code is not checked, and nothing that names the old path is rewritten." style="Disabled"/>
+        <element type="PanelText" id="renameShows" text="A file of a lower layer shows through at the old path afterwards" style="Warning" visible="browser.change.lowerLayerShows"/>
+        <element type="PanelText" id="renameProblem" bind="browser.change.problem" style="Error" visible="browser.change.hasProblem"/>
+        <element type="PanelRow" id="renameButtons">
+          <elements>
+            <element type="PanelButton" id="renameConfirm" icon="pencil" text="Rename" command="assetBrowser.confirm" visible="browser.change.unused" enableWhen="browser.change.canConfirm"/>
+            <element type="PanelButton" id="renameAnyway" icon="pencil" text="Rename anyway" command="assetBrowser.confirm" visible="browser.change.inUse" enableWhen="browser.change.canConfirm"/>
+            <element type="PanelButton" id="renameCancel" icon="x" text="Cancel" command="assetBrowser.cancel"/>
           </elements>
         </element>
       </elements>

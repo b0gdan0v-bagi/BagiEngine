@@ -311,6 +311,28 @@ namespace BECore::Tests {
         Settle();
     }
 
+    TEST_F(AssetBrowserAssetTest, TheDeleteButtonOpensTheQuestionAndEscClosesIt) {
+        CacheProbe(kBoard);
+        ASSERT_NO_FATAL_FAILURE(Open());
+        ASSERT_NO_FATAL_FAILURE(Click("##browser_probe_click.wav"));
+        ASSERT_TRUE(View().canChange) << View().deleteHint.c_str();
+
+        ASSERT_NO_FATAL_FAILURE(Click(" Delete"));
+        EXPECT_TRUE(View().change.deleteOpen);
+        EXPECT_NE(Find(" Cancel"), nullptr);
+        EXPECT_EQ(Find(" Delete anyway"), nullptr);
+
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiKey_Escape, true);
+        Frame();
+        io.AddKeyEvent(ImGuiKey_Escape, false);
+        Settle();
+
+        EXPECT_FALSE(View().change.deleteOpen);
+        EXPECT_EQ(Find(" Cancel"), nullptr);
+        EXPECT_TRUE(IsFile(_dir / "content/assets/browser_probe_click.wav"));
+    }
+
     TEST_F(AssetBrowserAssetTest, ASteadyFrameAllocatesNothing) {
         CacheProbe(kBoard);
         ASSERT_NO_FATAL_FAILURE(Open());

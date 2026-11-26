@@ -65,6 +65,8 @@ namespace BECore {
     }
 
     void AssetBrowserSlots::DrawFolders() {
+        // The tree is drawn whenever the panel is, so it is the one to say where the pointer is
+        _model.NotePointerOver(ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows));
         const StringView selected = _model.GetView().folder;
         constexpr ImGuiTreeNodeFlags kFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
         const auto noteClick = [this](PoolString folder) {

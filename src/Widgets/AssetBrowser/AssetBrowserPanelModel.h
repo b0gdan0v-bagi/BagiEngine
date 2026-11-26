@@ -1,16 +1,54 @@
 #pragma once
 
+#include <BECore/File/File.h>
 #include <BECore/FileSystem/FileWatcher.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Resource/AssetKind.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
+#include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Widgets/AssetBrowser/AssetBrowserSlots.h>
 #include <Widgets/AssetBrowser/AssetCatalog.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <cstdint>
+#include <expected>
 
 namespace BECore {
+
+    class EditorDocuments;
+    struct AssetFileTarget;
+
+    /// A line of a dialog's list of what uses an asset
+    struct AssetUseRow {
+        BE_CLASS(AssetUseRow)
+
+        BE_REFLECT_FIELD String text;
+        BE_REFLECT_FIELD PanelTextStyle style = PanelTextStyle::Normal;
+    };
+
+    /// The dialog that asks before a delete or a rename; at most one of the two is open
+    struct AssetChangeView {
+        BE_CLASS(AssetChangeView)
+
+        BE_REFLECT_FIELD bool deleteOpen = false;
+        BE_REFLECT_FIELD bool renameOpen = false;
+        /// The virtual path of the asset the dialog is about
+        BE_REFLECT_FIELD String path;
+        /// The name typed in the rename dialog, without the extension
+        BE_REFLECT_FIELD String newName;
+        BE_REFLECT_FIELD bool nameRefused = false;
+        BE_REFLECT_FIELD String nameRefusal;
+        /// A rename: the typed name is allowed
+        BE_REFLECT_FIELD bool canConfirm = false;
+        /// `users` has lines, and the confirm button says "anyway"; or it has none
+        BE_REFLECT_FIELD bool inUse = false;
+        BE_REFLECT_FIELD bool unused = false;
+        BE_REFLECT_FIELD Vector<AssetUseRow> users;
+        BE_REFLECT_FIELD bool lowerLayerShows = false;
+        /// Why the last confirm did nothing
+        BE_REFLECT_FIELD bool hasProblem = false;
+        BE_REFLECT_FIELD String problem;
+    };
 
     /**
      * @brief What the Asset Browser's asset binds to
@@ -32,6 +70,14 @@ namespace BECore {
         /// The folder, the search and the filter leave files to show, or none
         BE_REFLECT_FIELD bool showFiles = false;
         BE_REFLECT_FIELD bool showEmpty = false;
+        /// The selected asset may be deleted and renamed now; the hints say what the buttons do, or why they are off
+        BE_REFLECT_FIELD bool canChange = false;
+        BE_REFLECT_FIELD String renameHint;
+        BE_REFLECT_FIELD String deleteHint;
+        /// What went wrong with a delete or a rename, or what it left behind
+        BE_REFLECT_FIELD bool hasMessage = false;
+        BE_REFLECT_FIELD String message;
+        BE_REFLECT_FIELD AssetChangeView change;
     };
 
     /**
@@ -42,6 +88,9 @@ namespace BECore {
      * `Update` allocates nothing. `Initialize` watches the asset mounts: a notice marks the catalog stale for the next `Update` and drops a changed
      * texture from the resource cache at once, so a closed panel keeps the cache right too. It also registers the slots that draw the tree and the
      * tiles (`AssetBrowserSlots`); what they note is applied in `EndUpdate`. Refresh rules: `Widgets/AssetBrowser/CLAUDE.md`.
+     *
+     * `assetBrowser.delete` and `assetBrowser.rename` open the dialog about the selected asset, `assetBrowser.confirm` does it after checking
+     * everything again, `assetBrowser.cancel` closes it (`AssetBrowser/CLAUDE.md`, "Delete and rename in the panel").
      */
     class AssetBrowserPanelModel : public IPanelModel {
         BE_CLASS(AssetBrowserPanelModel)
@@ -65,6 +114,8 @@ namespace BECore {
         void SetWatcher(FileWatcher& watcher);
         /// Evicts through @p eviction instead of CoreManager's resource cache
         void SetEviction(Eviction eviction);
+        /// Asks @p documents for unsaved changes instead of CoreManager's; it must outlive the model
+        void SetDocuments(const EditorDocuments& documents);
 
         /// Selects a folder of the tree; one the catalog does not have becomes its nearest parent that it has
         void SelectFolder(StringView folder);
@@ -79,6 +130,12 @@ namespace BECore {
         /// A click of this frame on a tile, applied in `EndUpdate`
         void NoteAssetClick(PoolString path) {
             _clickedAsset = path;
+        }
+
+        /// Whether the pointer is over the panel, told every frame it is drawn: coming back to it, the user may have saved or edited elsewhere
+        void NotePointerOver(bool over) {
+            _actionsStale = _actionsStale || (over && !_pointerOver);
+            _pointerOver = over;
         }
 
         [[nodiscard]] const AssetCatalog& GetCatalog() const {
@@ -115,6 +172,17 @@ namespace BECore {
         void RebuildCatalog();
         void RebuildShown();
         void SetSelection(const AssetFile* file);
+        /// Decides again whether the buttons are on: it reads the disk and asks for the documents, so only on a cause
+        void RefreshActions();
+        /// Whether @p path may be changed now: no editor document is unsaved and the file rules allow it
+        [[nodiscard]] std::expected<AssetFileTarget, String> CheckChange(StringView path) const;
+        [[nodiscard]] Vector<AssetUseRow> ReadUsers(StringView path) const;
+        void OpenChange(bool rename);
+        void ShowUsers(Vector<AssetUseRow> users);
+        void CheckNewName();
+        void ConfirmChange();
+        void ShowProblem(String problem);
+        void ShowMessage(String message);
 
         AssetCatalog _catalog;
         AssetBrowserView _view;
@@ -127,6 +195,13 @@ namespace BECore {
         AssetBrowserSlots _slots{*this};
         Optional<PoolString> _clickedFolder;  ///< the empty string is the root, so "no click" is the empty optional
         Optional<PoolString> _clickedAsset;
+        const EditorDocuments* _documents = nullptr;
+        /// The file as it was when the dialog showed what it is about
+        FileInfo _changeStamp;
+        /// The text of the rename field that `nameRefusal` and `canConfirm` are about
+        String _checkedName;
+        bool _actionsStale = true;
+        bool _pointerOver = false;
         uint32_t _catalogRevision = 0;
         bool _catalogStale = true;
     };
