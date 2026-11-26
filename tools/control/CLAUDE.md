@@ -6,7 +6,7 @@ Python 3.10+ tools that drive a game through the control API (`src/Modules/Remot
 
 | File | Purpose |
 |------|---------|
-| `bagi_control_client.py` | Standard-library WebSocket client: `BagiControlClient.call(method, params)`, pushes in `events`, `ControlError` for an error answer |
+| `bagi_control_client.py` | Standard-library WebSocket client: `BagiControlClient.call(method, params)`, pushes in `events`, `ControlError` for an error answer; an optional `name` ("Client names") |
 | `game_process.py` | `GameProcess` starts an executable with `--control`, retries until it listens, keeps its log; `build_game_command`, `free_port`, `preset_executable`, `log_problems` (Warning and above), `PORT_TAKEN_MARKER` |
 | `scenario.py` | The scenario format: `load` / `dump`, `evaluate`, `minimal_expect` / `full_expect` / `updated_expect`. No other I/O |
 | `bagi_session.py` | `GameSession`: one game, started (`launch`) or reached (`connect`), as plain calls; records scenarios, keeps pushes (`take_event`). No MCP code. `SessionError` is the session's refusal; the game's stays a `ControlError` |
@@ -21,6 +21,10 @@ Python 3.10+ tools that drive a game through the control API (`src/Modules/Remot
 ## Running
 
 The repository venv (`CI/setup_venv.*`; Windows `.venv\Scripts\python`, needs `uv`), once `.venv/bin/pip install -r tools/control/requirements.txt` (`mcp` 2.x, `pytest`). Tests: `.venv/bin/python -m pytest tools/control/tests`.
+
+## Client names
+
+The editor's activity journal shows who did what by the name a connection gives (`client_hello`, `.claude/rules/control-activity.md`). `BagiControlClient(name=...)` sends it in `connect()`, `GameSession(client_name=...)` passes it to every connection it opens. The MCP server is `mcp`, the art bridge `artgen`; plain scripts, `bagi_play.py` and the QA player stay unnamed and send nothing. An engine without the method (`unknown_method`) is not an error; any other failure closes the connection. The hello is no call of the session, so a recording never holds it. A fake control server of a test sees it as its first request.
 
 ## Scenario files
 

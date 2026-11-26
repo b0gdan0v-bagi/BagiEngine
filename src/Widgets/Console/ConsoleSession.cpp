@@ -27,6 +27,9 @@ namespace BECore {
             return text;
         }
 
+        /// What the control service's journal calls the command line
+        constexpr StringView kClientName = "console";
+
         bool IsUtf8Continuation(char c) {
             constexpr unsigned char kMask = 0xC0;
             constexpr unsigned char kContinuation = 0x80;
@@ -166,7 +169,8 @@ namespace BECore {
         writer.Key("params");
         writer.Raw(command->params);
         writer.EndObject();
-        service.Post(request, [output = _output](const String& answer) { PrintReply(*output, answer); });
+        // A client per command: the session does not know how long the service it was given lives
+        service.Post(request, [output = _output](const String& answer) { PrintReply(*output, answer); }, service.OpenLocalClient(kClientName));
 
         _history.Add(line);
         return String(line);

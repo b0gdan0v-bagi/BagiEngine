@@ -23,6 +23,7 @@ A request may carry a `ControlClient` (`Control/ControlClient.h`, ref-counted): 
 - **Whoever keeps a client keeps it alive**: a request, a call and a record hold it, so a connection that has ended still has its id and name.
 - **Notices** are queued apart from the requests and applied at the start of `Drain()`, in the order they happened; the barrier holds none. So a connect is known before any request of that client runs, while a request may run after its client's disconnect (it was held, or both arrived between two drains).
 - The id counts from 1 and is never reused by a service. The name and `IsConnected()` belong to the main thread.
+- **Who is named:** the engine's command line (Console panel) is `console`, the request of `--replay` is `replay`; the MCP server calls itself `mcp` and the art bridge `artgen` (`tools/control/CLAUDE.md`, "Client names").
 
 ## `client_hello`
 

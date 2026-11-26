@@ -32,6 +32,8 @@ OPCODE_PONG = 0xA
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_TIMEOUT = 10.0
+HELLO_METHOD = "client_hello"
+UNKNOWN_METHOD = "unknown_method"
 
 _MAX_HANDSHAKE_BYTES = 16 * 1024
 _RECV_CHUNK = 64 * 1024
@@ -139,9 +141,15 @@ class FrameReader:
 
 
 class BagiControlClient:
-    """One connection to a game started with --control. Use it as a context manager or call close()."""
+    """One connection to a game started with --control. Use it as a context manager or call close().
 
-    def __init__(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, timeout: float = DEFAULT_TIMEOUT, origin: str | None = None):
+    `name` is what the engine's activity journal calls this connection; connect() sends it (`client_hello`). Without one nothing is sent.
+    """
+
+    def __init__(
+        self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, timeout: float = DEFAULT_TIMEOUT, origin: str | None = None, name: str | None = None
+    ):
+        self.name = name
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -159,7 +167,10 @@ class BagiControlClient:
         self.close()
 
     def connect(self) -> None:
-        """Opens the connection and completes the WebSocket handshake; raises HandshakeError when the engine refuses."""
+        """Opens the connection, completes the WebSocket handshake and tells the engine the name, if there is one.
+
+        Raises HandshakeError when the engine refuses. An engine that has no `client_hello` is not an error; any other failure of it closes the connection.
+        """
         self._socket = socket.create_connection((self.host, self.port), timeout=self.timeout)
         self._reader = FrameReader()
 
@@ -191,6 +202,19 @@ class BagiControlClient:
             self.close()
             raise HandshakeError(status, "the Sec-WebSocket-Accept value is wrong")
         self._reader.feed(rest)
+        if self.name is not None:
+            self._say_hello()
+
+    def _say_hello(self) -> None:
+        try:
+            self.call(HELLO_METHOD, {"name": self.name})
+        except ControlError as error:
+            if error.code != UNKNOWN_METHOD:
+                self.close()
+                raise
+        except (ConnectionClosed, OSError):
+            self.close()
+            raise
 
     def close(self) -> None:
         if self._socket is None:
