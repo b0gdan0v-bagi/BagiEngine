@@ -37,6 +37,12 @@ namespace BECore {
     /// Whether the file is the Generate panel's record beside a picture or a sound, `<name>.artgen.json`: part of that file, not an asset of its own
     [[nodiscard]] bool IsAssetSidecar(StringView virtualPath);
 
+    /// The kind of the listed file at @p virtualPath: what `AssetKindOfName` says, and for a `.xml` under `config` what the file of the top layer holds (read here)
+    [[nodiscard]] AssetKind AssetKindOfFile(const FileSystem& fileSystem, StringView virtualPath);
+
+    /// Whether the texts differ at most in the case of ASCII letters, which names the same file on macOS and Windows
+    [[nodiscard]] bool EqualsIgnoreAsciiCase(StringView left, StringView right);
+
     /**
      * @brief The content files of the asset mounts, their kinds and their folder tree, as of the last `Rebuild`
      *

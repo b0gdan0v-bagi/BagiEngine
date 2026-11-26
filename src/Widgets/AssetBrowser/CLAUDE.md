@@ -49,3 +49,13 @@ The window is an asset, `config/panels/AssetBrowserPanel.xml` (`Asset Browser###
 - **A node file** is also used by its reference: `ref="nodes/X"`, and, when the reference has a folder, the text `nodes/X` anywhere (a game's component may hold one).
 - **Could not be checked** (`unchecked`, never "unused"): a file that cannot be read or holds a zero byte (UTF-16), a folder that cannot be listed, and a linked folder, which no listing of content enters.
 - **Never seen:** names written or built in C++, cooked `.bin` content, files outside these roots, and a sprite id or a font family, which use the library's or `TextConfig`'s entry (that entry is the use of the file).
+
+## Delete and rename
+
+`AssetFileOps.{h,cpp}` (no ImGui; `AssetFileOpsTest`) is the one place that decides and does it. It destroys and moves the owner's files, so a case it cannot be sure of is refused, with a sentence for the user and the disk unchanged. A delete is permanent.
+
+- **Which file.** An asset of a mount point whose top file lies in that mount folder of `GetRootPath()` itself: a game never changes the engine's file, although the engine's checkout lies below the game's root. No symbolic link between the root and the file. Never with a content overlay, which cannot express a removal.
+- **Which kinds.** `Texture`, `Font`, `Sound`, `UiDocument`, `Node` and `Other`. A config and a scene file stay: code reads them by name, which no reference check sees.
+- **A new name** replaces the stem; the folder and the extension (`.ui.xml` and `.ui.html` whole, `AssetRenameStem`) stay. `A-Z a-z 0-9 _ -`, single inner dots too except for a node file, whose reference must stay valid. Refused: a name any layer has (ASCII case ignored, so content stays portable), one that differs from the old only by case, one that makes another kind of file, and a node name some layer holds cooked.
+- **The lower layer.** The answer says when the old path still leads somewhere (`lowerLayerShows`): the engine's file, or a node's cooked form.
+- A sidecar (`*.artgen.json`) stays where it is, and nothing rewrites the content that names the old path.

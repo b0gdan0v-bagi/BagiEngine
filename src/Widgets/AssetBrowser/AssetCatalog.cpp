@@ -40,17 +40,13 @@ namespace BECore {
             return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
         }
 
-        bool EqualsIgnoreCase(StringView left, StringView right) {
-            return left.size() == right.size() && eastl::equal(left.begin(), left.end(), right.begin(), [](char a, char b) { return ToLowerAscii(a) == ToLowerAscii(b); });
-        }
-
         bool EndsWithIgnoreCase(StringView text, StringView suffix) {
-            return text.size() >= suffix.size() && EqualsIgnoreCase(text.substr(text.size() - suffix.size()), suffix);
+            return text.size() >= suffix.size() && EqualsIgnoreAsciiCase(text.substr(text.size() - suffix.size()), suffix);
         }
 
         bool ContainsIgnoreCase(StringView text, StringView needle) {
             for (size_t start = 0; start + needle.size() <= text.size(); ++start) {
-                if (EqualsIgnoreCase(text.substr(start, needle.size()), needle)) {
+                if (EqualsIgnoreAsciiCase(text.substr(start, needle.size()), needle)) {
                     return true;
                 }
             }
@@ -71,6 +67,10 @@ namespace BECore {
 
     }  // namespace
 
+    bool EqualsIgnoreAsciiCase(StringView left, StringView right) {
+        return left.size() == right.size() && eastl::equal(left.begin(), left.end(), right.begin(), [](char a, char b) { return ToLowerAscii(a) == ToLowerAscii(b); });
+    }
+
     Span<const PoolString> GetAssetMounts() {
         static const Array<PoolString, 2> mounts = {MountPoints::assets, MountPoints::config};
         return {mounts.data(), mounts.size()};
@@ -90,7 +90,7 @@ namespace BECore {
         }
         const StringView extension = PathExtension(name);
         for (const AssetExtension& listed : kAssetExtensions) {
-            if (!EqualsIgnoreCase(extension, listed.extension)) {
+            if (!EqualsIgnoreAsciiCase(extension, listed.extension)) {
                 continue;
             }
             if (listed.extension == kXmlExtension && PathIsUnder(virtualPath, MountPoints::config.ToPoolString().ToStringView())) {
@@ -99,6 +99,11 @@ namespace BECore {
             return listed.kind;
         }
         return AssetKind::None;
+    }
+
+    AssetKind AssetKindOfFile(const FileSystem& fileSystem, StringView virtualPath) {
+        const AssetKind kind = AssetKindOfName(virtualPath);
+        return kind == AssetKind::Config ? KindOfConfigXml(fileSystem, virtualPath) : kind;
     }
 
     void AssetCatalog::Rebuild(const FileSystem& fileSystem) {
@@ -113,12 +118,9 @@ namespace BECore {
         for (const PoolString mount : GetAssetMounts()) {
             for (const PoolString path : fileSystem.EnumerateFiles(mount, Span<const StringView>(extensions.data(), extensions.size()))) {
                 const StringView text = path.ToStringView();
-                AssetKind kind = AssetKindOfName(text);
+                const AssetKind kind = AssetKindOfFile(fileSystem, text);
                 if (kind == AssetKind::None) {
                     continue;
-                }
-                if (kind == AssetKind::Config) {
-                    kind = KindOfConfigXml(fileSystem, text);
                 }
                 _files.push_back({path, kind});
 
