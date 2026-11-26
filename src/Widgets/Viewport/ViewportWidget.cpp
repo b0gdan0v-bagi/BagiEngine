@@ -83,11 +83,8 @@ namespace BECore {
         // area or the density of the target in Game mode whatever state the widget dies in
         CoreManager::GetUIEnvironment().SetSafeAreaOverride(std::nullopt);
         CoreManager::GetUIEnvironment().SetPixelDensityOverride(std::nullopt);
-        // A gizmo drag in progress gives the nodes their start values back, so the scene is not left half moved
-        if (_gizmos.IsDragging()) {
-            _gizmos.AbortDrag(CoreManager::GetSceneManager().GetActiveScene());
-        }
-        _uiGizmos.AbortDrag(CoreManager::GetSceneManager().GetActiveScene());
+        // A drag in progress gives the nodes their start values back, so the scene is not left half moved
+        DropLocalInput();
         // The target's destructor waits for the GPU and gives back its ImGui texture. It needs the device and the ImGui context
         // alive: the widgets die last-first (the viewport before ImGuiWidget) and before the renderer's cleanup
         _renderTarget = {};
