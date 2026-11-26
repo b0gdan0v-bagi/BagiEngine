@@ -202,6 +202,22 @@ namespace BECore {
         _registered = true;
     }
 
+    void RmlUiDocumentComponent::OnEnabledChanged() {
+        if (IsEnabled()) {
+            return;
+        }
+        if (_context) {
+            _context->ProcessMouseLeave();
+            if ((_consumedButtons & ButtonBit(SDL_BUTTON_LEFT)) != 0) {
+                // The context keeps the pressed element active, which takes later motions. With the pointer gone its release clicks nothing,
+                // and the second leave undoes the move that ends a drag
+                _context->ProcessMouseButtonUp(RmlButtonIndex(SDL_BUTTON_LEFT), 0);
+                _context->ProcessMouseLeave();
+            }
+        }
+        _consumedButtons = 0;
+    }
+
     void RmlUiDocumentComponent::RefreshInputOrder() {
         const int order = GetScene().GetInputOrder(*this);
         if (order == _inputOrder) {
@@ -309,7 +325,7 @@ namespace BECore {
     }
 
     bool RmlUiDocumentComponent::TakesInput() const {
-        return _visible && _inputEnabled && _context != nullptr && _document != nullptr && IsSceneActive();
+        return IsEnabled() && _visible && _inputEnabled && _context != nullptr && _document != nullptr && IsSceneActive();
     }
 
     bool RmlUiDocumentComponent::MovePointer(float outputX, float outputY) {

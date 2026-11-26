@@ -147,6 +147,15 @@ namespace BECore {
         }
     }
 
+    void UICanvasComponent::OnEnabledChanged() {
+        if (IsEnabled()) {
+            return;
+        }
+        _consumedButtons = 0;
+        CloseAllPopups();  // also a popup that code opened since the last draw
+        ClearPointerState();
+    }
+
     void UICanvasComponent::RefreshInputOrder() {
         // The draw order can change after attaching (a node added, a layer edited): the input order follows it
         const int order = GetScene().GetInputOrder(*this);
@@ -418,7 +427,7 @@ namespace BECore {
     }
 
     bool UICanvasComponent::TakesInput() const {
-        return (_visible || IsLeavingWithInput()) && _inputEnabled && IsSceneActive();
+        return IsEnabled() && (_visible || IsLeavingWithInput()) && _inputEnabled && IsSceneActive();
     }
 
     UIElement* UICanvasComponent::HitTestOutput(float outputX, float outputY) const {

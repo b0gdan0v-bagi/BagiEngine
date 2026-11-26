@@ -87,7 +87,7 @@ namespace BECore {
             Vector<FindingMark> findingMarks;
         };
 
-        // A canvas the overlays show: switched on, visible and laid out. A canvas that is not keeps its old marks but nothing draws, hovers or lists them.
+        // A canvas the overlays show: switched on, enabled, visible and laid out. A canvas that is not keeps its old marks but nothing draws, hovers or lists them.
         [[nodiscard]] static bool IsShown(const CanvasState& state);
 
         // Where the pointer is: a canvas of _states and an index into its findings, or an element picked in a canvas

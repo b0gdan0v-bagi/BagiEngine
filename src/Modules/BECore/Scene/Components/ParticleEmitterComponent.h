@@ -65,9 +65,9 @@ namespace BECore {
             return _simulation.GetLiveCount();
         }
 
-        /// Whether the frame loop has to keep running for this emitter (`ParticleSimulation::NeedsFrames`)
+        /// Whether the frame loop has to keep running for this emitter (`ParticleSimulation::NeedsFrames`); never while it is disabled, which freezes it
         [[nodiscard]] bool NeedsFrames() const {
-            return _simulation.NeedsFrames();
+            return IsEnabled() && _simulation.NeedsFrames();
         }
 
         [[nodiscard]] const ParticleSimulation& GetSimulation() const {

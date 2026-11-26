@@ -29,6 +29,12 @@ namespace BECore::Tests {
         }
     }
 
+    void PointerTargetTestComponent::OnTargetEnabledChanged() {
+        if (script != nullptr) {
+            ++script->enabledChanges;
+        }
+    }
+
     bool PointerTargetTestComponent::ContainsScenePoint(float sceneX, float sceneY) const {
         return scenePredicate != nullptr ? scenePredicate(sceneX, sceneY) : PointerTargetComponent::ContainsScenePoint(sceneX, sceneY);
     }
@@ -861,6 +867,81 @@ namespace BECore::Tests {
         Move(kInside, kInside);
 
         EXPECT_EQ(Calls(_a), Vector<TargetCall>({TargetCall::Enter, TargetCall::Move}));
+    }
+
+    TEST_F(PointerTargetComponentTest, ADisabledTargetTakesNothingAlsoBeforeTheFirstDraw) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("A", 0, 0, kBoxSize, kBoxSize)));
+        PointerTargetTestComponent& target = Bind("A", _a);
+        target.SetEnabled(false);
+        GameRecorder game;
+
+        EXPECT_FALSE(target.ContainsPoint(kInside, kInside)) << "no pass ran yet";
+        Draw();
+        EXPECT_FALSE(target.ContainsPoint(kInside, kInside));
+        EXPECT_FALSE(Press(kInside, kInside));
+        EXPECT_FALSE(Release(kInside, kInside));
+        EXPECT_FALSE(Move(kInside, kInside));
+        EXPECT_FALSE(Wheel(kInside, kInside, 0.0f, 1.0f));
+        EXPECT_TRUE(_a.log.empty());
+        EXPECT_EQ(game.downs, 1);
+        EXPECT_EQ(game.ups, 1);
+        EXPECT_EQ(game.motions, 1);
+        EXPECT_EQ(game.wheels, 1);
+
+        target.SetEnabled(true);
+        Draw();
+        EXPECT_TRUE(Press(kInside, kInside));
+        EXPECT_EQ(_a.Count(TargetCall::Press), 1u);
+    }
+
+    TEST_F(PointerTargetComponentTest, ATargetDisabledWhileItHoldsAPressGetsNoCallbackAndTheReleaseIsNotTheGames) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("A", 0, 0, kBoxSize, kBoxSize)));
+        Draw();
+        PointerTargetTestComponent& target = Bind("A", _a);
+        ASSERT_TRUE(Move(kInside, kInside));
+        ASSERT_TRUE(Press(kInside, kInside));
+        _a.log.clear();
+        GameRecorder game;
+
+        target.SetEnabled(false);
+        Move(kInside + 1.0f, kInside, kMouse, SDL_BUTTON_LMASK);
+        EXPECT_TRUE(Release(kInside, kInside));
+
+        EXPECT_EQ(_a.enabledChanges, 1);
+        EXPECT_TRUE(_a.log.empty()) << "no drag, no release and no exit";
+        EXPECT_EQ(game.ups, 0);
+    }
+
+    TEST_F(PointerTargetComponentTest, DisablingForgetsThePointersOverTheTarget) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("A", 0, 0, kBoxSize, kBoxSize)));
+        Draw();
+        PointerTargetTestComponent& target = Bind("A", _a);
+        ASSERT_TRUE(Move(kInside, kInside));
+        _a.log.clear();
+
+        target.SetEnabled(false);
+        target.SetEnabled(true);
+        Draw();
+        Move(kOutside, kOutside);
+        EXPECT_TRUE(_a.log.empty()) << "the exit of what was forgotten";
+
+        Move(kInside, kInside);
+        EXPECT_EQ(Calls(_a), Vector<TargetCall>({TargetCall::Enter, TargetCall::Move}));
+    }
+
+    TEST_F(PointerTargetComponentTest, ATargetThatDisablesItselfInsideTheEnterCallbackGetsNoFurtherCallback) {
+        ASSERT_NO_FATAL_FAILURE(LoadNodes(TargetNode("A", 0, 0, kBoxSize, kBoxSize)));
+        Draw();
+        PointerTargetTestComponent& target = Bind("A", _a);
+        _a.hook = [&](TargetCall call) {
+            if (call == TargetCall::Enter) {
+                target.SetEnabled(false);
+            }
+        };
+
+        Move(kInside, kInside);
+
+        EXPECT_EQ(Calls(_a), Vector<TargetCall>({TargetCall::Enter}));
     }
 
 }  // namespace BECore::Tests

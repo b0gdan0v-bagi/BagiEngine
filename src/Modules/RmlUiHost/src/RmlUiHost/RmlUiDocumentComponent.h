@@ -111,6 +111,10 @@ namespace BECore {
             return _inputOrder;
         }
 
+    protected:
+        /// A document that goes to sleep takes its pointer back and forgets the buttons it took
+        void OnEnabledChanged() override;
+
     private:
         /// Queues the `data-action` of the clicked element
         class ActionListener final : public Rml::EventListener {

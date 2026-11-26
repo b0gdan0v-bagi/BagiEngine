@@ -82,7 +82,7 @@ namespace BECore {
     }
 
     bool UIElementEditSession::Begin(Scene& scene, SceneNode& node, UICanvasComponent& canvas, UIElement& element) {
-        if (_active || node.HasEditorFlag(EditorFlags::Locked)) {
+        if (_active || node.HasEditorFlag(EditorFlags::Locked) || !canvas.IsEnabled()) {
             return false;
         }
         const UICanvasLayout& layout = canvas.GetLayout();
@@ -138,7 +138,7 @@ namespace BECore {
     }
 
     bool UIElementEditSession::CanContinue(Scene* activeScene, bool editMode) const {
-        if (!_active || !editMode || activeScene == nullptr || activeScene != _scene) {
+        if (!_active || !editMode || activeScene == nullptr || activeScene != _scene || !_canvas->IsEnabled()) {
             return false;
         }
         const SceneNode* const alive = HierarchyModel::FindNode(activeScene->GetRootNode(), _node);
@@ -297,7 +297,7 @@ namespace BECore {
         const IntrusivePtr<UICanvasComponent>& canvas = selected.canvas;
         UIElement* const element = selected.element;
         // A World canvas follows its node: its elements are not dragged here
-        if (!canvas->_visible || canvas->_space == CanvasSpace::World) {
+        if (!canvas->IsEnabled() || !canvas->_visible || canvas->_space == CanvasSpace::World) {
             return false;
         }
 

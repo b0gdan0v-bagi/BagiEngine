@@ -158,7 +158,7 @@ namespace BECore {
             return _inputOrder;
         }
 
-        /// True while the canvas is shown, has input on and its scene is the active one: the only time it consumes an event. A canvas that is hiding takes none, unless `_transitionInput`
+        /// True while the canvas is enabled and shown, has input on and its scene is the active one: the only time it consumes an event. A canvas that is hiding takes none, unless `_transitionInput`
         [[nodiscard]] bool TakesInput() const;
 
         /// True between a mouse press that this canvas took and its release: the canvas keeps consuming the motion in between
@@ -174,6 +174,10 @@ namespace BECore {
 
         /// The same in every canvas of @p scene; true when at least one element was found
         static bool SetElementVisibleByName(Scene& scene, PoolString elementName, bool visible);
+
+    protected:
+        /// A canvas that goes to sleep forgets its hover, press, popups, tooltip and the buttons it took
+        void OnEnabledChanged() override;
 
     private:
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;

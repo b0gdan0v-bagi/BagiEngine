@@ -22,7 +22,8 @@ namespace BECore {
      *
      * Plays when asked (Play()), when an InputEvents::ActionEvent of `_playAction` comes while its scene is active, and with `_playOnStart`
      * at the first update of its scene as the active one (every loaded scene attaches its components, so not at attach). One sound at a
-     * time: Play() while it plays starts it again on a new voice and Stop() stops the latest.
+     * time: Play() while it plays starts it again on a new voice and Stop() stops the latest. Disabling the component stops its sound
+     * and enabling does not start it again.
      */
     class AudioSourceComponent : public IComponent {
         BE_CLASS(AudioSourceComponent, ICON = volume - 2, CATEGORY = audio)
@@ -56,6 +57,9 @@ namespace BECore {
         [[nodiscard]] const AudioClip* GetLoadedClip() const {
             return _loaded.Get();
         }
+
+    protected:
+        void OnEnabledChanged() override;
 
     private:
         void OnUpdate(const SceneEvents::SceneUpdateEvent& e);

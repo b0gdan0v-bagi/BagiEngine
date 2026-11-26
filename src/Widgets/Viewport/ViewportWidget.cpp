@@ -380,7 +380,7 @@ namespace BECore {
             const float minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             for (const auto& canvas : _overlayCanvases) {
                 const UICanvasLayout& layout = canvas->GetLayout();
-                if (!canvas->_visible || !layout.HasLayout()) {
+                if (!canvas->IsEnabled() || !canvas->_visible || !layout.HasLayout()) {
                     continue;
                 }
                 if (overlays.canvasBounds) {
@@ -440,7 +440,7 @@ namespace BECore {
         // The selected element in the shapes checked in the popup, nothing is probed while none is
         _uiShapes.SetShapes(toolbar.GetShapeMask(), toolbar.IsLandscapeShapes());
         const UISelectedElement selected = scene && _uiShapes.AnyChecked() ? _uiGizmos.FindSelected(scene) : UISelectedElement{};
-        if (selected && selected.canvas->_visible) {
+        if (selected && selected.canvas->IsEnabled() && selected.canvas->_visible) {
             _uiShapes.Draw(*drawList, frame, {outputSize.x, outputSize.y}, selected.canvas->GetLayout(), *selected.element);
         } else {
             _uiShapes.Release();
