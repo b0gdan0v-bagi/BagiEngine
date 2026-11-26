@@ -94,4 +94,14 @@ namespace BECore::Tests {
         EXPECT_FALSE(line.Find("--control").has_value());
     }
 
+    TEST(CommandLineTest, TheProgramPathIsNoArgumentAndOutlivesASet) {
+        CommandLine line;
+        EXPECT_TRUE(line.GetProgramPath().empty());
+        line.SetProgramPath("bin/Game");
+        line.Set(Args{"--a"});
+        EXPECT_EQ(line.GetProgramPath(), "bin/Game");
+        EXPECT_EQ(line.GetArguments().size(), 1u);
+        EXPECT_FALSE(line.HasFlag("bin/Game"));
+    }
+
 }  // namespace BECore::Tests

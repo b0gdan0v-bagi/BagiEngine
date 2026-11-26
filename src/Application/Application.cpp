@@ -80,6 +80,9 @@ namespace BECore {
             _arguments.emplace_back(argv[i]);
         }
         CoreManager::GetCommandLine().Set(_arguments);
+        if (argc > 0 && argv != nullptr && argv[0] != nullptr) {
+            CoreManager::GetCommandLine().SetProgramPath(argv[0]);
+        }
     }
 
     int Application::RunCook(const CookRequest& request) {
