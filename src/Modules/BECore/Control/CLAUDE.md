@@ -51,7 +51,7 @@ Error codes are strings and part of the protocol (`ControlErrors`): `parse_error
 - `CoreManager::OnGameCycle` calls `Drain()` as stage **1b**: after input, before `TaskManager::Update`. A command therefore sees this frame's input and what it changes is seen by this frame's logic and render. `Application::RunFrame` calls `EndFrame()` after the present.
 - A `Request` and a `ControlCall` are `BE_POOLED` (made on the posting thread, freed on the main one: the concurrent pool). `id` is the raw text of the request's own id (echoed as written) and `params` a `JsonView`, both into the request's `RequestBuffers` (the text copy and its tape, recycled through a free list of the service); the two queues are `Fifo`s that keep their capacity; `Drain()` walks the inbox once and sends a request held by the barrier to the back, which keeps the held ones in order.
 - Requests run in the order they were posted (per posting thread). Do not use `TaskManager` for commands: its main-thread queue is a priority queue and does not keep the order of equal priorities.
-- The handler table, the event sink and the hooks hold `MoveOnlyFunction`s. The handler that runs is moved out of its entry for the call and goes back after it unless the call replaced it: a handler may register methods, even its own name, and the replaced handler's capture must outlive the call that is using it. A frame end hook is held the same way.
+- The handler table, the event sink and the hooks hold `MoveOnlyFunction`s. The handler that runs is moved out of its entry for the call and goes back after it unless the call replaced or removed it: a handler may do both, even to its own name, and its capture must outlive the call that is using it. A frame end hook is held the same way.
 - A handler ends in exactly one of `Reply()`, `Fail()`, `DeferFrames()`; one that does none gets `internal_error` and an error log line.
 - `DeferFrames(n, done)` answers later: `done` runs at the end of the frame in which the counter (starting at `n`, at least 1) reaches zero. `DeferFrames(n, secondsPerFrame, done)` also says how long each frame lasts, which only the manual clock uses (negative or not a number is zero; the default is `kDefaultStepSeconds`, 1/60). While a call is deferred it is a **barrier**: the requests behind it wait, so a pipelined `step` + `get_state` gives the state after the step. A method registered with `bypassBarrier` (`quit`) still runs, but cannot defer itself.
 - `SetFrameEndHook(name, hook)` runs `hook` at every `EndFrame()`, before a deferred call completes (the state-change push uses it). Setting a name again replaces its hook, so a module that registers twice (`GameManager::Initialize()` does, once per test) adds nothing. A hook that sets another one is fine: the new one runs in the same frame.
@@ -123,7 +123,7 @@ The game methods describe only what `GameControl` itself reads; the parameters o
 
 1. Write a handler `void(ControlCall&)` in the module that owns the behaviour (BECore only for things that need nothing above it).
 2. Read `call.Params()` with `ControlParams.h`; answer with `call.Reply(writer)` (a `JsonWriter` callback, keys alphabetical), `call.ReplyObject(answer)` or `call.Fail(code, message)`. For an answer that needs frames to pass (step, screenshot) use `call.DeferFrames(...)`.
-3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler).
+3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler). A method that lasts shorter than the service is taken away by `UnregisterHandler("name")`, its description too.
 4. Describe it with `DescribeMethod("name", {summary, params})` beside the registration, so `list_methods` and the editor's console can offer and complete it. For people only, never checked against the handler; a method without one still runs. A method that acts on nothing sets `quiet`, which keeps it out of the activity journal.
 5. Test it with a `ControlService` of its own and a lambda as the reply function: no transport needed.
 6. Write the method and its codes into the protocol description of the owning module.
@@ -132,4 +132,4 @@ An object a client may read or write by name is offered as a root: `service.Root
 
 ## Tests
 
-`tests/BECore/ControlServiceTest.cpp` is the pattern (a service of its own, a lambda as the reply). The transport has its own tests, see `RemoteControl/CLAUDE.md`.
+`tests/BECore/ControlServiceTest.cpp` is the pattern; the transport's tests: `RemoteControl/CLAUDE.md`.

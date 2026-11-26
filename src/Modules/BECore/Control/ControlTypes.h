@@ -59,7 +59,7 @@ namespace BECore {
         const ControlMethodInfo* info = nullptr;  // null without a description
     };
 
-    /// ControlMethodListing without the copy of the name (ControlService::GetMethodViews): valid until the next RegisterHandler or DescribeMethod
+    /// ControlMethodListing without the copy of the name (ControlService::GetMethodViews): valid until the next RegisterHandler, DescribeMethod or UnregisterHandler
     struct ControlMethodView {
         StringView name;
         const ControlMethodInfo* info = nullptr;  // null without a description
