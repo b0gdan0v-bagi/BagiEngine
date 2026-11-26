@@ -45,7 +45,7 @@ namespace BECore::Stress::Tests {
         }
 
         RampRun Drive(CostRef cost, uint32_t maxFrames = kMaxRampFrames) {
-            RampController controller(StressMeasure::Work, maxFrames);
+            RampController controller(StressMeasure::Work, kDefaultRampBudgetMs, maxFrames);
             return Drive(controller, cost);
         }
 
@@ -55,7 +55,7 @@ namespace BECore::Stress::Tests {
 
         /// The largest count whose frame fits the budget in Linear(@p msPerObject)
         uint32_t LinearLimit(double msPerObject) {
-            return static_cast<uint32_t>(kRampBudgetMs / msPerObject);
+            return static_cast<uint32_t>(kDefaultRampBudgetMs / msPerObject);
         }
 
         /// One step of a controller shown @p count: the settle frames at @p settleMs and the measured ones from @p window
@@ -77,7 +77,7 @@ namespace BECore::Stress::Tests {
 
         /// Like Drive, but every frame also carries the mark of its step as its update time (the settle frames one that no mean may hold)
         RampRun DriveMarked(CostRef cost, uint32_t maxFrames = kMaxRampFrames) {
-            RampController controller(StressMeasure::Work, maxFrames);
+            RampController controller(StressMeasure::Work, kDefaultRampBudgetMs, maxFrames);
             RampRun run;
             HashMap<uint32_t, uint32_t> visits;
             uint32_t shown = 0;
@@ -130,6 +130,16 @@ namespace BECore::Stress::Tests {
         }
     }
 
+    TEST(StressRampTest, HalfTheBudgetFindsAboutHalfTheCount) {
+        RampController whole(StressMeasure::Work, 16.6);
+        RampController half(StressMeasure::Work, 8.3);
+        const uint32_t atWhole = Drive(whole, Linear(0.01)).result.objectsAt60fps;
+        const uint32_t atHalf = Drive(half, Linear(0.01)).result.objectsAt60fps;
+
+        EXPECT_LE(atHalf, 830u) << "8.3 ms at 0.01 ms an object";
+        EXPECT_NEAR(static_cast<double>(atHalf), atWhole / 2.0, atWhole / 2.0 * 2 * kRampPrecision);
+    }
+
     TEST(StressRampTest, ACliffIsFoundJustBelowItsEdge) {
         constexpr uint32_t kEdge = 777;
         const RampRun run = Drive([](uint32_t count, uint32_t) { return count <= kEdge ? 1.0 : 50.0; });
@@ -155,7 +165,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(StressRampTest, TheCountGrowsByAHalfAndAtLeastOne) {
-        RampController controller(StressMeasure::Work);
+        RampController controller(StressMeasure::Work, kDefaultRampBudgetMs);
         Vector<uint32_t> shown;
         shown.push_back(controller.GetCount());
         for (int step = 0; step < 4; ++step) {
@@ -167,25 +177,25 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(StressRampTest, OneSlowFrameOfAStepIsForgivenAndTwoAreNot) {
-        RampController forgiving(StressMeasure::Work);
+        RampController forgiving(StressMeasure::Work, kDefaultRampBudgetMs);
         const RampNext grown = RunStep(forgiving, 1.0, Window(1.0, 1));
         EXPECT_EQ(grown.count, 150u) << "p95 of 30 frames is the 29th: one outlier is above it";
         EXPECT_FALSE(grown.done);
 
-        RampController strict(StressMeasure::Work);
+        RampController strict(StressMeasure::Work, kDefaultRampBudgetMs);
         const RampNext failed = RunStep(strict, 1.0, Window(1.0, 2));
         EXPECT_TRUE(failed.done) << "two outliers are the 29th and the 30th: the step fails, and it was the start";
         EXPECT_EQ(strict.GetResult().objectsAt60fps, 0u);
     }
 
     TEST(StressRampTest, TheSettleFramesAreThrownAway) {
-        RampController controller(StressMeasure::Work);
+        RampController controller(StressMeasure::Work, kDefaultRampBudgetMs);
         const RampNext next = RunStep(controller, 1000.0, Window(1.0, 0));
         EXPECT_EQ(next.count, 150u) << "ten frames of 1000 ms before the window did not fail the step";
     }
 
     TEST(StressRampTest, TheStepsAndFramesAreCounted) {
-        RampController controller(StressMeasure::Work);
+        RampController controller(StressMeasure::Work, kDefaultRampBudgetMs);
         RunStep(controller, 1.0, Window(1.0, 0));
         RunStep(controller, 1.0, Window(1.0, 0));
         EXPECT_EQ(controller.GetResult().steps, 2u);
@@ -255,8 +265,8 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(StressRampTest, TheCountNearTheLimitDoesNotOverflow) {
-        // 666'667 x 1.5 is above kMaxCount: the step is clamped to it, not wrapped
-        RampController controller(StressMeasure::Work);
+        // A count above kMaxCount / kRampGrowth grows past kMaxCount: the step is clamped to it, not wrapped
+        RampController controller(StressMeasure::Work, kDefaultRampBudgetMs);
         const RampRun run = Drive(controller, [](uint32_t, uint32_t) { return 1.0; });
         uint32_t previous = 0;
         for (const uint32_t count : run.counts) {
@@ -278,7 +288,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(StressRampTest, ADoneControllerStaysDone) {
-        RampController controller(StressMeasure::Work);
+        RampController controller(StressMeasure::Work, kDefaultRampBudgetMs);
         Drive(controller, [](uint32_t, uint32_t) { return 20.0; });
         ASSERT_TRUE(controller.IsDone());
         const RampResult before = controller.GetResult();
@@ -344,7 +354,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(StressRampTest, EveryStageIsAMeanAndTheGpuTimeIsOfTheFramesThatHaveOne) {
-        RampController controller(StressMeasure::Work, kSettleFrames + kMeasureFrames);
+        RampController controller(StressMeasure::Work, kDefaultRampBudgetMs, kSettleFrames + kMeasureFrames);
         for (uint32_t i = 0; i < kSettleFrames + kMeasureFrames; ++i) {
             const bool odd = i % 2 == 1;
             StressSample sample = FrameOf(1.0);
@@ -376,6 +386,7 @@ namespace BECore::Stress::Tests {
         result.verified = true;
         result.stages = {.updateMs = 1.0, .drawMs = 2.0, .submitMs = 3.0, .presentMs = 4.0, .waitMs = 5.0, .gpuMs = 6.0};
         RampRunContext context;
+        context.budgetMs = 8.5;
         context.scene = StressScene::Entities;
         context.atlases = 4;
         context.manualClock = true;
@@ -388,7 +399,7 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetParamString(parsed.Root(), "scene").value_or(""), "entities");
         EXPECT_EQ(GetParamString(parsed.Root(), "measure").value_or(""), "cpu");
         EXPECT_EQ(GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0), 4321);
-        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "budgetMs").value_or(0.0), 16.6);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "budgetMs").value_or(0.0), 8.5);
         EXPECT_EQ(GetParamBool(parsed.Root(), "capped"), Optional(false));
         EXPECT_EQ(GetParamBool(parsed.Root(), "aborted"), Optional(false));
         EXPECT_EQ(GetParamBool(parsed.Root(), "verified"), Optional(true));

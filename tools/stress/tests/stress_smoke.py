@@ -117,8 +117,9 @@ def set_count(client: BagiControlClient, count: int) -> dict:
 
 
 def check_bad_counts(client: BagiControlClient) -> None:
-    version = client.call("get_state")["version"]
-    for bad in (0, 1_000_001, 1.5, "7", None):
+    state = client.call("get_state")
+    version = state["version"]
+    for bad in (0, state["state"]["maxCount"] + 1, 1.5, "7", None):
         expect_error("invalid_params", lambda bad=bad: client.call("perform_action", {"type": "set_count", "count": bad}), f"set_count {bad!r}")
     expect_error("invalid_params", lambda: client.call("perform_action", {"type": "set_count"}), "set_count without a count")
     expect_error("illegal_action", lambda: client.call("perform_action", {"type": "no_such_action"}), "an unknown action")

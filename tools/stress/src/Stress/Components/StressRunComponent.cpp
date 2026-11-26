@@ -80,7 +80,7 @@ namespace BECore::Stress {
     void StressRunComponent::UpdateRamp(StressGame& game) {
         const StressSettings& settings = game.GetSettings();
         if (!_ramp) {
-            _ramp.emplace(settings.measure);  // the state already shows kRampStart (StressGame)
+            _ramp.emplace(settings.measure, settings.budgetMs);  // the state already shows kRampStart (StressGame)
         }
         const FrameStats* frame = TakeNewFrame();
         if (frame == nullptr) {
@@ -124,6 +124,7 @@ namespace BECore::Stress {
         context.atlases = settings.atlases;
         context.manualClock = IsManualClock();
         context.allocTracking = AllocTracker::kEnabled;
+        context.budgetMs = settings.budgetMs;
         Print(FormatRampLine(_ramp->GetResult(), settings.measure, context));
         ApplicationEvents::QuitEvent::Emit();
     }

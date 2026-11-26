@@ -17,8 +17,6 @@ namespace BECore::Stress {
     inline constexpr double kRampGrowth = 1.5;
     /// The bisection stops when the bracket is no wider than this part of the last passing count (and no narrower than 1)
     inline constexpr double kRampPrecision = 0.02;
-    /// The frame time a step must keep: a frame that fits 60 fps (1000 / 60 = 16.67, rounded down)
-    inline constexpr double kRampBudgetMs = 16.6;
     /// The part of the measured frames that must fit the budget: the 95th percentile, nearest rank (of 30 frames the 29th: one slow frame is forgiven, two are not)
     inline constexpr double kRampPercentile = 0.95;
     /// How many times the final re-measure may fail and step the result down before the ramp gives up on verifying it
@@ -33,7 +31,7 @@ namespace BECore::Stress {
     };
 
     struct RampResult {
-        uint32_t objectsAt60fps = 0;  // the largest count whose frames fit the budget; 0 when even kRampStart does not
+        uint32_t objectsAt60fps = 0;  // the largest count whose frames fit the budget, whatever the budget; 0 when even kRampStart does not
         bool capped = false;          // kMaxCount fit: the machine is faster than the app can ask
         bool aborted = false;         // kMaxRampFrames went first: objectsAt60fps is the best count found so far
         bool verified = false;        // the count passed its own re-measure at the end
@@ -44,12 +42,12 @@ namespace BECore::Stress {
     };
 
     /**
-     * @brief The search for "objects at 60 fps": the largest count whose frames fit the budget. Pure: no clock, no scene; the caller feeds it
+     * @brief The search for the largest count whose frames fit the budget ("objects at 60 fps" with the default budget). Pure: no clock, no scene; the caller feeds it
      *        the sample of every frame and shows the count it returns.
      *
      * The algorithm, exactly (the constants above):
      * 1. Start at `kRampStart`. A **step** is `kSettleFrames` discarded frames, then `kMeasureFrames` measured; it **passes** when the
-     *    `kRampPercentile` of the measured frames (nearest rank, the function the recorder uses) is at most `kRampBudgetMs`. The p95 and not
+     *    `kRampPercentile` of the measured frames (nearest rank, the function the recorder uses) is at most the budget. The p95 and not
      *    one frame: one slow frame (the OS, a glyph page) must not end the ramp; and not the mean: a 60 fps game loses its frame to the tail.
      * 2. While a step passes the count grows by `kRampGrowth` (at least +1). A pass at `kMaxCount` ends the ramp with `capped`.
      * 3. At the first failure with a passing count `lo` behind it (`hi` the failing one) the ramp **bisects**: it measures `lo + (hi - lo) / 2` and
@@ -64,8 +62,8 @@ namespace BECore::Stress {
      */
     class RampController {
     public:
-        /// @p maxFrames is the abort limit (a test lowers it)
-        explicit RampController(StressMeasure measure, uint32_t maxFrames = kMaxRampFrames);
+        /// @p budgetMs is the frame time a step must keep, @p maxFrames the abort limit (a test lowers it)
+        RampController(StressMeasure measure, double budgetMs, uint32_t maxFrames = kMaxRampFrames);
 
         /// The count to show before the first frame
         uint32_t GetCount() const {
@@ -97,6 +95,7 @@ namespace BECore::Stress {
         void Show(uint32_t count);
 
         StressMeasure _measure;
+        double _budgetMs;
         uint32_t _maxFrames;
         Phase _phase = Phase::Growing;
         uint32_t _count = kRampStart;
@@ -121,6 +120,7 @@ namespace BECore::Stress {
         uint32_t atlases = 0;
         bool manualClock = false;
         bool allocTracking = false;
+        double budgetMs = kDefaultRampBudgetMs;
     };
 
     /**

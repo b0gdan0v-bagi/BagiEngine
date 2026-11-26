@@ -346,6 +346,21 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(_quit.count, 1);
     }
 
+    TEST_F(StressRunTest, TheBudgetFlagIsWhatTheRampHoldsAndItsLineNames) {
+        constexpr double kMsPerObject = 0.055;  // 33 / 0.055 = 600
+        StartRamp({"--stress-budget-ms=33"});
+
+        RampFramesUntilDone(kMsPerObject);
+
+        ASSERT_EQ(_lines.size(), 1u);
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed()) << _lines[0].c_str();
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "budgetMs").value_or(0.0), 33.0);
+        const int64_t found = GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0);
+        EXPECT_LE(found, 600);
+        EXPECT_GE(found, 575);
+    }
+
     TEST_F(StressRunTest, TheRampHoldsToTheWorkTimeUnlessTheCpuTimeIsAsked) {
         // A frame whose present alone is over the budget: the work time (cpu without the present) is what the ramp judges by default
         StartRamp();

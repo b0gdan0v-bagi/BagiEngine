@@ -41,7 +41,7 @@ namespace BECore::Stress {
 
     }  // namespace
 
-    RampController::RampController(StressMeasure measure, uint32_t maxFrames) : _measure(measure), _maxFrames(maxFrames) {}
+    RampController::RampController(StressMeasure measure, double budgetMs, uint32_t maxFrames) : _measure(measure), _budgetMs(budgetMs), _maxFrames(maxFrames) {}
 
     RampNext RampController::OnFrame(const StressSample& sample) {
         if (_phase == Phase::Done) {
@@ -70,7 +70,7 @@ namespace BECore::Stress {
         eastl::sort(sorted.begin(), sorted.end());
         _stepCount = _count;
         _stepStages = _stepSum.Mean();
-        OnStepEnd(NearestRank(sorted, kRampPercentile) <= kRampBudgetMs);
+        OnStepEnd(NearestRank(sorted, kRampPercentile) <= _budgetMs);
         if (_stepCount == _lo) {
             _loStages = _stepStages;
         }
@@ -151,7 +151,7 @@ namespace BECore::Stress {
         AddBool(line, "aborted", result.aborted);
         AddBool(line, "allocTracking", context.allocTracking);
         AddInteger(line, "atlases", context.atlases);
-        AddNumber(line, "budgetMs", kRampBudgetMs);
+        AddNumber(line, "budgetMs", context.budgetMs);
         AddBool(line, "capped", result.capped);
         AddNumber(line, "drawMs", result.stages.drawMs);
         AddInteger(line, "frames", result.frames);

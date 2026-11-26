@@ -34,6 +34,7 @@ def make_args(*argv: str) -> argparse.Namespace:
         trace=None,
         backend=stress_frames.DEFAULT_BACKEND,
         no_batching=False,
+        budget_ms=None,
     )
     for item in argv:
         name, _, value = item.partition("=")
@@ -57,6 +58,11 @@ def test_a_ramp_passes_neither_the_count_nor_the_frames():
 def test_no_batching_is_a_flag_of_the_game():
     assert "--stress-no-batching" in stress_frames.stress_flags(make_args("--no-batching"))
     assert "--stress-no-batching" not in stress_frames.stress_flags(make_args())
+
+
+def test_the_budget_of_a_ramp_is_passed_only_when_asked_for():
+    assert "--stress-budget-ms=8.3" in stress_frames.stress_flags(make_args("--ramp", "--budget-ms=8.3"))
+    assert not any(flag.startswith("--stress-budget-ms") for flag in stress_frames.stress_flags(make_args("--ramp")))
 
 
 def test_the_software_backend_is_the_headless_run_and_a_gpu_backend_a_hidden_window():
