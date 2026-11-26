@@ -68,6 +68,8 @@ python3 tools/todo/todo.py history <id>
 python3 tools/todo/todo.py dep add|rm|list|graph ...              # <id> waits until each blocker is closed
 python3 tools/todo/todo.py dashboard [--area A]                   # the address of the pages
 python3 tools/todo/todo.py export --out DIR                       # a backup outside git, old file format
+python3 tools/todo/todo.py stats list [--area A] [--since YYYY-MM] [--entry ID]  # the entry cost records, newest first
+python3 tools/todo/todo.py stats report [--area A] [--since YYYY-MM]  # per area and month: cost, role shares, reviews
 python3 tools/todo/todo.py version get [--counter C]              # the counter and the numbers it gave
 python3 tools/todo/todo.py version next --bump minor|patch --entry <id> [--counter C]  # prints the number alone
 python3 tools/todo/todo.py version set <v> --expected <old|none>  # the owner's token only
@@ -98,6 +100,9 @@ python3 tools/todo/worker.py queue [k] [--add id [--first] [--by-loop] | --remov
 python3 tools/todo/worker.py overlap <id>  # busy entries whose plans name its files
 python3 tools/todo/worker.py prefs | dispatch --json [k ...]   # the owner's preferences and the one read of /todo-dispatch
 python3 tools/todo/worker.py build-info | cost <id> | remarks <id> --file F|- [--start]
+python3 tools/todo/worker.py stats entry|record <branch-id> [--entry ID]  # a branch's token cost: look | into the store; run where the loops ran
+python3 tools/todo/worker.py stats backfill [--since YYYY-MM-DD]  # record each branch of the transcripts the store lacks
+python3 tools/todo/worker.py stats import [--dir DIR]  # once per machine: old ~/.claude/todo/tokstats records into the store
 python3 tools/todo/worker.py doctor [k] [--fix K] | merge-train [--dry-run] | busy | day | timeline | review-stats | machine  # the panel's
 ```
 
