@@ -156,4 +156,15 @@ Counting allocations costs nothing measurable on one thread (the replacement cal
 Use them on a `macos-profile` or Release build when the zones show a slow stage but not why, or for code without zones.
 
 - **macOS, Instruments Time Profiler:** `xcrun xctrace record --template 'Time Profiler' --launch -- build/macos-profile/bin/BagiStress`, then open the `.trace` in Instruments. Allocations: the `Allocations` template. An `os_signpost` backend that would show the zones inside Instruments is not built (a later entry may add it).
+- **macOS, `sample`** (nothing to install; a Release build keeps the function names, an inlined function counts in its caller). A game without a window, uncapped:
+
+  ```bash
+  cd build/macos-release/bin
+  ./BagiStress --control --control-port=0 --hidden-window --backend=vulkan --stress-scene=sprites --stress-count=500000 > /tmp/game.log 2>&1 &
+  sleep 8   # the scene is built and the frames are steady
+  sample $! 10 -mayDie -file /tmp/sample.txt
+  kill $!
+  ```
+
+  The end of the file ("Sort by top of stack") is the self time per function, the call tree above it gives a subtree's total: the draw pass is `SceneDrawSystem::Run` less the `IRenderer::Flush` calls under it (the submissions). A leaf's samples can include its wait for values the caller loaded, so read neighbouring functions as one step.
 - **Windows, Visual Studio:** Debug > Performance Profiler > CPU Usage on a Release build (or ETW with Windows Performance Recorder / WPA for whole-system views).
