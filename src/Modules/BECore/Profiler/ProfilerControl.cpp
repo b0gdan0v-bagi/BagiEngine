@@ -53,6 +53,7 @@ namespace BECore {
             writer.Member("drawCalls", stats.draws.drawCalls);
             writer.Member("frame", stats.frame);
             writer.Member("frameMs", stats.frameMs);
+            writer.Member("gpuMs", stats.gpuMs);
             writer.Member("liveBytes", stats.liveBytes);
             writer.Member("paused", stats.paused);
             writer.Member("poolLiveBlocks", stats.poolLiveBlocks);

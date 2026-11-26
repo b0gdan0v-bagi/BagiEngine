@@ -1,3 +1,5 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
 #include <Generated/IRenderer.gen.hpp>
@@ -185,7 +187,13 @@ namespace BECore {
             return;
         }
         CountSubmission(_batch.texture.Get());
-        SubmitBatch(_batch);
+        {
+            Optional<FrameStatsCollector::StageScope> timed;
+            if (_countersPaused == 0) {
+                timed.emplace(CoreManager::GetFrameStats(), FrameStage::Submit);
+            }
+            SubmitBatch(_batch);
+        }
         _batch.Reset();
     }
 
