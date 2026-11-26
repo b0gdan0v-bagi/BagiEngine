@@ -29,6 +29,8 @@ namespace BECore {
         constexpr StringView kBridgeLog = "artgen-bridge.log";
         constexpr StringView kNotConnectedText = "The generation service is not connected";
         constexpr StringView kStartingText = "Starting the generation service...";
+        constexpr StringView kRunProgressText = "Generating art";
+        constexpr StringView kSetProgressText = "Generating an art set";
         constexpr StringView kStartControlTip = "Turn on the editor's control API and run the generation service for it; it stops when the editor closes";
         constexpr StringView kStartBridgeTip = "Run tools/artgen/artgen_bridge.py of the engine for this editor; it stops when the editor closes";
 
@@ -109,6 +111,28 @@ namespace BECore {
         session.SetAcceptBatch(&BeginAcceptBatch, &EndAcceptBatch);
         session.RegisterControl(_services.control != nullptr ? *_services.control : CoreManager::GetControlService());
         _slots.Register();
+        _progressSource = EditorProgressRegistry::GetInstance().Register([this] { return ReadProgress(); });
+    }
+
+    Optional<EditorProgress> ArtGenPanelModel::ReadProgress() {
+        const ArtGenSession& session = GetSession();
+        // With no service nothing is worked on: a queued request waits for one, and a service that fell silent reports no more
+        if (!session.IsServiceConnected()) {
+            return {};
+        }
+        if (session.IsSetupBusy()) {
+            const ArtGenSetup& setup = session.GetSetup();
+            return EditorProgress{DoingOf(setup.action), setup.GetFraction()};
+        }
+        if (!session.IsRunInWork()) {
+            return {};
+        }
+        const ArtGenRun& run = session.GetRun();
+        EditorProgress progress{run.setName.empty() ? kRunProgressText : kSetProgressText, {}};
+        if (run.state == ArtGenRunState::Running) {
+            progress.fraction = run.GetFraction();
+        }
+        return progress;
     }
 
     TypedRef ArtGenPanelModel::GetObject() {
@@ -264,9 +288,10 @@ namespace BECore {
             SetText(view.doing, DoingOf(setup.action));
             view.current = setup.current;
             view.hasCurrent = !setup.current.empty();
-            view.hasProgress = setup.total > 0;
-            if (view.hasProgress) {
-                view.progress = static_cast<float>(static_cast<double>(setup.done) / static_cast<double>(setup.total));
+            const Optional<float> fraction = setup.GetFraction();
+            view.hasProgress = fraction.has_value();
+            if (fraction) {
+                view.progress = *fraction;
                 view.progressText = Format("{:.0f} / {:.0f} MB", static_cast<double>(setup.done) / kBytesPerMegabyte, static_cast<double>(setup.total) / kBytesPerMegabyte);
             }
             view.log = setup.log;

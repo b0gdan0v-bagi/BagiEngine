@@ -66,13 +66,13 @@ The control API cannot drop a handler and the panel is re-created at every switc
 - **Tabs.** Above them, shared: the service line, setup and the preset form. Each tab owns its controls: **Generate** the run form and the run view; **Set** (`ArtGenSetPanel`) the queue and the sets (`Sets/CLAUDE.md`, "The panel"). Generate is off while a set runs.
 - **The preset form** (`ArtGenPresetForm`): the combo lists the game's presets, then the engine's starters, a broken one with its error; picking one drops unsaved edits (marked `*`). Save makes a starter the game's copy. Its Settings: the size, the workflow's inputs from the service's description and, for an image workflow, "Accept (image)" and "Reference" (`Reference/CLAUDE.md`).
 - **Start the service** first turns the control API on when it is off (`ApplicationEvents::StartControlServerRequestEvent`), then, once it listens, runs the bridge of the engine checkout (`ArtGenLaunch`); its log is `artgen-bridge.log` in the editor's user folder.
-- **Set up** (`not_installed`) shows the service's plan; **Download and install** runs it with a progress bar and Cancel; Not now forgets it. **Start** (`not_running`) starts the local generator; **Stop ComfyUI** is there only for a generator started from the panel (`startedHere`). **Disconnect** stops the service itself (`RequestServiceStop`).
+- **Set up** (`not_installed`) shows the service's plan, then **Download and install** or Not now. **Start** (`not_running`) starts the local generator; **Stop ComfyUI** only for one started from the panel (`startedHere`). **Disconnect** stops the service itself.
+- A run or a setup action is in the status bar's progress strip, panel open or not (`ReadProgress`; `src/Widgets/Feedback/CLAUDE.md`).
 - Thumbnails are loaded from the reported paths and **evicted** when the run is replaced or the model dies.
 - **Sounds.** A run of sound variants (`kind` audio) is a list instead of the grid: Play / Stop of each (a FLAC as an `AudioClip` on the `Ui` bus, evicted with the run). One sound plays at a time.
 - **The verdict mark** (thumbnails sit on a checkerboard): an image thumbnail of the grid and of a Set row has a mark in its top-right corner from `checks` of its provenance file, read once when the thumbnail loads (`ArtGenVerdict`): passed, failed (the tooltip names the checks), unreadable (`passed: null`); a sound or a file without `checks` has none.
 - **Reference** (`Reference/CLAUDE.md`; Generate tab, image presets only). The workflow combo leaves out the variants a map reaches.
 - **Drag out.** An image variant of the grid and of a Set row is a drag source (a click still selects). The payload names the variant, never its file. A target plans with `PlanArtGenDrop` and emits `ArtGenVariantDropEvent`; the model answers, also while the window is closed, with the form's accept settings (a set's variant: `AcceptSetVariant`, the manifest untouched) and the Accept message (`TextureEditor/CLAUDE.md`, "Drop of a generated variant").
-- A click picks a variant; its dice puts its seed into the run form.
 
 ## Accept
 

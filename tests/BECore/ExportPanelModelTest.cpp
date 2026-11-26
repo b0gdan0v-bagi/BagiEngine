@@ -470,4 +470,36 @@ namespace BECore::Tests {
         });
     }
 
+    TEST_F(ExportPanelModelTest, TheProgressSourceTakesTheEndOfTheExportWhileTheWindowIsClosed) {
+        _model->Initialize();
+        EditorProgressRegistry& progress = EditorProgressRegistry::GetInstance();
+        EXPECT_FALSE(progress.Collect().first);
+
+        Run(EditorCommandIds::kExportStart);
+        _model->OnOpenChanged(false);
+        const EditorProgressSummary running = progress.Collect();
+        ASSERT_TRUE(running.first);
+        EXPECT_EQ(running.first->label, "Exporting");
+        EXPECT_FALSE(running.first->fraction);
+
+        _fixture.launcher.End(0, "== export ok: /pkg\n");
+
+        EXPECT_FALSE(progress.Collect().first);
+        EXPECT_EQ(_model->GetState(), ExportState::Succeeded);
+    }
+
+    TEST_F(ExportPanelModelTest, ACancelledExportSaysSoInTheStripAndTheModelsEndRemovesItsSource) {
+        _model->Initialize();
+        EditorProgressRegistry& progress = EditorProgressRegistry::GetInstance();
+        Run(EditorCommandIds::kExportStart);
+        Run(EditorCommandIds::kExportCancel);
+
+        const EditorProgressSummary cancelling = progress.Collect();
+        ASSERT_TRUE(cancelling.first);
+        EXPECT_EQ(cancelling.first->label, "Cancelling the export");
+
+        _model.reset();
+        EXPECT_FALSE(progress.Collect().first);
+    }
+
 }  // namespace BECore::Tests

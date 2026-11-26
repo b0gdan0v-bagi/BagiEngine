@@ -14,7 +14,7 @@ The script is found among the content roots and run by the Python of `Widgets/Ed
 
 ## Process
 
-- **Output goes to a file, not a pipe**: nobody reads while the panel is closed, and a full pipe would stop the build. Both streams share the handle, so their lines stay in order.
+- **Output goes to a file, not a pipe**: nobody need read while the panel is closed, and a full pipe would stop the build. Both streams share the handle, so their lines stay in order.
 - **Cancel** writes `cancel` to the script's input and closes it; the script then stops the whole build. The script is killed only after `kExportKillGraceMs`, longer than the grace it gives the build, and only from `Poll`. Destroying a running process cancels it and does not wait, so a mode switch never blocks.
 - Not an SDL background process: that one has no exit code.
 
@@ -27,7 +27,7 @@ The script is found among the content roots and run by the Python of `Widgets/Ed
 ## Model
 
 - One export at a time: `export.start` does nothing while one runs. The exit code decides the state; a cancelled script that was killed has none of its own and counts as cancelled.
-- **Lifetime.** The model owns the process. Closing the window keeps the export running (the next `Update` takes its end and the rest of the log); destroying the model, which a switch to Game mode does, cancels it.
+- **Lifetime.** The model owns the process. Closing the window keeps the export running: the progress source of the status bar (`PollProgress`; `src/Widgets/Feedback/CLAUDE.md`), else the next `Update`, takes its end and the rest of the log; destroying the model, which a switch to Game mode does, cancels it.
 - **The log** is `export.log` in the editor's user folder, removed and made again by each start, so a cancelled export that is still ending writes on into its own file. Two editors share the name.
 - `export.run` of a desktop result starts the package through the script and does not follow it: only a script that cannot be started is reported. What counts is the platform the export was started with, not the choice now.
 - An unsaved editor document shows a line and does not block the export, which reads the saved files. Documents are asked and the scenes listed when the window opens, when the pointer comes back to it and at a start, not each frame (both allocate).

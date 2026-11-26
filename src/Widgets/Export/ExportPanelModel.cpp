@@ -24,6 +24,8 @@ namespace BECore {
 
         constexpr StringView kLogName = "export.log";
         constexpr StringView kServeLogName = "export-serve.log";
+        constexpr StringView kExportingProgressText = "Exporting";
+        constexpr StringView kCancellingProgressText = "Cancelling the export";
         constexpr StringView kBlanks = " \t";
 
         std::expected<void, String> OpenWithSystem(StringView url) {
@@ -93,6 +95,7 @@ namespace BECore {
 
     void ExportPanelModel::Initialize() {
         _slots.Register();
+        _progressSource = EditorProgressRegistry::GetInstance().Register([this] { return PollProgress(); });
     }
 
     TypedRef ExportPanelModel::GetObject() {
@@ -103,15 +106,7 @@ namespace BECore {
         if (_editorStale) {
             RefreshFromEditor();
         }
-        if (_process) {
-            // Asked before the log is read: all a process wrote before it ended is in the file by now
-            if (const Optional<int> code = _process->Poll()) {
-                _log.Finish();
-                Finish(*code);
-            } else {
-                _log.Read();
-            }
-        }
+        PollExport();
         if (_server) {
             if (const Optional<int> code = _server->Poll()) {
                 _serveLog.Finish();
@@ -121,6 +116,28 @@ namespace BECore {
             }
         }
         SyncView();
+    }
+
+    void ExportPanelModel::PollExport() {
+        if (!_process) {
+            return;
+        }
+        // Asked before the log is read: all a process wrote before it ended is in the file by now
+        if (const Optional<int> code = _process->Poll()) {
+            _log.Finish();
+            Finish(*code);
+        } else {
+            _log.Read();
+        }
+    }
+
+    Optional<EditorProgress> ExportPanelModel::PollProgress() {
+        PollExport();
+        if (!_process) {
+            return {};
+        }
+        // The script's output has no reliable total, so there is no fraction
+        return EditorProgress{_cancelRequested ? kCancellingProgressText : kExportingProgressText, {}};
     }
 
     void ExportPanelModel::OnOpenChanged(bool open) {

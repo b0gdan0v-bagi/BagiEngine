@@ -9,6 +9,7 @@
 #include <Widgets/Export/ExportLaunch.h>
 #include <Widgets/Export/ExportLog.h>
 #include <Widgets/Export/ExportSlots.h>
+#include <Widgets/Feedback/EditorProgress.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <cstdint>
 #include <expected>
@@ -105,8 +106,9 @@ namespace BECore {
     /**
      * @brief The model of the Export window: starts the export, follows its output and offers the result, with no ImGui
      *
-     * One export at a time. The process runs on while the panel is closed; its end and the rest of its output are taken at the next `Update`. Destroying
-     * the model (a switch to Game mode) cancels it. The exit code of the script decides the state. A steady `Update` with no new output allocates nothing.
+     * One export at a time. The process runs on while the panel is closed; its end and the rest of its output are taken by the next `Update` or
+     * `PollProgress`. Destroying the model (a switch to Game mode) cancels it. The exit code of the script decides the state. A steady `Update` with no
+     * new output allocates nothing.
      * The documents are asked for unsaved changes and the scenes are listed when the panel opens, when the pointer comes back to it and when an export
      * starts. The assets are checked on command and at each start; a finding never stops an export.
      *
@@ -126,12 +128,15 @@ namespace BECore {
 
         ExportPanelModel();
 
-        /// Registers the slot that draws the output; called once by the widget that hosts the model
+        /// Registers the slot that draws the output and the progress source; called once by the widget that hosts the model
         void Initialize() override;
         [[nodiscard]] TypedRef GetObject() override;
         void Update() override;
         void OnOpenChanged(bool open) override;
         bool RunCommand(StringView id, StringView argument) override;
+
+        /// Takes the end and the new output of the export, so it holds while the panel is closed; the export that runs then, if one does
+        [[nodiscard]] Optional<EditorProgress> PollProgress();
 
         /// Starts processes with @p launcher instead of SDL; it must outlive the model
         void SetLauncher(IExportLauncher& launcher) {
@@ -194,6 +199,8 @@ namespace BECore {
         /// What `Start` does once nothing runs; the error is why no process was started
         [[nodiscard]] std::expected<void, String> Launch();
         void Cancel();
+        /// Reads the new output of the export, and its end once it has one
+        void PollExport();
         void OpenFolder();
         void RunPackage();
         /// Starts the server of the web result
@@ -250,6 +257,7 @@ namespace BECore {
         bool _cancelRequested = false;
         bool _editorStale = true;
         bool _pointerOver = false;
+        EditorProgressHandle _progressSource;
     };
 
 }  // namespace BECore

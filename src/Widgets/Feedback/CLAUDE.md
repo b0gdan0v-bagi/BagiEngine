@@ -8,6 +8,7 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 | `ToastList.{h,cpp}` | the toasts that live now: bounded, merged, ageing, fading; no ImGui |
 | `ToastFeed.{h,cpp}` | what fills the list from events and the control journal; no ImGui |
 | `ToastOverlay.{h,cpp}` | the toasts on screen; ImGui |
+| `EditorProgress.{h,cpp}` | `EditorProgressRegistry`: the sources of the status bar's progress strip; no ImGui |
 
 ## Toasts
 
@@ -24,3 +25,11 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 - A card is **one line**: the first of its text, drawn unformatted (it may hold client text) and cut with an ellipsis.
 - The toasts age by `io.DeltaTime`, so on the manual clock only a `step` moves them.
 - Tests: `ToastListTest` (the list and the feed), `ToastOverlayTest` (a context with no backend). The look is not covered.
+
+## Progress strip
+
+- An owner of an operation that spans frames registers a source and keeps the handle; the source ends with it. `StatusBar` asks every source once per frame and shows the first operation, in the order of registration, with "+N" for the others.
+- **A source tells the truth while its panel is closed**, where the model's `Update` does not run: it takes the end of its operation itself. The export's polls its process there, which is also what lets a cancelled script be killed.
+- Sources: `ExportPanelModel` (no fraction: the build's output has no reliable total) and `ArtGenPanelModel` (a setup action, else a run; nothing while no service is connected). Their tests are with the models' own.
+- A load that blocks inside one frame has no source, since nothing can be drawn meanwhile; an asynchronous one registers its own.
+

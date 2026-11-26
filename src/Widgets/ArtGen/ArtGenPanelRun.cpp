@@ -176,8 +176,7 @@ namespace BECore {
         view.isSetJob = !run.setName.empty();
         view.setJobText = view.isSetJob ? Format("job {} of set {} (see the Set tab)", run.jobName, run.setName) : String();
         const int32_t made = static_cast<int32_t>(run.variants.size()) - run.keptVariants;
-        const float perImage = run.steps > 0 ? static_cast<float>(run.step) / static_cast<float>(run.steps) : 0.0f;
-        view.progress = run.count > 0 ? (static_cast<float>(made) + perImage) / static_cast<float>(run.count) : 0.0f;
+        view.progress = run.GetFraction();
         view.progressText = run.state == ArtGenRunState::Running ? Format("image {} of {}, step {} of {}", made + 1, run.count, run.step, run.steps) : String();
         view.doneText = run.state == ArtGenRunState::Done ? Format("{} image(s) of \"{}\"", run.variants.size(), run.subject) : String();
         view.failedText = run.state == ArtGenRunState::Failed ? Format("Failed: {}", run.error) : String();
