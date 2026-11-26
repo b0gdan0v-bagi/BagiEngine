@@ -43,6 +43,7 @@ NAME_FIELD = "##node_name"
 LAYER_FIELD = "##node_layer"
 PALETTE_QUERY_FIELD = "##query"
 PALETTE_LIST_CHILD = "##list"
+PALETTE_POPUP = "##Popup"  # starts the palette's window name; a panel may have a child called `##list` too (the Config Editor)
 PALETTE_CHORD = ("P", ("ctrl",))  # `view.commandPalette`, rebindable
 GAME_PANEL_CHORD = ("G", ("ctrl", "shift"))  # `view.game`, rebindable
 PALETTE_ESCAPES = 2  # the first Escape leaves the focused query field, the second closes the popup
@@ -130,9 +131,9 @@ def panel_open(session: Any, title: str) -> bool:
 
 
 def view_menu_items(session: Any) -> list[str]:
-    """The labels of the View menu in the order it lists them; the menu is closed again (Escape) when this returns."""
+    """The names of the View menu's items in the order it lists them (a label without its `###<id>`); the menu is closed again (Escape) when this returns."""
     click_item(session, find_item(session, label=MENU_BAR_VIEW))
-    labels = [item["label"] for item in find_items(session, VIEW_MENU_WINDOW) if item["label"]]
+    labels = [item["label"].split("##")[0] for item in find_items(session, VIEW_MENU_WINDOW) if item["label"]]
     session.imgui_key("Escape")
     return labels
 
@@ -358,7 +359,8 @@ def open_palette(session: Any) -> None:
 
 def palette_rows(session: Any) -> list[str]:
     """The commands the open palette lists, in order."""
-    return [item["label"] for item in find_items(session, child=PALETTE_LIST_CHILD) if item["label"] and item["visible"]]
+    rows = find_items(session, child=PALETTE_LIST_CHILD)
+    return [item["label"] for item in rows if item["window"].startswith(PALETTE_POPUP) and item["label"] and item["visible"]]
 
 
 def close_palette(session: Any) -> None:
