@@ -9,6 +9,7 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/PanelAssets/PanelSlots.h>
+#include <Widgets/RemoteEditor/RemoteSceneView.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/ISceneEditorHost.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
@@ -23,6 +24,7 @@ namespace pugi {
 
 namespace BECore {
 
+    class ConfigManager;
     class UICanvasComponent;
 
     namespace SceneEvents {
@@ -32,6 +34,9 @@ namespace BECore {
     /**
      * @brief ImGui panel for live scene editing: the hierarchy tree on the left, the inspector of the selected node
      * and its components on the right. Edits apply at once, without staging. It is the `ISceneEditorHost` of the models of its panel assets.
+     *
+     * In remote mode (`RemoteSessionRegistry::GetRemote`) it shows the attached program through `RemoteSceneView`, holds no node of the local scene,
+     * ignores what would edit or save it, and keeps its unsaved flag for the return.
      */
     class SceneEditorWidget : public IWidget, public ISceneEditorHost {
         BE_CLASS(SceneEditorWidget)
@@ -41,6 +46,11 @@ namespace BECore {
         ~SceneEditorWidget() override;
 
         bool Initialize(IDeserializer& deserializer) override;
+
+        /// Save writes into @p manager instead of the program's, which a test must not make write a shipped file; it must outlive the widget
+        void SetConfigManager(ConfigManager& manager) {
+            _configManager = &manager;
+        }
 
         /// The scene and the node files with unsaved changes, for `editor_state` (`.claude/rules/control-editor-api.md`); nothing without an active scene
         void AppendDocuments(Vector<EditorDocumentState>& out);
@@ -120,8 +130,14 @@ namespace BECore {
         /// `SceneDialogsModel` by SceneAddNodeRequestEvent)
         void ApplyHierarchyAnswers(Scene& scene);
 
+        /// Lets go of the nodes of the local scene and tells the other panels so: the editor has entered remote mode
+        void ForgetLocalSelection();
+
+        [[nodiscard]] ConfigManager& Configs() const;
+
         /// The slot `sceneComponents` of the inspector bar: the components of the selected node with their remove buttons, the "UI elements" section and the
-        /// inspectors, disabled for a locked node. Drawn directly when no inspector bar is registered, so a game without its asset line keeps the component list
+        /// inspectors, disabled for a locked node; in remote mode the list of `RemoteSceneView`. Drawn directly when no inspector bar is registered, so a game
+        /// without its asset line keeps the component list
         void DrawComponents();
 
         /**
@@ -131,7 +147,7 @@ namespace BECore {
          */
         void SaveScene();
 
-        /// The primary node when the active scene is the one the selection belongs to and the node is alive in its tree, else null. The models of the
+        /// The primary node when the active scene is the one the selection belongs to and the node is alive in its tree, else null; null in remote mode. The models of the
         /// panel assets are updated before this widget, so its own Update has not yet dropped a node that died or a scene that was replaced
         [[nodiscard]] SceneNode* FindInspected() const;
 
@@ -145,7 +161,10 @@ namespace BECore {
         SceneNode* _uiSelectionNode = nullptr;                 // the node whose canvas `_selectedUIElement` belongs to
         IntrusivePtr<UIElement> _selectedUIElement;            // held, so that a tree edit cannot leave it dangling
         UINodeFileSession _uiFileSession;                      // the elements changed since the last save, whose rects go into their node files
-        IntrusivePtr<UIElement> _inexactUIElement;             // the element whose last edit the layout limits kept from being exact (the inspector warns)
+        RemoteSceneView _remoteView;
+        bool _showsRemote = false;                  // the local selection was dropped for the remote mode that is on
+        ConfigManager* _configManager = nullptr;    // null: the program's
+        IntrusivePtr<UIElement> _inexactUIElement;  // the element whose last edit the layout limits kept from being exact (the inspector warns)
         bool _isDirty = false;
         bool _focusRequested = false;  // a reveal was asked for: the window comes to the front on the next Update (never inside the event), so a background dock tab shows the hierarchy
 

@@ -27,6 +27,13 @@ namespace BECore {
         BE_REFLECT_FIELD bool multiSelection = false;
         BE_REFLECT_FIELD String multiText;
         BE_REFLECT_FIELD bool locked = false;
+        /// The name, the layer or the node's components take no edit: the node is locked, or the host says so
+        BE_REFLECT_FIELD bool nameReadOnly = false;
+        BE_REFLECT_FIELD bool layerReadOnly = false;
+        BE_REFLECT_FIELD bool structureReadOnly = false;
+        /// An attached program refused the last edit
+        BE_REFLECT_FIELD bool hasRefusal = false;
+        BE_REFLECT_FIELD String refusalText;
         BE_REFLECT_FIELD String name;
         BE_REFLECT_FIELD int32_t layer = 0;
         /// The node is an instance of a node file
@@ -40,7 +47,7 @@ namespace BECore {
      * `Update` **applies before it refreshes**: a `name` or `layer` that differs from what the model last showed is the user's edit and goes to the host
      * (the name at every change, as a live field), then the view is copied from the host. `SceneNodeSelectedEvent` refreshes the view at once and drops an
      * edit not yet applied, so a new selection never shows, or receives, the old node's fields. With no host the view is every default (no selection).
-     * The texts are made again only when the selection count or the node file changed, so a steady `Update` allocates nothing.
+     * The texts are made again only when the selection count, the node file or the refusal changed, so a steady `Update` allocates nothing.
      */
     class SceneEditorPanelModel : public IPanelModel, public SubscriptionHolder {
         BE_CLASS(SceneEditorPanelModel)
@@ -65,10 +72,13 @@ namespace BECore {
         void Refresh(const ISceneEditorHost* host);
 
         SceneEditorPanelView _view;
-        PoolString _shownName;       // the name the view last got from the host: a `name` that differs is the user's
+        String _shownName;           // the name the view last got from the host: a `name` that differs is the user's
         int32_t _shownLayer = 0;     // the same for `layer`
         size_t _shownCount = 0;      // the selection count `multiText` was made for
         PoolString _shownSourceRef;  // the node file `instanceText` was made for
+        // What `refusalText` was made for
+        String _shownRefusalCode;
+        String _shownRefusalMessage;
     };
 
 }  // namespace BECore

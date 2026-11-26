@@ -12,6 +12,7 @@
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/RemoteEditor/RemoteLinkStatus.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportInput.h>
@@ -45,6 +46,7 @@ namespace BECore {
     // image has an editor camera (ViewportCamera), a drag on empty ground draws a rubber band, and the gizmo
     // (ViewportGizmos) moves, turns and scales the selected nodes; its keys are read here and handed to the toolbar's model, which runs its commands.
     // The selected canvas element (UIElementSelectedEvent) gets eight handles and an anchor widget (ViewportUIGizmos): a drag writes its style.rect and tells UIRectDragEvent.
+    // In remote mode (RemoteSessionRegistry::GetRemote) the window holds no image: no scene pass, no input to the game, no drag, only the state of the link.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -62,6 +64,12 @@ namespace BECore {
         bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
         /// The "Viewport" window: toolbar, image, overlays and input
         void DrawViewportWindow();
+
+        /// Ends whatever of the pointer and the keys is going on over the local scene: a gizmo or UI drag is cancelled, held presses are forgotten
+        void DropLocalInput();
+
+        /// The "Viewport" window in remote mode
+        void DrawRemoteWindow(const RemoteSession& session);
 
         // The grid preference of the editor (EditorLayoutWidget sends it on its first frame and on every change)
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
@@ -135,6 +143,7 @@ namespace BECore {
         bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)
         ViewportBoxSelect _boxSelect;
         ViewportPointer _pointer;  // the held presses and where each goes
+        RemoteLinkStatus _remoteLink;
     };
 
 }  // namespace BECore

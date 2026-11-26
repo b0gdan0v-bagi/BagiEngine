@@ -51,6 +51,10 @@ namespace BECore {
             return _session;
         }
 
+        /// The registered session while it is in remote mode (any state but `Detached`), else null. While there is one, the panels of the scene
+        /// leave the scene of this process alone
+        [[nodiscard]] RemoteSession* GetRemote() const;
+
         /// True for the first caller only: the program's `--attach` is for its start, not for the widgets a later mode switch makes
         [[nodiscard]] bool TakeStartAttach();
 

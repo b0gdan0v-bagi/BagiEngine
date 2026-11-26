@@ -17,7 +17,7 @@ namespace BECore::Tests {
         void RenameInspected(StringView name) override {
             renames.emplace_back(name.data(), name.size());
             if (inspected.hasSelection && !inspected.locked) {
-                inspected.name = PoolString::Intern(name);
+                inspected.name = PoolString::Intern(name).ToStringView();
                 inspected.dirty = true;
             }
         }
@@ -36,7 +36,7 @@ namespace BECore::Tests {
             inspected.hasScene = true;
             inspected.hasSelection = true;
             inspected.selectionCount = 1;
-            inspected.name = PoolString::Intern(name);
+            inspected.name = PoolString::Intern(name).ToStringView();
         }
 
         SceneInspectedNode inspected;

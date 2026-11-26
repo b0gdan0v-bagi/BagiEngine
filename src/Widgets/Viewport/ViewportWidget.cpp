@@ -14,9 +14,11 @@
 #include <Generated/ViewportEvents.gen.hpp>
 #include <Generated/ViewportWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelBars.h>
+#include <Widgets/RemoteEditor/RemoteSessionRegistry.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
@@ -125,7 +127,15 @@ namespace BECore {
 
     void ViewportWidget::Update() {
         BE_PROFILE_SCOPE("ViewportWidget::Update");
+        const RemoteSession* const remote = RemoteSessionRegistry::GetInstance().GetRemote();
+        if (remote != nullptr) {
+            DropLocalInput();
+        }
         if (!_open) {
+            return;
+        }
+        if (remote != nullptr) {
+            DrawRemoteWindow(*remote);
             return;
         }
         DrawViewportWindow();
@@ -134,6 +144,26 @@ namespace BECore {
         if (toolbar.GetPreview().overlays.findings && !_uiDebug.DrawFindingsWindow()) {
             toolbar.ClearFindingsOverlay();
         }
+    }
+
+    void ViewportWidget::DropLocalInput() {
+        SceneManager* const sceneManager = CoreManager::FindSceneManager();
+        Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
+        _gizmos.AbortDrag(scene);
+        _uiGizmos.AbortDrag(scene);
+        _boxSelect.Cancel();
+        _cameraInput.Cancel();
+        _pointer.Reset();
+        _frameRequested = false;
+    }
+
+    void ViewportWidget::DrawRemoteWindow(const RemoteSession& session) {
+        ImGui::SetNextWindowSize({800.0f, 600.0f}, ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Viewport", &_open)) {
+            _remoteLink.Update(session);
+            EmptyState(_remoteLink.IsTroubled() ? ICON_LC_UNPLUG : ICON_LC_PLUG, _remoteLink.GetText().c_str());
+        }
+        ImGui::End();
     }
 
     void ViewportWidget::DrawViewportWindow() {

@@ -3,7 +3,7 @@
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
-#include <Widgets/RemoteEditor/RemoteSession.h>
+#include <Widgets/RemoteEditor/RemoteLinkStatus.h>
 
 namespace BECore {
 
@@ -35,8 +35,7 @@ namespace BECore {
     /**
      * @brief The model of the Attach panel: starts and ends the link of the registered `RemoteSession` and says how it is
      *
-     * It does not poll the session (`RemoteSessionWidget` does). The sentences are made again only when the state, the stall, the address or
-     * the reason changed.
+     * It does not poll the session (`RemoteSessionWidget` does). The view is written again only when the sentence of the link changed.
      *
      * Commands (`EditorCommandIds`): `remote.attach` (the button and the input's `submitCommand`) and `remote.detach`.
      */
@@ -57,15 +56,9 @@ namespace BECore {
     private:
         void Attach();
         void SetError(StringView error);
-        /// Makes `status`, `troubled` and the buttons from @p session
-        void Describe(const RemoteSession& session);
 
         AttachPanelView _view;
-        // What the sentence was made from; nullopt before the first one and while there is no session
-        Optional<RemoteSessionState> _shownState;
-        bool _shownStalled = false;
-        String _shownAddress;
-        String _shownReason;
+        RemoteLinkStatus _link;
     };
 
 }  // namespace BECore

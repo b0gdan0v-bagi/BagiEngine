@@ -14,7 +14,9 @@
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/PanelAssets/PanelBars.h>
+#include <Widgets/RemoteEditor/RemoteSessionRegistry.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
+#include <Widgets/SceneEditor/ComponentListView.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
@@ -31,6 +33,41 @@ namespace BECore {
         constexpr StringView kToolbarAsset = "SceneEditorToolbarPanel";
         constexpr StringView kInspectorAsset = "SceneInspectorPanel";
         constexpr StringView kComponentsSlot = "sceneComponents";
+
+        /// The session while the editor shows an attached program instead of the local scene, else null
+        RemoteSession* FindRemote() {
+            return RemoteSessionRegistry::GetInstance().GetRemote();
+        }
+
+        class LocalComponentList final : public IComponentListSource {
+        public:
+            LocalComponentList(SceneNode& node, FunctionRef<void(IComponent&)> drawFields) : _node(node), _drawFields(drawFields) {}
+
+            [[nodiscard]] size_t GetCount() const override {
+                return _node.GetComponents().size();
+            }
+
+            [[nodiscard]] const char* GetTypeName(size_t index) const override {
+                return _node.GetComponents()[index]->GetTypeMeta().typeName.data();
+            }
+
+            /// A locked node is read-only
+            [[nodiscard]] bool IsReadOnly() const override {
+                return _node.HasEditorFlag(EditorFlags::Locked);
+            }
+
+            [[nodiscard]] bool IsRemovable() const override {
+                return true;
+            }
+
+            void DrawFields(size_t index) override {
+                _drawFields(*_node.GetComponents()[index]);
+            }
+
+        private:
+            SceneNode& _node;
+            FunctionRef<void(IComponent&)> _drawFields;
+        };
     }  // namespace
 
     SceneEditorWidget::~SceneEditorWidget() {
@@ -57,6 +94,9 @@ namespace BECore {
     }
 
     SceneNode* SceneEditorWidget::FindInspected() const {
+        if (FindRemote() != nullptr) {
+            return nullptr;
+        }
         SceneManager* const sceneManager = CoreManager::FindSceneManager();
         Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
         if (scene == nullptr || scene != _lastScene || _hierarchy.selected == nullptr) {
@@ -66,6 +106,9 @@ namespace BECore {
     }
 
     SceneInspectedNode SceneEditorWidget::GetInspected() const {
+        if (RemoteSession* const remote = FindRemote()) {
+            return RemoteSceneView::Inspect(*remote);
+        }
         SceneInspectedNode inspected;
         SceneManager* const sceneManager = CoreManager::FindSceneManager();
         inspected.hasScene = sceneManager != nullptr && sceneManager->GetActiveScene() != nullptr;
@@ -74,7 +117,7 @@ namespace BECore {
             inspected.hasSelection = true;
             inspected.selectionCount = _selection.Count();
             inspected.locked = node->HasEditorFlag(EditorFlags::Locked);
-            inspected.name = node->GetName();
+            inspected.name = node->GetName().ToStringView();
             inspected.layer = node->GetLayer();
             inspected.sourceRef = node->GetSourceRef();
         }
@@ -91,6 +134,10 @@ namespace BECore {
     }
 
     void SceneEditorWidget::SetInspectedLayer(int32_t layer) {
+        if (RemoteSession* const remote = FindRemote()) {
+            RemoteSceneView::SetLayer(*remote, layer);
+            return;
+        }
         SceneNode* const node = FindInspected();
         if (node == nullptr || node->HasEditorFlag(EditorFlags::Locked)) {
             return;
@@ -102,7 +149,7 @@ namespace BECore {
     void SceneEditorWidget::AppendDocuments(Vector<EditorDocumentState>& out) {
         if (SceneManager* const sceneManager = CoreManager::FindSceneManager()) {
             if (Scene* const scene = sceneManager->GetActiveScene()) {
-                AppendSceneDocuments(out, CoreManager::GetConfigManager(), *scene, _isDirty, _uiFileSession);
+                AppendSceneDocuments(out, Configs(), *scene, _isDirty, _uiFileSession);
             }
         }
     }
@@ -112,7 +159,7 @@ namespace BECore {
             _open = !_open;
         }
         // The same rule as the Save button: nothing to save while there are no unsaved changes
-        if (event.commandId == EditorCommandIds::kSceneSave && _isDirty) {
+        if (event.commandId == EditorCommandIds::kSceneSave && _isDirty && FindRemote() == nullptr) {
             SaveScene();
         }
         if (event.commandId == EditorCommandIds::kSceneEditorAddComponent) {
@@ -124,6 +171,9 @@ namespace BECore {
     }
 
     void SceneEditorWidget::OnSelectRequest(const SelectSceneNodeRequestEvent& event) {
+        if (FindRemote() != nullptr) {
+            return;
+        }
         if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             if (HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
                 _focusRequested = true;
@@ -135,7 +185,7 @@ namespace BECore {
     void SceneEditorWidget::OnViewportClick(const ViewportEditClickEvent& event) {
         constexpr uint8_t kLeftButton = 0;
         Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
-        if (event.button != kLeftButton || !scene) {
+        if (event.button != kLeftButton || !scene || FindRemote() != nullptr) {
             return;
         }
         const ScenePick::Hit hit = ScenePick::PickAt(*scene, event.x, event.y);
@@ -154,7 +204,7 @@ namespace BECore {
 
     void SceneEditorWidget::OnSelectUIElementRequest(const SelectUIElementRequestEvent& event) {
         Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
-        if (!scene || !HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
+        if (!scene || FindRemote() != nullptr || !HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
             return;
         }
         _focusRequested = true;
@@ -181,7 +231,7 @@ namespace BECore {
 
     void SceneEditorWidget::OnViewportBoxSelect(const ViewportBoxSelectEvent& event) {
         Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
-        if (!scene) {
+        if (!scene || FindRemote() != nullptr) {
             return;
         }
         ScenePick::PickInRect(*scene, event.x0, event.y0, event.x1, event.y1, _boxHits);
@@ -198,7 +248,7 @@ namespace BECore {
     }
 
     void SceneEditorWidget::OnTransformEdit(const NodeTransformEditEvent& event) {
-        if (event.phase == NodeTransformEditPhase::Commit && !event.edits.empty()) {
+        if (event.phase == NodeTransformEditPhase::Commit && !event.edits.empty() && FindRemote() == nullptr) {
             _isDirty = true;
         }
     }
@@ -229,6 +279,9 @@ namespace BECore {
     }
 
     void SceneEditorWidget::OnUIRectDrag(const UIRectDragEvent& event) {
+        if (FindRemote() != nullptr) {
+            return;
+        }
         const bool selected = event.element != nullptr && event.element == _selectedUIElement.Get();
         switch (event.phase) {
             case UIRectDragPhase::Begin:
@@ -299,7 +352,26 @@ namespace BECore {
         UIElementSelectedEvent::Emit(scene, node, element);
     }
 
+    void SceneEditorWidget::ForgetLocalSelection() {
+        _hierarchy.Reset();
+        _selection.Clear();
+        ResetUISelection();
+        AnnounceSelection(nullptr);
+        AnnounceUIElement(nullptr);
+    }
+
     void SceneEditorWidget::Update() {
+        RemoteSession* const remote = FindRemote();
+        if (remote != nullptr) {
+            // Before the open check: the other panels let go of the local scene also while this window is closed
+            if (!_showsRemote) {
+                ForgetLocalSelection();
+                _remoteView.Reset();
+            }
+            RemoteSceneView::ReleaseTypedText(*remote);
+        }
+        _showsRemote = remote != nullptr;
+
         // A reveal (a pick in the viewport, a request) opens a closed panel too
         if (_focusRequested) {
             _open = true;
@@ -313,6 +385,12 @@ namespace BECore {
             _focusRequested = false;
         }
         if (!ImGui::Begin("Scene Editor", &_open)) {
+            ImGui::End();
+            return;
+        }
+
+        if (remote != nullptr) {
+            _remoteView.Draw(*remote, kToolbarAsset, kInspectorAsset);
             ImGui::End();
             return;
         }
@@ -442,49 +520,31 @@ namespace BECore {
         return changed;
     }
 
+    ConfigManager& SceneEditorWidget::Configs() const {
+        return _configManager != nullptr ? *_configManager : CoreManager::GetConfigManager();
+    }
+
     void SceneEditorWidget::DrawComponents() {
+        if (RemoteSession* const remote = FindRemote()) {
+            RemoteSceneView::DrawComponents(*remote);
+            return;
+        }
         if (_hierarchy.selected == nullptr) {
             return;
         }
-        // A locked node is read-only: the whole list is disabled
-        ImGui::BeginDisabled(_hierarchy.selected->HasEditorFlag(EditorFlags::Locked));
-
-        const auto& components = _hierarchy.selected->GetComponents();
-        PoolString componentToRemove;
-        for (size_t i = 0; i < components.size(); ++i) {
-            const auto& component = components[i];
-            const auto& typeMeta = component->GetTypeMeta();
-
-            ImGui::PushID(static_cast<int>(i));
-
-            bool visible = true;
-            const bool isOpen = ImGui::CollapsingHeader(typeMeta.typeName.data(), &visible);
-
-            if (isOpen) {
-                ImGui::Indent();
-                if (typeMeta.typeHash == UICanvasComponent::GetStaticTypeMeta().typeHash && RenderUIElements(static_cast<UICanvasComponent&>(*component.Get()))) {
-                    _isDirty = true;
-                }
-                if (RenderComponentInspector(component.Get())) {
-                    _isDirty = true;
-                }
-                ImGui::Unindent();
+        const auto drawFields = [this](IComponent& component) {
+            if (component.GetTypeMeta().typeHash == UICanvasComponent::GetStaticTypeMeta().typeHash && RenderUIElements(static_cast<UICanvasComponent&>(component))) {
+                _isDirty = true;
             }
-
-            ImGui::PopID();
-
-            if (!visible) {
-                componentToRemove = PoolString::Intern(typeMeta.typeName);
-                break;
+            if (RenderComponentInspector(&component)) {
+                _isDirty = true;
             }
-        }
-
-        if (!componentToRemove.Empty()) {
-            _hierarchy.selected->RemoveComponent(componentToRemove);
+        };
+        LocalComponentList list(*_hierarchy.selected, drawFields);
+        if (const Optional<size_t> removed = DrawComponentList(list)) {
+            _hierarchy.selected->RemoveComponent(PoolString::Intern(list.GetTypeName(*removed)));
             _isDirty = true;
         }
-
-        ImGui::EndDisabled();
     }
 
     void SceneEditorWidget::SaveScene() {
@@ -496,7 +556,7 @@ namespace BECore {
         // The node files first: an instance whose rects are in its file then has nothing to override in the scene file. A failure here is logged and never stops the scene
         _uiFileSession.Save(*scene);
 
-        auto& configManager = CoreManager::GetConfigManager();
+        ConfigManager& configManager = Configs();
         auto xmlRoot = configManager.GetConfig(ConfigNames::scene);
         if (!xmlRoot) {
             return;

@@ -93,6 +93,46 @@ namespace BECore::Tests {
         EXPECT_FALSE(Updated().multiSelection);
     }
 
+    TEST_F(SceneEditorPanelModelTest, TheHostsReadOnlyPartsAreReadOnlyOnTheirOwnAndALockMakesEveryPartSo) {
+        _host.SelectOne(kFirstNode);
+        _host.inspected.nameReadOnly = true;
+        _host.inspected.structureReadOnly = true;
+        const SceneEditorPanelView& view = Updated();
+        EXPECT_TRUE(view.nameReadOnly);
+        EXPECT_FALSE(view.layerReadOnly);
+        EXPECT_TRUE(view.structureReadOnly);
+        EXPECT_FALSE(view.locked);
+
+        _host.inspected.nameReadOnly = false;
+        _host.inspected.structureReadOnly = false;
+        _host.inspected.layerReadOnly = true;
+        EXPECT_FALSE(Updated().nameReadOnly);
+        EXPECT_TRUE(view.layerReadOnly);
+        EXPECT_FALSE(view.structureReadOnly);
+
+        _host.inspected.layerReadOnly = false;
+        _host.inspected.locked = true;
+        EXPECT_TRUE(Updated().nameReadOnly);
+        EXPECT_TRUE(view.layerReadOnly);
+        EXPECT_TRUE(view.structureReadOnly);
+    }
+
+    TEST_F(SceneEditorPanelModelTest, ARefusedEditIsToldWithItsCodeAndMessageUntilTheHostDropsIt) {
+        _host.SelectOne(kFirstNode);
+        ASSERT_FALSE(Updated().hasRefusal);
+
+        _host.inspected.refusalCode = "interning";
+        _host.inspected.refusalMessage = "the program does not know the text";
+        const SceneEditorPanelView& view = Updated();
+        EXPECT_TRUE(view.hasRefusal);
+        EXPECT_EQ(StringView(view.refusalText), "Refused: the program does not know the text (interning)");
+
+        _host.inspected.refusalCode = {};
+        _host.inspected.refusalMessage = {};
+        EXPECT_FALSE(Updated().hasRefusal);
+        EXPECT_TRUE(view.refusalText.empty());
+    }
+
     TEST_F(SceneEditorPanelModelTest, ALockedNodeTakesNoEditAndTheViewGoesBackToItsName) {
         _host.SelectOne(kFirstNode);
         _host.inspected.locked = true;

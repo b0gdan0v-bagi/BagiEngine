@@ -1,6 +1,6 @@
 # Remote editor: the scene of another process
 
-Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the control API. The files here are data and logic with no ImGui. The data classes know no transport: results of control methods go in as text, property visits and writes come out. Everything read is a peer's: a wrong shape is left out, every recursion is bounded, and nothing is interned (the editor's pool never frees).
+Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the control API. All but `RemoteSceneView` is data and logic with no ImGui. The data classes know no transport: results of control methods go in as text, property visits and writes come out. Everything read is a peer's: a wrong shape is left out, every recursion is bounded, and nothing is interned (the editor's pool never frees).
 
 | File | Holds |
 |------|-------|
@@ -12,6 +12,8 @@ Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the co
 | `RemoteSession` | the link: connects, keeps the data above current, sends the writes |
 | `RemoteSessionRegistry` | how a panel finds the editor's one session |
 | `RemoteSessionWidget` | owns that session ("The widget and the panel") |
+| `RemoteLinkStatus` | the state of the link in a sentence |
+| `RemoteSceneView` | the Scene Editor's content in remote mode ("The Scene Editor") |
 | `AttachPanelModel` | the Attach panel (`config/panels/AttachPanel.xml`) |
 | `RemoteHierarchySource` | the session's tree and selection as the hierarchy panel reads them: read-only, rows named to ImGui by path (`.claude/rules/widgets-module.md`, "Scene Editor Conventions") |
 
@@ -62,3 +64,15 @@ Tests drive it over `tests/BECore/FakeControlEndpoint.h`: the real methods over 
 `RemoteSessionWidget` is listed in `config/WidgetsConfig.xml` right after `ImGuiWidget`: it polls the session with the steady clock (not the engine's, which a manual clock holds) before the panels read it. The session lasts as long as the widget, so a switch to Game mode detaches. `--attach=<address>` attaches at the start of the program only, not again at a switch back; a refused address is a logged error and the editor starts detached.
 
 A panel asks `RemoteSessionRegistry` for the session in each call and keeps no pointer. `AttachPanelModel` only starts and ends the link and words its state; with no widget in the list it says so. The panel is `view.attach` (Game menu, "Attach to a Running Game..."), its buttons `remote.attach` and `remote.detach`. A browser editor offers none of them (`EditorLayout/CLAUDE.md`, "The editor in a browser").
+
+## The Scene Editor
+
+What remote mode does to the local editor: `.claude/rules/widgets-module.md`, "Scene Editor Conventions". `RemoteSceneView` draws what the local widget draws, from the session: the toolbar bar, a line on the link (a warning when lost or stalled, with the reason), the hierarchy, the inspector bar and the component list over `ImGuiPropertyVisitor`.
+
+- Only a node's layer and its component fields take an edit, and only while `Attached`: the whole view is disabled otherwise, over what was read. A name would intern client text into the program's pool, and no method changes the structure.
+- Typed texts are released once a frame while no ImGui item is active, also while the window is closed.
+- The bars ask `ISceneEditorHost`, which answers from `Inspect`: the name is the tree's (never interned), the layer the pending one while there is one, and the last refusal is shown under the inspector's title.
+- A component header comes from the tree and its fields from the last read, matched by type and namesake, since the tree may be the newer of the two.
+
+Tests: `RemoteSceneEditorTest` runs the widget and its shipped bars over the fake endpoint, beside a local scene that must not change.
+

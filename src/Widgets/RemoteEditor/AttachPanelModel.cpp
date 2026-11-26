@@ -19,8 +19,8 @@ namespace BECore {
     void AttachPanelModel::Update() {
         const RemoteSession* session = RemoteSessionRegistry::GetInstance().Get();
         if (session == nullptr) {
-            if (_shownState || _view.status.empty()) {
-                _shownState.reset();
+            if (StringView(_view.status) != kNoSessionStatus) {
+                _link.Reset();
                 _view.status.assign(kNoSessionStatus.data(), kNoSessionStatus.size());
                 _view.troubled = true;
                 _view.canAttach = false;
@@ -28,10 +28,13 @@ namespace BECore {
             }
             return;
         }
-        if (_shownState == session->GetState() && _shownStalled == session->IsStalled() && StringView(_shownAddress) == session->GetAddress() && StringView(_shownReason) == session->GetLossReason()) {
+        if (!_link.Update(*session)) {
             return;
         }
-        Describe(*session);
+        _view.status = _link.GetText();
+        _view.troubled = _link.IsTroubled();
+        _view.canAttach = true;
+        _view.canDetach = session->GetState() != RemoteSessionState::Detached;
     }
 
     bool AttachPanelModel::RunCommand(StringView id, StringView /*argument*/) {
@@ -61,33 +64,6 @@ namespace BECore {
     void AttachPanelModel::SetError(StringView error) {
         _view.error.assign(error.data(), error.size());
         _view.hasError = !error.empty();
-    }
-
-    void AttachPanelModel::Describe(const RemoteSession& session) {
-        _shownState = session.GetState();
-        _shownStalled = session.IsStalled();
-        _shownAddress = String(session.GetAddress());
-        _shownReason = String(session.GetLossReason());
-        switch (*_shownState) {
-            case RemoteSessionState::Detached:
-                _view.status = "Not attached";
-                break;
-            case RemoteSessionState::Connecting:
-                _view.status = Format("Connecting to {}", _shownAddress);
-                break;
-            case RemoteSessionState::Attached:
-                _view.status = Format("Attached to {}", _shownAddress);
-                break;
-            case RemoteSessionState::Lost:
-                _view.status = Format("Lost the link to {}: {}", _shownAddress, _shownReason);
-                break;
-        }
-        if (_shownStalled) {
-            _view.status += " (the program does not answer)";
-        }
-        _view.troubled = _shownStalled || *_shownState == RemoteSessionState::Lost;
-        _view.canAttach = true;
-        _view.canDetach = *_shownState != RemoteSessionState::Detached;
     }
 
 }  // namespace BECore

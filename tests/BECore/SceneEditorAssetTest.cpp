@@ -243,7 +243,7 @@ namespace BECore::Tests {
         const String expected = Format("{}{}", kNodeName, kTyped);
         ASSERT_FALSE(_host.renames.empty());
         EXPECT_EQ(_host.renames.back(), expected);
-        EXPECT_EQ(_host.inspected.name.ToStringView(), StringView(expected.data(), expected.size()));
+        EXPECT_EQ(_host.inspected.name, StringView(expected.data(), expected.size()));
     }
 
     TEST_F(SceneEditorAssetTest, TheLayerStepperWritesTheNextLayer) {

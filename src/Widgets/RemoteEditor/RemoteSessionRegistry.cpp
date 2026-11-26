@@ -1,5 +1,7 @@
 #include "RemoteSessionRegistry.h"
 
+#include <Widgets/RemoteEditor/RemoteSession.h>
+
 namespace BECore {
 
     RemoteSessionHandle::~RemoteSessionHandle() {
@@ -36,6 +38,10 @@ namespace BECore {
         _session = &session;
         _token = _nextToken++;
         return RemoteSessionHandle(_token);
+    }
+
+    RemoteSession* RemoteSessionRegistry::GetRemote() const {
+        return _session != nullptr && _session->GetState() != RemoteSessionState::Detached ? _session : nullptr;
     }
 
     bool RemoteSessionRegistry::TakeStartAttach() {
