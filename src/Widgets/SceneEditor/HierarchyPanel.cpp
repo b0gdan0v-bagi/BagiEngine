@@ -182,68 +182,77 @@ namespace BECore {
             }
         }
 
-        void DrawNode(HierarchyState& state, const SceneSelection& selection, SceneNode& node, bool filterOn, bool ancestorHidden) {
-            const auto& children = node.GetChildren();
+        void DrawRow(IHierarchySource& source, HierarchyState& state, HierarchyRow row, bool filterOn, bool ancestorHidden) {
+            SceneNode* const node = source.EditableNode(row);
+            const size_t childCount = source.GetChildCount(row);
 
             ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap;
-            if (children.empty()) {
+            if (childCount == 0) {
                 flags |= ImGuiTreeNodeFlags_Leaf;
             }
-            if (state.selected == &node || selection.Contains(&node)) {
+            if (source.IsSelected(row)) {
                 flags |= ImGuiTreeNodeFlags_Selected;
             }
             // A filter opens the path to its matches; an ancestor that is not a match and a hidden node (its own flag or an ancestor's) are dimmed
-            const bool hidden = ancestorHidden || node.HasEditorFlag(EditorFlags::Hidden);
-            const bool dimmed = hidden || (filterOn && !HierarchyModel::NodeMatchesFilter(node, state.searchBuffer, state.componentType));
-            if (state.revealNode == &node || (filterOn && !children.empty()) || eastl::find(state.openNodes.begin(), state.openNodes.end(), &node) != state.openNodes.end()) {
+            const bool hidden = ancestorHidden || source.IsHidden(row);
+            const bool dimmed = hidden || (filterOn && !HierarchyModel::NodeMatchesFilter(source, row, state.searchBuffer, state.componentType));
+            // What the state asks of a node (reveal, scroll, rename) is asked of editable rows only: its pointers are null otherwise
+            const bool revealed = node != nullptr && (state.revealNode == node || eastl::find(state.openNodes.begin(), state.openNodes.end(), node) != state.openNodes.end());
+            if (revealed || source.IsOnRevealPath(row) || (filterOn && childCount > 0)) {
                 ImGui::SetNextItemOpen(true);
             }
 
-            const bool renaming = state.renameTarget == &node;
+            const bool renaming = node != nullptr && state.renameTarget == node;
             if (dimmed) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
             }
             const float rowLeft = ImGui::GetCursorScreenPos().x;
-            const bool isOpen = renaming ? ImGui::TreeNodeEx(&node, flags, "%s", IconOfNode(node)) : ImGui::TreeNodeEx(&node, flags, "%s %s", IconOfNode(node), node.GetName().CStr());
+            const void* const id = source.GetId(row);
+            const char* const icon = source.GetIcon(row);
+            const bool isOpen = renaming ? ImGui::TreeNodeEx(id, flags, "%s", icon) : ImGui::TreeNodeEx(id, flags, "%s %s", icon, source.GetName(row));
             if (dimmed) {
                 ImGui::PopStyleColor();
-            } else {
-                TintRowIcon(node, rowLeft);
+            } else if (node != nullptr) {
+                TintRowIcon(*node, rowLeft);
             }
-            FillItemWithTouchFlash(TouchHighlights::GetInstance().NodeAlpha(node.GetRuntimeId()));
-            if (state.scrollTo == &node) {
+            // Touches are recorded for the nodes of this process only
+            if (node != nullptr) {
+                FillItemWithTouchFlash(TouchHighlights::GetInstance().NodeAlpha(node->GetRuntimeId()));
+            }
+            if ((node != nullptr && state.scrollTo == node) || source.IsRevealTarget(row)) {
                 ImGui::SetScrollHereY();
                 state.scrollTo = nullptr;
             }
             const float rowRight = ImGui::GetItemRectMax().x;
             const float rowTop = ImGui::GetItemRectMin().y;
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-                state.selected = &node;
-                state.clickedNode = &node;
-                state.clickModifiers = ImGui::GetIO().KeyCtrl ? kSelectionModifierCtrl : 0;
+                source.Click(row, ImGui::GetIO().KeyCtrl ? kSelectionModifierCtrl : 0);
             }
-            if (renaming) {
-                DrawRenameField(state, node);
-            } else {
-                HandleDragDrop(state, node, filterOn);
-                DrawContextMenu(state, node);
+            if (node != nullptr) {
+                if (renaming) {
+                    DrawRenameField(state, *node);
+                } else {
+                    HandleDragDrop(state, *node, filterOn);
+                    DrawContextMenu(state, *node);
+                }
+                DrawToggles(*node, rowRight, rowTop);
             }
-            DrawToggles(node, rowRight, rowTop);
 
             if (isOpen) {
                 // No copy of the child list: every change of the tree waits in state.pending until the walk is over
-                for (const auto& child : children) {
-                    if (!filterOn || HierarchyModel::SubtreeMatchesFilter(*child, state.searchBuffer, state.componentType)) {
-                        DrawNode(state, selection, *child.Get(), filterOn, hidden);
+                for (size_t i = 0; i < source.GetChildCount(row); ++i) {
+                    const HierarchyRow child = source.GetChild(row, i);
+                    if (!filterOn || HierarchyModel::SubtreeMatchesFilter(source, child, state.searchBuffer, state.componentType)) {
+                        DrawRow(source, state, child, filterOn, hidden);
                     }
                 }
                 ImGui::TreePop();
             }
         }
 
-        void DrawTypeCombo(HierarchyState& state, Scene& scene) {
+        void DrawTypeCombo(const IHierarchySource& source, HierarchyState& state) {
             char preview[kComponentLabelSize];
-            snprintf(preview, sizeof(preview), "%s %s", ICON_LC_FILTER, state.componentType.empty() ? "Any component" : state.componentType.data());
+            snprintf(preview, sizeof(preview), "%s %s", ICON_LC_FILTER, state.componentType.empty() ? "Any component" : state.componentType.c_str());
             ImGui::SetNextItemWidth(-1.0f);
             if (!ImGui::BeginCombo("##component_type", preview)) {
                 state.typeComboOpen = false;
@@ -252,21 +261,21 @@ namespace BECore {
             }
             if (!state.typeComboOpen) {
                 // Collected when the combo opens, not every frame
-                HierarchyModel::CollectComponentTypes(scene.GetRootNode(), state.componentTypes);
+                source.CollectComponentTypes(state.componentTypes);
                 state.typeComboOpen = true;
             }
             if (ImGui::Selectable("Any component", state.componentType.empty())) {
-                state.componentType = {};
+                state.componentType.clear();
             }
-            for (const StringView type : state.componentTypes) {
-                if (ImGui::Selectable(type.data(), type == state.componentType)) {
+            for (const String& type : state.componentTypes) {
+                if (ImGui::Selectable(type.c_str(), type == state.componentType)) {
                     state.componentType = type;
                 }
             }
             ImGui::EndCombo();
         }
 
-        void DrawFilterBar(HierarchyState& state, Scene& scene) {
+        void DrawFilterBar(const IHierarchySource& source, HierarchyState& state) {
             if (state.focusSearch) {
                 ImGui::SetKeyboardFocusHere();
                 state.focusSearch = false;
@@ -280,7 +289,7 @@ namespace BECore {
                 state.searchBuffer[0] = '\0';
             }
             ImGui::EndDisabled();
-            DrawTypeCombo(state, scene);
+            DrawTypeCombo(source, state);
         }
 
         // Keys of the focused panel; a text field (rename, the search box) keeps them to itself
@@ -324,6 +333,35 @@ namespace BECore {
             }
         }
 
+        /// The title and the filter bar
+        void DrawHead(const IHierarchySource& source, HierarchyState& state) {
+            ImGui::TextUnformatted("Hierarchy");
+            ImGui::Separator();
+
+            if (ImGui::IsWindowFocused() && ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_F)) {
+                state.focusSearch = true;
+            }
+            DrawFilterBar(source, state);
+        }
+
+        void DrawTree(IHierarchySource& source, HierarchyState& state) {
+            if (source.IsTruncated()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, GetImGuiPalette().warning);
+                ImGui::TextWrapped(ICON_LC_TRIANGLE_ALERT " Only a part of the tree is listed");
+                ImGui::PopStyleColor();
+            }
+            const HierarchyRow root = source.GetRoot();
+            const bool filterOn = FilterIsOn(state);
+            if (filterOn && !HierarchyModel::SubtreeMatchesFilter(source, root, state.searchBuffer, state.componentType)) {
+                EmptyState(ICON_LC_SEARCH, "No node matches the filter");
+            } else {
+                DrawRow(source, state, root, filterOn, false);
+            }
+            state.revealNode = nullptr;
+            state.openNodes.clear();
+            state.scrollTo = nullptr;
+        }
+
     }  // namespace
 
     void HierarchyState::Reset() {
@@ -344,11 +382,17 @@ namespace BECore {
             state.renameTarget = nullptr;
             HierarchyModel::AncestorsOf(*live, state.openNodes);
             state.scrollTo = live;
-            if (FilterIsOn(state) && !HierarchyModel::SubtreeMatchesFilter(*live, state.searchBuffer, state.componentType)) {
-                state.searchBuffer[0] = '\0';
-                state.componentType = {};
-            }
+            const SceneSelection none;
+            const LocalHierarchySource source(active, state, none);
+            ClearHidingFilter(source, state, LocalHierarchySource::RowOf(*live));
             return true;
+        }
+
+        void ClearHidingFilter(const IHierarchySource& source, HierarchyState& state, HierarchyRow row) {
+            if (FilterIsOn(state) && !HierarchyModel::SubtreeMatchesFilter(source, row, state.searchBuffer, state.componentType)) {
+                state.searchBuffer[0] = '\0';
+                state.componentType.clear();
+            }
         }
 
         void BeginRename(HierarchyState& state, SceneNode& node) {
@@ -360,13 +404,12 @@ namespace BECore {
             snprintf(state.renameBuffer, sizeof(state.renameBuffer), "%s", node.GetName().CStr());
         }
 
-        void Draw(Scene& scene, HierarchyState& state, const SceneSelection& selection) {
-            ImGui::TextUnformatted("Hierarchy");
-            ImGui::Separator();
+        void Draw(IHierarchySource& source, HierarchyState& state) {
+            DrawHead(source, state);
+            DrawTree(source, state);
+        }
 
-            if (ImGui::IsWindowFocused() && ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_F)) {
-                state.focusSearch = true;
-            }
+        void Draw(Scene& scene, HierarchyState& state, const SceneSelection& selection) {
             // The payload of a drag holds a pointer: it is used only when the node is found in the tree
             state.dragNode = nullptr;
             if (const ImGuiPayload* payload = ImGui::GetDragDropPayload(); payload != nullptr && payload->IsDataType(kNodePayload)) {
@@ -374,18 +417,10 @@ namespace BECore {
                 state.dragNode = HierarchyModel::ContainsNode(scene.GetRootNode(), dragged) ? dragged : nullptr;
             }
 
-            DrawFilterBar(state, scene);
+            LocalHierarchySource source(scene, state, selection);
+            DrawHead(source, state);
             HandleKeys(state);
-
-            const bool filterOn = FilterIsOn(state);
-            if (filterOn && !HierarchyModel::SubtreeMatchesFilter(scene.GetRootNode(), state.searchBuffer, state.componentType)) {
-                EmptyState(ICON_LC_SEARCH, "No node matches the filter");
-            } else {
-                DrawNode(state, selection, scene.GetRootNode(), filterOn, false);
-            }
-            state.revealNode = nullptr;
-            state.openNodes.clear();
-            state.scrollTo = nullptr;
+            DrawTree(source, state);
             ApplyPending(scene, state);
 
             ImGui::Separator();

@@ -12,7 +12,7 @@ file(GLOB_RECURSE RUNTIME_MODULE_SOURCES
 
 # The editor panels are built only with BE_WITH_EDITOR (cmake/BagiEngine.cmake). ImGuiWidget stays: a game may use it in its HUD.
 if(NOT BE_EDITOR_ENABLED)
-    list(FILTER RUNTIME_MODULE_SOURCES EXCLUDE REGEX "/Widgets/(ArtGen|AssetBrowser|ConfigEditor|Console|EditorLayout|Export|Feedback|FileChanges|GamePanel|PanelAssets|PoolStrings|Profiler|SceneEditor|TextureEditor|Viewport)/")
+    list(FILTER RUNTIME_MODULE_SOURCES EXCLUDE REGEX "/Widgets/(ArtGen|AssetBrowser|ConfigEditor|Console|EditorLayout|Export|Feedback|FileChanges|GamePanel|PanelAssets|PoolStrings|Profiler|RemoteEditor|SceneEditor|TextureEditor|Viewport)/")
 endif()
 
 add_library(RuntimeModule STATIC ${RUNTIME_MODULE_SOURCES})
@@ -42,6 +42,7 @@ target_link_libraries(RuntimeModule PUBLIC
     TaskSystemModule
     GamesModule
     SDLModule
+    RoomClientModule  # the WebSocket transport of the control link (Application/ControlLink.h)
 )
 
 # The socket server and the Vulkan backend are built only with ENGINE_WITH_REMOTE_CONTROL / ENGINE_WITH_VULKAN

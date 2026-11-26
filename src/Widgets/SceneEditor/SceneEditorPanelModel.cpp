@@ -35,7 +35,7 @@ namespace BECore {
             return;
         }
         const StringView typedName(_view.name.data(), _view.name.size());
-        if (typedName != _shownName.ToStringView()) {
+        if (typedName != StringView(_shownName)) {
             host.RenameInspected(typedName);
         }
         if (_view.layer != _shownLayer) {
@@ -48,15 +48,20 @@ namespace BECore {
         _view.dirty = inspected.dirty;
         _view.hasSelection = inspected.hasSelection;
         _view.locked = inspected.locked;
+        _view.nameReadOnly = inspected.locked || inspected.nameReadOnly;
+        _view.layerReadOnly = inspected.locked || inspected.layerReadOnly;
+        _view.structureReadOnly = inspected.locked || inspected.structureReadOnly;
         _view.multiSelection = inspected.selectionCount > 1;
         _view.isInstance = !inspected.sourceRef.Empty();
 
         // Assigned whenever the host differs from the view, not only from `_shownName`: a refresh drops an edit the host did not take
-        const StringView name = inspected.name.ToStringView();
+        const StringView name = inspected.name;
         if (StringView(_view.name.data(), _view.name.size()) != name) {
             _view.name.assign(name.data(), name.size());
         }
-        _shownName = inspected.name;
+        if (StringView(_shownName) != name) {
+            _shownName.assign(name.data(), name.size());
+        }
         _view.layer = inspected.layer;
         _shownLayer = inspected.layer;
 
@@ -72,6 +77,15 @@ namespace BECore {
             _view.instanceText.clear();
             if (_view.isInstance) {
                 AppendFormat(_view.instanceText, "Instance of {}", _shownSourceRef.ToStringView());
+            }
+        }
+        if (StringView(_shownRefusalCode) != inspected.refusalCode || StringView(_shownRefusalMessage) != inspected.refusalMessage) {
+            _shownRefusalCode.assign(inspected.refusalCode.data(), inspected.refusalCode.size());
+            _shownRefusalMessage.assign(inspected.refusalMessage.data(), inspected.refusalMessage.size());
+            _view.hasRefusal = !_shownRefusalCode.empty() || !_shownRefusalMessage.empty();
+            _view.refusalText.clear();
+            if (_view.hasRefusal) {
+                AppendFormat(_view.refusalText, "Refused: {} ({})", _shownRefusalMessage, _shownRefusalCode);
             }
         }
     }

@@ -11,7 +11,7 @@ namespace BECore {
     CORE_ENUM(AssignStatus, uint8_t, Assigned, Conflict, NotAllowed)
 
     /// Why an assignment is refused (AssignStatus::NotAllowed); the preferences window shows it
-    CORE_ENUM(AssignRefusal, uint8_t, None, UnknownCommand, FixedCommand, NeedsModifier, Reserved)
+    CORE_ENUM(AssignRefusal, uint8_t, None, UnknownCommand, FixedCommand, NeedsModifier, Reserved, Browser)
 
     struct AssignResult {
         AssignStatus status = AssignStatus::Assigned;
@@ -22,6 +22,9 @@ namespace BECore {
     /// A chord that no command may take: Ctrl+Shift+E (Application reads it before ImGui), ImGui's text editing chords
     /// (Ctrl+A, C, V, X, Y, Z) and Ctrl+Tab (window switching)
     [[nodiscard]] bool IsReservedChord(const KeyChord& chord);
+
+    /// A chord a browser acts on itself and no page can catch: Ctrl+W, T, N and Q, with or without Shift. Refused in the browser host
+    [[nodiscard]] bool IsBrowserKeptChord(const KeyChord& chord);
 
     /**
      * @brief The chord of every command of the editor: the defaults of the command table plus the user's changes.
@@ -44,7 +47,7 @@ namespace BECore {
         [[nodiscard]] bool IsDefault(PoolString commandId) const;
 
         /// Gives @p chord to @p commandId. NotAllowed: an unknown or fixed command, a chord that needs Ctrl or Alt
-        /// (IsAllowedAsHotkey), a reserved chord. Conflict: another command holds the chord.
+        /// (IsAllowedAsHotkey), a reserved chord, in a browser a chord the browser keeps. Conflict: another command holds the chord.
         AssignResult Assign(PoolString commandId, const KeyChord& chord);
 
         /// Like Assign, but a conflict is settled by taking the chord from the other command, which becomes unbound

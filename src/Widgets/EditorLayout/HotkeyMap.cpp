@@ -1,5 +1,7 @@
 #include "HotkeyMap.h"
 
+#include <Widgets/EditorLayout/EditorHost.h>
+
 namespace BECore {
 
     namespace {
@@ -15,6 +17,8 @@ namespace BECore {
             {ImGuiKey_Z, kChordModCtrl},
             {ImGuiKey_Tab, kChordModCtrl},
         };
+
+        constexpr ImGuiKey kBrowserKeptKeys[] = {ImGuiKey_W, ImGuiKey_T, ImGuiKey_N, ImGuiKey_Q};
 
         /// One counter for every map, so a map that is replaced by a fresh one never repeats a revision the cache of a chord text has seen
         uint64_t NextRevision() {
@@ -33,6 +37,11 @@ namespace BECore {
 
     bool IsReservedChord(const KeyChord& chord) {
         return std::ranges::find(kReservedChords, chord) != std::end(kReservedChords);
+    }
+
+    bool IsBrowserKeptChord(const KeyChord& chord) {
+        const bool ctrl = chord.mods == kChordModCtrl || chord.mods == (kChordModCtrl | kChordModShift);
+        return ctrl && std::ranges::find(kBrowserKeptKeys, chord.key) != std::end(kBrowserKeptKeys);
     }
 
     HotkeyMap::HotkeyMap() : _revision(NextRevision()) {
@@ -93,6 +102,9 @@ namespace BECore {
         }
         if (IsReservedChord(chord)) {
             return Refused(AssignRefusal::Reserved);
+        }
+        if (GetEditorHost() == EditorHostKind::Browser && IsBrowserKeptChord(chord)) {
+            return Refused(AssignRefusal::Browser);
         }
 
         // A chord belongs to one command at most, so there is one holder to find, and it is not the command itself

@@ -36,8 +36,12 @@
 #       the assertions in Debug only (as a generator expression, so the list is the same for every
 #       configuration). Without SINGLE_THREAD it also has -pthread and the Web Worker pool (BE_WEB_THREAD_POOL_SIZE); with
 #       SINGLE_THREAD it has neither (no thread, no shared memory).
+#   be_web_editor_marker_command(OUT <var> MARKER <file> EDITOR <bool>)
+#       The command that makes the marker say what the page just linked is: it writes <file> for a build with the editor and removes a
+#       stale one for a build without it. tools/web/package.py reads the marker.
 #   be_web_configure_target(<target> GAME_ROOT <dir>)
-#       Makes the executable an HTML page with its content package and the virtual content roots as definitions. With the cache variable
+#       Makes the executable an HTML page with its content package and the virtual content roots as definitions, and after each link
+#       writes or removes <target>.editor beside the page (BE_EDITOR_ENABLED). With the cache variable
 #       ENGINE_WEB_COOKED_DIR (empty: the XML sources) the config/ folders are the cooked layers of that folder (be_web_preload_args); a
 #       folder or layer that is not there stops the configure and names the target <target>Cook that writes it.
 include_guard(GLOBAL)
@@ -49,6 +53,9 @@ set(BE_WEB_OUTPUT_SUFFIX ".html")
 set(BE_WEB_ENGINE_ROOT "/bagi/engine")
 set(BE_WEB_GAME_ROOT "/bagi/game")
 set(BE_WEB_WEB_ROOT "/bagi/web")
+
+# <target>.editor beside the page: the package of such a page says so, and it is served and deployed only behind access control
+set(BE_WEB_EDITOR_MARKER_SUFFIX ".editor")
 
 # The Web Workers created before main() in a threaded page (-sPTHREAD_POOL_SIZE). The engine blocks the main thread at start-up
 # (ConfigManager::Initialize waits for the config loads on the TaskManager's workers), and a worker that only the main thread's event
@@ -220,6 +227,20 @@ function(be_web_link_options)
     set(${ARG_OUT} "${_options}" PARENT_SCOPE)
 endfunction()
 
+function(be_web_editor_marker_command)
+    cmake_parse_arguments(ARG "" "OUT;MARKER;EDITOR" "" ${ARGN})
+    if(NOT ARG_OUT OR NOT ARG_MARKER)
+        message(FATAL_ERROR "be_web_editor_marker_command: OUT and MARKER are required")
+    endif()
+
+    if(ARG_EDITOR)
+        set(_command "${CMAKE_COMMAND}" -E touch "${ARG_MARKER}")
+    else()
+        set(_command "${CMAKE_COMMAND}" -E rm -f "${ARG_MARKER}")
+    endif()
+    set(${ARG_OUT} "${_command}" PARENT_SCOPE)
+endfunction()
+
 function(be_web_configure_target TARGET_NAME)
     cmake_parse_arguments(ARG "" "GAME_ROOT" "" ${ARGN})
     if(NOT ARG_GAME_ROOT)
@@ -227,6 +248,11 @@ function(be_web_configure_target TARGET_NAME)
     endif()
 
     set_target_properties(${TARGET_NAME} PROPERTIES SUFFIX "${BE_WEB_OUTPUT_SUFFIX}")
+
+    # Tied to the link and not to the configure step, so the marker never describes another page than the one in the folder
+    be_web_editor_marker_command(OUT _marker_command EDITOR "${BE_EDITOR_ENABLED}"
+        MARKER "$<TARGET_FILE_DIR:${TARGET_NAME}>/${TARGET_NAME}${BE_WEB_EDITOR_MARKER_SUFFIX}")
+    add_custom_command(TARGET ${TARGET_NAME} POST_BUILD COMMAND ${_marker_command} VERBATIM)
 
     # The shell is a generated copy of web/shell.html that knows whether the build is threaded (be_web_generate_shell)
     set(_shell "${CMAKE_CURRENT_BINARY_DIR}/web/shell.html")

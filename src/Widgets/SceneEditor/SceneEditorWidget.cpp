@@ -1,15 +1,15 @@
 #include "SceneEditorWidget.h"
 
 #include <BECore/Config/ConfigManager.h>
-#include <BECore/Config/ConfigNames.h>
-#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneConfigWriter.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/ScenePick.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Events/ConfigEvents.h>
 #include <Events/SceneEvents.h>
@@ -21,16 +21,15 @@
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/PanelAssets/PanelBars.h>
+#include <Widgets/RemoteEditor/RemoteSessionRegistry.h>
 #include <Widgets/SceneEditor/Breadcrumbs.h>
 #include <Widgets/SceneEditor/ComponentCard.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
 #include <Widgets/SceneEditor/FieldHelpEvents.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneAssetDrop.h>
-#include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneEditorDocuments.h>
-#include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/SceneEditor/UIEditEvents.h>
 #include <Widgets/SceneEditor/UIRectInspector.h>
 #include <imgui.h>
@@ -43,6 +42,12 @@ namespace BECore {
         constexpr StringView kToolbarAsset = "SceneEditorToolbarPanel";
         constexpr StringView kInspectorAsset = "SceneInspectorPanel";
         constexpr StringView kComponentsSlot = "sceneComponents";
+
+        /// The session while the editor shows an attached program instead of the local scene, else null
+        RemoteSession* FindRemote() {
+            return RemoteSessionRegistry::GetInstance().GetRemote();
+        }
+
         /// The serialized field of a canvas that an edit of an element's rect writes
         constexpr StringView kCanvasElementsField = "elements";
 
@@ -81,6 +86,7 @@ namespace BECore {
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
         Subscribe<SceneEditedEvent, &SceneEditorWidget::OnSceneEdited>(this);
         Subscribe<SceneEvents::SceneNodeEditedEvent, &SceneEditorWidget::OnNodeEdited>(this);
+        Subscribe<SceneEvents::SceneSavedEvent, &SceneEditorWidget::OnSceneSaved>(this);
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
         Subscribe<ConfigEvents::ConfigChangedEvent, &SceneEditorWidget::OnConfigChanged>(this);
@@ -104,6 +110,9 @@ namespace BECore {
     }
 
     SceneNode* SceneEditorWidget::FindInspected() const {
+        if (FindRemote() != nullptr) {
+            return nullptr;
+        }
         SceneManager* const sceneManager = CoreManager::FindSceneManager();
         Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
         if (scene == nullptr || scene != _lastScene || _hierarchy.selected == nullptr) {
@@ -113,6 +122,9 @@ namespace BECore {
     }
 
     SceneInspectedNode SceneEditorWidget::GetInspected() const {
+        if (RemoteSession* const remote = FindRemote()) {
+            return RemoteSceneView::Inspect(*remote);
+        }
         SceneInspectedNode inspected;
         SceneManager* const sceneManager = CoreManager::FindSceneManager();
         inspected.hasScene = sceneManager != nullptr && sceneManager->GetActiveScene() != nullptr;
@@ -121,7 +133,7 @@ namespace BECore {
             inspected.hasSelection = true;
             inspected.selectionCount = _selection.Count();
             inspected.locked = node->HasEditorFlag(EditorFlags::Locked);
-            inspected.name = node->GetName();
+            inspected.name = node->GetName().ToStringView();
             inspected.layer = node->GetLayer();
             inspected.sourceRef = node->GetSourceRef();
         }
@@ -138,6 +150,10 @@ namespace BECore {
     }
 
     void SceneEditorWidget::SetInspectedLayer(int32_t layer) {
+        if (RemoteSession* const remote = FindRemote()) {
+            RemoteSceneView::SetLayer(*remote, layer);
+            return;
+        }
         SceneNode* const node = FindInspected();
         if (node == nullptr || node->HasEditorFlag(EditorFlags::Locked)) {
             return;
@@ -149,7 +165,7 @@ namespace BECore {
     void SceneEditorWidget::AppendDocuments(Vector<EditorDocumentState>& out) {
         if (SceneManager* const sceneManager = CoreManager::FindSceneManager()) {
             if (Scene* const scene = sceneManager->GetActiveScene()) {
-                AppendSceneDocuments(out, CoreManager::GetConfigManager(), *scene, _isDirty, _uiFileSession);
+                AppendSceneDocuments(out, Configs(), *scene, _isDirty, _uiFileSession);
             }
         }
     }
@@ -159,8 +175,12 @@ namespace BECore {
             _open = !_open;
         }
         // The same rule as the Save button: nothing to save while there are no unsaved changes
-        if (event.commandId == EditorCommandIds::kSceneSave && _isDirty) {
-            SaveScene();
+        if (event.commandId == EditorCommandIds::kSceneSave) {
+            if (RemoteSession* const remote = FindRemote()) {
+                RemoteSceneView::Save(*remote);
+            } else if (_isDirty) {
+                SaveScene();
+            }
         }
         if (event.commandId == EditorCommandIds::kSceneEditorAddComponent) {
             SceneNode* const node = FindInspected();
@@ -180,7 +200,7 @@ namespace BECore {
         SceneManager* const sceneManager = CoreManager::FindSceneManager();
         Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
         // The history of a replaced scene is cleared only by the next Update
-        if (scene == nullptr || scene != _lastScene) {
+        if (scene == nullptr || scene != _lastScene || FindRemote() != nullptr) {
             return;
         }
         SceneNode& root = scene->GetRootNode();
@@ -201,6 +221,9 @@ namespace BECore {
     }
 
     void SceneEditorWidget::OnSelectRequest(const SelectSceneNodeRequestEvent& event) {
+        if (FindRemote() != nullptr) {
+            return;
+        }
         if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             if (HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
                 _focusRequested = true;
@@ -212,7 +235,7 @@ namespace BECore {
     void SceneEditorWidget::OnViewportClick(const ViewportEditClickEvent& event) {
         constexpr uint8_t kLeftButton = 0;
         Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
-        if (event.button != kLeftButton || !scene) {
+        if (event.button != kLeftButton || !scene || FindRemote() != nullptr) {
             return;
         }
         const ScenePick::Hit hit = ScenePick::PickAt(*scene, event.x, event.y);
@@ -231,7 +254,7 @@ namespace BECore {
 
     void SceneEditorWidget::OnSelectUIElementRequest(const SelectUIElementRequestEvent& event) {
         Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
-        if (!scene || !HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
+        if (!scene || FindRemote() != nullptr || !HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
             return;
         }
         _focusRequested = true;
@@ -258,7 +281,7 @@ namespace BECore {
 
     void SceneEditorWidget::OnViewportBoxSelect(const ViewportBoxSelectEvent& event) {
         Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
-        if (!scene) {
+        if (!scene || FindRemote() != nullptr) {
             return;
         }
         ScenePick::PickInRect(*scene, event.x0, event.y0, event.x1, event.y1, _boxHits);
@@ -276,7 +299,7 @@ namespace BECore {
 
     void SceneEditorWidget::OnViewportAssetDrop(const ViewportAssetDropEvent& event) {
         Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
-        if (!scene) {
+        if (!scene || FindRemote() != nullptr) {
             return;
         }
         SceneAssetDrop drop{event.kind, event.path, Vec2{scene->ScreenToSceneX(event.x), scene->ScreenToSceneY(event.y)}, Vec2{}};
@@ -300,7 +323,7 @@ namespace BECore {
     }
 
     void SceneEditorWidget::OnTransformEdit(const NodeTransformEditEvent& event) {
-        if (event.phase == NodeTransformEditPhase::Commit && !event.edits.empty()) {
+        if (event.phase == NodeTransformEditPhase::Commit && !event.edits.empty() && FindRemote() == nullptr) {
             _isDirty = true;
             for (const NodeTransformEdit& edit : event.edits) {
                 DismissMovedFieldMarks(edit);
@@ -326,6 +349,12 @@ namespace BECore {
         _isDirty = true;
     }
 
+    void SceneEditorWidget::OnSceneSaved(const SceneEvents::SceneSavedEvent& event) {
+        if (event.scene != nullptr && event.scene == CoreManager::GetSceneManager().GetActiveScene() && _uiFileSession.PendingCount() == 0) {
+            _isDirty = false;
+        }
+    }
+
     void SceneEditorWidget::OnNodeAdded(const SceneNodeAddedEvent& event) {
         if (event.scene != nullptr && event.scene == CoreManager::GetSceneManager().GetActiveScene()) {
             _isDirty = true;
@@ -334,6 +363,9 @@ namespace BECore {
     }
 
     void SceneEditorWidget::OnUIRectDrag(const UIRectDragEvent& event) {
+        if (FindRemote() != nullptr) {
+            return;
+        }
         const bool selected = event.element != nullptr && event.element == _selectedUIElement.Get();
         switch (event.phase) {
             case UIRectDragPhase::Begin:
@@ -405,7 +437,30 @@ namespace BECore {
         UIElementSelectedEvent::Emit(scene, node, element);
     }
 
+    void SceneEditorWidget::ForgetLocalSelection() {
+        _hierarchy.Reset();
+        _selection.Clear();
+        ResetUISelection();
+        AnnounceSelection(nullptr);
+        AnnounceUIElement(nullptr);
+    }
+
     void SceneEditorWidget::Update() {
+        RemoteSession* const remote = FindRemote();
+        if (remote != nullptr) {
+            // Before the open check: the other panels let go of the local scene also while this window is closed
+            if (!_showsRemote) {
+                ForgetLocalSelection();
+                _remoteView.Reset();
+            }
+            RemoteSceneView::ReleaseTypedText(*remote);
+            // A pick in the viewport opens a closed panel, as a local one does
+            if (_remoteView.TakeReveal(*remote)) {
+                _focusRequested = true;
+            }
+        }
+        _showsRemote = remote != nullptr;
+
         // A reveal (a pick in the viewport, a request) opens a closed panel too
         if (_focusRequested) {
             _open = true;
@@ -419,6 +474,12 @@ namespace BECore {
             _focusRequested = false;
         }
         if (!ImGui::Begin("Scene Editor", &_open)) {
+            ImGui::End();
+            return;
+        }
+
+        if (remote != nullptr) {
+            _remoteView.Draw(*remote, kToolbarAsset, kInspectorAsset);
             ImGui::End();
             return;
         }
@@ -563,7 +624,15 @@ namespace BECore {
         return changed;
     }
 
+    ConfigManager& SceneEditorWidget::Configs() const {
+        return _configManager != nullptr ? *_configManager : CoreManager::GetConfigManager();
+    }
+
     void SceneEditorWidget::DrawComponents() {
+        if (RemoteSession* const remote = FindRemote()) {
+            RemoteSceneView::DrawComponents(*remote);
+            return;
+        }
         if (_hierarchy.selected == nullptr) {
             return;
         }
@@ -616,21 +685,7 @@ namespace BECore {
         // The node files first: an instance whose rects are in its file then has nothing to override in the scene file. A failure here is logged and never stops the scene
         _uiFileSession.Save(*scene);
 
-        auto& configManager = CoreManager::GetConfigManager();
-        auto xmlRoot = configManager.GetConfig(ConfigNames::scene);
-
-        // An instance of a node file is saved as its <node ref> with the overrides; one that cannot be goes inline and is told here
-        const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
-        Vector<String> notes;
-        if (!xmlRoot || !WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
-            EditorToastEvent::Emit(ToastLevel::Error, kSaveFailedText);
-            return;
-        }
-        for (const String& note : notes) {
-            LOG_WARNING("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note);
-        }
-
-        if (configManager.SaveConfig(ConfigNames::scene)) {
+        if (SaveSceneToConfig(Configs(), *scene)) {
             _isDirty = false;
         } else {
             EditorToastEvent::Emit(ToastLevel::Error, kSaveFailedText);

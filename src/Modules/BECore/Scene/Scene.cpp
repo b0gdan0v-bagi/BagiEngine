@@ -75,9 +75,10 @@ namespace BECore {
         // The view and its fit follow the output size of every frame, so a resized window or viewport needs no event. The pick comes first:
         // everything drawn below (and every canvas that lays out) reads the active view.
         IRenderer* renderer = CoreManager::GetRenderer().Get();
-        PickView(renderer ? renderer->GetOutputWidth() : 0.0f, renderer ? renderer->GetOutputHeight() : 0.0f);
+        _drawOutputSize = renderer ? Vec2{renderer->GetOutputWidth(), renderer->GetOutputHeight()} : Vec2{};
+        PickView(_drawOutputSize.x, _drawOutputSize.y);
         const ActiveSceneView view = GetActiveView();
-        _viewTransform = renderer ? ViewTransform::Fit(view.width, view.height, renderer->GetOutputWidth(), renderer->GetOutputHeight()) : ViewTransform{};
+        _viewTransform = renderer ? ViewTransform::Fit(view.width, view.height, _drawOutputSize.x, _drawOutputSize.y) : ViewTransform{};
         if (renderer) {
             renderer->SetViewTransform(_viewTransform);
         }

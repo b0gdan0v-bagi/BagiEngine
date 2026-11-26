@@ -2,6 +2,7 @@
 
 #include <BECore/Memory/ArenaAllocator.h>
 #include <EASTL/sort.h>
+#include <Widgets/EditorLayout/EditorHost.h>
 
 namespace BECore {
 
@@ -112,7 +113,9 @@ namespace BECore {
         if (normalized.empty()) {
             out.reserve(commands.size());
             for (const EditorCommand& command : commands) {
-                out.push_back(&command);
+                if (IsEditorCommandAvailable(command.id.ToStringView())) {
+                    out.push_back(&command);
+                }
             }
             return;
         }
@@ -133,7 +136,7 @@ namespace BECore {
             }
             const int idScore = ScoreMatch(needle, command.id.ToStringView());
             const int score = std::max(titleScore == kNoMatch ? kNoMatch : titleScore * kTitleWeight, idScore);
-            if (score != kNoMatch) {
+            if (score != kNoMatch && IsEditorCommandAvailable(command.id.ToStringView())) {
                 hits.push_back({&command, score, index});
             }
             ++index;

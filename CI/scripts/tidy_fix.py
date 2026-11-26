@@ -4,7 +4,7 @@ Run clang-tidy fixes on project sources (readability-braces-around-statements).
 
 Modes:
   --changed  Only files with uncommitted changes (git).
-  --all      All C/C++ sources under src/ and config/.
+  --all      All C/C++ sources under src/, config/, tools/stress/ and tools/demo/.
 
 Only .cpp and .c files are passed to clang-tidy directly; fixes in included
 headers are applied automatically by clang-tidy when processing the .cpp unit.
@@ -154,7 +154,7 @@ def get_changed_files(project_root: Path, ignore_patterns: list[str]) -> list[Pa
 
 def get_all_source_files(project_root: Path, ignore_patterns: list[str]) -> list[Path]:
     result = []
-    for top in ("src", "config", "tools/stress"):
+    for top in ("src", "config", "tools/stress", "tools/demo"):
         top_path = project_root / top
         if not top_path.is_dir():
             continue
@@ -179,7 +179,7 @@ def main() -> int:
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--changed", action="store_true", help="Process only changed files (git)")
-    group.add_argument("--all", action="store_true", help="Process all sources under src/ and config/")
+    group.add_argument("--all", action="store_true", help="Process all sources under src/, config/, tools/stress/ and tools/demo/")
     parser.add_argument(
         "--build-dir",
         metavar="PATH",

@@ -4,7 +4,7 @@
 
 ## A hand run
 
-It works from the root of a project that has the web presets (the engine, or a game that carries it as `engine/`; `--source-dir` names another). It needs the Emscripten SDK (`python CI/scripts/setup_emsdk.py` installs it into `external/emsdk` once per checkout, about 2 GB; the presets find it), and for `--deploy` the Railway CLI logged in (`railway login`, `railway link`), or `RAILWAY_TOKEN`; the script reads and writes no secret. Defaults: the page in `<source>/build/<preset>/bin` (a single-thread preset's own: its libraries lack `-pthread`), the package in `<source>/dist` (in the engine's `.gitignore`; a game adds it to its own), the staging in `<source>/build/web-deploy`. The staging is emptied first (only inside `<source>/build`; another `--stage-dir` must be empty or absent, else exit 2) and then holds only `Dockerfile`, `serve.py` and a fresh copy of `dist/`; `railway up` gets it with `--path-as-root`, so it never uploads a linked parent such as the engine root.
+It works from the root of a project that has the web presets (the engine, or a game that carries it as `engine/`; `--source-dir` names another). It needs the Emscripten SDK (`python CI/scripts/setup_emsdk.py` installs it into `external/emsdk` once per checkout, about 2 GB; the presets find it), and for `--deploy` the Railway CLI logged in (`railway login`, `railway link`), or `RAILWAY_TOKEN`; the script writes no secret and reads the variables of a service only for an editor page ("The editor page"). Defaults: the page in `<source>/build/<preset>/bin` (a single-thread preset's own: its libraries lack `-pthread`), the package in `<source>/dist` (in the engine's `.gitignore`; a game adds it to its own), the staging in `<source>/build/web-deploy`. The staging is emptied first (only inside `<source>/build`; another `--stage-dir` must be empty or absent, else exit 2) and then holds only `Dockerfile`, `serve.py` and a fresh copy of `dist/`; `railway up` gets it with `--path-as-root`, so it never uploads a linked parent such as the engine root.
 
 **The gate:** `--deploy` stops before the build unless HEAD of the source has a green full test run and the tree is HEAD (`tools/alltests/CLAUDE.md`); `--skip-alltests` deploys anyway and says so, `--dry-run` only reports it. A hand run never starts the tests: it refuses and says how to start them.
 
@@ -12,7 +12,7 @@ By hand without the script: `cmake --preset web-release`, `cmake --build --prese
 
 ## Targets: `<project>/web/targets.json`
 
-`--target NAME` reads the file next to the game's `web/app.json`, from the project that runs the script (not from the fetched checkout: the name is refused before any network use). The engine ships none; the game owns its file.
+`--target NAME` reads the file next to the game's `web/app.json`, from the project that runs the script (not from the fetched checkout: the name is refused before any network use). The engine ships one target, `engine-editor` (the editor page of its demo scene, `tools/demo/CLAUDE.md`); a game owns its own file.
 
 ```json
 {"format": 1, "targets": {"mahjong-editor": {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev"}}}
@@ -50,9 +50,23 @@ A JSON object rewritten whole, through a temp file and `os.replace`, at every ch
 - `stages` lists what this run goes through: `fetch` only in checkout mode, `tests` there with `--deploy` (and no `--skip-alltests`), `deploy` only with `--deploy`; configure and build are stage `build`, `package.py` is `package`, the staging and `railway up` are `deploy`.
 - `state: failed` carries the `stage` it stopped in and a one-line `error` (and `failedTests` after a red run). **`done` at the stage `deploy` means `railway up --detach` accepted the upload, not that the page is live;** `url` is `https://<address>`, set from the target.
 
+## The editor page
+
+`--preset web-editor` (by hand or in a target) builds the page with the editor and packages it into `<source>/build/web-editor-dist`; `dist/` is not touched. It is a debug build: tens of MB of `.wasm` (`CLAUDE.md`, "The package").
+
+```bash
+python tools/web/build_and_deploy.py --game BagiDemo --preset web-editor
+python tools/web/serve.py --root build/web-editor-dist --host 127.0.0.1      # this machine only, http://localhost:8080
+python tools/web/build_and_deploy.py --game BagiDemo --preset web-editor --deploy --service <editor service>
+```
+
+- **Set the access first** (`ACCESS.md`): Basic, or sign-in with `SIGNIN_ALLOW`, on a service of its own. A hand `--deploy` without `--service` is exit 2, also with `--dry-run`; a package that says `editor` under another preset name needs `--service` too.
+- **The question:** after the build and before the staging the script runs `railway variable list --service <name> --json` where `railway up` will run (the same linked project and environment) and applies the rule of `serve.py` to the answer. No door, settings the server would not start with, a failed command or an answer that is not a JSON object of strings: exit 2, nothing staged or uploaded. A variable the CLI does not return (sealed) counts as unset. `--dry-run` says that the question would be asked and asks nothing; `--skip-alltests` skips the test gate only.
+- The test gate is the one of the release page.
+
 ## Commits in the manifest
 
-`package.py --commit NAME=SHA` (repeatable; `NAME` `[a-z][a-z0-9-]*`, `SHA` 7 to 64 lower-case hex digits) writes `commits: {name: sha}` into `manifest.json`; without the option the key is absent. The deploy script passes `engine` (HEAD of `<project>/engine` in a game, else of the project) and `game` (HEAD of the project; the same sha in the engine) whenever git answers for a folder that is the top of a repository, so a reader of the deployed `manifest.json` can say "outdated" by comparing them with `origin/<base>`. `serve.py` reads only `threads` and ignores the key.
+`package.py --commit NAME=SHA` (repeatable; `NAME` `[a-z][a-z0-9-]*`, `SHA` 7 to 64 lower-case hex digits) writes `commits: {name: sha}` into `manifest.json`; without the option the key is absent. The deploy script passes `engine` (HEAD of `<project>/engine` in a game, else of the project) and `game` (HEAD of the project; the same sha in the engine) whenever git answers for a folder that is the top of a repository, so a reader of the deployed `manifest.json` can say "outdated" by comparing them with `origin/<base>`. `serve.py` ignores the key (of the manifest it reads `threads` and `editor`).
 
 ## What stays the owner's
 

@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<PanelAsset id="Attach" title="Attach to a Running Game" command="view.attach" open="false" window="Floating" width="520" height="170">
+  <sources>
+    <item name="remote" model="AttachPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelInput" id="address" bind="remote.address" text="Address" hint="ws://host:port" width="24" submitCommand="remote.attach" tooltip="The control port of a running game (--control), or the bridge of a game in a browser"/>
+    <element type="PanelRow" id="buttons">
+      <elements>
+        <element type="PanelButton" id="attach" icon="plug" text="Attach" command="remote.attach" enableWhen="remote.canAttach"/>
+        <element type="PanelButton" id="detach" icon="unplug" text="Detach" command="remote.detach" enableWhen="remote.canDetach" tooltip="Back to the local scene"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="status" bind="remote.status" wrap="true" visible="!remote.troubled"/>
+    <element type="PanelText" id="trouble" bind="remote.status" wrap="true" style="Warning" visible="remote.troubled"/>
+    <element type="PanelText" id="error" bind="remote.error" wrap="true" style="Error" visible="remote.hasError"/>
+  </elements>
+</PanelAsset>

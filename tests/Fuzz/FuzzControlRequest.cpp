@@ -8,6 +8,9 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneControl.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNodeControl.h>
+#include <BECore/Scene/ScenePickControl.h>
+#include <BECore/Scene/SceneSaveControl.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Games/GameControl.h>
@@ -99,12 +102,17 @@ namespace BECore::Fuzz {
         ControlService service;
         RegisterControlBuiltins(service);
         RegisterGameControl(service);
-        RegisterSceneControl(service, [&scenes] {
+        const auto activeScene = [&scenes] {
             if (!scenes) {
                 scenes = MakeScene();
             }
             return scenes->GetActiveScene();
-        });
+        };
+        RegisterSceneControl(service, activeScene);
+        RegisterSceneNodeControl(service, activeScene);
+        RegisterScenePickControl(service, activeScene, [] { return true; });
+        // No config manager: a request must never write a file
+        RegisterSceneSaveControl(service, activeScene, []() -> ConfigManager* { return nullptr; });
 
         // Real data for `get_property`, `set_property` and `call_method`; neither root allows interning, so a request cannot grow the pool
         ProbeState state = MakeFilledProbe();

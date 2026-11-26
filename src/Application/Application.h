@@ -17,6 +17,7 @@ namespace BECore {
     }
 
     class ApplicationMainAccess;
+    class ControlLink;
     struct CookRequest;
 #if BE_WITH_REMOTE_CONTROL
     class WebSocketServer;
@@ -90,6 +91,9 @@ namespace BECore {
         Vector<String> _arguments;
 #if BE_WITH_REMOTE_CONTROL
         UniquePtr<WebSocketServer> _controlServer;
+#endif
+#if BE_CONTROL_LINK
+        UniquePtr<ControlLink> _controlLink;  // a web Debug page that was asked to dial the bridge
 #endif
     };
 }  // namespace BECore

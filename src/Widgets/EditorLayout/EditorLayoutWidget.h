@@ -5,6 +5,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/CommandPalette.h>
+#include <Widgets/EditorLayout/EditorBrowserInput.h>
 #include <Widgets/EditorLayout/EditorChordText.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorPlayModel.h>
@@ -30,6 +31,8 @@ namespace BECore {
     // flashes of what the control API touched (TouchHighlights), which the panels read.
     // Must be registered after ImGuiWidget and the `Bar` assets it draws (`MainToolbarPanel`, `MainMenuPanel`: their models update before
     // this widget draws them) and before the other editor windows, so they dock into this space.
+    //
+    // In a browser it also shows, once per page load, that nothing changed here is kept (EditorHost.h).
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore, the workspaces of WorkspaceSwitcher) and runs the commands it is in charge of
     // (EditorCommandEvent): quit, switch mode, switch the workspace, reset its layout and open the palette (`view.preferences` is the Preferences asset's own command, `view.saveLayout` is run by
@@ -74,6 +77,8 @@ namespace BECore {
         void ApplyPreferences(const EditorPreferences& preferences);
 
         void DrawMenuBar();
+        /// The modal that says a browser editor keeps nothing; opened on the first Update after Initialize took the notice
+        void DrawReloadNotice();
         /// Emits the command of every chord pressed this frame
         void DispatchHotkeys();
         /// Pause / Resume through the model, written to the engine's GamePause (the pause of a manual clock is not lifted)
@@ -94,7 +99,8 @@ namespace BECore {
         ToastOverlay _toasts;
 
         CommandPalette _palette;
-        GameEditorCommands _gameCommands;  // the rows of the palette: the table and the active game's
+        Optional<EditorBrowserInput> _browserInput;  // only in the browser host
+        GameEditorCommands _gameCommands;            // the rows of the palette: the table and the active game's
         GameCommandRunner _gameRunner;
         GameEditorPanels _gamePanels;
 
@@ -103,6 +109,7 @@ namespace BECore {
         EditorLayoutHostHandle _hostHandle;
         bool _preferencesNotified = false;  // NotifyPreferencesChanged waits here for the next Update
         bool _preferencesAnnounced = false;
+        bool _reloadNoticePending = false;
     };
 
 }  // namespace BECore

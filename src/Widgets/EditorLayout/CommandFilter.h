@@ -12,9 +12,9 @@ namespace BECore {
      * in that order. The score rewards a match at the start of the title, at the start of a word and in a run, so "lay"
      * puts "Reset Layout" before a title that only has an l, an a and a y far apart. A match in the title beats one in the id.
      * Commands with the same score keep the order of @p commands. An empty query (or spaces only) lists all of them in
-     * their order.
+     * their order. A command the editor's host does not offer (`EditorHost.h`) is never listed.
      *
-     * Pure, no ImGui context.
+     * No ImGui context.
      */
     [[nodiscard]] Vector<const EditorCommand*> FilterCommands(StringView query, Span<const EditorCommand> commands);
 

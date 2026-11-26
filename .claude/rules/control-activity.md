@@ -18,7 +18,7 @@ A request may carry a `ControlClient` (`Control/ControlClient.h`, ref-counted): 
 
 | Kind | Made by | Told to the main thread |
 |------|---------|-------------------------|
-| connection | `OpenConnectionClient()` / `CloseConnectionClient()`, any thread; the control server does both, once per connection | a connect and a disconnect notice |
+| connection | `OpenConnectionClient()` / `CloseConnectionClient()`, any thread; the control server does both, once per connection, and a web page's `ControlLink` once per channel (`control-web-link.md`) | a connect and a disconnect notice |
 | local | `OpenLocalClient(name)`: a part of the program that posts requests of its own | nothing |
 
 - **Whoever keeps a client keeps it alive**: a request, a call and a record hold it, so a connection that has ended still has its id and name.

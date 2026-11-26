@@ -12,9 +12,9 @@
             <element type="PanelSeparator" id="viewportTitle" title="Viewport"/>
             <element type="PanelCheckbox" id="viewportGrid" bind="prefs.viewportGrid" text="Show a grid over the image"/>
             <element type="PanelNumber" id="viewportGridStep" bind="prefs.viewportGridStep" text="Grid step (image pixels)" min="4" max="256" slider="true" width="16" commitCommand="preferences.commit" visible="prefs.viewportGrid"/>
-            <element type="PanelSeparator" id="consoleTitle" title="Console"/>
-            <element type="PanelText" id="externalEditorLabel" text="Open files with"/>
-            <element type="PanelInput" id="externalEditor" bind="prefs.externalEditor" hint="code -g {file}:{line}" width="24" commitCommand="preferences.commit" tooltip="The program that opens a file of the log. {file} and {line} are replaced inside an argument; quotes keep an&#10;argument together. Empty: the system's program for the file, without the line.&#10;On Windows a .cmd tool needs cmd /c code -g {file}:{line}"/>
+            <element type="PanelSeparator" id="consoleTitle" title="Console" visible="prefs.externalEditorSupported"/>
+            <element type="PanelText" id="externalEditorLabel" text="Open files with" visible="prefs.externalEditorSupported"/>
+            <element type="PanelInput" id="externalEditor" bind="prefs.externalEditor" visible="prefs.externalEditorSupported" hint="code -g {file}:{line}" width="24" commitCommand="preferences.commit" tooltip="The program that opens a file of the log. {file} and {line} are replaced inside an argument; quotes keep an&#10;argument together. Empty: the system's program for the file, without the line.&#10;On Windows a .cmd tool needs cmd /c code -g {file}:{line}"/>
             <element type="PanelText" id="notSaved" bind="prefs.message" style="Warning" visible="prefs.hasError"/>
           </elements>
         </element>

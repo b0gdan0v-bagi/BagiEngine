@@ -12,6 +12,7 @@
 #include <Events/RenderEvents.h>
 #include <Games/GameManager.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
+#include <Widgets/EditorLayout/EditorHost.h>
 #include <Widgets/EditorLayout/GitBranch.h>
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/ImGuiLayoutText.h>
@@ -25,6 +26,9 @@ namespace BECore {
     namespace {
 
         constexpr StringView kMainMenuAsset = "MainMenuPanel";
+
+        constexpr const char* kReloadNoticeId = "Nothing is kept###reloadNotice";
+        constexpr const char* kReloadNoticeText = "Nothing you change here is kept: a reload brings back the content the page came with";
 
         /// Where the search for the engine's repository starts: the folder above the lowest layer of the `config` mount (the engine's own
         /// content), else the working directory
@@ -92,6 +96,13 @@ namespace BECore {
         ApplyPreferences(_settings->GetPreferences());
         _statusBar.SetBranch(ReadGitBranch(BranchSearchStart()));
         _statusBar.StartHardwareMonitor();
+        if (GetEditorHost() == EditorHostKind::Browser) {
+            _browserInput.emplace(CoreManager::GetClipboard(), IsMacBrowserPage());
+        }
+        _reloadNoticePending = GetReloadNotice().Take(GetEditorHost());
+        if (_reloadNoticePending) {
+            LOG_INFO("Editor: {}", kReloadNoticeText);
+        }
 
         _hostHandle = EditorLayoutHostRegistry::GetInstance().Register(*this);
         _toasts.Connect(CoreManager::GetControlService().Activity());
@@ -212,6 +223,7 @@ namespace BECore {
             EditorCommandEvent::Emit(chosen);
         }
         _gameRunner.Draw();
+        DrawReloadNotice();
 
         // It takes what the status bar leaves; the bars are children of the host, so no dock node can overlap them
         const float dockHeight = eastl::max(0.0f, ImGui::GetContentRegionAvail().y - StatusBar::GetHeight());
@@ -261,6 +273,21 @@ namespace BECore {
 
     void EditorLayoutWidget::NotifyPreferencesChanged() {
         _preferencesNotified = true;
+    }
+
+    void EditorLayoutWidget::DrawReloadNotice() {
+        if (_reloadNoticePending) {
+            _reloadNoticePending = false;
+            ImGui::OpenPopup(kReloadNoticeId);
+        }
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        if (ImGui::BeginPopupModal(kReloadNoticeId, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+            ImGui::TextUnformatted(kReloadNoticeText);
+            if (ImGui::Button("OK")) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
 
     void EditorLayoutWidget::DrawMenuBar() {

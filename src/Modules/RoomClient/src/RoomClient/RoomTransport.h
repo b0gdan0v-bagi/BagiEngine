@@ -3,6 +3,8 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
+#include <Rooms/RoomLimits.h>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 
@@ -30,8 +32,17 @@ namespace BECore {
         String reason;
     };
 
+    /// How much one connection takes and holds; the defaults are those of the rooms. The browser transport always has them, the desktop one only
+    /// when it is made with them: without, WebSocketClientSettings bounds it
+    struct RoomTransportLimits {
+        /// The longest message taken from the other end; a longer one ends the connection (1009)
+        size_t maxMessageBytes = RoomLimits::kMaxServerMessageBytes;
+        /// What may wait unsent: SendText refuses a text that would put more than this into the send buffer
+        size_t maxSendBufferBytes = 1024 * 1024;
+    };
+
     /**
-     * @brief One connection to a room server, polled.
+     * @brief One connection to a room server, polled. The control link of a browser page uses the same interface for its bridge.
      *
      * Everything is delivered on the calling thread by PollEvent(): no callback ever runs on a network thread, so the owner needs no
      * lock. A transport serves one connection: after Closed it is finished and the owner makes a new one. Exactly one Closed follows

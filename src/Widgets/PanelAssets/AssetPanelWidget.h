@@ -48,6 +48,9 @@ namespace BECore {
      * models' `EndUpdate` comes at the end of `DrawBar`, or in the next `Update` when nobody drew the bar in between. A bad reload shows as one error line above the bar.
      * The widget must be listed before the window that draws it in `WidgetsConfig.xml`, so the models update before the draw.
      *
+     * **Not offered.** An asset whose `command` the editor's host does not offer (`EditorHost.h`) is a panel the host cannot run: it stays closed, makes no model and no
+     * window, and its command does nothing.
+     *
      * A click is emitted as `EditorCommandEvent` after the window is closed, never inside the walk (`PanelInterpreter`). Editor only.
      */
     class AssetPanelWidget : public IWidget, public IPanelBar, public IEditorPanel {
@@ -132,6 +135,8 @@ namespace BECore {
         PanelBinding _titleBinding;
         PanelBindingReader _titleReader;
         bool _hasTitleBinding = false;
+        /// False when the editor's host does not offer the asset's `command`
+        bool _offered = true;
         Fade _fade;
         /// The size of what the open window drew last, which the empty body of a fading one keeps
         float _contentWidth = 0.0f;

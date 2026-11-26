@@ -28,7 +28,6 @@ The core of the external control API: a program or a model sends commands, the e
 | `JsonDeserializer` | `IDeserializer` that walks a tape: `Load(text)` / `Load(tape)` / `Load(JsonView)` (any value of a tape the caller keeps) serve many messages, always strict, with findings (`.claude/rules/json-tape.md`) |
 | `JsonViewOps` | `JsonEquals`, `WriteJson(writer, view)`, `WriteJsonSorted` (keys in byte order), `FindJsonPointer(view, ..)`: what the game layer does with a view |
 | `JsonMemberMap` | An object as sorted keys and the text of each value: unknown keys kept and written back, or an object made from `key=value`; files and typed commands, never a hot path |
-| `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
 
 ## Protocol
 
@@ -66,7 +65,7 @@ There is no DOM and no exception: JSON is read through a `JsonTape` and written 
 - **A handler reads `call.Params()`** (a `JsonView` into the request's tape; `.claude/rules/json-tape.md`) with `ControlParams.h`: every read is checked, a number must be finite (`1e999` reads as nothing, so the handler answers `invalid_params`). A reflected type is read with `JsonDeserializer::Load(view)`.
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport. A request nested deeper than `kMaxRequestDepth` (128) is `invalid_request` with `id: null` (`IsJsonNestedDeeperThan` runs before the tape, whose own limit is 256 and a `parse_error`).
 - **JSON is written with `JsonWriter`.** A document that is passed on or kept is text (`JsonMemberMap` for unknown keys written back, `WriteJsonSorted` for keys in byte order) and is read through a `JsonTape`. A type with no native writer (a field with only `Serialize`) goes through `WriteSerializedMember` / `WriteSerializedObject`: `Serialize` into a `JsonStreamSerializer`, taped and written sorted; it allocates, so it is never a hot path.
-- A plain answer is a reflected struct of arena types and `TextView`s, a local of the handler or of `done`, `call.ReplyObject(answer)` (`Reflection/CLAUDE.md`, "Answers on the scratch arena"); an answer with the clock derives `ControlClock`. A foreign JSON value in it (the client's `id`, a game's document) is a `JsonPayload` member, by holder: `Streamed` for a game's document written straight into the writer (a failing callback answers its `ControlError` with `JsonWriter::Fail`), `Text` for ready text. A hand-written writer stays for the log lines (they stream from the ring), `frame_stats`, `explain_value` and `PropertyValue`.
+- A plain answer is a reflected struct of arena types and `TextView`s, a local of the handler or of `done`, `call.ReplyObject(answer)` (`Reflection/CLAUDE.md`, "Answers on the scratch arena"); an answer with the clock derives `ControlClock`. A foreign JSON value in it (the client's `id`, a game's document) is a `JsonPayload` member, by holder: `Streamed` for a game's document written straight into the writer (a failing callback answers its `ControlError` with `JsonWriter::Fail`), `Text` for ready text. A hand-written writer stays for the log lines (streamed from the ring), `frame_stats`, `explain_value` and `PropertyValue`.
 - Write a message with `JsonWriter` into a `String` that lives as a member (it keeps its capacity, so the second message allocates nothing); a reflected value writes itself with `value.WriteJson(writer)`. A hand-written object writes its keys in **alphabetical (byte) order** (`id`, `ok`, `result`): clients may rely on it. `Reply` and `Publish` take a writer callback; `TryReply` is for a writer that can fail (its error answers, nothing is sent).
 - The `const String&` a `ControlReplyFn` gets is valid for the call only (the service writes every reply into one scratch): a reply function that keeps the text copies it.
 
@@ -80,7 +79,7 @@ The two clocks differ in who runs the frames:
 |---|---|---|
 | Frames | run all the time; `Time::Tick` measures them | run only while the pause has a step due (`GamePause::IsStepDue()`, which `ControlService::IsStepDue()` mirrors); `Time::Advance(step seconds)` sets their length |
 | `step` | waits for `N` frames; `dt` is ignored (a game that is **paused** makes `N` stepped frames of `dt`) | makes `N` frames of `dt` seconds, then answers |
-| Between steps | | `Application::RunFrame` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`). The window stays alive and `quit` still works |
+| Between steps | | `Application::RunFrame` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`; not on the web). The window stays alive and `quit` still works |
 
 While a step runs it is the barrier too. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (`screenshot` asks for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down.
 
@@ -95,17 +94,17 @@ What the manual clock means for a client:
 
 ## Starting the API
 
-Off by default (`--control`, `control="true"`); the command line beats the attribute. Flags, config and status: `.claude/rules/control-startup.md`.
+Off by default (`--control`, `control="true"`); the command line beats the attribute. Flags, config and status: `.claude/rules/control-startup.md`. A web Debug page dials a bridge instead: `.claude/rules/control-web-link.md`.
 
 ## Methods
 
 | Where | Methods |
 |-------|---------|
-| `BECore/Control/ControlBuiltins` | `client_hello` (`{name}` to `{id, name}`; `no_client`), `ping`, `status` (the clock, `manualClock`, `paused`, `log` totals, `runMode`: `Editor` or `Game`, the mode that runs, `window`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `list_methods` (to `{methods: [{name, summary, params: [{name, type, required, description}]}]}`, sorted), `log_mark`, `log_since`, `log_subscribe`, `batch` (shapes, limits and traps: `.claude/rules/control-qa-api.md`), `quit` |
+| `BECore/Control/ControlBuiltins` | `client_hello` (`{name}` to `{id, name}`; `no_client`), `ping`, `status` (the clock, `manualClock`, `paused`, `log` totals, `runMode`: `Editor` or `Game`, the mode that runs, `window`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `list_methods` (sorted: name, summary, params), `log_mark`, `log_since`, `log_subscribe`, `batch` (shapes, limits and traps: `.claude/rules/control-qa-api.md`), `quit` |
 | `BECore/Control/ControlWindow` | `set_window` (`{width, height, density?, userScale?, safeArea?}` on a headless window, answered after a frame; `not_headless` on a real one) and the `window` object of `status`; `.claude/rules/control-window-api.md` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `BECore/UI/UIControl` | answers are the reflected structs of `UIControlAnswers.h`; `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real click on a visible button, toggle or slider, `at` 0..1 also sets a slider; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `.claude/rules/ui-control-api.md`) |
-| `BECore/Scene/SceneControl` | `scene_tree`, `scene_get`, `scene_set` (the active scene by node path; `.claude/rules/control-scene-api.md`) |
+| `BECore/Scene/Scene*Control` | `scene_tree`, `scene_get`, `scene_set`, `scene_set_node`, `scene_pick`, `scene_save` (the active scene; `.claude/rules/control-scene-api.md`) |
 | `BECore/Input/InputControl` | `click_at` (`{x, y, space?, button?, which?}`; `Input/CLAUDE.md`), `wheel_at` (`{x, y, dx?, dy?, flipped?, which?}`: a wheel event at an output pixel to `{consumed, x, y}`) |
 | `BECore/Input/ImGuiInputControl` | `imgui_input` (`{events, space?}` to `{events, frames, wantCapture*, wantTextInput}`: events into `ImGuiIO`, answered once ImGui took the queue and a frame reacted; `no_imgui`, `invalid_params`, `imgui_timeout`), `imgui_find` (`{label?, labelContains?, id?, window?, kind?, visibleOnly?, limit?}` to the matches with rects in output pixels; no filter lists the windows); `Input/CLAUDE.md`, `.claude/rules/control-imgui-api.md` |
 | `BECore/Clipboard/ClipboardControl` | `clipboard_set` (`{text}` to `{ok}`), `clipboard_get` (to `{status, text}`; answered after frames, `clipboard_timeout` after 600), `clipboard_paste` (to `{}` once the `PasteEvent` has been delivered, as Cmd+V gives it); `Clipboard/CLAUDE.md` |

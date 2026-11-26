@@ -18,9 +18,10 @@ from pathlib import Path
 ENGINE_DIR = Path(__file__).resolve().parents[3]
 PRESETS_FILE = ENGINE_DIR / "CMakePresets.json"
 CHECK_SCRIPT = Path(__file__).resolve().parent / "check_bagi_web.cmake"
-THREADED_PRESETS = ("web-debug", "web-release", "web-release-stats")
+THREADED_PRESETS = ("web-debug", "web-release", "web-release-stats", "web-editor")
 SINGLE_THREAD_PRESETS = ("web-debug-single-thread", "web-release-single-thread", "web-release-single-thread-stats")
 STATS_PRESETS = ("web-release-stats", "web-release-single-thread-stats")
+EDITOR_PRESETS = ("web-editor",)
 WEB_PRESETS = THREADED_PRESETS + SINGLE_THREAD_PRESETS
 CMAKE = shutil.which("cmake")
 
@@ -76,7 +77,7 @@ class WebPresetsTest(unittest.TestCase):
             with self.subTest(name):
                 preset = resolve_configure_preset(self.presets, name)
                 self.assertEqual(preset["generator"], "Ninja")
-                if "debug" in name:
+                if "debug" in name or name in EDITOR_PRESETS:
                     self.assertEqual(preset["cacheVariables"]["CMAKE_BUILD_TYPE"], "Debug")
                     self.assertNotIn("ENGINE_ENABLE_ASSERTS", preset["cacheVariables"])
                 else:
@@ -118,12 +119,13 @@ class WebPresetsTest(unittest.TestCase):
         folders = {resolve_configure_preset(self.presets, name)["binaryDir"].replace("${presetName}", name) for name in WEB_PRESETS}
         self.assertEqual(len(folders), len(WEB_PRESETS))
 
-    def test_no_tests_and_no_editor_in_either_preset(self):
+    def test_no_tests_in_any_preset_and_the_editor_in_the_editor_preset_only(self):
+        # A page with the editor can change everything, so no other preset may get it
         for name in WEB_PRESETS:
             with self.subTest(name):
                 variables = resolve_configure_preset(self.presets, name)["cacheVariables"]
                 self.assertEqual(variables["ENGINE_BUILD_TESTS"], "OFF")
-                self.assertEqual(variables["BE_WITH_EDITOR"], "OFF")
+                self.assertEqual(variables["BE_WITH_EDITOR"], "ON" if name in EDITOR_PRESETS else "OFF")
 
     def test_the_toolchain_file_is_the_emscripten_one_from_the_emsdk_submodule(self):
         # ${fileDir} is the folder of the CMakePresets.json that holds the preset: the engine root, also when a game includes the file
@@ -264,6 +266,12 @@ class WebFlagsTextTest(unittest.TestCase):
         # web-debug sets BE_WITH_EDITOR=OFF; the "ignored in a Debug build" warning must not fire there
         text = (ENGINE_DIR / "cmake" / "BagiEngine.cmake").read_text(encoding="utf-8")
         self.assertRegex(text, r"if\(NOT BE_IS_MULTI_CONFIG AND NOT ENGINE_TARGET_WEB AND CMAKE_BUILD_TYPE STREQUAL \"Debug\"\)\s+message\(WARNING \"BE_WITH_EDITOR=OFF")
+
+    def test_only_an_explicit_on_gives_a_web_build_the_editor(self):
+        # AUTO is ON in Debug, so the force has to look at the value and not only at the result
+        text = (ENGINE_DIR / "cmake" / "BagiEngine.cmake").read_text(encoding="utf-8")
+        self.assertRegex(text, r"if\(ENGINE_TARGET_WEB AND BE_EDITOR_ENABLED AND NOT BE_WITH_EDITOR_VALUE STREQUAL \"ON\"\)"
+                               r"\s+message\([^\n]*\)\s+set\(BE_EDITOR_ENABLED FALSE\)")
 
     def test_sdl_image_is_built_without_tiff_and_webp_on_the_web_only(self):
         # 444 KB of .wasm (libtiff, libwebp); the forcing sits inside the web condition, in front of the SDL_image subdirectory

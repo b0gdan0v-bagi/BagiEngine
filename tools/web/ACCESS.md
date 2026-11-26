@@ -10,6 +10,8 @@
 
 Basic and sign-in exclude each other (the server does not start with both). Without `SIGNIN_ALLOW` sign-in is **identity, not a closed door**: any account of a configured provider comes in, and so does a guest; its purpose is that a match a signed-in visitor sends carries who sent it. With `SIGNIN_ALLOW` it is a closed door (below).
 
+**An editor page** (`"editor": true` in the package's `manifest.json`) is published only behind a closed door: Basic, or sign-in **with** `SIGNIN_ALLOW`. `serve.py` does not start it otherwise, unless `--host` is a loopback address and no `RAILWAY_*` marker is set, and `build_and_deploy.py --deploy` refuses the service first (`DEPLOY.md`, "The editor page"). Whoever passes the door can change everything the page can.
+
 ## Sign-in
 
 - **Providers.** `PROVIDERS` in `serve.py` is the table of the providers a deployment can turn on; one is on when both of its variables are set (Google: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`). An OpenID Connect provider is one row (its authorization and token endpoints, its issuers); one that is not (plain OAuth with a profile call) is a `Provider` subclass with `authorize_url` and `identity`. The routes carry the provider id: `/auth/<id>/start`, `/auth/<id>/callback`.

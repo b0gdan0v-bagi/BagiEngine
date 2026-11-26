@@ -30,6 +30,18 @@ if(ENGINE_BUILD_TESTS)
     )
     # the control smoke of the app: its own script (a fresh game per scene, the check of the game's log)
     be_add_game_control_tests(BagiStress SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/tests/stress_smoke.py)
+    # the editor attached to the app over two processes (src/Widgets/RemoteEditor); it takes the smoke lock because it moves the app's imgui.ini aside
+    if(Python3_FOUND)
+        add_test(NAME BagiStressAttachSmoke
+            COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/control/tests/attach_smoke.py --exe $<TARGET_FILE:BagiStress>)
+        set_tests_properties(BagiStressAttachSmoke PROPERTIES
+            SKIP_RETURN_CODE 77
+            TIMEOUT 120
+            RESOURCE_LOCK bagi_control_smoke
+            ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
+            LABELS smoke
+        )
+    endif()
     # the cook of the app's content, read back against the XML: every config of the engine, including the widgets
     # that only this executable can make
     be_add_game_cook_test(BagiStress)

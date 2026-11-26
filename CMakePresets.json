@@ -207,7 +207,7 @@
         {
             "name": "web",
             "hidden": true,
-            "description": "The browser build with the Emscripten SDK of the submodule external/emsdk (install it once: python CI/scripts/setup_emsdk.py; no environment variable). No tests (ctest does not run wasm), no editor panels",
+            "description": "The browser build with the Emscripten SDK of the submodule external/emsdk (install it once: python CI/scripts/setup_emsdk.py; no environment variable). No tests (ctest does not run wasm), no editor panels (the preset web-editor adds them)",
             "inherits": "ninja",
             "toolchainFile": "${fileDir}/external/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
             "cacheVariables": {
@@ -411,6 +411,12 @@
             "name": "web-release",
             "displayName": "Web (Emscripten) Release",
             "inherits": ["web", "release"]
+        },
+        {
+            "name": "web-editor",
+            "displayName": "Web (Emscripten) Debug with the editor",
+            "description": "web-debug with the editor panels: the page starts in Editor mode. A debug build that can change everything: never serve it open",
+            "inherits": ["editor", "web", "debug"]
         },
         {
             "name": "web-debug-single-thread",
@@ -658,6 +664,12 @@
             "displayName": "Web (Emscripten) Release",
             "inherits": "build-web",
             "configurePreset": "web-release"
+        },
+        {
+            "name": "web-editor",
+            "displayName": "Web (Emscripten) Debug with the editor",
+            "inherits": "build-web",
+            "configurePreset": "web-editor"
         },
         {
             "name": "web-debug-single-thread",

@@ -1,6 +1,6 @@
 # BagiEngine
 
-A C++23 game engine on a scene graph of `SceneNode` + `IComponent`. It runs on SDL3 with an SDL or Vulkan renderer, on desktop and in the browser (Emscripten), and drives its in-game UI with its own canvases (adaptive layout, a validator of touch sizes and text fit). A game lives in a repository of its own that carries the engine as the submodule `engine/` (`NEW_GAME.md`); the engine's own runnable program is the stress app `BagiStress`.
+A C++23 game engine on a scene graph of `SceneNode` + `IComponent`. It runs on SDL3 with an SDL or Vulkan renderer, on desktop and in the browser (Emscripten), and drives its in-game UI with its own canvases (adaptive layout, a validator of touch sizes and text fit). A game lives in a repository of its own that carries the engine as the submodule `engine/` (`NEW_GAME.md`); the engine's own runnable programs are the demo scene `BagiDemo` (`tools/demo/`) and the stress app `BagiStress`.
 
 ## Principles
 
@@ -11,7 +11,7 @@ A C++23 game engine on a scene graph of `SceneNode` + `IComponent`. It runs on S
 
 ```bash
 cmake --preset macos-debug          # configure (also regenerates reflection code); list: cmake --list-presets
-cmake --build --preset macos-debug  # BagiStress and the test executables
+cmake --build --preset macos-debug  # BagiStress, BagiDemo and the test executables
 ctest --preset macos-debug
 ```
 

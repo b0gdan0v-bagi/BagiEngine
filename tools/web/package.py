@@ -13,7 +13,10 @@ a gzip copy and, when the `brotli` module can be imported, a brotli copy of ever
 (name.gz, name.br; serve.py picks them by Accept-Encoding) and manifest.json with `threads` (true for a threaded build, the default; false
 with --single-thread: serve.py sends the cross-origin isolation headers only to a threaded page) and the size and the SHA-256 of every
 file. `--commit NAME=SHA` (repeatable) adds `commits` ({name: sha}) to it, the commits the build was made from, so a reader can
-tell an outdated page; without the option the key is absent. The build's <game>.notices.txt (cmake/BagiNotices.cmake), when there is
+tell an outdated page; without the option the key is absent. A build with the editor has the marker <game>.editor beside the page
+(cmake/BagiWeb.cmake): its manifest says `"editor": true` (no key otherwise; serve.py and build_and_deploy.py then ask for access
+control), and a folder whose manifest says the other kind of page is refused.
+The build's <game>.notices.txt (cmake/BagiNotices.cmake), when there is
 one, is published as third-party-notices.txt (the page links it; no .gz / .br copy) and a copy of an earlier run is deleted when the
 build has none. A file of
 an earlier run that this run does not make (another game's, a .data the game no longer has) is deleted from the output folder, so the
@@ -51,6 +54,8 @@ OPTIONAL_SUFFIXES = (".data",)
 # The licence notices of the engine and the game (cmake/BagiNotices.cmake writes <game>.notices.txt); the page links the published name
 NOTICES_BUILD_SUFFIX = ".notices.txt"
 NOTICES_NAME = "third-party-notices.txt"
+# The build writes <game>.editor beside a page that has the editor (cmake/BagiWeb.cmake)
+EDITOR_MARKER_SUFFIX = ".editor"
 # What is worth compressing: the text of the page and the script, and the two large binaries (the wasm and the content package)
 COMPRESSED_SUFFIXES = (".html", ".js", ".wasm", ".data")
 GZIP_LEVEL = 9
@@ -107,6 +112,19 @@ def sha256_of(path: Path) -> str:
         while chunk := stream.read(HASH_CHUNK):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def holds_editor_page(manifest_path: Path) -> bool:
+    """Whether the package manifest at `manifest_path` says `editor`; one that cannot be read does not."""
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(manifest, dict) and bool(manifest.get("editor"))
+
+
+def write_manifest(out_dir: Path, manifest: dict) -> None:
+    (out_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def write_compressed_copies(path: Path, brotli_module) -> dict:
@@ -309,7 +327,8 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
     `brotli_module` is the module used for the .br copies: "auto" imports `brotli` when it is installed, None leaves them out.
     `threads` says whether the build is threaded (the manifest's `threads`, which serve.py reads to decide on the isolation headers).
     `app_file` is the game's web/app.json for the web app manifest and the icons (None: the defaults, generated icons).
-    `commits` ({name: sha}) is written as the manifest's `commits`; None or empty leaves the key out, so an old manifest is unchanged."""
+    `commits` ({name: sha}) is written as the manifest's `commits`; None or empty leaves the key out, so an old manifest is unchanged.
+    A build with the editor marker gets `"editor": true`; PackageError when `out_dir` holds a package of the other kind."""
     commits = check_commits(commits)
     if not build_dir.is_dir():
         raise PackageError(f"{build_dir} is not a folder")
@@ -344,7 +363,16 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
     build_resolved, out_resolved = build_dir.resolve(), out_dir.resolve()
     if out_resolved == build_resolved or out_resolved in build_resolved.parents or build_resolved in out_resolved.parents:
         raise PackageError(f"{out_dir} and the build folder {build_dir} are the same folder or one is inside the other: write the package to a folder of its own")
+    editor = (build_dir / f"{stem}{EDITOR_MARKER_SUFFIX}").is_file()
+    previous = out_dir / MANIFEST_NAME
+    if previous.is_file() and holds_editor_page(previous) != editor:
+        kinds = {True: "an editor page", False: "a page without the editor"}
+        raise PackageError(f"{out_dir} holds {kinds[not editor]} and this build is {kinds[editor]}: each kind has a folder of its own "
+                           "(delete the folder to reuse it)")
     out_dir.mkdir(parents=True, exist_ok=True)
+    if editor:
+        # Before the first file of the page: a run that stops halfway must not leave a folder serve.py takes for an open page
+        write_manifest(out_dir, {"game": stem, "editor": True})
     remove_stale_files(out_dir, {name for _, name in sources})
     files = {}
     for source, name in sources:
@@ -361,7 +389,9 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
     manifest = {"game": stem, "threads": threads, "files": files}
     if commits:
         manifest["commits"] = commits
-    (out_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if editor:
+        manifest["editor"] = True
+    write_manifest(out_dir, manifest)
     return manifest
 
 
@@ -385,6 +415,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     total = sum(entry["size"] for entry in manifest["files"].values())
     kind = "threaded" if manifest["threads"] else "single-thread"
+    if manifest.get("editor"):
+        kind += ", editor"
     print(f"package.py: {manifest['game']} ({kind}): {len(manifest['files'])} files, {total} bytes, written to {args.out_dir}")
     return 0
 

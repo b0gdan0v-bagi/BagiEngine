@@ -55,4 +55,12 @@ namespace BECore::SceneEvents {
         SceneNodeEditedEvent(const Scene* s, const SceneNode* n) : scene(s), node(n) {}
     };
 
+    /// A client of the control API saved `scene` into SceneConfig (`scene_save`). Sent after the file is written, for who keeps track of unsaved changes
+    struct SceneSavedEvent : public EventBase<SceneSavedEvent> {
+        const Scene* scene = nullptr;
+
+        SceneSavedEvent() = default;
+        explicit SceneSavedEvent(const Scene* s) : scene(s) {}
+    };
+
 }  // namespace BECore::SceneEvents

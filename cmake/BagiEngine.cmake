@@ -320,13 +320,14 @@ endif()
 #                   So a Debug build has the editor and a Release build does not.
 #   ON:             the editor is built (also in Release).
 #   OFF:            the editor is not built. A Debug build ignores it (WARNING, the editor is built anyway):
-#                   Debug builds always include the editor. The web build is the exception: it has no editor in any
-#                   configuration.
+#                   Debug builds always include the editor.
+# The web build is the exception to AUTO and to the Debug rule: it has the editor only with ON (the preset web-editor),
+# so a page never carries it by accident.
 # A multi-config generator (Visual Studio, Ninja Multi-Config) picks the configuration at build time, but the sources
 # are picked now, so there AUTO means ON; use -DBE_WITH_EDITOR=OFF for a build without the editor.
 # The result is the variable BE_EDITOR_ENABLED (used by src/CMakeLists.txt and tests/CMakeLists.txt) and the
 # compile definition BE_WITH_EDITOR=1|0 on every target. ImGui and ImGuiWidget stay in every build.
-set(BE_WITH_EDITOR "AUTO" CACHE STRING "Build the editor panels: AUTO (ON, except OFF in a single-config Release/RelWithDebInfo/MinSizeRel build), ON or OFF. Debug always has the editor")
+set(BE_WITH_EDITOR "AUTO" CACHE STRING "Build the editor panels: AUTO (ON, except OFF in a single-config Release/RelWithDebInfo/MinSizeRel build), ON or OFF. Debug always has the editor; a web build has it only with ON")
 set_property(CACHE BE_WITH_EDITOR PROPERTY STRINGS AUTO ON OFF)
 
 string(TOUPPER "${BE_WITH_EDITOR}" BE_WITH_EDITOR_VALUE)
@@ -349,9 +350,8 @@ else()
     message(FATAL_ERROR "BE_WITH_EDITOR is '${BE_WITH_EDITOR}'; it must be AUTO, ON or OFF")
 endif()
 
-if(ENGINE_TARGET_WEB AND BE_EDITOR_ENABLED)
-    # The browser build has no editor panels; this also overrides the Debug rule above (Debug always builds them)
-    message(STATUS "Editor: the web build never has the editor panels, forced off")
+if(ENGINE_TARGET_WEB AND BE_EDITOR_ENABLED AND NOT BE_WITH_EDITOR_VALUE STREQUAL "ON")
+    message(STATUS "Editor: a web build has the editor panels only with BE_WITH_EDITOR=ON, forced off")
     set(BE_EDITOR_ENABLED FALSE)
 endif()
 

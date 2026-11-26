@@ -14,6 +14,7 @@
       <elements>
         <element type="PanelMenuItem" id="pause" text="Pause / Resume" command="game.pause"/>
         <element type="PanelMenuItem" id="step" text="Step One Frame" command="game.step" enableWhen="play.canStep"/>
+        <element type="PanelMenuItem" id="attach" text="Attach to a Running Game..." command="view.attach"/>
       </elements>
     </element>
     <element type="PanelMenu" id="view" title="View">

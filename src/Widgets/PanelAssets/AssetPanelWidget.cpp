@@ -5,6 +5,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/AssetPanelWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/EditorLayout/EditorHost.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelDrawSupport.h>
 #include <imgui.h>
@@ -87,6 +88,15 @@ namespace BECore {
             }
             _windowTitle = Format("{}###{}", _asset, _asset);
             _hasTitleBinding = false;
+            return;
+        }
+        _offered = asset->command.empty() || IsEditorCommandAvailable(asset->command);
+        if (!_offered) {
+            _open = false;
+            NotifyOpenChanged();
+            _barHandle.Reset();
+            _panelHandle.Reset();
+            _models.clear();
             return;
         }
         if (!_openDecided) {
@@ -210,6 +220,9 @@ namespace BECore {
     }
 
     void AssetPanelWidget::OnCommand(const EditorCommandEvent& event) {
+        if (!_offered) {
+            return;
+        }
         const PanelAsset* asset = _holder.Current().Get();
         const StringView id = event.commandId.ToStringView();
         // A `Dialogs` host and a `Bar` are always open: their command, when they have one, reaches the models like any other
@@ -240,6 +253,9 @@ namespace BECore {
         // A bar nobody drew last frame still owes its models the end of that frame
         EndBarFrame();
         ApplyPendingReload();
+        if (!_offered) {
+            return;
+        }
         const PanelAsset* asset = _holder.Current().Get();
         const bool dialogs = asset != nullptr && asset->window == PanelWindowKind::Dialogs;
         const bool bar = asset != nullptr && asset->window == PanelWindowKind::Bar;

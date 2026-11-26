@@ -8,6 +8,7 @@
 #include <Generated/SceneDialogsModel.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/IconTable.h>
+#include <Widgets/RemoteEditor/RemoteSessionRegistry.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 
@@ -73,7 +74,9 @@ namespace BECore {
 
     Scene* SceneDialogsModel::ResolveTarget() {
         Scene* const active = CoreManager::GetSceneManager().GetActiveScene();
-        if (active != nullptr && active == _scene && _node != nullptr && HierarchyModel::ContainsNode(active->GetRootNode(), _node)) {
+        // A dialog that is open when the editor enters remote mode closes: it adds to the local scene
+        const bool local = RemoteSessionRegistry::GetInstance().GetRemote() == nullptr;
+        if (local && active != nullptr && active == _scene && _node != nullptr && HierarchyModel::ContainsNode(active->GetRootNode(), _node)) {
             return active;
         }
         _scene = nullptr;

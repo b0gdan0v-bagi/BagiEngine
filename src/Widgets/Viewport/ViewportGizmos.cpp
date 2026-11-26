@@ -3,10 +3,10 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Scene/ScenePick.h>
 #include <EASTL/algorithm.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
-#include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/Viewport/ViewportInput.h>
 

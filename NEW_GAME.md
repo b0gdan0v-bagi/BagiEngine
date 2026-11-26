@@ -144,6 +144,18 @@ ctest --preset macos-debug
 - `ctest --preset <p>` runs 8 tests at once (`execution.jobs` of `test-base` in the included presets; `-j1` switches it off), so the game's own tests must be safe side by side: temp names from `<Common/TempPath.h>` (`engine/tests/Common/TempPath.h`), port 0, polling instead of fixed sleeps, or `RUN_SERIAL` / `RESOURCE_LOCK` on the one that cannot (`.claude/rules/tests-module.md`).
 - `python3 engine/tools/todo/todo.py list --area <area>` works (empty at first). This check alone needs the store.
 
+### The editor in a browser (optional)
+
+The engine's `web-editor` preset builds the game's page with the editor. It needs the Emscripten SDK once per checkout (`python3 engine/CI/scripts/setup_emsdk.py`). From the game's root:
+
+```bash
+python3 engine/tools/web/build_and_deploy.py --game Bagi<Name> --preset web-editor     # into build/web-editor-dist
+python3 engine/tools/web/serve.py --root build/web-editor-dist --host 127.0.0.1       # this machine only
+python3 engine/tools/web/build_and_deploy.py --game Bagi<Name> --preset web-editor --deploy --service <editor service>
+```
+
+The editor can change everything, so deploy it to a Railway service of its own (the name is the game's choice, never the release page's) and **set its access before the first deploy**: Basic auth, or sign-in with `SIGNIN_ALLOW` (`engine/tools/web/ACCESS.md`). The script and the server refuse it otherwise (`engine/tools/web/DEPLOY.md`, "The editor page"). Nothing changed in the page is kept: a reload brings back the content it came with.
+
 ## 7. Commits, and what the agent does not do
 
 - Commit in steps, like Chess: the submodule (`Add the engine as the submodule engine/`), the infrastructure (`.claude/`, `CI/`, rules, ignore files), then the game.

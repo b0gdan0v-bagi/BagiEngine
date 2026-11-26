@@ -8,13 +8,13 @@ Presets of `CMakePresets.json` build into `build/<preset>/` (`bin`, `lib`); the 
 
 ```bash
 cmake --preset macos-debug           # configure, regenerates reflection code
-cmake --build --preset macos-debug   # BagiStress and the test executables
+cmake --build --preset macos-debug   # BagiStress, BagiDemo and the test executables
 ctest --preset macos-debug           # each gtest executable in shards, 8 at a time, without label extended
 ctest --preset macos-debug-all       # every test (build-project.md, "Tests")
 ```
 
 - Exceptions are disabled. Re-run `cmake --preset` after changing `BE_CLASS` / `BE_REFLECT_FIELD` or adding files (sources are globbed).
-- Tests: `BagiEngineTests` (`tests/`), `StressTests`, `BagiStressControlSmoke`, `BagiStressScenario.*` (77 without `BagiStress`). **They run 8 at a time**: temp names from `tests/Common/TempPath.h`, port 0, polls with a time limit, never read `engine.log` (`.claude/rules/tests-module.md`). Runtime `ITest`s run at game start-up (`config/TestsConfig.xml`).
+- Tests: `BagiEngineTests` (`tests/`), `StressTests`, `DemoTests`, `BagiStressControlSmoke`, `BagiDemoControlSmoke`, `BagiStressScenario.*` (77 without their executable). **They run 8 at a time**: temp names from `tests/Common/TempPath.h`, port 0, polls with a time limit, never read `engine.log` (`.claude/rules/tests-module.md`). Runtime `ITest`s run at game start-up (`config/TestsConfig.xml`).
 - Untrusted input (save and content readers, WebSocket, rooms, control API) has fuzz targets: `FuzzCorpusTest` in every `ctest`, libFuzzer in `macos-fuzz` (`tests/Fuzz/CLAUDE.md`). Python tools: `tools/CLAUDE.md`.
 - **Licence:** Beerware; every vendored library or font has a row in `THIRD_PARTY_NOTICES.md` (ctest `BagiThirdPartyNotices`), added in the same commit.
 

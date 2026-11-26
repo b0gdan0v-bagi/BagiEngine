@@ -14,12 +14,20 @@ namespace BECore {
         bool hasSelection = false;
         size_t selectionCount = 0;
         bool locked = false;
-        PoolString name;
+        /// Read-only on their own, besides `locked`: the node's name, its layer, and what it holds (its components)
+        bool nameReadOnly = false;
+        bool layerReadOnly = false;
+        bool structureReadOnly = false;
+        /// A text of this process or of the host: it lasts as long as the copy does (a node of an attached program is not interned)
+        StringView name;
         int32_t layer = 0;
         /// The node file the node is an instance of; empty for a node written in the scene file
         PoolString sourceRef;
-        /// The active scene has unsaved changes
+        /// The scene shown has unsaved changes: the active one, or in remote mode the attached program's
         bool dirty = false;
+        /// The code and the message of the last edit an attached program refused; empty when it refused none
+        StringView refusalCode;
+        StringView refusalMessage;
     };
 
     /**
@@ -36,10 +44,10 @@ namespace BECore {
         /// The primary node of the selection, checked to be alive in the active scene at this call
         [[nodiscard]] virtual SceneInspectedNode GetInspected() const = 0;
 
-        /// Renames the inspected node and marks the scene unsaved; nothing for no selection or a locked node
+        /// Renames the inspected node and marks the scene unsaved; nothing for no selection, a locked node or a read-only name
         virtual void RenameInspected(StringView name) = 0;
 
-        /// Sets the draw layer of the inspected node and marks the scene unsaved; nothing for no selection or a locked node
+        /// Sets the draw layer of the inspected node and marks the scene unsaved; nothing for no selection, a locked node or a read-only layer
         virtual void SetInspectedLayer(int32_t layer) = 0;
     };
 
