@@ -155,6 +155,7 @@ namespace BECore {
         bool _answered = false;
         bool _capturing = false;  // the answer goes to _captured, not to _reply
         Optional<ControlAnswer> _captured;
+        uint64_t _touchedNode = 0;  // the first node the call reported (ControlService::ReportTouch), for its journal entry
     };
 
 }  // namespace BECore

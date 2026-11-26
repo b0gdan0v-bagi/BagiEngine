@@ -6,6 +6,23 @@
 
 namespace BECore {
 
+    uint64_t SceneNode::NextRuntimeId() {
+        static std::atomic<uint64_t> lastId{0};
+        return lastId.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
+
+    SceneNode* FindNodeByRuntimeId(SceneNode& root, uint64_t id) {
+        if (root.GetRuntimeId() == id) {
+            return &root;
+        }
+        for (const auto& child : root.GetChildren()) {
+            if (SceneNode* found = FindNodeByRuntimeId(*child, id)) {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
     SceneNode* SceneNode::GetParent() const {
         return _parent;
     }

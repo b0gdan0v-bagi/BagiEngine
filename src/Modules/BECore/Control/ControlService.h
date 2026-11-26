@@ -19,6 +19,7 @@ namespace BECore {
     class ControlCall;
     class ControlLog;
     class ControlRoots;
+    class ControlTouches;
 
     /**
      * @brief Command queue of the external control API: requests come from any thread and run on the main thread.
@@ -113,6 +114,32 @@ namespace BECore {
         [[nodiscard]] const ControlActivity& Activity() const {
             return *_activity;
         }
+
+        /// Which nodes, components and fields clients touched (ReportTouch), for the editor. Main thread only
+        [[nodiscard]] ControlTouches& Touches() {
+            return *_touches;
+        }
+
+        [[nodiscard]] const ControlTouches& Touches() const {
+            return *_touches;
+        }
+
+        /// The client of the call whose handler or `done` runs now (of the innermost one inside a RunNested()); null outside a call and for the
+        /// engine's own one. Main thread
+        [[nodiscard]] ControlClient* GetCurrentClient() const;
+
+        /**
+         * @brief Records that the call running now touched the node @p nodeId (SceneNode::GetRuntimeId), or a component and a field of it.
+         *
+         * The record goes into Touches() under the call's client, and the first node a call reports is also written into its journal entry, so
+         * report before the answer. Nothing is recorded outside a call, for a call with no client and for the id 0. The texts may be client
+         * data: they are kept shortened, never interned. Main thread
+         */
+        void ReportTouch(uint64_t nodeId, StringView component = {}, StringView field = {});
+
+        /// ReportTouch() for a change made after its call, as by a game that applies a request in a later frame: it keeps GetCurrentClient() in an
+        /// IntrusivePtr and names it here. Goes into Touches() only, into no journal entry; nothing for a null @p client. Main thread
+        void ReportTouch(ControlClient* client, uint64_t nodeId, StringView component = {}, StringView field = {});
 
         /// Says what @p method does and which parameters it reads (for list_methods and the completion of a console). Kept apart from the handler: registering the
         /// method again keeps it, and a description of a name that has no handler is kept but not listed. Main thread
@@ -309,6 +336,8 @@ namespace BECore {
         UniquePtr<ControlRoots> _roots;                    // behind a pointer so this header does not pull in the reflection registry
         UniquePtr<ControlLog> _log;                        // behind a pointer so this header does not pull in the logger
         UniquePtr<ControlActivity> _activity;              // behind a pointer for the same reason
+        UniquePtr<ControlTouches> _touches;                // behind a pointer for the same reason
+        ControlCall* _currentCall = nullptr;               // whose handler or done runs now
         HashMap<String, ControlMethodInfo> _descriptions;  // beside the handlers, so a handler registered again keeps its description
         uint64_t _methodsVersion = 0;
         // Before _pending: a deferred call that owns an observer (run_until) removes it when it dies with the service

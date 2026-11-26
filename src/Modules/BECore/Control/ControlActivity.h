@@ -24,7 +24,12 @@ namespace BECore {
         String method;                       ///< Call: the method
         String text;                         ///< Call: the params as the client wrote them, on one line and shortened; Named: the name given then
         String error;                        ///< Call: the code of a failed one, empty for a success
+        uint64_t node = 0;                   ///< Call: the runtime id of the node it touched first (ControlTouches.h), 0 for none
     };
+
+    /// Makes @p out the start of @p text as the journal and the touch record keep client text: on one line (control characters become spaces),
+    /// ControlActivity::kMaxTextBytes at most and no half of a UTF-8 character
+    void AssignControlRecordText(String& out, StringView text);
 
     /**
      * @brief The journal of the control API: who connected, who named itself and who did what, the last kCapacity entries.
@@ -66,8 +71,8 @@ namespace BECore {
         void RecordConnection(PassKey<ControlService>, ControlClient& client, bool connected);
         void RecordName(PassKey<ControlService>, ControlClient& client);
 
-        /// An answered call; @p error is empty for a success
-        void RecordCall(PassKey<ControlService>, ControlClient* client, StringView method, StringView params, StringView error);
+        /// An answered call; @p error is empty for a success, @p node is the node it touched or 0
+        void RecordCall(PassKey<ControlService>, ControlClient* client, StringView method, StringView params, StringView error, uint64_t node);
 
     private:
         /// The slot of a new entry, its texts empty

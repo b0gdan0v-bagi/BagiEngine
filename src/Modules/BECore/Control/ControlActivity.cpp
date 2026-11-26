@@ -2,24 +2,18 @@
 
 namespace BECore {
 
-    namespace {
-
-        /// Makes @p out the start of @p text, ControlActivity::kMaxTextBytes at most and no half of a UTF-8 character, with its control characters (the line
-        /// breaks a client may write between the values of its JSON) as spaces
-        void AssignShortened(String& out, StringView text) {
-            size_t length = std::min(text.size(), ControlActivity::kMaxTextBytes);
-            if (length < text.size()) {
-                constexpr uint8_t kMask = 0xC0;
-                constexpr uint8_t kContinuation = 0x80;
-                while (length > 0 && (static_cast<uint8_t>(text[length]) & kMask) == kContinuation) {
-                    --length;
-                }
+    void AssignControlRecordText(String& out, StringView text) {
+        size_t length = std::min(text.size(), ControlActivity::kMaxTextBytes);
+        if (length < text.size()) {
+            constexpr uint8_t kMask = 0xC0;
+            constexpr uint8_t kContinuation = 0x80;
+            while (length > 0 && (static_cast<uint8_t>(text[length]) & kMask) == kContinuation) {
+                --length;
             }
-            out.assign(text.data(), length);
-            std::replace_if(out.begin(), out.end(), [](char symbol) { return static_cast<uint8_t>(symbol) < ' '; }, ' ');
         }
-
-    }  // namespace
+        out.assign(text.data(), length);
+        std::replace_if(out.begin(), out.end(), [](char symbol) { return static_cast<uint8_t>(symbol) < ' '; }, ' ');
+    }
 
     void ControlActivity::Clear() {
         for (ControlActivityEntry& entry : _slots) {
@@ -44,6 +38,7 @@ namespace BECore {
         entry.method.clear();
         entry.text.clear();
         entry.error.clear();
+        entry.node = 0;
         ++_version;
         return entry;
     }
@@ -53,14 +48,15 @@ namespace BECore {
     }
 
     void ControlActivity::RecordName(PassKey<ControlService>, ControlClient& client) {
-        AssignShortened(Add(ControlActivityKind::Named, &client).text, client.GetName());
+        AssignControlRecordText(Add(ControlActivityKind::Named, &client).text, client.GetName());
     }
 
-    void ControlActivity::RecordCall(PassKey<ControlService>, ControlClient* client, StringView method, StringView params, StringView error) {
+    void ControlActivity::RecordCall(PassKey<ControlService>, ControlClient* client, StringView method, StringView params, StringView error, uint64_t node) {
         ControlActivityEntry& entry = Add(ControlActivityKind::Call, client);
         entry.method.assign(method.data(), method.size());
-        AssignShortened(entry.text, params);
+        AssignControlRecordText(entry.text, params);
         entry.error.assign(error.data(), error.size());
+        entry.node = node;
     }
 
 }  // namespace BECore

@@ -6,6 +6,7 @@
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
+#include <BECore/Control/ControlTouches.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Memory/Pooled.h>
 #include <BECore/Memory/ScratchArena.h>
@@ -76,7 +77,7 @@ namespace BECore {
         IntrusivePtr<ControlClient> client;  // null for the engine's own request
     };
 
-    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()), _activity(MakeUnique<ControlActivity>()) {
+    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()), _activity(MakeUnique<ControlActivity>()), _touches(MakeUnique<ControlTouches>()) {
         _freeBuffers.reserve(kMaxFreeBuffers);
     }
     ControlService::~ControlService() = default;
@@ -243,7 +244,28 @@ namespace BECore {
         if (description != _descriptions.end() && description->second.quiet) {
             return;
         }
-        _activity->RecordCall(PassKey<ControlService>{}, call.GetClient(), call.GetMethod(), call.Params().Raw(), error);
+        _activity->RecordCall(PassKey<ControlService>{}, call.GetClient(), call.GetMethod(), call.Params().Raw(), error, call._touchedNode);
+    }
+
+    ControlClient* ControlService::GetCurrentClient() const {
+        return _currentCall != nullptr ? _currentCall->GetClient() : nullptr;
+    }
+
+    void ControlService::ReportTouch(uint64_t nodeId, StringView component, StringView field) {
+        ControlClient* client = GetCurrentClient();
+        if (client == nullptr || nodeId == 0) {
+            return;
+        }
+        if (_currentCall->_touchedNode == 0) {
+            _currentCall->_touchedNode = nodeId;
+        }
+        ReportTouch(client, nodeId, component, field);
+    }
+
+    void ControlService::ReportTouch(ControlClient* client, uint64_t nodeId, StringView component, StringView field) {
+        if (client != nullptr && nodeId != 0) {
+            _touches->Record(PassKey<ControlService>{}, *client, nodeId, component, field);
+        }
     }
 
     void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
@@ -437,11 +459,13 @@ namespace BECore {
         // The running handler is moved out of the table: it may register handlers, which replaces entries (its own too, and its capture dies with the replaced handler)
         const uint64_t generation = entry.generation;
         Handler handler = std::move(entry.handler);
+        ControlCall* const outer = std::exchange(_currentCall, &call);
         {
             // The answer struct a handler builds on the scratch arena is written into the reply inside the call and dies here, on this thread
             ScratchScope scratch;
             handler(call);
         }
+        _currentCall = outer;
 
         const auto current = _handlers.find(call.GetMethod());
         if (current != _handlers.end() && current->second.generation == generation) {
@@ -483,7 +507,9 @@ namespace BECore {
         nested->_deferFrames = 0;
         ControlCall::DoneFn nestedDone = std::move(nested->_done);
         outer.DeferFrames(frames, seconds, [this, nested = std::move(nested), nestedDone = std::move(nestedDone), onAnswer = std::move(onAnswer)](ControlCall& outerCall) mutable {
+            ControlCall* const running = std::exchange(_currentCall, nested.get());
             nestedDone(*nested);
+            _currentCall = running;
             if (auto answer = AwaitNested(outerCall, nested, onAnswer)) {
                 onAnswer(outerCall, std::move(*answer));
             }
@@ -558,10 +584,12 @@ namespace BECore {
         const ControlCall::DoneFn done = std::move(call->_done);
         if (done) {
             _inFrameEnd = true;
+            ControlCall* const outer = std::exchange(_currentCall, call.get());
             {
                 ScratchScope scratch;  // as in InvokeHandler: the answer struct of `done` dies with the reply; the continuation of a nested call runs here too
                 done(*call);
             }
+            _currentCall = outer;
             _inFrameEnd = false;
         }
         Settle(std::move(call));  // answered by done, deferred again, or an internal_error
