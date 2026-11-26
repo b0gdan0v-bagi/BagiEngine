@@ -42,6 +42,16 @@ The page retries after every close but 1008: after 1 s, doubling to 10 s, and fr
 
 **Limits:** a request is at most `ControlService::kMaxRequestBytes` (the bridge closes that client with 1009). The page receives up to that plus the channel prefix and sends up to `WebSocketServer::kMaxOutboxBytes`; a send its transport refuses aborts the link, which then retries. Before the hello the bridge takes no more than `MAX_HELLO_BYTES` (1009).
 
+## The page's end
+
+`ControlLink` (`src/Application/`) is polled once a frame, before `ControlService::Drain()`, and runs on any `IRoomTransport`, so `ControlLinkTest` drives it on the desktop over the rooms' fake one.
+
+- An answer goes out only on the connection its request came on. A later reply is dropped, one after `Stop()` or the link's destruction too (`ControlService::Shutdown()` answers late): a restarted bridge counts its channels from 1 again, so an old answer would reach a stranger.
+- The link holds the service's event sink only while it is connected.
+- A message without a channel aborts the connection like a refused send (a script cannot close with 1002), and what the transport still holds of it does not run.
+- One Info line per outage, and the one Warning of a 1008: a QA run reads warnings as findings. The token is never logged.
+- `ControlLink::kTransportLimits` are the `RoomTransportLimits` the browser transport of a link takes; its defaults are those of the rooms, and the desktop transport takes none.
+
 ## The control side
 
 - **The port listens only while a page is linked.** When the page goes, the listener closes and every client is closed with 1001, so a client sees what it sees of a desktop game that is not running or has quit. It opens again for the next page.
