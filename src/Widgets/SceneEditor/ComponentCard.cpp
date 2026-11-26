@@ -25,6 +25,9 @@ namespace BECore {
         /// The room between the last item of an open card and its frame
         constexpr float kBodyPadding = 3.0f;
         constexpr const char* kMenuPopup = "##card_actions";
+        constexpr const char* kEnabledTooltip = "Component enabled";
+        /// The serialized name of the flag the checkbox writes: what OnPropertyWritten() and the touch marks know it by
+        constexpr StringView kEnabledField = "enabled";
         constexpr StringView kCopiedText = "Component copied";
         constexpr StringView kCopyFailedText = "The component was not copied: the clipboard refused it";
 
@@ -50,6 +53,17 @@ namespace BECore {
                 }
             }
             return false;
+        }
+
+        void DrawEnabledBox(IComponent& component, const ComponentCardContext& context, ComponentCardAnswer& answer) {
+            bool enabled = component.IsEnabled();
+            if (ImGui::Checkbox("##card_enabled", &enabled)) {
+                component.SetEnabled(enabled);
+                component.OnPropertyWritten(kEnabledField);
+                context.highlights.Dismiss(context.nodeId, component.GetTypeMeta().typeName, kEnabledField);
+                answer.changed = true;
+            }
+            ItemTooltip(kEnabledTooltip);
         }
 
         void DrawMenu(IComponent& component, const ComponentCardContext& context, ComponentCardAnswer& answer) {
@@ -80,8 +94,15 @@ namespace BECore {
         char label[kHeaderLabelSize];
         snprintf(label, sizeof(label), "%s %.*s##card", IconOfClass(meta), static_cast<int>(meta.typeName.size()), meta.typeName.data());
         const float right = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
-        // The menu button lies over the header, which must let it take the pointer
+        const bool dimmed = !component.IsEnabled();
+        if (dimmed) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+        }
+        // The checkbox and the menu button lie over the header, which must let them take the pointer
         const bool open = ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_AllowOverlap);
+        if (dimmed) {
+            ImGui::PopStyleColor();
+        }
         const ImVec2 headerMin = ImGui::GetItemRectMin();
         const ImVec2 headerMax = ImGui::GetItemRectMax();
         FillItemWithTouchFlash(context.highlights.ComponentAlpha(context.nodeId, meta.typeName));
@@ -92,8 +113,14 @@ namespace BECore {
         const float rounding = ImGui::GetStyle().FrameRounding;
         drawList->AddRectFilled(headerMin, {headerMin.x + kStripeWidth, headerMax.y}, stripe, rounding, ImDrawFlags_RoundCornersLeft);
 
+        const float menuLeft = right - ImGui::GetFrameHeight();
+        if (component.CanBeDisabled()) {
+            ImGui::SameLine();
+            ImGui::SetCursorScreenPos({menuLeft - ImGui::GetStyle().ItemInnerSpacing.x - ImGui::GetFrameHeight(), headerMin.y});
+            DrawEnabledBox(component, context, answer);
+        }
         ImGui::SameLine();
-        ImGui::SetCursorScreenPos({right - ImGui::GetFrameHeight(), headerMin.y});
+        ImGui::SetCursorScreenPos({menuLeft, headerMin.y});
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         if (IconButton(ICON_LC_ELLIPSIS_VERTICAL, "Component actions", "card_menu")) {
             ImGui::OpenPopup(kMenuPopup);

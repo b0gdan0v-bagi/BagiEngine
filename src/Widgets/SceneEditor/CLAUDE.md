@@ -4,12 +4,13 @@ The rest of the Scene Editor (selection, hierarchy, dialogs, Save, the viewport)
 
 ## Component cards
 
-`DrawComponentCard` (`ComponentCard.h`) draws one component of the inspected node: the frame, the header with the category stripe, the class icon and name, the touch flash and the "..." menu, and the body `SceneEditorWidget` gives it (the "UI elements" section of a canvas, then `RenderComponentInspector`).
+`DrawComponentCard` (`ComponentCard.h`) draws one component of the inspected node: the frame, the header with the category stripe, the class icon and name, the touch flash, the enabled checkbox and the "..." menu, and the body `SceneEditorWidget` gives it (the "UI elements" section of a canvas, then `RenderComponentInspector`).
 
+- The checkbox (a component that `CanBeDisabled()`) writes the saved flag through `SetEnabled`, not through the inspector, which skips the hidden field; so "Reset" leaves it and "Copy" holds it. A click calls `OnPropertyWritten("enabled")`, drops that mark and makes the scene unsaved. The header text of a disabled component is dimmed.
 - The card changes no node: "Remove" is an answer, which the widget acts on after the loop over the components.
 - "Reset" is `ComponentDefaults::ResetAll`; it drops every mark of the component, makes the scene unsaved and never touches a canvas's elements.
 - "Copy" puts the `<component>` element of a scene file on the engine's clipboard (`AppendComponentElement` with `skipDefaults`, the writer Save uses). There is no paste.
-- The header's item label is `<glyph> <type name>##card`, the menu button's ends with `##card_menu`: `tools/qa/bagi_qa_editor.py` finds a card and its controls by them.
+- The header's item label is `<glyph> <type name>##card`, the checkbox's ends with `##card_enabled`, the menu button's with `##card_menu`: `tools/qa/bagi_qa_editor.py` finds a card and its controls by them.
 
 ## Defaults
 

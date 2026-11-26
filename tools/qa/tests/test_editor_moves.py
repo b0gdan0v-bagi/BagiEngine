@@ -26,6 +26,7 @@ PALETTE_COMMANDS = ["Game Panel", "Switch Game and Editor", "Console", "Save Sce
 TRANSFORM_FIELDS = 7
 CARD_ICON = "\ue194"  # any glyph of the Lucide range
 CARD_MENU = "\ue0b7##card_menu"
+CARD_ENABLED = "##card_enabled"
 HIERARCHY = "Scene Editor/##hierarchy_8D0B9DE4"
 INSPECTOR = "Scene Editor/##inspector_828F5624"
 
@@ -61,6 +62,7 @@ class FakeEditor:
         self.extra_documents = []
         self.not_editor = False
         self.sections = set()
+        self.cards = [("TransformComponent", TRANSFORM_FIELDS), ("StressRunComponent", 0)]  # the components of the selected node and the fields of each
         self.values = {}
         self.dock_width = SPLITTER_X - 1
         self.dragging = False
@@ -114,10 +116,12 @@ class FakeEditor:
         x = 318.0
         found = [item("##node_name", INSPECTOR, x + 54, 166.0, 241.0, 24.0), item("##node_layer", INSPECTOR, x + 52, 196.0, 183.0, 23.0), item("-", INSPECTOR, x + 241, 196.0, 23.0, 23.0)]
         y = 251.0
-        for component, fields in (("TransformComponent", TRANSFORM_FIELDS), ("StressRunComponent", 0)):
+        for component, fields in self.cards:
             found.append(item(card_header(component), INSPECTOR, x + 5, y, 361.0, 24.0))
             # a pixel lower than the header: the helper must leave it out by its label, not by its place
             found.append(item(CARD_MENU, INSPECTOR, x + 342, y + 1, 23.0, 23.0))
+            if component != "TransformComponent":  # a component with nothing to switch off has no checkbox
+                found.append(item(CARD_ENABLED, INSPECTOR, x + 314, y + 1, 23.0, 23.0))
             y += 30.0
             if component in self.sections:
                 for index in range(fields):
@@ -338,6 +342,17 @@ def test_the_menu_button_of_a_card_is_neither_its_header_nor_a_field(ed):
         editor.set_number_field(ed, CARD_MENU, 1, "TransformComponent")
     with pytest.raises(SessionError, match=r"0 visible component cards are headed 'QuadRendererComponent'.*##card"):
         editor.open_component(ed, "QuadRendererComponent")
+
+
+def test_the_checkbox_of_a_closed_card_does_not_pass_for_a_control_of_its_section(ed):
+    # not the last card: the Add Component button below counts for that one
+    ed.cards = [("QuadRendererComponent", 2), ("StressRunComponent", 0)]
+    editor.widen_left_dock(ed)
+    editor.select_node(ed, "Run")
+    editor.open_component(ed, "QuadRendererComponent")
+    assert ed.sections == {"QuadRendererComponent"}, "the header was clicked: the checkbox alone does not make the card open"
+    with pytest.raises(SessionError, match=r"0 controls called '##card_enabled'"):
+        editor.set_number_field(ed, CARD_ENABLED, 1, "QuadRendererComponent")
 
 
 def test_a_field_that_is_not_in_the_section_lists_what_is(ed):

@@ -20,17 +20,19 @@ namespace BECore {
 
     /// What the user did with a card in this frame
     struct ComponentCardAnswer {
-        /// A field changed: the body said so, or "Reset" of the menu changed one
+        /// A field changed: the body said so, "Reset" of the menu changed one, or the checkbox switched the component
         bool changed = false;
         /// "Remove" was chosen; the caller removes the component, the card changes no node
         bool remove = false;
     };
 
     /**
-     * @brief Draws the card of one component: a framed header (the category stripe, the class icon and name, the flash of a touched component, a "..." menu) and,
-     * while it is open, what @p body draws
+     * @brief Draws the card of one component: a framed header (the category stripe, the class icon and name, the flash of a touched component, a checkbox and a
+     * "..." menu) and, while it is open, what @p body draws
      *
-     * The header's item label is `<glyph> <type name>##card` and the menu button's ends with `##card_menu` (`tools/qa/bagi_qa_editor.py` reads both). The menu has
+     * The header's item label is `<glyph> <type name>##card`, the checkbox's ends with `##card_enabled` and the menu button's with `##card_menu`
+     * (`tools/qa/bagi_qa_editor.py` reads them). The checkbox is there when the component CanBeDisabled(); a click calls SetEnabled() and
+     * OnPropertyWritten("enabled") and drops the touch mark of that field. The header text of a disabled component is dimmed. The menu has
      * "Reset" (every differing field, `ComponentDefaults::ResetAll`, disabled while none can be reset; the component's marks are dropped), "Copy" (the element a
      * scene file would hold, to the engine's clipboard, with a toast that says whether it went) and "Remove". Needs a frame in progress; under `BeginDisabled` the
      * whole card is disabled. Allocates nothing in a frame with no click.

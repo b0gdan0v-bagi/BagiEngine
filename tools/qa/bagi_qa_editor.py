@@ -56,6 +56,7 @@ FIELD_LABEL = re.compile(r"^##\d+$")
 # the header of a component's card in the inspector: a Lucide glyph, a space, the type name and `##card`
 COMPONENT_TYPE = re.compile("^[\ue000-\uf8ff] (?P<type>[A-Za-z_][A-Za-z0-9_]*)##card$")
 CARD_MENU_MARK = "##card_menu"  # ends the label of the "..." button on a card's header, which is neither a header nor a field
+CARD_ENABLED_MARK = "##card_enabled"  # ends the label of the checkbox on a card's header, neither of those either
 
 LEFT_DOCK_SPLITTER_OFFSET = 1.0  # from the right edge of the Scene Editor into the gap to the viewport (output pixels)
 LEFT_DOCK_PRESS_Y = 400.0  # a height at which the left column is beside the viewport
@@ -290,7 +291,7 @@ def _visible_rows(session: Any, name: str) -> list[HierarchyRow]:
 
 
 def inspector_labels(session: Any) -> list[str]:
-    """The labels of the inspector's items that have one, in drawn order: the name and layer fields, the card headers and menu buttons, the `##<index>` fields and their names."""
+    """The labels of the inspector's items that have one, in drawn order: the name and layer fields, the card headers, checkboxes and menu buttons, the `##<index>` fields and their names."""
     return [item["label"] for item in find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD) if item["label"]]
 
 
@@ -314,11 +315,11 @@ def _component_header(session: Any, component: str) -> dict[str, Any]:
 
 
 def _section_items(session: Any, header: dict[str, Any]) -> list[dict[str, Any]]:
-    """The items of a component's card under its header, down to the next card's header; the cards' menu buttons are left out."""
+    """The items of a component's card under its header, down to the next card's header; the cards' checkboxes and menu buttons are left out."""
     items = find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD)
     below = [item for item in items if COMPONENT_TYPE.match(item["label"]) and item["y"] > header["y"]]
     end = below[0]["y"] if below else float("inf")
-    return [item for item in items if header["y"] < item["y"] < end and item["label"] and not item["label"].endswith(CARD_MENU_MARK)]
+    return [item for item in items if header["y"] < item["y"] < end and item["label"] and not item["label"].endswith((CARD_MENU_MARK, CARD_ENABLED_MARK))]
 
 
 def _field(session: Any, label: str, component: str | None) -> dict[str, Any]:

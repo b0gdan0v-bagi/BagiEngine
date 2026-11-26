@@ -1,9 +1,11 @@
 // The card of a component in the inspector (SceneEditor/ComponentCard) and its menu, in an ImGui context with no backend.
 
 #include <BECore/Clipboard/FakeClipboard.h>
+#include <BECore/ComponentEnabledTest.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Input/ImGuiItemIndex.h>
 #include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
@@ -32,6 +34,8 @@ namespace BECore::Tests {
         constexpr uint64_t kNode = 7;
         constexpr StringView kHeader = "TransformComponent##card";
         constexpr StringView kMenuButton = "##card_menu";
+        constexpr StringView kEnabledBox = "##card_enabled";
+        constexpr StringView kEnabledField = "enabled";
         constexpr StringView kBodyButton = "Body";
 
         class ToastRecorder : public SubscriptionHolder {
@@ -72,14 +76,16 @@ namespace BECore::Tests {
                 SetActiveImGuiFonts({});
             }
 
-            /// One frame with the card of the transform, whose body is a button
+            /// One frame with the card of `_component` (the transform unless a test says otherwise), whose body is a button
             void Frame() {
                 ImGui::GetIO().DeltaTime = kFrameSeconds;
                 ImGui::NewFrame();
                 ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
                 ImGui::SetNextWindowSize(kInspectorSize);
                 ImGui::Begin("Inspector");
-                const ComponentCardAnswer answer = DrawComponentCard(0, *_transform, {_defaults, _highlights, kNode}, [] { return ImGui::Button(kBodyButton.data()); });
+                ImGui::BeginDisabled(_locked);
+                const ComponentCardAnswer answer = DrawComponentCard(0, *_component, {_defaults, _highlights, kNode}, [] { return ImGui::Button(kBodyButton.data()); });
+                ImGui::EndDisabled();
                 _changed |= answer.changed;
                 _removed |= answer.remove;
                 ImGui::End();
@@ -129,6 +135,8 @@ namespace BECore::Tests {
             TouchHighlights _highlights;
             ComponentDefaults _defaults;
             IntrusivePtr<TransformComponent> _transform = New<TransformComponent>();
+            IntrusivePtr<IComponent> _component = _transform;
+            bool _locked = false;  ///< as the inspector draws the cards of a locked node
             bool _changed = false;
             bool _removed = false;
         };
@@ -207,8 +215,81 @@ namespace BECore::Tests {
         EXPECT_FALSE(_changed);
     }
 
+    TEST_F(ComponentCardTest, TheCheckboxStandsOnTheHeadersRowBesideTheMenuButton) {
+        _component = New<EnabledProbeComponent>();
+        Settle();
+
+        const ImGuiItemRecord& header = Require(Find("##card"));
+        const ImGuiItemRecord& box = Require(Find(kEnabledBox));
+        const ImGuiItemRecord& menu = Require(Find(kMenuButton));
+
+        EXPECT_FLOAT_EQ(box.minY, header.minY);
+        EXPECT_LE(box.maxX, menu.minX);
+    }
+
+    TEST_F(ComponentCardTest, AComponentWithNothingToSwitchOffHasNoCheckbox) {
+        Settle();
+
+        EXPECT_EQ(Find(kEnabledBox), nullptr);
+    }
+
+    TEST_F(ComponentCardTest, TheCheckboxSwitchesTheComponentTellsItAndDropsTheMarkOfTheFlag) {
+        const IntrusivePtr<EnabledProbeComponent> probe = New<EnabledProbeComponent>();
+        _component = probe;
+        _service.ReportTouch(_agent.Get(), kNode, probe->GetTypeMeta().typeName, kEnabledField);
+        _highlights.Update(0.0f);
+
+        Click(kEnabledBox);
+
+        EXPECT_FALSE(probe->IsEnabled());
+        EXPECT_EQ(probe->written, (Vector<String>{String(kEnabledField)}));
+        EXPECT_TRUE(_changed);
+        EXPECT_EQ(_highlights.FindMark(kNode, probe->GetTypeMeta().typeName, kEnabledField), nullptr);
+
+        Click(kEnabledBox);
+        EXPECT_TRUE(probe->IsEnabled());
+        EXPECT_EQ(probe->enabledChanges, 2);
+    }
+
+    TEST_F(ComponentCardTest, TheCheckboxOfALockedNodeSwitchesNothing) {
+        _component = New<EnabledProbeComponent>();
+        _locked = true;
+
+        Click(kEnabledBox);
+
+        EXPECT_TRUE(_component->IsEnabled());
+        EXPECT_FALSE(_changed);
+    }
+
+    TEST_F(ComponentCardTest, ResetKeepsADisabledComponentDisabled) {
+        const IntrusivePtr<QuadRendererComponent> quad = New<QuadRendererComponent>();
+        const Color authored = quad->_color;
+        quad->_color = Color{1, 2, 3, 4};
+        quad->SetEnabled(false);
+        _component = quad;
+
+        Choose("Reset");
+
+        EXPECT_TRUE(_changed);
+        EXPECT_EQ(quad->_color.r, authored.r);
+        EXPECT_FALSE(quad->IsEnabled());
+    }
+
+    TEST_F(ComponentCardTest, CopyWritesThatTheComponentIsDisabled) {
+        const IntrusivePtr<FakeClipboard> clipboard = New<FakeClipboard>();
+        const ScopedClipboardBackend scope{IntrusivePtr<IClipboardBackend>(clipboard)};
+        _component = New<QuadRendererComponent>();
+        _component->SetEnabled(false);
+
+        Choose("Copy");
+
+        EXPECT_EQ(clipboard->Content(), String(R"(<component type="QuadRendererComponent" enabled="false" />)"));
+    }
+
     TEST_F(ComponentCardTest, ASettledFrameAllocatesNothing) {
-        Click(kHeader);
+        _component = New<EnabledProbeComponent>();
+        _component->SetEnabled(false);  // the checkbox and the dimmed header
+        Click("##card");
         _index.Disarm();  // the index copies the labels
         Settle();
 
