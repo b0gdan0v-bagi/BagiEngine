@@ -15,6 +15,7 @@
 
 namespace BECore {
 
+    class ControlActivity;
     class ControlCall;
     class ControlLog;
     class ControlRoots;
@@ -101,6 +102,16 @@ namespace BECore {
 
         [[nodiscard]] const ControlLog& Log() const {
             return *_log;
+        }
+
+        /// Who connected, who named itself and which calls that act were answered (a method described as `quiet` is left out; the answers of Shutdown() are
+        /// not calls it lists). Main thread only
+        [[nodiscard]] ControlActivity& Activity() {
+            return *_activity;
+        }
+
+        [[nodiscard]] const ControlActivity& Activity() const {
+            return *_activity;
         }
 
         /// Says what @p method does and which parameters it reads (for list_methods and the completion of a console). Kept apart from the handler: registering the
@@ -266,8 +277,11 @@ namespace BECore {
         /// Write a response into the reply buffer and give it to @p reply (main thread: ControlCall and the answers of Process and Shutdown). The buffer
         /// keeps its capacity between replies; a reply sent from inside a reply function gets a local String, never the busy buffer. SendOk sends the error
         /// response in place of the result when @p writeResult fails or does not write one value
-        void SendOk(ControlReplyFn& reply, StringView id, WriteResultFn writeResult);
+        void SendOk(ControlCall& call, WriteResultFn writeResult);
         void SendError(ControlReplyFn& reply, StringView id, const ControlError& error);
+
+        /// Puts the answer of @p call into the journal, unless its method is quiet; @p error is empty for a success. Main thread
+        void RecordCall(const ControlCall& call, StringView error);
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;
         void Process(Request& request);
@@ -294,6 +308,7 @@ namespace BECore {
         HashMap<String, HandlerEntry> _handlers;
         UniquePtr<ControlRoots> _roots;                    // behind a pointer so this header does not pull in the reflection registry
         UniquePtr<ControlLog> _log;                        // behind a pointer so this header does not pull in the logger
+        UniquePtr<ControlActivity> _activity;              // behind a pointer for the same reason
         HashMap<String, ControlMethodInfo> _descriptions;  // beside the handlers, so a handler registered again keeps its description
         uint64_t _methodsVersion = 0;
         // Before _pending: a deferred call that owns an observer (run_until) removes it when it dies with the service

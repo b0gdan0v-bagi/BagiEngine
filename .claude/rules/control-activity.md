@@ -7,7 +7,7 @@ paths:
   - "tests/BECore/WebSocketServerTest.cpp"
 ---
 
-# Who asks the control API (`ControlClient`, `client_hello`)
+# Who asks the control API (`ControlClient`, `client_hello`) and the activity journal
 
 The module: `src/Modules/BECore/Control/CLAUDE.md`; the transport: `src/Modules/RemoteControl/CLAUDE.md`. Additive to protocol version 1.
 
@@ -31,3 +31,18 @@ A request may carry a `ControlClient` (`Control/ControlClient.h`, ref-counted): 
 - `name` is a string of 1 to `kMaxControlClientNameBytes` bytes with no control character, else `invalid_params`; the old name stays. The text is not checked for UTF-8.
 - A call with no client (posted by the engine without one) fails with `no_client`.
 - The name is client text: it is never interned and never used as a format string.
+
+## The activity journal (`service.Activity()`)
+
+`ControlActivity` (`Control/ControlActivity.h`) keeps who did what, for the editor: the last `kCapacity` entries, oldest first, each with a sequence (never reused, `Clear()` included), the time of day, the client and a kind. Main thread only. `GetVersion()` moves with every entry and every `Clear()`, so a view rebuilds only then; a reader that wants the new entries keeps `GetNextSequence()`.
+
+| Kind | Recorded when |
+|------|---------------|
+| `Connected`, `Disconnected` | `Drain()` applies the notice of a connection (a local client has none) |
+| `Named` | `RenameClient()`; `text` is the name given then, while `client->GetName()` is the latest |
+| `Call` | a call is answered: `method`, `text` (the params), `error` (the code, empty for a success) |
+
+- A deferred call is listed when it is answered, a call nested in a `batch` under the outer client.
+- Not listed: a method described as quiet; a request that ran no method (it could not be read, `unknown_method`); what `Shutdown()` answers with `shutting_down`.
+- **`ControlMethodInfo::quiet`** is for a method that acts on nothing: a read, a poll, the clock (`step`, `run_until`), `batch` (its calls are listed) and what the art service reports. A method with no description is listed, so a game's acting methods show without a change and its reads need a description with `quiet`. `list_methods` does not show the flag.
+- `text` is client data cut to `kMaxTextBytes` between two UTF-8 characters, its control characters turned into spaces. Neither it nor a name is ever interned or used as a format string.

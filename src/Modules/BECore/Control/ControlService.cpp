@@ -1,5 +1,6 @@
 #include "ControlService.h"
 
+#include <BECore/Control/ControlActivity.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlLog.h>
@@ -75,7 +76,7 @@ namespace BECore {
         IntrusivePtr<ControlClient> client;  // null for the engine's own request
     };
 
-    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()) {
+    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()), _activity(MakeUnique<ControlActivity>()) {
         _freeBuffers.reserve(kMaxFreeBuffers);
     }
     ControlService::~ControlService() = default;
@@ -188,11 +189,13 @@ namespace BECore {
 
     void ControlService::RenameClient(ControlClient& client, StringView name) {
         client._name.assign(name.data(), name.size());
+        _activity->RecordName(PassKey<ControlService>{}, client);
     }
 
     void ControlService::DeliverClientNotices() {
         for (const ClientNotice& notice : _notices) {
             notice.client->_connected = notice.connected;
+            _activity->RecordConnection(PassKey<ControlService>{}, *notice.client, notice.connected);
         }
         _notices.clear();
     }
@@ -216,19 +219,31 @@ namespace BECore {
         request->reply(MakeErrorResponse(request->id, MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down")));
     }
 
-    void ControlService::SendOk(ControlReplyFn& reply, StringView id, WriteResultFn writeResult) {
+    void ControlService::SendOk(ControlCall& call, WriteResultFn writeResult) {
         ScratchLease lease(_replyScratch, _replyScratchBusy);
-        const std::expected<void, ControlError> written = TryAppendOkResponse(lease.Text(), id, writeResult);
+        const std::expected<void, ControlError> written = TryAppendOkResponse(lease.Text(), call._id, writeResult);
         if (!written) {
-            AppendErrorResponse(lease.Text(), id, written.error());
+            AppendErrorResponse(lease.Text(), call._id, written.error());
         }
-        reply(lease.Text());
+        RecordCall(call, written ? StringView() : StringView(written.error().code));  // before the reply: whoever gets the answer finds the entry
+        call._reply(lease.Text());
     }
 
     void ControlService::SendError(ControlReplyFn& reply, StringView id, const ControlError& error) {
         ScratchLease lease(_replyScratch, _replyScratchBusy);
         AppendErrorResponse(lease.Text(), id, error);
         reply(lease.Text());
+    }
+
+    void ControlService::RecordCall(const ControlCall& call, StringView error) {
+        if (error == ControlErrors::kShuttingDown) {
+            return;
+        }
+        const auto description = _descriptions.find(call.GetMethod());
+        if (description != _descriptions.end() && description->second.quiet) {
+            return;
+        }
+        _activity->RecordCall(PassKey<ControlService>{}, call.GetClient(), call.GetMethod(), call.Params().Raw(), error);
     }
 
     void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
@@ -447,7 +462,7 @@ namespace BECore {
             return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("'{}' cannot run inside itself", entry->first)));
         }
 
-        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), params, outer._client);
+        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, String(method), params, outer._client);
         InvokeHandler(entry->second, *nested);
         return AwaitNested(outer, nested, onAnswer);
     }
@@ -458,6 +473,7 @@ namespace BECore {
         }
         if (nested->_deferFrames == 0) {
             LOG_ERROR("[ControlService] the handler of '{}' gave no answer", nested->GetMethod());
+            RecordCall(*nested, ControlErrors::kInternalError);
             return std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler gave no answer"));
         }
 

@@ -473,31 +473,37 @@ namespace BECore {
         RegisterWindowControl(service);
 
         service.DescribeMethod("client_hello", {"Names the client that asks, for people who watch what it does; asking again renames it. Answers its id and name",
-                                                {{"name", "string", true, Format("1 to {} bytes without control characters", kMaxControlClientNameBytes)}}});
-        service.DescribeMethod("ping", {"Answers pong and the protocol version", {}});
+                                                {{"name", "string", true, Format("1 to {} bytes without control characters", kMaxControlClientNameBytes)}},
+                                                /*quiet=*/true});
+        service.DescribeMethod("ping", {"Answers pong and the protocol version", {}, /*quiet=*/true});
         service.DescribeMethod("status", {"The frame clock, whether the clock is manual, whether the game is paused, the totals of warnings and errors logged since the start, the window (size, "
                                           "density, safe area, output, user scale) and the run mode that runs (Editor or Game)",
-                                          {}});
+                                          {},
+                                          /*quiet=*/true});
         service.DescribeMethod("step", {"Runs frames and answers with the clock after the last one",
                                         {{"frames", "integer", false, Format("Frames to run, 1 to {} (default 1)", kMaxStepFrames)},
-                                         {"dt", "number", false, Format("Seconds each frame lasts, 0 to {} (default 1/60)", Time::kMaxFrameTime)}}});
+                                         {"dt", "number", false, Format("Seconds each frame lasts, 0 to {} (default 1/60)", Time::kMaxFrameTime)}},
+                                        /*quiet=*/true});
         service.DescribeMethod("pause", {"Holds the game from the next frame", {}});
         service.DescribeMethod("resume", {"Lets the game run again (refused with the manual clock)", {}});
-        service.DescribeMethod("list_methods", {"Lists the methods with their summaries and parameters", {}});
-        service.DescribeMethod("log_mark", {"A mark for log_since and the totals of warnings and errors so far", {}});
+        service.DescribeMethod("list_methods", {"Lists the methods with their summaries and parameters", {}, /*quiet=*/true});
+        service.DescribeMethod("log_mark", {"A mark for log_since and the totals of warnings and errors so far", {}, /*quiet=*/true});
         service.DescribeMethod(
             "log_since", {Format("The warnings and errors logged since a mark, the newest {} at most, with the counts of all of them", ControlLog::kMaxLogSinceLines),
-                          {{"mark", "integer", true, "The mark of log_mark (0 is the start)"}, {"level", "string", false, "\"warning\" (default: warnings and errors) or \"error\" (errors only)"}}});
+                          {{"mark", "integer", true, "The mark of log_mark (0 is the start)"}, {"level", "string", false, "\"warning\" (default: warnings and errors) or \"error\" (errors only)"}},
+                          /*quiet=*/true});
         service.DescribeMethod("log_subscribe",
                                {Format("Turns on or off the push of the event `log`, one per new line, at most {} per frame (off by default, for every client)", ControlLog::kMaxLogPushPerFrame),
-                                {{"enabled", "boolean", true, "Push on or off"}, {"level", "string", false, "\"warning\" (default) or \"error\""}}});
+                                {{"enabled", "boolean", true, "Push on or off"}, {"level", "string", false, "\"warning\" (default) or \"error\""}},
+                                /*quiet=*/true});
         service.DescribeMethod(
             "batch",
             {Format(
                  "Runs up to {} calls in order in one request and answers with the answer of each; an error ends it unless continueOnError. A call that waits for frames (step) makes the batch wait",
                  kMaxBatchCalls),
              {{"calls", "array", true, "Objects {method, params?}; `batch` and `quit` are refused inside"},
-              {"continueOnError", "boolean", false, "Keep running after a call that fails (default false)"}}});
+              {"continueOnError", "boolean", false, "Keep running after a call that fails (default false)"}},
+             /*quiet=*/true});
         service.DescribeMethod("quit", {"Answers, then stops the application at the end of the frame", {}});
     }
 

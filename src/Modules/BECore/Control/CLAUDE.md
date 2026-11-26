@@ -9,6 +9,7 @@ The core of the external control API: a program or a model sends commands, the e
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()` (a `JsonView`), `Reply()`, `Fail()`, `DeferFrames()`; it owns its text and tape (`RequestBuffers`) |
 | `ControlClient` | Who posts a request: a connection or a named part of the program (`Post()`, `call.GetClient()`, `client_hello`; `.claude/rules/control-activity.md`) |
+| `ControlActivity` | The journal of connects, names and answered calls that act (`service.Activity()`; same rule file) |
 | `ControlParams` | Checked readers of a call's params: `FindParam`, `GetParamString` / `Int` / `Number` / `Bool`; a wrong type or an absent key is nothing, a number is finite |
 | `ControlLog` | Totals of warnings and errors and the last `kLogCapacity` lines of Warning and above, from `LogEvent` (`service.Log()`; `log_*` methods) |
 | `ControlRoots` | The roots of a service: named providers of a `TypedRef` (`game` is the active game) that the by-name methods reach; names are `String`s, never interned; `allowInterning` (default off) lets a write intern client text |
@@ -87,8 +88,8 @@ While a step runs it is the barrier too. `quit` bypasses the barrier and ends ev
 
 What the manual clock means for a client:
 
-- Game time and the frame number stand still between steps. A request that changes the state (`perform_action`, `reset`) applies at once, in the idle cycle, but the scene reacts (logic, render, the `state_changed` push) in the next frame: send a `step` after it.
-- The window is not redrawn between steps. A frame renders as usual, including the present.
+- Game time and the frame number stand still between steps. A request that changes the state (`perform_action`, `reset`) applies at once, but the scene reacts (logic, render, the `state_changed` push) in the next frame: send a `step` after it.
+- The window is redrawn only by a step's frames.
 - Tasks, animations and fixed updates also move only with steps; `dt` 0 makes frames in which nothing moves.
 - `--manual-clock` without `--control` is an error: nobody could step the game.
 
@@ -122,7 +123,7 @@ The game methods describe only what `GameControl` itself reads; the parameters o
 1. Write a handler `void(ControlCall&)` in the module that owns the behaviour (BECore only for things that need nothing above it).
 2. Read `call.Params()` with `ControlParams.h`; answer with `call.Reply(writer)` (a `JsonWriter` callback, keys alphabetical), `call.ReplyObject(answer)` or `call.Fail(code, message)`. For an answer that needs frames to pass (step, screenshot) use `call.DeferFrames(...)`.
 3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler).
-4. Describe it with `DescribeMethod("name", {summary, params})` beside the registration, so `list_methods` and the editor's console can offer and complete it. For people only, never checked against the handler; a method without one still runs.
+4. Describe it with `DescribeMethod("name", {summary, params})` beside the registration, so `list_methods` and the editor's console can offer and complete it. For people only, never checked against the handler; a method without one still runs. A method that acts on nothing sets `quiet`, which keeps it out of the activity journal.
 5. Test it with a `ControlService` of its own and a lambda as the reply function: no transport needed.
 6. Write the method and its codes into the protocol description of the owning module.
 

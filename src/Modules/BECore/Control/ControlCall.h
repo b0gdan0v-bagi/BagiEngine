@@ -60,7 +60,7 @@ namespace BECore {
 
         /// A call that runs inside another one: its answer is kept as a value (ControlService::RunNested) instead of being sent. @p params is a view that
         /// the caller keeps alive while the call runs. @p client is the one of the call it runs inside
-        ControlCall(PassKey<ControlService>, String method, JsonView params, IntrusivePtr<ControlClient> client);
+        ControlCall(PassKey<ControlService>, ControlService& service, String method, JsonView params, IntrusivePtr<ControlClient> client);
 
         ControlCall(const ControlCall&) = delete;
         ControlCall& operator=(const ControlCall&) = delete;
@@ -142,8 +142,8 @@ namespace BECore {
     private:
         friend class ControlService;
 
-        ControlService* _service = nullptr;  // null for a nested call, which sends nothing
-        RequestBuffersPtr _buffers;          // the text that _id and _params point into
+        ControlService* _service = nullptr;
+        RequestBuffersPtr _buffers;  // the text that _id and _params point into
         String _method;
         StringView _id = kNullId;
         JsonView _params;

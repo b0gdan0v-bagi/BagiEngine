@@ -50,6 +50,7 @@ namespace BECore {
     struct ControlMethodInfo {
         String summary;  // one line
         Vector<ControlParamInfo> params;
+        bool quiet = false;  // a call that only reads or waits: ControlActivity does not list it; not shown by list_methods
     };
 
     /// A registered method and its description, if its module gave one (ControlService::GetMethods)
