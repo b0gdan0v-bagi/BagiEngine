@@ -154,13 +154,21 @@ namespace BECore::Tests {
         }
 
         /// Parks on a delay that never expires within a test run, standing in for a task that Shutdown strands.
-        /// The delayed job still holds the (now dangling) coroutine_handle until the engine environment shuts down,
-        /// where it is dropped unrun; nothing in the test process pumps TaskManager::Update.
+        /// The delayed job keeps its coroutine_handle after AbandonAll has freed the frame: it is never due within a run, even in the cases
+        /// that pump the delayed queue, and the shutdown of the engine environment drops it unrun.
         Task<void> ParkedTask([[maybe_unused]] FrameGuard guard, LifetimeProbe& probe) {
             probe.parked.store(true, std::memory_order_release);
             co_await Delay(std::chrono::hours(1));
             probe.finished.store(true, std::memory_order_release);
             co_return;
+        }
+
+        /// Starts a ParkedTask on the calling thread: it is parked on return and no worker holds a reference to the handle, as the start job
+        /// of TaskManager::Run still may when the task reports that it parked.
+        IntrusivePtr<TaskHandle<void>> StartParked(LifetimeProbe& probe) {
+            auto handle = New<TaskHandle<void>>(ParkedTask(FrameGuard(probe), probe));
+            handle->Start();
+            return handle;
         }
 
     }  // namespace
@@ -765,8 +773,8 @@ namespace BECore::Tests {
 
     TEST_F(TaskManagerLifetimeTest, AbandonCancelsParkedTaskAndWakesWaiter) {
         LifetimeProbe probe;
-        auto handle = CoreManager::GetTaskManager().Run(ParkedTask(FrameGuard(probe), probe));
-        ASSERT_TRUE(WaitUntil([&probe]() { return probe.parked.load(); })) << "The task never reached its delay";
+        auto handle = StartParked(probe);
+        ASSERT_TRUE(probe.parked.load()) << "The task never reached its delay";
 
         AsyncWaiter waiter(handle);
         std::this_thread::sleep_for(kLetWaiterBlock);
@@ -785,8 +793,8 @@ namespace BECore::Tests {
 
     TEST_F(TaskManagerLifetimeTest, AbandonFreesParkedTaskWhoseHandleWasDropped) {
         LifetimeProbe probe;
-        CoreManager::GetTaskManager().Run(ParkedTask(FrameGuard(probe), probe));  // fire and forget
-        ASSERT_TRUE(WaitUntil([&probe]() { return probe.parked.load(); })) << "The task never reached its delay";
+        StartParked(probe);  // fire and forget
+        ASSERT_TRUE(probe.parked.load()) << "The task never reached its delay";
         EXPECT_FALSE(probe.frameDestroyed.load()) << "The frame must live while the task is parked";
 
         Detail::LiveTasks::GetInstance().AbandonAll();
@@ -797,8 +805,8 @@ namespace BECore::Tests {
 
     TEST_F(TaskManagerLifetimeTest, AbandonKeepsFrameWhileCallerHoldsTheHandle) {
         LifetimeProbe probe;
-        auto handle = CoreManager::GetTaskManager().Run(ParkedTask(FrameGuard(probe), probe));
-        ASSERT_TRUE(WaitUntil([&probe]() { return probe.parked.load(); })) << "The task never reached its delay";
+        auto handle = StartParked(probe);
+        ASSERT_TRUE(probe.parked.load()) << "The task never reached its delay";
 
         Detail::LiveTasks::GetInstance().AbandonAll();
         EXPECT_FALSE(probe.frameDestroyed.load()) << "The frame is owned by the caller's handle and must outlive Abandon";
