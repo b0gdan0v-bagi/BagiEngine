@@ -7,6 +7,9 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
+#if BE_WITH_EDITOR
+#include <BECore/Application/RunMode.h>
+#endif
 #endif
 
 #ifndef BAGI_WEB_ROOT
@@ -30,7 +33,14 @@ int RunApplication(int argc, const char* const* argv) {
     BECore::CoreManager::GetFileSystem().AddContentRoot(BagiContentRoots::kGame);
 #endif
 
+#if defined(__EMSCRIPTEN__) && BE_WITH_EDITOR
+    // A page passes no arguments, and the web overlay's mode="Game" (the release page's) wins over the game's config
+    BECore::Vector<const char*> arguments(argv, argv + argc);
+    arguments.push_back(BECore::RunModeArguments::kEditor.data());
+    BECore::Application::GetInstance().SetArguments(static_cast<int>(arguments.size()), arguments.data());
+#else
     BECore::Application::GetInstance().SetArguments(argc, argv);
+#endif
 
 #ifndef __EMSCRIPTEN__
     // The cook is a mode of this executable (its types decide the layout hash): it runs before anything of the window or the GPU exists
