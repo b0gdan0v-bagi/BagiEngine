@@ -49,6 +49,11 @@ namespace BECore {
             return _queueFamilies;
         }
 
+        /// The bits of a timestamp the graphics queue family writes (`timestampValidBits`); 0: it writes none
+        uint32_t GetTimestampValidBits() const;
+        /// The nanoseconds of a timestamp tick as the driver says now: it may calibrate the value while the program runs (MoltenVK)
+        float ReadTimestampPeriod() const;
+
         // Memory helper: finds the index of a memory type satisfying both typeFilter and
         // required property flags. Returns UINT32_MAX if not found.
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;

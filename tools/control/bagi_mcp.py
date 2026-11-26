@@ -449,8 +449,8 @@ def frame_stats(frames: int = 1) -> dict[str, Any]:
 
     frames: how many (1 to 240). Each has frame, frameMs (end to end), cpuMs, stagesMs (Update, SceneUpdate, Render, SceneDraw, Present, Wait,
     Submit; the scene stages are inside the other two, Wait is the display wait the Vulkan backend times, inside cpuMs, Submit is the batch
-    submissions, inside whichever stage flushed), gpuMs (the GPU time of the newest finished frame, some frames old; 0 where the backend
-    has none), drawCalls, triangles, textureSwitches (the engine's draws; ImGui's are the counters
+    submissions, inside whichever stage flushed), gpuMs (the GPU time of the newest finished frame, some frames old; 0: no value, either
+    a backend without GPU time or a frame its driver gave none for), drawCalls, triangles, textureSwitches (the engine's draws; ImGui's are the counters
     "ImGui draw calls" / "ImGui triangles"), allocCount, allocBytes, liveBytes (0 unless the game was built with ENGINE_PROFILER_ALLOC,
     allocTracking says), arenaUsedBytes, arenaPeakBytes, arenaOverflows (the memory arenas, summed), poolLiveBlocks, poolPageBytes (the block
     pools, summed; a pool shared by threads lags by a few calls) and counters (named values set during the frame). arenas and pools list each arena (name, capacity, used, peak, overflows, chunks) and each block

@@ -106,6 +106,15 @@ Then open the Tracy viewer of the **same version** as the vendored client (v0.15
 
 In Tracy every `Mutex` and `SharedMutex` is a lockable named after its `BE_LOCK_SITE` (`Task queue`, `Pool busy report`, ...): open the viewer's **Locks** window (or the lock rows of a thread's timeline) to see who held it, who waited and for how long. A lock shows once it has been used while the viewer is connected; Tracy's `lock wait` zones of the Chrome trace are not duplicated there.
 
+## GPU time
+
+`gpuMs` of `frame_stats` (and the trace counter `GPU ms`) is the span the GPU spent on one frame: a timestamp at the start of the frame's command buffer, after the wait for the swapchain image, to one after its last render pass (offscreen passes included, texture uploads not). No zone inside a frame is timed.
+
+- **Backends:** Vulkan only. SDL (`SDL_Renderer`, SDL GPU) has no timestamp query and the web has neither, so they report 0, as does a Vulkan device without timestamps (one info line at start-up).
+- **Lag:** the value is read when the frame slot comes round again, so it belongs to the frame two before the one that carries it. Skip the first frames after a change of the load.
+- **0 means no value, not no work.** Average over the frames that have one. KosmicKrisp (Mesa on Metal) often answers with an earlier frame's timestamps when frames follow each other closely; the backend drops those, so on a light load most frames have no value.
+- **Which driver on macOS:** the instance asks for no portability drivers, so the loader hides MoltenVK and the game runs the other driver the SDK installs, KosmicKrisp; `VK_LOADER_DEBUG=driver` prints which.
+
 ## Marking code
 
 ```cpp
