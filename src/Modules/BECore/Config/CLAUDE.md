@@ -71,6 +71,10 @@ A list of factory objects (widgets, runtime tests, log sinks, assert handlers) i
 2. Consume it with `GetConfig("<Name>"_intern)` or `MakeFromConfig<T>("<Name>")`; the names the engine reads from more than one place are `ConfigNames` (`ConfigNames.h`).
 3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorPanelModel::Initialize` (`src/Widgets/ConfigEditor/`): `RegisterEnum<E>` for an enum, `RegisterFactoryTypes<Base>` for a `type` attribute resolved by `AbstractFactory<Base>`. The options must be the strings the loader accepts (for a factory, the class names), so take them from the factory or the enum, never from a copy.
 
+## Field help
+
+`FieldHelpConfig` is the shape of `config/FieldHelpConfig.xml` (the engine's descriptions of component fields, every non-hidden one) and of `config/GameFieldHelpConfig.xml` (a game's, optional; another stem because a game file of the same name replaces the engine's whole file). So the two merge entry by entry: the component's own class wins over a parent class, for one class the game's entry over the engine's, and the field's `tooltip` attribute answers last. Editor data: `FieldHelp` (`src/Widgets/SceneEditor/FieldHelp.h`) reads it through the file system, so a file made during the run is found, and the cook copies it.
+
 ## Content version
 
 A **content file** is a file of a `config/` folder whose root element is `SceneManager` (a `SceneConfig.xml`) or `node` (a node file): `IsContentRoot` (`ContentVersion.h`). Its root may carry `contentVersion="N"`; **no attribute is version 1**, the format before versions (an explicit `0` is older than anything). The engine reads exactly one number, `kContentVersion`: a format change that old files cannot satisfy adds a step to `tools/migrate/steps/` and bumps it (`tools/migrate/CLAUDE.md`). Other files (`UIConfig.xml`, `TextureLibrary.xml`, ...) are not content files and carry no version; the first step that rewrites one adds its root to `IsContentRoot`.
