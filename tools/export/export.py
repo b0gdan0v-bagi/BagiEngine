@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Exports a desktop game: configures and builds it in a build folder of the export's own and packages the result
-(package_desktop.py). The editor's Export panel starts this script and reads its output; a person can run it too.
-The command line, the output lines and the cancel contract: tools/export/CLAUDE.md. Standard library only.
+Exports a game for the desktop or the web: configures and builds it in a build folder of the export's own and packages the
+result (package_desktop.py, package_web.py). The editor's Export panel starts this script and reads its output; a person can
+run it too. The command line, the output lines and the cancel contract: tools/export/CLAUDE.md. Standard library only.
 
     python3 tools/export/export.py build --project . --target BagiStress --config release
     python3 tools/export/export.py build --exe build/macos-debug/bin/BagiStress --config debug
+    python3 tools/export/export.py build --project . --target BagiStress --config release --platform web
     python3 tools/export/export.py run --dir dist/BagiStress-release
 """
 
@@ -26,9 +27,12 @@ from pathlib import Path
 ENGINE_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(ENGINE_DIR / "tools" / "dev"))
+sys.path.insert(0, str(ENGINE_DIR / "tools" / "web"))
 
+import build_and_deploy  # noqa: E402
 import dev  # noqa: E402
 import package_desktop  # noqa: E402
+import package_web  # noqa: E402
 import scenes  # noqa: E402
 
 EXIT_OK = 0
@@ -41,6 +45,10 @@ RESULT_FAILED = "== export failed: "
 RESULT_CANCELLED = "== export cancelled"
 
 STEPS = ("configure", "build", "package")
+DESKTOP = "desktop"
+WEB = "web"
+# The content folders of a web page: empty for the sources, else what takes the place of their config/ (cmake/BagiWeb.cmake)
+WEB_CONTENT_DEFINITION = "-DENGINE_WEB_COOKED_DIR="
 CANCEL_WORD = b"cancel"
 POLL_SECONDS = 0.05
 # From the polite signal to the kill. Whoever cancels this script waits longer than this before killing it, or the build outlives it
@@ -199,21 +207,27 @@ def preset_for(config: str, system: str) -> str:
     return PRESET_PREFIXES[system] + config
 
 
-def build_commands(project: Path, build_dir: Path, preset: str, target: str, system: str) -> list[list[str]]:
+def configure_command(preset: str, build_dir: Path, definition: str) -> list[str]:
+    # -B: never the preset's own folder, which holds the program that may be running this export
+    return ["cmake", "--preset", preset, "-B", str(build_dir), definition]
+
+
+def build_commands(build_dir: Path, preset: str, target: str, system: str, platform_name: str) -> list[list[str]]:
     """The commands of the steps `configure` and `build`."""
-    # Tests off: nothing of them is exported. -B: never the preset's own folder, which holds the program that may be running this export
+    # Web: the folder an earlier export left in the cache is cleared. Desktop: nothing of the tests is exported
+    definition = WEB_CONTENT_DEFINITION if platform_name == WEB else "-DENGINE_BUILD_TESTS=OFF"
     commands = [
-        ["cmake", "--preset", preset, "-B", str(build_dir), "-DENGINE_BUILD_TESTS=OFF"],
+        configure_command(preset, build_dir, definition),
         ["cmake", "--build", str(build_dir), "--target", target],
     ]
-    if system == "Windows":
-        # The Ninja presets leave the Visual Studio environment to the caller
+    if system == "Windows" and platform_name == DESKTOP:
+        # The desktop Ninja presets leave the Visual Studio environment to the caller; the web ones need none
         prefix = [sys.executable, str(ENGINE_DIR / "CI" / "scripts" / "vs_env.py")]
         commands = [prefix + command for command in commands]
     return commands
 
 
-def export(args: argparse.Namespace, cancel: Cancel, runner: Runner, system: str) -> Path:
+def export(args: argparse.Namespace, cancel: Cancel, runner: Runner, system: str, emsdk_dir: Path) -> Path:
     """Runs the steps of `build` and returns the package folder."""
     if args.exe:
         project, target = resolve_executable(args.exe)
@@ -221,28 +235,59 @@ def export(args: argparse.Namespace, cancel: Cancel, runner: Runner, system: str
         project, target = args.project.resolve(), args.target
     if not project.is_dir():
         raise ExportError(f"no project folder {project}")
-    preset = args.preset or preset_for(args.config, system)
+    web = args.platform == WEB
+    preset = args.preset or (f"{WEB}-{args.config}" if web else preset_for(args.config, system))
     build_dir = project / "build" / "export" / preset
-    out = (args.out or project / "dist" / f"{target}-{args.config}").resolve()
+    name = f"{target}-{WEB}-{args.config}" if web else f"{target}-{args.config}"
+    out = (args.out or project / "dist" / name).resolve()
+    manifest_file = build_dir / "export" / f"{target}.json"
     env = dev.tool_env(project)
+    without = f" without the scenes {', '.join(args.exclude_scene)}" if args.exclude_scene else ""
 
     def run(command: list[str], cwd: Path) -> int:
         say(f"$ {subprocess.list2cmdline(command)}")
         return 0 if args.dry_run else runner(command, cwd, env, cancel)
 
-    for number, name in enumerate(STEPS, start=1):
+    def run_step(step: str, command: list[str]) -> None:
+        code = run(command, project)
+        if code != 0:
+            raise ExportError(f"{step} failed with exit code {code}")
+
+    def announce(number: int) -> None:
         cancel.check()
-        say(f"== step {number}/{len(STEPS)}: {name}")
-        if name != "package":
-            code = run(build_commands(project, build_dir, preset, target, system)[number - 1], project)
-            if code != 0:
-                raise ExportError(f"{name} failed with exit code {code}")
-        elif args.dry_run:
-            without = f" without the scenes {', '.join(args.exclude_scene)}" if args.exclude_scene else ""
-            say(f"would package {target} into {out}{without}")
-        else:
-            package_desktop.package(build_dir / "export" / f"{target}.json", out, release=args.config == "release", project_dir=project,
-                                    runner=run, checkpoint=cancel.check, excluded_scenes=args.exclude_scene)
+        say(f"== step {number}/{len(STEPS)}: {STEPS[number - 1]}")
+
+    configure, build = build_commands(build_dir, preset, target, system, args.platform)
+
+    announce(1)
+    if web and not args.dry_run and not build_and_deploy.is_sdk_installed(emsdk_dir):
+        raise ExportError(build_and_deploy.SDK_MISSING_MESSAGE)
+    run_step("configure", configure)
+    if web:
+        content = build_dir / package_web.CONTENT_FOLDER
+        if not args.dry_run:
+            # The configure wrote the manifest: a folder that is refused is refused before the long build
+            manifest = package_web.read_manifest(manifest_file)
+            package_web.check_output(out, manifest, project, build_dir)
+        if args.exclude_scene:
+            if args.dry_run:
+                say(f"would copy the config/ folders into {content}{without}")
+            else:
+                package_web.stage_content(manifest, content, args.exclude_scene, cancel.check)
+            run_step("configure", configure_command(preset, build_dir, WEB_CONTENT_DEFINITION + content.as_posix()))
+
+    announce(2)
+    run_step("build", build)
+
+    announce(3)
+    if args.dry_run:
+        say(f"would package {target} into {out}{without}")
+    elif web:
+        package_web.package(manifest_file, out, target=target, single_thread=build_and_deploy.SINGLE_THREAD_SUFFIX in preset,
+                            project_dir=project, app_file=project / build_and_deploy.APP_FILE, runner=run, checkpoint=cancel.check)
+    else:
+        package_desktop.package(manifest_file, out, release=args.config == "release", project_dir=project, runner=run,
+                                checkpoint=cancel.check, excluded_scenes=args.exclude_scene)
     return out
 
 
@@ -257,6 +302,8 @@ def launch(package_dir: Path) -> Path:
         raise ExportError(f"{folder} is no exported package (no {package_desktop.MARKER_NAME})")
     lines = marker.read_text(encoding="utf-8").splitlines()
     name = lines[0].strip() if lines else ""
+    if name == package_web.INDEX_NAME:
+        raise ExportError(f"{folder} is a web package: serve it with `export.py serve --dir`")
     if not name or Path(name).name != name or not (folder / name).is_file():
         raise ExportError(f"{marker} names no executable of the package: {name!r}")
     options = ({"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
@@ -273,7 +320,7 @@ def launch(package_dir: Path) -> Path:
 
 
 def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Export a desktop game into a folder that runs by itself.")
+    parser = argparse.ArgumentParser(description="Export a game into a folder that runs by itself, for the desktop or the web.")
     commands = parser.add_subparsers(dest="command", required=True)
     build = commands.add_parser("build", help="build the game and package it")
     source = build.add_mutually_exclusive_group(required=True)
@@ -281,8 +328,9 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     source.add_argument("--project", type=Path, help="the CMake project of the game (with --target)")
     build.add_argument("--target", help="the game executable's target (with --project)")
     build.add_argument("--config", required=True, choices=("debug", "release"))
-    build.add_argument("--out", type=Path, help="the package folder (default <project>/dist/<target>-<config>)")
-    build.add_argument("--preset", help="the configure preset (default: the host's Ninja preset of --config)")
+    build.add_argument("--platform", choices=(DESKTOP, WEB), default=DESKTOP, help="what to export for (default desktop)")
+    build.add_argument("--out", type=Path, help="the package folder (default <project>/dist/<target>-[web-]<config>)")
+    build.add_argument("--preset", help="the configure preset (default: the host's Ninja preset of --config, or web-<config>)")
     build.add_argument("--exclude-scene", action="append", default=[], metavar="NAME",
                        help="a scene of SceneConfig.xml the package leaves out; once per scene")
     build.add_argument("--cancel-on-stdin-close", action="store_true", help="give up on a `cancel` line or the end of stdin")
@@ -295,7 +343,8 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     return args
 
 
-def main(argv: list[str] | None = None, *, runner: Runner = run_child, system: str | None = None) -> int:
+def main(argv: list[str] | None = None, *, runner: Runner = run_child, system: str | None = None,
+         emsdk_dir: Path = build_and_deploy.EMSDK_DIR) -> int:
     args = parse_arguments(argv)
     cancel = Cancel()
     previous = {}
@@ -307,7 +356,7 @@ def main(argv: list[str] | None = None, *, runner: Runner = run_child, system: s
         if args.command == "run":
             folder = launch(args.dir)
         else:
-            folder = export(args, cancel, runner, system or platform.system())
+            folder = export(args, cancel, runner, system or platform.system(), emsdk_dir)
     except Cancelled:
         say(RESULT_CANCELLED)
         return EXIT_CANCELLED

@@ -81,6 +81,8 @@ REFUSED_WITH_TARGET = {
 }
 # The game's own web app settings (package.py --app); the file is optional
 APP_FILE = Path("web") / "app.json"
+# A folder with this file is a package of tools/export (its MARKER_NAME): an export's default output lies in dist/
+EXPORT_MARKER_NAME = "bagi-package.txt"
 
 
 class DeployError(Exception):
@@ -228,12 +230,18 @@ def empty_stage(stage_dir: Path, source_dir: Path) -> None:
     stage_dir.mkdir(parents=True, exist_ok=True)
 
 
+def export_packages(folder: str, names: list[str]) -> list[str]:
+    """The names of `folder` that are export packages (the `ignore` of the staging)."""
+    return [name for name in names if (Path(folder) / name / EXPORT_MARKER_NAME).is_file()]
+
+
 def stage(dist: Path, stage_dir: Path, source_dir: Path, tools_dir: Path = TOOLS_DIR) -> None:
-    """Puts what the Dockerfile copies into one folder: the files of tools/web and a fresh copy of dist/, nothing else."""
+    """Puts what the Dockerfile copies into one folder: the files of tools/web and a fresh copy of dist/ without the export
+    packages inside it, nothing else."""
     empty_stage(stage_dir, source_dir)
     for name in STAGED_FILES:
         shutil.copyfile(tools_dir / name, stage_dir / name)
-    shutil.copytree(dist, stage_dir / "dist")
+    shutil.copytree(dist, stage_dir / "dist", ignore=export_packages)
 
 
 def fail(status: deploy_status.Status, message: str, code: int) -> int:

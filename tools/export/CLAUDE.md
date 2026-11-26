@@ -1,19 +1,19 @@
 # tools/export
 
-Turns a game into a desktop package: a folder that runs without the sources or the build. Python, standard library only. `export.py` is the command, `package_desktop.py` the packaging, `scenes.py` what it leaves out.
+Turns a game into a folder that runs without the sources or the build: a desktop package or a web page. Python, standard library only. `export.py` is the command, `package_desktop.py` and `package_web.py` the packaging, `scenes.py` what it leaves out.
 
 ## Command
 
 ```bash
-export.py build (--exe <path> | --project <dir> --target <name>) --config debug|release
+export.py build (--exe <path> | --project <dir> --target <name>) --config debug|release [--platform desktop|web]
                 [--out <dir>] [--preset <p>] [--exclude-scene <name>]... [--cancel-on-stdin-close] [--dry-run]
 export.py run --dir <package>
 ```
 
 - `--exe` takes the executable of a build (what a running editor knows of itself): the first `CMakeCache.txt` above it names the project, its file name the target. A packaged executable has none and cannot export.
-- **Build folder** `<project>/build/export/<preset>`, tests off, never the preset's own `build/<preset>`: building there would overwrite the editor that runs the export. So the first export is a full build. The preset is the host's Ninja preset of `--config` (macOS, or Windows through `CI/scripts/vs_env.py`); another host needs `--preset`.
-- **Output** `--out`, by default `<project>/dist/<target>-<config>`.
-- `run` starts the executable the marker names with `--game`, the package as its working folder, detached and with no standard streams.
+- **Build folder** `<project>/build/export/<preset>`, tests off, never the preset's own `build/<preset>`: building there would overwrite the editor that runs the export. So the first export is a full build. The desktop preset is the host's Ninja preset of `--config` (macOS, or Windows through `CI/scripts/vs_env.py`; another host needs `--preset`), the web one `web-<config>` on every host ("Web target").
+- **Output** `--out`, by default `<project>/dist/<target>-<config>`, on the web `<project>/dist/<target>-web-<config>`.
+- `run` (desktop packages only) starts the executable the marker names with `--game`, the package as its working folder, detached and with no standard streams.
 
 ## Output
 
@@ -30,7 +30,15 @@ Exit codes: 0 ok, 1 failed, 2 a wrong command line (no result line), 3 cancelled
 - Children take no input. On POSIX each runs in a process group of its own, and a cancel signals the group (ninja then ends its compilers, which have groups of their own), waits `KILL_GRACE_SECONDS`, then kills the group and every descendant listed before the signal. On Windows it is `taskkill /T /F`. A caller that kills the script on a timeout must give it longer than that grace.
 - `<out>.partial` is removed and the old package stays.
 
-## Package layout
+## Web target
+
+- **Steps:** `configure` clears `ENGINE_WEB_COOKED_DIR`, reads the manifest and checks the output folder before the long build; `package` runs `tools/web/package.py` as a child (so a cancel stops it) with `--game`, `--single-thread` for a preset whose name holds `-single-thread`, and `--app <project>/web/app.json` when that file exists. The package is what it writes plus the marker, whose first line is `index.html`.
+- It needs the Emscripten SDK of the engine checkout (`CI/scripts/setup_emsdk.py`); without it the export fails before the configure.
+- **Scenes left out:** the `config/` of the engine and the game are copied to `<build folder>/export-content/layer<k>/config` (numbered as a cook's output, times kept), the scenes are cut there, and a second configure points `ENGINE_WEB_COOKED_DIR` at it. That variable already replaces those two folders in the page's content, so CMake needs no option of its own; the first configure of every export empties it, or an earlier export's content would stay in the cache.
+- The page ships XML in both configurations: a cook needs a desktop build with the same types.
+- It does not go through `tools/web/build_and_deploy.py`: that script takes no build folder, so the content override would stay in the cache of the developer's `build/web-*`.
+
+## Package layout (desktop)
 
 | In the package | What |
 |----------------|------|
@@ -54,14 +62,14 @@ Refused, with the old package kept: an unknown name, the first scene (the game o
 
 ## Manifest
 
-`<build folder>/export/<Target>.json`, written at generate time for every desktop game executable of a Ninja build (`cmake/BagiExport.cmake`): `target`, `executable`, `engineRoot`, `gameRoot`, `notices` and `libraries`, a list of `{source, name}`. `name` is the file name the executable asks the system's loader for, which is not always the name of the source file. Every file it names must exist, else the target is not built.
+`<build folder>/export/<Target>.json`, written at generate time for every game executable of a Ninja build (`cmake/BagiExport.cmake`). A web one has `target`, `engineRoot` and `gameRoot`. A desktop one has also `executable`, `notices` and `libraries`, a list of `{source, name}`: `name` is the file name the executable asks the system's loader for, which is not always the name of the source file. Every file it names must exist, else the target is not built.
 
 ## Safety of the output folder
 
 The export replaces the output folder as a whole, so it refuses, before it writes anything:
 
 - a folder that exists, is not empty and has no marker (the owner's files);
-- one that is or contains the project or a content root (a package there would replace the sources);
+- one that is or contains the project or a content root (a package there would replace the sources; on the web the engine's `web/` overlay is a root too);
 - one inside a content root's `config/` or `assets/` (the game would read the package as content) or inside the export's build folder.
 
 The checks compare the folders themselves, not their spelling, so a link or another letter case is refused too. The package is made in `<out>.partial` and takes the place of the old one (moved to `<out>.previous` for that moment) only after every step succeeded: a failed or cancelled export leaves the old package as it was. Both siblings obey the first rule. The marker is written first into `<out>.partial`, which is what lets a later export remove the left-over of a killed one.

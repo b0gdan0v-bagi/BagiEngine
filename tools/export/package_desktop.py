@@ -5,11 +5,12 @@ The layout, the manifest and the safety rules: tools/export/CLAUDE.md. The comma
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -104,15 +105,14 @@ def _sibling(folder: Path, suffix: str) -> Path:
     return folder.with_name(folder.name + suffix)
 
 
-def check_output(out: Path, manifest: Manifest, project_dir: Path, build_dir: Path) -> None:
+def check_output(out: Path, content_roots: Sequence[Path], project_dir: Path, build_dir: Path) -> None:
     """Refuses an output folder whose replacement could delete something of the owner's, or that a build or the game would read.
 
     `out` is resolved. Nothing is written."""
-    roots = (manifest.engine_root, manifest.game_root)
-    for protected in (project_dir, *roots):
+    for protected in (project_dir, *content_roots):
         if is_within(protected.resolve(), out):
             raise PackageError(f"{out} is or contains {protected}: choose a folder of its own")
-    for content in (root / mount for root in roots for mount in MOUNT_FOLDERS):
+    for content in (root / mount for root in content_roots for mount in MOUNT_FOLDERS):
         if is_within(out, content):
             raise PackageError(f"{out} is inside the content folder {content}")
     if is_within(out, build_dir):
@@ -185,6 +185,22 @@ def _replace(partial: Path, out: Path) -> None:
     shutil.rmtree(previous, ignore_errors=True)
 
 
+@contextlib.contextmanager
+def partial_package(out: Path) -> Iterator[Path]:
+    """Gives the folder (not there yet) to make a package in, and puts it in the place of `out` when the block ends well.
+    Whatever fails or raises, a package that was in `out` stays as it was. `out` has passed check_output."""
+    partial = _sibling(out, PARTIAL_SUFFIX)
+    try:
+        if partial.exists():
+            shutil.rmtree(partial)
+        yield partial
+        _replace(partial, out)
+    except OSError as error:
+        raise PackageError(f"cannot write the package: {error}") from error
+    finally:
+        shutil.rmtree(partial, ignore_errors=True)  # not there after a success
+
+
 def package(manifest_file: Path, out_dir: Path, *, release: bool, project_dir: Path, runner: Runner,
             checkpoint: Callable[[], None] = lambda: None, excluded_scenes: Sequence[str] = ()) -> Path:
     """Makes the package of the manifest's target in `out_dir` and returns that folder, resolved.
@@ -195,11 +211,8 @@ def package(manifest_file: Path, out_dir: Path, *, release: bool, project_dir: P
     manifest = read_manifest(manifest_file)
     out = out_dir.resolve()
     # The manifest lies in <build folder>/export/
-    check_output(out, manifest, project_dir, manifest_file.resolve().parent.parent)
-    partial = _sibling(out, PARTIAL_SUFFIX)
-    try:
-        if partial.exists():
-            shutil.rmtree(partial)
+    check_output(out, (manifest.engine_root, manifest.game_root), project_dir, manifest_file.resolve().parent.parent)
+    with partial_package(out) as partial:
         _assemble(manifest, partial, checkpoint)
         if excluded_scenes:
             layers = [partial / CONTENT_FOLDER / name / "config" for name in (ENGINE_FOLDER, GAME_FOLDER)]
@@ -207,9 +220,4 @@ def package(manifest_file: Path, out_dir: Path, *, release: bool, project_dir: P
         if release:
             _cook(manifest, partial, runner)
         checkpoint()
-        _replace(partial, out)
-    except OSError as error:
-        raise PackageError(f"cannot write the package: {error}") from error
-    finally:
-        shutil.rmtree(partial, ignore_errors=True)  # not there after a success
     return out

@@ -285,6 +285,7 @@ endfunction()
 # they only take effect when it is included before the targets are created. Checked: -O2 -DNDEBUG is on every compile line of
 # web-release (compile_commands.json) and on its link line, and Debug is -O0 -g
 if(EMSCRIPTEN)
+    # tools/export also points it at staged copies of the XML config/ folders, to leave scenes out of the page
     set(ENGINE_WEB_COOKED_DIR "" CACHE PATH "A folder a desktop cook wrote (<desktop build>/cooked/<Game>): the page preloads its layer<k>/config in place of the XML config/ folders")
 
     # The level of the Release build, compile and link (-Oz is smaller, see the size table in tools/web/CLAUDE.md). A cache variable only so

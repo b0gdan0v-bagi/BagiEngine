@@ -892,9 +892,7 @@ function(be_add_game_executable NAME)
         )
     endif()
 
-    if(NOT ENGINE_TARGET_WEB)
-        be_add_export_manifest(${NAME} GAME_ROOT "${ARG_GAME_ROOT}" VULKAN_LOADER "${_EXPORT_VULKAN_LOADER}")
-    endif()
+    be_add_export_manifest(${NAME} GAME_ROOT "${ARG_GAME_ROOT}" VULKAN_LOADER "${_EXPORT_VULKAN_LOADER}")
 
     if(MSVC AND BAGI_NATVIS_FILES)
         set_property(TARGET ${NAME} PROPERTY VS_DEBUGGER_VISUALIZER_FILE "${BAGI_NATVIS_FILES}")
