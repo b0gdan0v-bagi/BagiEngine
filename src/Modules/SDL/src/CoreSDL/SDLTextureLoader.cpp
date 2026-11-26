@@ -64,6 +64,8 @@ namespace BECore {
             return texture;
         }
 
+        sdlBackend->CountTextureUpload(image->width, image->height);
+
         float texWidth = 0.0f;
         float texHeight = 0.0f;
         SDL_GetTextureSize(sdlTexture, &texWidth, &texHeight);
