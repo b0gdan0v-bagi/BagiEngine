@@ -1,5 +1,8 @@
 #include "SceneConfigWriter.h"
 
+#include <BECore/Config/ConfigManager.h>
+#include <BECore/Config/ConfigNames.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/IComponent.h>
@@ -142,6 +145,25 @@ namespace BECore {
             scenesEl.remove_child(oldEl);
         }
         return true;
+    }
+
+    std::expected<Vector<String>, StringView> SaveSceneToConfig(ConfigManager& configs, Scene& scene) {
+        if (configs.IsBinaryConfig(ConfigNames::scene)) {
+            return std::unexpected(StringView("SceneConfig is a cooked file, which is read only"));
+        }
+        XmlNode root = configs.GetConfig(ConfigNames::scene);
+        const NodeFileLoader loader = MakeFileSystemNodeLoader(configs.GetFileSystem());
+        Vector<String> notes;
+        if (!root || !WriteSceneToConfig(root.GetPugiNode(), scene, &loader, &notes)) {
+            return std::unexpected(StringView("there is no SceneConfig"));
+        }
+        for (const String& note : notes) {
+            LOG_WARNING("Scene save: scene '{}': {}", scene.GetName().CStr(), note);
+        }
+        if (!configs.SaveConfig(ConfigNames::scene)) {
+            return std::unexpected(StringView("SceneConfig could not be written, the log says why"));
+        }
+        return notes;
     }
 
 }  // namespace BECore

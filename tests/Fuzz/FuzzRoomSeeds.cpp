@@ -414,6 +414,7 @@ namespace BECore::Fuzz {
             add("scene-set-node.bin", Request("57", "scene_set_node", R"({"node":"Board/Cell","layer":-2147483648})"));
             add("scene-pick.bin", Request("58", "scene_pick", R"({"x":0.5,"y":1})"));
             add("scene-pick-outside.bin", Request("59", "scene_pick", R"({"x":-1e999,"y":18446744073709551615})"));
+            add("scene-save.bin", Request("60", "scene_save"));
             add("frame-stats.bin", Request("17", "frame_stats", R"({"frames":10})"));
             add("profiler-dump.bin", Request("18", "profiler_dump", R"({"path":"trace.json"})"));
             add("zone-allocs.bin", Request("19", "zone_allocs", R"({"top":5,"reset":false})"));

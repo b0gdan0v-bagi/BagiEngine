@@ -29,6 +29,7 @@ namespace BECore {
 
     namespace SceneEvents {
         struct SceneNodeEditedEvent;
+        struct SceneSavedEvent;
     }  // namespace SceneEvents
 
     /**
@@ -107,6 +108,8 @@ namespace BECore {
         void OnSceneEdited(const SceneEditedEvent& event);
         /// A field a control client wrote is unsaved like one the inspector edits, unless Save leaves its node out
         void OnNodeEdited(const SceneEvents::SceneNodeEditedEvent& event);
+        /// A control client saved the active scene, so nothing of it is unsaved, unless canvas edits still wait to go into their node files, which only this Save writes
+        void OnSceneSaved(const SceneEvents::SceneSavedEvent& event);
 
         /// Answers the Add Node dialog: the scene is unsaved and the parent of the new node is revealed, when the scene is the active one
         void OnNodeAdded(const SceneNodeAddedEvent& event);
@@ -141,9 +144,7 @@ namespace BECore {
         void DrawComponents();
 
         /**
-         * @brief Replace the `<scene>` of the active scene in SceneConfig.xml (WriteSceneToConfig) and save the file
-         *        through ConfigManager, with the node files found through the FileSystem. The other scenes of the file stay as they are;
-         *        an instance that cannot be written as a reference is written inline and logged as a warning.
+         * @brief Writes the pending canvas rects into their node files (UINodeFileSession), then saves the active scene with SaveSceneToConfig; the unsaved flag stays when that fails
          */
         void SaveScene();
 

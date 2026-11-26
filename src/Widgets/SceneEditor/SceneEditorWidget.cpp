@@ -1,11 +1,10 @@
 #include "SceneEditorWidget.h"
 
 #include <BECore/Config/ConfigManager.h>
-#include <BECore/Config/ConfigNames.h>
-#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneConfigWriter.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/ScenePick.h>
 #include <BECore/UI/UICanvasComponent.h>
@@ -19,7 +18,6 @@
 #include <Widgets/SceneEditor/ComponentInspectors.h>
 #include <Widgets/SceneEditor/ComponentListView.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
-#include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneEditorDocuments.h>
 #include <Widgets/SceneEditor/UIEditEvents.h>
@@ -85,6 +83,7 @@ namespace BECore {
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
         Subscribe<SceneEditedEvent, &SceneEditorWidget::OnSceneEdited>(this);
         Subscribe<SceneEvents::SceneNodeEditedEvent, &SceneEditorWidget::OnNodeEdited>(this);
+        Subscribe<SceneEvents::SceneSavedEvent, &SceneEditorWidget::OnSceneSaved>(this);
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
@@ -269,6 +268,12 @@ namespace BECore {
             }
         }
         _isDirty = true;
+    }
+
+    void SceneEditorWidget::OnSceneSaved(const SceneEvents::SceneSavedEvent& event) {
+        if (event.scene != nullptr && event.scene == CoreManager::GetSceneManager().GetActiveScene() && _uiFileSession.PendingCount() == 0) {
+            _isDirty = false;
+        }
     }
 
     void SceneEditorWidget::OnNodeAdded(const SceneNodeAddedEvent& event) {
@@ -556,23 +561,7 @@ namespace BECore {
         // The node files first: an instance whose rects are in its file then has nothing to override in the scene file. A failure here is logged and never stops the scene
         _uiFileSession.Save(*scene);
 
-        ConfigManager& configManager = Configs();
-        auto xmlRoot = configManager.GetConfig(ConfigNames::scene);
-        if (!xmlRoot) {
-            return;
-        }
-
-        // An instance of a node file is saved as its <node ref> with the overrides; one that cannot be goes inline and is told here
-        const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
-        Vector<String> notes;
-        if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
-            return;
-        }
-        for (const String& note : notes) {
-            LOG_WARNING("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note);
-        }
-
-        if (configManager.SaveConfig(ConfigNames::scene)) {
+        if (SaveSceneToConfig(Configs(), *scene)) {
             _isDirty = false;
         }
     }

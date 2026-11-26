@@ -8,6 +8,7 @@
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
+#include <BECore/Scene/SceneConfigWriter.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodeFiles.h>
@@ -23,9 +24,9 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Events/SceneEvents.h>
-#include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/SceneEditor/SceneEditorWidget.h>
 #include <Widgets/SceneEditor/UINodeFileSession.h>
+#include <Widgets/Viewport/ViewportEvents.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>
 
 namespace BECore::Tests {
@@ -1384,6 +1385,31 @@ namespace BECore::Tests {
         EXPECT_FALSE(editor->GetInspected().dirty);
 
         SceneEvents::SceneNodeEditedEvent::Emit(&game, &board);
+
+        EXPECT_TRUE(editor->GetInspected().dirty);
+    }
+
+    TEST_F(SceneEditorUnsavedTest, ASaveByAControlClientClearsTheFlagOfTheActiveSceneUnlessNodeFileEditsWait) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes());
+        _manager->SetActiveScene("Game"_intern);
+        EngineEnvironment::UseSceneManager(_manager);
+        const IntrusivePtr<SceneEditorWidget> editor = New<SceneEditorWidget>();
+        XmlDeserializer config;
+        ASSERT_TRUE(editor->Initialize(config));
+        Scene& game = GetScene("Game");
+        SceneNode& board = Require(FindTopLevelNode(game, "Board"_intern));
+        SceneEvents::SceneNodeEditedEvent::Emit(&game, &board);
+
+        SceneEvents::SceneSavedEvent::Emit(&GetScene("Menu"));
+        EXPECT_TRUE(editor->GetInspected().dirty);
+        SceneEvents::SceneSavedEvent::Emit(&game);
+        EXPECT_FALSE(editor->GetInspected().dirty);
+
+        // A finished drag of a canvas element waits for the editor's own Save, which writes the node files
+        board.AddComponent(New<UICanvasComponent>());
+        const IntrusivePtr<UIElement> element = Require(board.GetComponent<UICanvasComponent>()).GetRoot().AddChild("Dragged"_intern);
+        UIRectDragEvent::Emit(UIRectDragPhase::Commit, &game, &board, element.Get(), element->style.rect, element->style.rect, true);
+        SceneEvents::SceneSavedEvent::Emit(&game);
 
         EXPECT_TRUE(editor->GetInspected().dirty);
     }
