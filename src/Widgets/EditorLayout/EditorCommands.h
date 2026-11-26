@@ -104,11 +104,21 @@ namespace BECore {
         inline constexpr auto kViewFileChanges = "view.fileChanges"_intern;
         inline constexpr auto kViewSpriteLibrary = "view.spriteLibrary"_intern;
         inline constexpr auto kViewViewport = "view.viewport"_intern;
+        /// Show and hide the Asset Browser (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewAssetBrowser = "view.assetBrowser"_intern;
         /// The File changes panel's buttons (config/panels/FileChangesPanel.xml names them). FileChangesPanelModel owns them and runs them only while its panel is open;
         /// fileChanges.apply takes the virtual path of a pending row as the argument and does nothing without one
         inline constexpr auto kFileChangesRescan = "fileChanges.rescan"_intern;
         inline constexpr auto kFileChangesApplyAll = "fileChanges.applyAll"_intern;
         inline constexpr auto kFileChangesApply = "fileChanges.apply"_intern;
+        /// The Asset Browser's Rescan button: AssetBrowserPanelModel lists the content files again, only while its panel is open
+        inline constexpr auto kAssetBrowserRescan = "assetBrowser.rescan"_intern;
+        /// Delete and rename of the selected asset: the first two open the dialog that names its users, confirm does it, cancel closes (AssetBrowserPanelModel, only
+        /// while its panel is open)
+        inline constexpr auto kAssetBrowserDelete = "assetBrowser.delete"_intern;
+        inline constexpr auto kAssetBrowserRename = "assetBrowser.rename"_intern;
+        inline constexpr auto kAssetBrowserConfirm = "assetBrowser.confirm"_intern;
+        inline constexpr auto kAssetBrowserCancel = "assetBrowser.cancel"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

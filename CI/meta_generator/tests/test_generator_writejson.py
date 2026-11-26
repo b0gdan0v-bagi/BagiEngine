@@ -82,7 +82,7 @@ def test_the_file_includes_the_helpers(generated):
 
 
 def test_the_cache_version_regenerates_unchanged_sources():
-    assert MetadataCache.CACHE_VERSION == "2.15"
+    assert MetadataCache.CACHE_VERSION == "2.16"
 
 
 def test_a_class_writes_its_members_in_the_order_of_their_serialized_names_each_guarded_by_the_merge(generated):

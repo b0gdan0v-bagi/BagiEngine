@@ -60,5 +60,8 @@
     <widget
       type="AssetPanelWidget"
       asset="GeneratePanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="AssetBrowserPanel" />
   </widgets>
 </root>

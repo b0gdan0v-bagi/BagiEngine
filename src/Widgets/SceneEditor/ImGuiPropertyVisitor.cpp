@@ -2,6 +2,7 @@
 
 #include <BECore/Values/Explain/ValueContextRegistry.h>
 #include <BECore/Values/Explain/ValueExplain.h>
+#include <Widgets/AssetBrowser/AssetDrag.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
@@ -220,7 +221,12 @@ namespace BECore {
         buf[copyLen] = '\0';
 
         const bool changed = ImGui::InputText(label, buf, sizeof(buf));
+        const Optional<AssetDragPayload> dropped = AcceptAssetDrop(attributes.asset);
         FieldTooltip(attributes);
+        if (dropped) {
+            value = PoolString::Intern(StringView(dropped->path));
+            return true;
+        }
         if (changed) {
             value = PoolString::Intern(StringView(buf));
         }
@@ -239,7 +245,12 @@ namespace BECore {
         buf[copyLen] = '\0';
 
         const bool changed = ImGui::InputText(label, buf, sizeof(buf));
+        const Optional<AssetDragPayload> dropped = AcceptAssetDrop(attributes.asset);
         FieldTooltip(attributes);
+        if (dropped) {
+            value.assign(dropped->path);
+            return true;
+        }
         if (changed) {
             value.assign(buf);
         }

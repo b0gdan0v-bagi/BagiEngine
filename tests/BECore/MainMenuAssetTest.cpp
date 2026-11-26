@@ -224,8 +224,8 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Click("view"));
 
         float previous = -1.0f;
-        for (const StringView id : {"commandPalette", "preferences", "viewport", "sceneEditor", "configEditor", "fileChanges", "spriteLibrary", "gamePanel", "console", "generate", "profiler",
-                                    "layouts", "saveLayout", "deleteLayout", "resetLayout"}) {
+        for (const StringView id : {"commandPalette", "preferences", "viewport", "sceneEditor", "configEditor", "fileChanges", "spriteLibrary", "assetBrowser", "gamePanel", "console", "generate",
+                                    "profiler", "layouts", "saveLayout", "deleteLayout", "resetLayout"}) {
             const ImGuiItemRecord* item = Find(id);
             ASSERT_NE(item, nullptr) << String(id.data(), id.size()).c_str();
             EXPECT_GT(item->minY, previous) << String(id.data(), id.size()).c_str();

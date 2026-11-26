@@ -19,6 +19,8 @@ namespace BECore {
      * - `readonly`: the field is drawn disabled (`ImGui::BeginDisabled`); a read-only compound can be opened, its children are disabled
      * - `hidden`: the field is not drawn (the dispatch skips it: `ShowsHidden()` is false)
      * - `required`: not used here
+     * - `asset(<Kind>)`: the text field takes a content file of that kind dragged onto it (`Widgets/AssetBrowser/AssetDrag.h`) and holds its
+     *   virtual path; not while it is disabled
      * A value is constrained when the user edits it, not when it is shown: a value loaded outside the range stays as it is until touched.
      *
      * Containers (the hooks of `IPropertyVisitor`; the dispatch applies what they ask, after the list, never here):

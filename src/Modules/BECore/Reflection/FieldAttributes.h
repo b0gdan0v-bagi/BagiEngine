@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Resource/AssetKind.h>
 #include <BECore/Types/Types.h>
 
 namespace BECore {
@@ -28,6 +29,8 @@ namespace BECore {
         bool hidden = false;
         /// `required`: a load reports a scope that does not name the field
         bool required = false;
+        /// `asset(<Kind>)`: the string names a file of this kind, and the inspector takes a dropped asset of it; `None` otherwise
+        AssetKind asset = AssetKind::None;
 
         constexpr bool operator==(const FieldAttributes&) const = default;
     };

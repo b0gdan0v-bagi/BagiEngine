@@ -58,6 +58,8 @@ def format_field_attributes(attrs: FieldAttrs) -> str:
     for flag, member in (('readonly', 'readOnly'), ('hidden', 'hidden'), ('required', 'required')):
         if getattr(attrs, flag):
             parts.append(f'.{member} = true')
+    if attrs.asset:
+        parts.append(f'.asset = ::BECore::AssetKind::{attrs.asset}')
     return '::BECore::FieldAttributes{ ' + ', '.join(parts) + ' }'
 
 
