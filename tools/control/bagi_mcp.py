@@ -488,6 +488,23 @@ def zone_allocs(top: int = 20, reset: bool = False) -> dict[str, Any]:
 
 @server.tool()
 @reports_errors
+def pool_strings(frames: int = 60, limit: int = 20, query: str | None = None, source: str | None = None, record: bool | None = None, reset: bool = False) -> dict[str, Any]:
+    """The pool of interned strings (PoolString, which never frees): {checks, growth, recording, search, summary}.
+
+    summary: counts and bytes by source, the blocks and the table. growth: the strings and bytes added in each of the last frames (1 to
+    240); runtime additions in a steady frame are a leak. search: the strings that hold query (ASCII case ignored; every string without
+    it) and come from source ("static", "runtime" or "adopted"): matched counts them all, rows lists the first limit (0 to 1000) by
+    text. checks: pairs of hash collisions and of texts held twice. recording: the new runtime strings by profiler zone, filled while
+    recording is on; record switches it before the answer (a build with the editor only, else not_available), reset drops the records
+    after the answer. Zones are named only in a build with ENGINE_PROFILER_ALLOC.
+    """
+    optional = {"query": query, "source": source, "record": record}
+    given = {name: value for name, value in optional.items() if value is not None}
+    return session.call("pool_strings", {"frames": frames, "limit": limit, "reset": reset, **given})
+
+
+@server.tool()
+@reports_errors
 def game_log(lines: int = 40) -> str:
     """The last lines of the output of the game that launch_game started: use it when the game fails or an action is refused for no visible reason."""
     return session.game_log(lines)

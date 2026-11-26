@@ -16,7 +16,7 @@
 
 ## Files
 
-`PoolString.h` (the type, `PoolStringStats`, `PoolAdoptOptions`, the opaque `PoolAdoptError`) and `PoolBlock.h` (`PoolBlock`, `PoolAdoptResult` and the `CORE_ENUM` of `PoolAdoptError`; a caller of `AdoptBlock` includes it) and `PoolString.cpp` (wrappers over the one process-wide storage); `PoolStringEntry.h` (the entry, `PoolEntryBytes`, `ConstructPoolEntry`: the header a cook and a loader may include); `PoolEntryTable.h` (the table); `PoolStringStorage.h/.cpp` (the pool itself); `PoolStringSnapshot.h` (the rows of a snapshot, `PoolStringOrigin`, `PoolBlockKind`; not in the PCH); `PoolStringObserver.h`; `PoolStringMonitor.h/.cpp`; `PoolStringAnalysis.h/.cpp`; `PoolBlockSource.h/.cpp` (where blocks come from); `StaticPoolString.h`, `PoolStringMap.h`.
+`PoolString.h` (the type, `PoolStringStats`, `PoolAdoptOptions`, the opaque `PoolAdoptError`) and `PoolBlock.h` (`PoolBlock`, `PoolAdoptResult` and the `CORE_ENUM` of `PoolAdoptError`; a caller of `AdoptBlock` includes it) and `PoolString.cpp` (wrappers over the one process-wide storage); `PoolStringEntry.h` (the entry, `PoolEntryBytes`, `ConstructPoolEntry`: the header a cook and a loader may include); `PoolEntryTable.h` (the table); `PoolStringStorage.h/.cpp` (the pool itself); `PoolStringSnapshot.h` (the rows of a snapshot, `PoolStringOrigin`, `PoolBlockKind`; not in the PCH); `PoolStringObserver.h`; `PoolStringMonitor.h/.cpp`; `PoolStringAnalysis.h/.cpp`; `PoolStringsControl.h/.cpp` and `PoolStringsAnswers.h/.cpp` (the control method); `PoolBlockSource.h/.cpp` (where blocks come from); `StaticPoolString.h`, `PoolStringMap.h`.
 
 ## Storage (`PoolStringStorage.h/.cpp`)
 
@@ -43,6 +43,26 @@ For tools that look at the pool or watch it grow; nothing here is on the hit pat
 - **Growth** (`PoolStringMonitor`, over the process storage: `CoreManager::GetPoolStringMonitor()`). A steady frame should copy nothing into the pool: `runtimeStrings` and `runtimeBytes` of a frame are the figure to watch, since a `PoolString` made every frame from changing data is a leak. `otherStrings` (registrations, adoptions) is apart: the first use of a constant is no leak. A frame is the change since the end of the one before, so nothing falls between frames (idle cycles of the manual clock count in the next); held frames are frames too. `CoreManager::OnGameCycle` brackets it with the number `frame_stats` gives the frame. A steady frame of the monitor allocates nothing.
 - **Recording** is off, with no observer installed, until `SetRecording(true)`. It keeps each new runtime string with the frame and the innermost profiler zone of the interning thread, up to `kMaxRecords` (the rest are counted as dropped), and `GroupByZone` gives them by zone. **Zones are known only with `ENGINE_PROFILER_ALLOC`** (`ProfileZone` tracks the current zone for the allocation counts; nothing was added for this): elsewhere every record has no zone. The observer takes the monitor's mutex under the pool's lock, so the monitor never calls the pool while it holds that mutex.
 - **Checks** (`PoolStringAnalysis`, pure over a snapshot): `FindHashCollisions` (two texts, one hash: `Find` still tells them apart, a `consteval` equality does not), `FindDuplicateTexts` (one text in two entries, so two unequal strings; only an entry with a wrong hash can make one: an unverified block, or a hashed batch or `RegisterStatic` in a build without asserts) and `Search` (text part with ASCII case ignored, origin, block source, a sort key, either direction).
+
+## Control method
+
+`pool_strings` (`RegisterPoolStringsControl`, over the monitor of the process pool). The pool's view for tests and tools: each call takes a snapshot, so it is not for every frame, and it interns nothing of what the client sends.
+
+| Param | Value |
+|-------|-------|
+| `frames?` | 1 to `kFrameHistory` ended frames of `growth` (default 60) |
+| `limit?` | 0 to 1000 search rows (default 20) |
+| `query?`, `source?` | the search: a part of the text, ASCII case ignored; `static`, `runtime` or `adopted` |
+| `record?` | switches recording before the answer; only a build with the editor, else the code `not_available` |
+| `reset?` | drops the records after the answer |
+
+A wrong type or value is `invalid_params` and switches nothing. The answer (`PoolStringsAnswer`):
+
+- `checks {duplicateTexts, hashCollisions}`: numbers of pairs.
+- `growth {bytes, frames [{frame, otherStrings, runtimeBytes, runtimeStrings}], strings}`: the oldest frame first; `bytes` and `strings` sum the runtime additions of the frames listed.
+- `recording {dropped, enabled, zones [{bytes, file, lastFrame, line, strings, texts, zone}]}`: the most bytes first; `texts` are the first few strings of the zone; without a zone it is `(no zone)`.
+- `search {matched, rows [{file, hash, length, source, text}]}`: by text; `file` is the source name of the string's block; `hash` is 16 hex digits (64 bits do not fit a JSON double). `source` and `query` select rows only, not the other sections.
+- `summary`: the fields of `PoolStringStats` under their names, `tableLoad`, and `blocks [{capacity, deadBytes, deadStrings, kind, source, used}]` with `kind` `runtime`, `allocated` or `adopted`.
 
 ## Loading
 

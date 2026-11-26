@@ -58,6 +58,11 @@ namespace BECore {
         PoolStringMonitor(const PoolStringMonitor&) = delete;
         PoolStringMonitor& operator=(const PoolStringMonitor&) = delete;
 
+        /// The pool it watches
+        [[nodiscard]] Details::PoolStringStorage& GetStorage() const {
+            return _storage;
+        }
+
         void BeginFrame(uint64_t frame);
         /// Stores the growth of the frame; allocates nothing
         void EndFrame();

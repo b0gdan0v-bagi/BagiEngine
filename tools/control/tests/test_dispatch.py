@@ -55,6 +55,8 @@ def echo_handler(method: str, params: dict | None):
         raise FakeError("not_recording", "the Chrome trace is not recording")
     if method == "zone_allocs":
         return {"enabled": False, "zones": [], "totals": {"count": 0}, "params": params}
+    if method == "pool_strings":
+        return {"checks": {"duplicateTexts": 0, "hashCollisions": 0}, "params": params}
     if method == "editor_state":
         return {"anyDirty": False, "documents": []}
     if method == "log_mark":
@@ -320,7 +322,7 @@ EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "click_at", "game_log", "quit",
     "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop", "image_diff",
     "log_mark", "log_since", "log_subscribe", "batch", "run_until", "set_window",
-    "imgui_find", "imgui_click", "imgui_type", "imgui_key", "editor_state",
+    "imgui_find", "imgui_click", "imgui_type", "imgui_key", "editor_state", "pool_strings",
 }
 
 
@@ -386,6 +388,10 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             assert dumped.is_error and "not_recording" in dumped.content[0].text
             zones = await client.call_tool("zone_allocs", {"top": 5, "reset": True})
             assert not zones.is_error and "totals" in zones.content[0].text
+            pool = await client.call_tool("pool_strings", {})
+            assert not pool.is_error and "hashCollisions" in pool.content[0].text
+            searched = await client.call_tool("pool_strings", {"frames": 5, "limit": 0, "query": "ui", "source": "adopted", "record": False, "reset": True})
+            assert not searched.is_error
 
             editor = await client.call_tool("editor_state", {})
             assert not editor.is_error and '"anyDirty": false' in editor.content[0].text
@@ -413,6 +419,10 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
     assert requests_of(server, "frame_stats")[-1] == {"frames": 3}
     assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
     assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
+    assert requests_of(server, "pool_strings") == [
+        {"frames": 60, "limit": 20, "reset": False},
+        {"frames": 5, "limit": 0, "query": "ui", "source": "adopted", "record": False, "reset": True},
+    ]
     assert requests_of(server, "click_at")[:2] == [{"x": 10, "y": 20}, {"x": 1.5, "y": 2, "space": "scene", "button": "right", "which": 3}]
     assert requests_of(server, "log_since")[0] == {"mark": 5, "level": "error"}
     assert requests_of(server, "log_subscribe") == [{"enabled": True, "level": "warning"}]

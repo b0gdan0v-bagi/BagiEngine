@@ -26,6 +26,7 @@
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Memory/MemTag.h>
 #include <BECore/PoolString/PoolStringMonitor.h>
+#include <BECore/PoolString/PoolStringsControl.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Renderer/RendererManager.h>
@@ -159,6 +160,7 @@ namespace BECore {
         RegisterInputControl(*_controlService);
         RegisterImGuiInputControl(*_controlService);
         RegisterProfilerControl(*_controlService);
+        RegisterPoolStringsControl(*_controlService, *_poolStringMonitor);
         RegisterClipboardControl(*_controlService);
         RegisterAudioControl(*_controlService, *_audioManager);
         RegisterFileWatchControl(*_controlService, *_fileWatcher);
