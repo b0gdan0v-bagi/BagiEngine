@@ -53,6 +53,7 @@ namespace BECore {
         [[nodiscard]] EditorSettings* GetSettings() override;
         [[nodiscard]] LayoutStore* GetLayouts() override;
         [[nodiscard]] const EditorPlayModel* GetPlayModel() const override;
+        [[nodiscard]] Optional<EditorWorkspace> GetActiveWorkspace() const override;
         /// Needs an ImGui context: the text is ImGui's ini of the moment
         std::expected<void, String> SaveCurrentLayoutAs(StringView name) override;
         void LoadLayout(StringView name) override;

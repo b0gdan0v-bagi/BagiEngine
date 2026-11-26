@@ -24,6 +24,8 @@ namespace BECore {
         constexpr float kSideWidth = 0.25f;
         constexpr float kWideSideWidth = 0.4f;
         constexpr float kLeftWidth = 0.22f;
+        // Of the narrower rest that a wide right column leaves, so the left column is about as wide as in the other layouts
+        constexpr float kLeftWidthBesideWide = 0.275f;
         constexpr float kBottomHeight = 0.3f;
         constexpr float kRightBottomHeight = 0.4f;
 
@@ -102,7 +104,7 @@ namespace BECore {
             {kSideWidth, kLeftWidth, kBottomHeight, 0.0f, 0.0f, {scene.data(), scene.size()}},
             {kSideWidth, kLeftWidth, 0.0f, kBottomHeight, kRightBottomHeight, {ui.data(), ui.size()}},
             {kSideWidth, kLeftWidth, 0.0f, kBottomHeight, 0.0f, {animation.data(), animation.size()}},
-            {kWideSideWidth, kLeftWidth, 0.0f, kBottomHeight, 0.0f, {profiling.data(), profiling.size()}},
+            {kWideSideWidth, kLeftWidthBesideWide, 0.0f, kBottomHeight, 0.0f, {profiling.data(), profiling.size()}},
         }};
         return ready[static_cast<size_t>(workspace)];
     }

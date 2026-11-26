@@ -255,6 +255,10 @@ namespace BECore {
         return &_playModel;
     }
 
+    Optional<EditorWorkspace> EditorLayoutWidget::GetActiveWorkspace() const {
+        return _workspaces ? Optional<EditorWorkspace>(_workspaces->GetActive()) : std::nullopt;
+    }
+
     void EditorLayoutWidget::NotifyPreferencesChanged() {
         _preferencesNotified = true;
     }

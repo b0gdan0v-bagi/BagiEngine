@@ -18,8 +18,10 @@ ROW_HEIGHT = 30.0
 FIELD_HEIGHT = 29.0
 SPLITTER_X = 211.0
 WIDE_DOCK = 400.0
-PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console": "Console (1 errors)###Console", "Game Panel": "Game###GamePanel", "Profiler": "Profiler", "Field Help": "Field Help###FieldHelp"}
-MENU_ITEMS = ["Command Palette...", "Preferences...", "Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Field Help", "Layouts", "Reset to Defaults"]
+PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console": "Console (1 errors)###Console", "Game Panel": "Game###GamePanel", "Profiler": "Profiler", "Field Help": "Field Help###FieldHelp", "Config Editor": "Config Editor###ConfigEditor", "Sprite Library": "Sprite Library###SpriteLibrary", "Asset Browser": "Asset Browser###AssetBrowser"}
+# a menu item's label ends with the id of its element, as the engine draws it
+MENU_ITEMS = [f"{name}###{index}" for index, name in enumerate(["Command Palette...", "Preferences...", "Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Field Help", "Layouts", "Reset to Defaults"])]
+TOOLBAR = "##EditorRoot/##MainToolbar_1A2B3C4D"
 PALETTE_COMMANDS = ["Game Panel", "Switch Game and Editor", "Console", "Save Scene"]
 TRANSFORM_FIELDS = 7
 CARD_ICON = "\ue194"  # any glyph of the Lucide range
@@ -48,6 +50,8 @@ class FakeEditor:
         self.menu_items = menu_items or MENU_ITEMS
         self.save_clears = save_clears
         self.menu_open = False
+        self.workspace = "Scene"
+        self.stays_closed = set()  # panels a switch fails to open
         self.root_open = False
         self.search = ""
         self.names = {"Field": "Field", "Run": "Run"}
@@ -77,6 +81,10 @@ class FakeEditor:
 
     def items(self):
         found = [item("View", "##EditorRoot", **VIEW_ITEM)]
+        if "Config Editor" in self.open_panels:
+            found.append(item("ConsolePanel##select", "Config Editor###ConfigEditor/##list_0F0F0F0F", 20.0, 700.0, 200.0, MENU_ROW_HEIGHT))
+        for index, name in enumerate(editor.WORKSPACE_PANELS):
+            found.append(item(name, TOOLBAR, 600.0 + index * 110.0, 28.0, 100.0, 24.0))
         if self.palette:
             found.append(item("##query", "##Popup_c0f026a4", 730.0, 224.0, 459.0, 24.0))
             commands = [command for command in PALETTE_COMMANDS if self.query in command.lower()]
@@ -119,7 +127,8 @@ class FakeEditor:
         return found
 
     def windows(self):
-        return [{"kind": "window", "label": PANEL_TITLES.get(title, title), "window": None, "x": 0, "y": 0, "width": 100, "height": 100, "visible": True, "hovered": False, "id": "0x2"} for title in sorted(self.open_panels)]
+        widths = {"Scene Editor": self.dock_width}  # the left column
+        return [{"kind": "window", "label": PANEL_TITLES.get(title, title), "window": None, "x": 0, "y": 0, "width": widths.get(title, 100), "height": 100, "visible": True, "hovered": False, "id": "0x2"} for title in sorted(self.open_panels)]
 
     # -- the session's methods
 
@@ -153,7 +162,7 @@ class FakeEditor:
                 if self.dragging:
                     self.dock_width = event["x"]
             elif kind == "down":
-                self.dragging = abs(self.pointer[0] - SPLITTER_X) <= 2
+                self.dragging = abs(self.pointer[0] - (self.dock_width + 1)) <= 2
             elif kind == "up":
                 self.dragging = False
             elif kind == "click":
@@ -207,7 +216,13 @@ class FakeEditor:
         label, window = target["label"], target["window"]
         if window == "View###Menu_00":
             self.menu_open = False
-            self.toggle_panel(label)
+            if part_before_hashes(label) == "Reset to Defaults":
+                self.show_workspace(self.workspace)
+            else:
+                self.toggle_panel(part_before_hashes(label))
+        elif window == TOOLBAR:
+            if label != self.workspace:
+                self.show_workspace(label)
         elif label == "View":
             self.menu_open = not self.menu_open
         elif label == "####clear_search":
@@ -226,6 +241,10 @@ class FakeEditor:
 
     def toggle_panel(self, label):
         self.open_panels ^= {label}
+
+    def show_workspace(self, name):
+        self.workspace = name
+        self.open_panels = set(editor.WORKSPACE_PANELS[name]) - self.stays_closed
 
     def key(self, event):
         if event["key"] == "P" and "ctrl" in event.get("mods", []) and not self.palette:
@@ -275,6 +294,15 @@ def test_an_unknown_node_is_an_error_that_lists_the_rows(ed):
 def test_a_clipped_inspector_is_named_when_the_dock_was_not_widened(ed):
     with pytest.raises(SessionError, match="widen_left_dock"):
         editor.select_node(ed, "Run")
+
+
+def test_widen_left_dock_finds_the_splitter_of_a_column_of_another_width(ed):
+    ed.dock_width = 315.0  # the default layout of a larger window
+    editor.widen_left_dock(ed)
+    assert ed.dock_width == editor.LEFT_DOCK_DRAG_TO[-1]
+    ed.open_panels = {"Viewport"}
+    with pytest.raises(SessionError, match="no 'Scene Editor' window"):
+        editor.widen_left_dock(ed)
 
 
 def test_widen_left_dock_drags_the_splitter_so_the_inspector_has_items(ed):
@@ -383,8 +411,30 @@ def test_a_panel_that_does_not_appear_is_an_error():
 def test_the_view_menu_lists_known_panels_and_names_what_it_does_not_know():
     known, unknown = editor.view_panels(FakeEditor())
     assert known == ["Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Field Help"] and unknown == []
-    known, unknown = editor.view_panels(FakeEditor(menu_items=[*MENU_ITEMS, "Timeline"]))
+    known, unknown = editor.view_panels(FakeEditor(menu_items=[*MENU_ITEMS, "Timeline###timeline"]))
     assert unknown == ["Timeline"]
+
+
+def test_a_workspace_button_switches_to_the_panels_of_its_ready_layout(ed):
+    editor.switch_workspace(ed, "Profiling")
+    assert ed.workspace == "Profiling"
+    assert editor.closed_workspace_panels(ed, "Profiling") == []
+    assert editor.closed_workspace_panels(ed, "UI") == ["Asset Browser", "Sprite Library", "Config Editor"]
+    with pytest.raises(SessionError, match="not a workspace"):
+        editor.switch_workspace(ed, "Debugging")
+
+
+def test_a_panel_a_workspace_does_not_show_is_named(ed):
+    ed.stays_closed = {"Asset Browser"}
+    editor.switch_workspace(ed, "Animation")
+    assert editor.closed_workspace_panels(ed, "Animation") == ["Asset Browser"]
+
+
+def test_reset_layout_brings_back_the_panels_of_the_active_workspace(ed):
+    editor.switch_workspace(ed, "UI")
+    ed.open_panels = {"Viewport"}
+    editor.reset_layout(ed)
+    assert ed.workspace == "UI" and editor.closed_workspace_panels(ed, "UI") == []
 
 
 def test_an_item_that_is_not_there_names_the_labels_the_window_shows(ed):
@@ -399,6 +449,7 @@ def test_rows_matching_gives_the_rows_the_search_leaves_and_clears_it(ed):
 
 
 def test_the_palette_opens_by_its_chord_filters_and_takes_two_escapes_to_close(ed):
+    ed.open_panels.add("Config Editor")  # its list child is not the palette's
     editor.open_palette(ed)
     ed.imgui_type("game")
     assert editor.palette_rows(ed) == ["Game Panel", "Switch Game and Editor"]

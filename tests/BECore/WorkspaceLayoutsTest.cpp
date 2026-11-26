@@ -1,3 +1,4 @@
+#include <Common/AllocCheck.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -261,6 +262,13 @@ namespace BECore::Tests {
         EXPECT_EQ(NodeOf(kSpriteLibrary), NodeOf(kSceneEditor));
         EXPECT_TRUE(Panel(kConsole).open);
         EXPECT_FALSE(GetFileInfo(_directory / kWorkspacesFileName)) << "nothing changed, so nothing is written yet";
+    }
+
+    TEST_F(WorkspaceLayoutsTest, ASettledFrameAllocatesNothing) {
+        Settle();
+        SwitchTo(EditorWorkspace::UI);
+
+        ExpectNoAllocations([&] { Settle(); });
     }
 
     TEST_F(WorkspaceLayoutsTest, ARunThatNeverDrewStoresNothing) {
