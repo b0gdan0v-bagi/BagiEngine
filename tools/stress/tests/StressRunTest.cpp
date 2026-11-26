@@ -207,6 +207,7 @@ namespace BECore::Stress::Tests {
         ASSERT_TRUE(parsed.IsParsed());
         EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMs").value_or(0.0), 3.0);
         EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "cpuMs").value_or(0.0), 10.0);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "presentMs").value_or(0.0), 7.0);
     }
 
     TEST_F(StressRunTest, ACountChangeRestartsTheWarmUp) {
@@ -337,6 +338,7 @@ namespace BECore::Stress::Tests {
         const int64_t found = GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0);
         EXPECT_LE(found, 301);
         EXPECT_GE(found, 290);
+        EXPECT_TRUE(parsed.Root().Find("updateMs").has_value()) << "the ramp line carries the stages";
 
         Frame(kFastMs);
         Frame(kFastMs);

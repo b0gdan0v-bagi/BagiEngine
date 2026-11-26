@@ -8,10 +8,33 @@
 
 namespace BECore::Stress {
 
+    /// Where the time of a frame went, in milliseconds: the stages of one frame, or a statistic of each over many
+    struct StageTimes {
+        double updateMs = 0.0;
+        double drawMs = 0.0;    // the SceneDraw stage without the submissions inside it
+        double submitMs = 0.0;  // the batcher's submissions to the backend
+        double presentMs = 0.0;
+        double waitMs = 0.0;  // the backend's wait for the GPU and the swapchain
+        double gpuMs = 0.0;   // 0: no value (the backend measures none, or has none for this frame), so no statistic counts it
+    };
+
+    /// The mean of the stage times of the frames added so far, `gpuMs` over those that have one; allocates nothing
+    class StageSum {
+    public:
+        void Add(const StageTimes& frame);
+        /// 0 for a quantity without a frame
+        StageTimes Mean() const;
+
+    private:
+        StageTimes _sum;
+        uint32_t _frames = 0;
+        uint32_t _gpuFrames = 0;
+    };
+
     /// What one measured frame cost (a `FrameStats` of the collector, reduced to what the JSON line reports)
-    struct StressSample {
+    struct StressSample : StageTimes {
         double cpuMs = 0.0;    // from BeginFrame to EndFrame
-        double workMs = 0.0;   // cpuMs without the Present stage: headless the present is the software renderer's copy, in a window it waits for the display
+        double workMs = 0.0;   // cpuMs without Present and Wait: headless the present is the software renderer's copy, in a window the two wait for the display
         double frameMs = 0.0;  // end to end, from the end of the frame before (on a manual clock it includes the idle between steps)
         uint32_t drawCalls = 0;
         uint64_t triangles = 0;
@@ -20,7 +43,7 @@ namespace BECore::Stress {
         uint64_t allocBytes = 0;
     };
 
-    /// The sample of @p stats; `workMs` is `cpuMs` minus the Present stage, never below 0
+    /// The sample of @p stats; `workMs` is `cpuMs` minus the Present and Wait stages and `drawMs` is SceneDraw minus Submit, neither below 0
     StressSample SampleOf(const FrameStats& stats);
 
     /**
@@ -33,7 +56,7 @@ namespace BECore::Stress {
      */
     double NearestRank(Span<const double> sorted, double fraction);
 
-    /// What a run measured: the percentiles of the three times and the means of the rest
+    /// What a run measured: percentiles of the times and means
     struct StressSummary {
         uint32_t frames = 0;
         double frameMsP50 = 0.0;
@@ -49,6 +72,9 @@ namespace BECore::Stress {
         double textureSwitches = 0.0;
         double allocsPerFrame = 0.0;
         double allocBytesPerFrame = 0.0;
+        StageTimes stages;     // means
+        StageTimes stagesP50;  // medians, `gpuMs` of the frames that have one
+        double gpuMsP99 = 0.0;
     };
 
     /**

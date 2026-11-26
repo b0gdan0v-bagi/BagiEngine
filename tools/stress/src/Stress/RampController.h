@@ -39,11 +39,13 @@ namespace BECore::Stress {
         bool verified = false;        // the count passed its own re-measure at the end
         uint32_t steps = 0;           // how many steps (settle + measure) ran
         uint32_t frames = 0;          // how many frames the ramp took
+        /// The means over the measured frames of the last full step run at `objectsAt60fps`; zeros when that is 0
+        StageTimes stages;
     };
 
     /**
      * @brief The search for "objects at 60 fps": the largest count whose frames fit the budget. Pure: no clock, no scene; the caller feeds it
-     *        the measure of every frame and shows the count it returns.
+     *        the sample of every frame and shows the count it returns.
      *
      * The algorithm, exactly (the constants above):
      * 1. Start at `kRampStart`. A **step** is `kSettleFrames` discarded frames, then `kMeasureFrames` measured; it **passes** when the
@@ -70,8 +72,8 @@ namespace BECore::Stress {
             return _count;
         }
 
-        /// Feeds the measure (the work or the cpu time in milliseconds, by `StressMeasure`) of the frame that was just shown with GetCount()
-        RampNext OnFrame(double measureMs);
+        /// Feeds the sample of the frame that was just shown with GetCount(); `StressMeasure` picks the time the budget holds. Allocates nothing
+        RampNext OnFrame(const StressSample& sample);
 
         bool IsDone() const {
             return _phase == Phase::Done;
@@ -105,6 +107,10 @@ namespace BECore::Stress {
         uint32_t _settleLeft = kSettleFrames;
         uint32_t _measured = 0;
         Array<double, kMeasureFrames> _window{};
+        StageSum _stepSum;        // of the measured frames of the running step
+        uint32_t _stepCount = 0;  // the count of the last full step, 0 before the first
+        StageTimes _stepStages;   // ... and its means
+        StageTimes _loStages;     // the means of the last full step run at `_lo`: an abort publishes `_lo` after steps at other counts
         RampResult _result;
     };
 

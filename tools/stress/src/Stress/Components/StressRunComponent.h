@@ -32,7 +32,7 @@ namespace BECore::Stress {
      * id; the frame that notices a change of `StressState::Version()` builds the new nodes, so it and the next `warmup` frames are skipped. After
      * `frames` samples the line (`FormatJsonLine`) goes to the sink and `ApplicationEvents::QuitEvent` is emitted, once.
      *
-     * **Ramp mode** (`--stress-ramp`, which wins over `--stress-frames`). Each new frame's measure goes to the `RampController`, and the count it
+     * **Ramp mode** (`--stress-ramp`, which wins over `--stress-frames`). Each new frame's sample goes to the `RampController`, and the count it
      * answers is set into the state; its settle frames cover the frame that builds the new count. When it is done (or aborted) the line
      * (`FormatRampLine`) goes out and the application is asked to quit, once. Both modes: `CLAUDE.md`, "Fixed mode" and "Ramp mode".
      */

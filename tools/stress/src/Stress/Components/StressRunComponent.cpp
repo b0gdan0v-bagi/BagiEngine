@@ -86,8 +86,7 @@ namespace BECore::Stress {
         if (frame == nullptr) {
             return;
         }
-        const StressSample sample = SampleOf(*frame);
-        const RampNext next = _ramp->OnFrame(settings.measure == StressMeasure::Work ? sample.workMs : sample.cpuMs);
+        const RampNext next = _ramp->OnFrame(SampleOf(*frame));
         if (next.done) {
             FinishRamp(game);
         } else {
