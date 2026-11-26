@@ -31,6 +31,8 @@ include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
 # THIRD_PARTY_NOTICES.txt next to every game executable (be_add_third_party_notices)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiNotices.cmake)
+# The manifest the export of a desktop game reads (be_add_export_manifest)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiExport.cmake)
 # ccache in front of the compiler when it is installed (before the first target, so every target gets the launcher)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiCompilerCache.cmake)
 # clang -ftime-trace on every compile when ENGINE_TIME_TRACE is ON (the preset macos-time-trace; before the first target)
@@ -858,6 +860,7 @@ function(be_add_game_executable NAME)
     endif()
 
     # Vulkan Loader (vulkan-1.dll / libvulkan.1.dylib) next to the executable: VULKAN_SDK/Bin first, else the vendored folder
+    set(_EXPORT_VULKAN_LOADER "")
     if(WIN32 AND ENGINE_WITH_VULKAN)
         set(_VULKAN_DLL "")
         if(VULKAN_SDK AND EXISTS "${VULKAN_SDK}/Bin/vulkan-1.dll")
@@ -866,6 +869,7 @@ function(be_add_game_executable NAME)
             set(_VULKAN_DLL "${VULKAN_LOADER_ROOT}/Windows/Bin/vulkan-1.dll")
         endif()
         if(_VULKAN_DLL)
+            set(_EXPORT_VULKAN_LOADER "${_VULKAN_DLL}")
             add_custom_command(TARGET ${NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${_VULKAN_DLL}"
@@ -875,6 +879,7 @@ function(be_add_game_executable NAME)
     elseif(APPLE)
         set(_VULKAN_RUNTIME "${VULKAN_LOADER_ROOT}/macOS/lib/libvulkan.1.dylib")
         if(ENGINE_WITH_VULKAN AND EXISTS "${_VULKAN_RUNTIME}")
+            set(_EXPORT_VULKAN_LOADER "${_VULKAN_RUNTIME}")
             add_custom_command(TARGET ${NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${_VULKAN_RUNTIME}"
@@ -885,6 +890,10 @@ function(be_add_game_executable NAME)
             BUILD_RPATH "@executable_path"
             INSTALL_RPATH "@executable_path"
         )
+    endif()
+
+    if(NOT ENGINE_TARGET_WEB)
+        be_add_export_manifest(${NAME} GAME_ROOT "${ARG_GAME_ROOT}" VULKAN_LOADER "${_EXPORT_VULKAN_LOADER}")
     endif()
 
     if(MSVC AND BAGI_NATVIS_FILES)
