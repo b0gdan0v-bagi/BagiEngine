@@ -51,6 +51,8 @@ namespace BECore {
      * TagTree::FillBaked on a block that is zero-initialised (`BakedTagTree block{}`); every byte past the data stays zero, so the same
      * tree gives byte-equal blocks. The ids and ranges are those of the tree it came from. The lookups allocate nothing on success; an
      * id that is not a tag (`>= Count()`, `kNoTag`) gives `kNoTag`, an empty name or an empty range, never an assert.
+     *
+     * The accessors trust the counts and the arrays: a loader of an untrusted block calls IsValid() once, before any of them.
      */
     struct BakedTagTree {
         /// The number of tags.
@@ -69,6 +71,10 @@ namespace BECore {
         [[nodiscard]] size_t Count() const {
             return count;
         }
+
+        /// True when no accessor can read out of the block: the counts are within the limits, the names lie one after another in
+        /// the blob with their NULs, every parent is kNoTag or a lower id and every subtree ends at a tag at or after its own.
+        [[nodiscard]] bool IsValid() const;
 
         /// The id of the tag with exactly this full path. A linear scan over the names: for load time, not for a frame.
         [[nodiscard]] Optional<TagId> Find(StringView path) const;

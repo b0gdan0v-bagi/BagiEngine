@@ -1,7 +1,5 @@
 #include "TagTree.h"
 
-#include <BECore/Utils/EnumUtils.h>
-
 namespace BECore {
 
     namespace {
@@ -250,6 +248,27 @@ namespace BECore {
         out.count = static_cast<uint16_t>(_byId.size());
         out.nameBlobSize = static_cast<uint16_t>(blobUsed);
         ASSERT(blobUsed == _nameBytes, "TagTree: the name blob does not match the counted bytes");
+    }
+
+    bool BakedTagTree::IsValid() const {
+        if (count > kMaxTagCount || nameBlobSize > kMaxTagNameBlob) {
+            return false;
+        }
+        for (size_t id = 0; id < count; ++id) {
+            // A name ends one byte before the next one starts, the last one before the end of the blob
+            const size_t begin = nameOffset[id];
+            const size_t end = id + 1 < count ? nameOffset[id + 1] : nameBlobSize;
+            if (begin >= end || end > nameBlobSize || names[end - 1] != '\0') {
+                return false;
+            }
+            if (parent[id] != kNoTag && parent[id] >= id) {
+                return false;
+            }
+            if (subtreeEnd[id] < id || subtreeEnd[id] >= count) {
+                return false;
+            }
+        }
+        return true;
     }
 
     Optional<TagId> BakedTagTree::Find(StringView path) const {

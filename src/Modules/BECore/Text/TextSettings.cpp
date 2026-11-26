@@ -1,5 +1,7 @@
 #include "TextSettings.h"
 
+#include <BECore/Text/Utf8.h>
+
 namespace BECore {
 
     namespace {
@@ -133,7 +135,14 @@ namespace BECore {
                     LOG_ERROR("TextConfig: a preload range needs from <= to, ignoring it");
                     continue;
                 }
-                settings.preload.push_back({static_cast<char32_t>(*first), static_cast<char32_t>(*last)});
+                if (*first > Utf8::kMaxCodePoint) {
+                    LOG_ERROR("TextConfig: a preload range starts past U+{:X}, ignoring it", static_cast<uint32_t>(Utf8::kMaxCodePoint));
+                    continue;
+                }
+                if (*last > Utf8::kMaxCodePoint) {
+                    LOG_ERROR("TextConfig: a preload range ends past U+{:X}, cutting it there", static_cast<uint32_t>(Utf8::kMaxCodePoint));
+                }
+                settings.preload.push_back({static_cast<char32_t>(*first), std::min(static_cast<char32_t>(*last), Utf8::kMaxCodePoint)});
             }
         }
         return settings;

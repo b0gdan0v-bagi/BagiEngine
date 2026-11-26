@@ -1,6 +1,7 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Text/TextSettings.h>
+#include <BECore/Text/Utf8.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
@@ -73,6 +74,14 @@ namespace BECore::Tests {
 
         ASSERT_EQ(settings.preload.size(), 1u);
         EXPECT_EQ(settings.preload[0].first, U'0');
+    }
+
+    TEST(TextSettingsTest, APreloadRangeIsCutAtTheLastCodePointAndOnePastItIsDropped) {
+        const TextSettings settings = Parse(R"(<TextConfig><preload><range from="65" to="4294967295"/><range from="1114112" to="1114113"/></preload></TextConfig>)");
+
+        ASSERT_EQ(settings.preload.size(), 1u);
+        EXPECT_EQ(settings.preload[0].first, U'A');
+        EXPECT_EQ(settings.preload[0].last, Utf8::kMaxCodePoint);
     }
 
     TEST(TextSettingsTest, ThePageSizeIsKeptInASaneRange) {

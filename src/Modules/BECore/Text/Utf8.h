@@ -7,6 +7,9 @@ namespace BECore::Utf8 {
     /// What an invalid byte sequence decodes to
     constexpr char32_t kReplacement = 0xFFFD;
 
+    /// The last code point of Unicode
+    constexpr char32_t kMaxCodePoint = 0x10FFFF;
+
     /// Decodes the code point that starts at @p pos and moves @p pos past it. A malformed sequence (a stray continuation
     /// byte, a truncated or overlong sequence, a surrogate, a value past U+10FFFF) gives kReplacement and consumes one byte,
     /// so a loop over any bytes always ends. Returns 0 and leaves @p pos alone when @p pos is at or past the end.
