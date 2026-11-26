@@ -7,6 +7,9 @@
 namespace BECore {
 
     class IControllableGame;
+#if BE_WITH_EDITOR
+    class GameEditorTools;
+#endif
 
     /**
      * @brief Base interface for a self-contained game.
@@ -41,6 +44,13 @@ namespace BECore {
         virtual IControllableGame* AsControllable() {
             return nullptr;
         }
+
+#if BE_WITH_EDITOR
+        /// Where the game adds its editor commands and debug panels (`.claude/rules/games-editor-tools.md`), called each time it has become active, after Start().
+        /// It exists only in a build with the editor, so a game guards its override with `#if BE_WITH_EDITOR` too. A command that changes the state goes through
+        /// ControlledReset / ControlledAction / ControlledSetState, or a recording does not replay
+        virtual void RegisterEditorTools(GameEditorTools& /*tools*/) {}
+#endif
     };
 
 }  // namespace BECore
