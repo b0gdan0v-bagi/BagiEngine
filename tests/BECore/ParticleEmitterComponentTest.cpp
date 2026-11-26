@@ -251,6 +251,37 @@ namespace BECore::Tests {
         }
     }
 
+    TEST_F(ParticleEmitterComponentTest, ADisabledEmitterIsFrozenHiddenAndNeedsNoFrames) {
+        auto emitter = Emitter("Loop");
+        emitter->Play();
+        Frames(16);
+        const size_t live = emitter->GetLiveCount();
+        const double time = emitter->GetSimulation().GetTime();
+        ASSERT_GT(live, 0u);
+        const size_t drawnBatches = Draw().size();
+
+        emitter->SetEnabled(false);
+        Frames(4);
+        EXPECT_FALSE(emitter->NeedsFrames());
+        EXPECT_EQ(emitter->GetLiveCount(), live);
+        EXPECT_DOUBLE_EQ(emitter->GetSimulation().GetTime(), time);
+        EXPECT_EQ(Draw().size(), drawnBatches - 1);
+
+        emitter->SetEnabled(true);
+        EXPECT_TRUE(emitter->NeedsFrames());
+    }
+
+    TEST_F(ParticleEmitterComponentTest, AOneShotOfADisabledEmitterFiresAfterItIsEnabled) {
+        auto emitter = Emitter("OneShot");
+        emitter->SetEnabled(false);
+        Frames(kFramesToOutliveTheEffect);
+        EXPECT_EQ(emitter->GetLiveCount(), 0u);
+
+        emitter->SetEnabled(true);
+        Frame();
+        EXPECT_EQ(emitter->GetLiveCount(), 8u);
+    }
+
     TEST_F(ParticleEmitterComponentTest, EachEmitterDrawsOneBatchOfFourVerticesPerParticleUnderItsBlendMode) {
         EXPECT_TRUE(Draw().empty()) << "nothing is alive before the first update";
 

@@ -8,13 +8,18 @@
 #include <BECore/Widgets/EditorDocuments.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorPanelRegistry.h>
 #include <Widgets/PanelAssets/PanelSlots.h>
 #include <Widgets/RemoteEditor/RemoteSceneView.h>
+#include <Widgets/SceneEditor/ComponentDefaults.h>
+#include <Widgets/SceneEditor/FieldHelp.h>
+#include <Widgets/SceneEditor/FieldTooltips.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/ISceneEditorHost.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
+#include <Widgets/SceneEditor/SelectionHistory.h>
 #include <Widgets/SceneEditor/UINodeFileSession.h>
 #include <Widgets/Viewport/ViewportEvents.h>
 
@@ -26,6 +31,11 @@ namespace BECore {
 
     class ConfigManager;
     class UICanvasComponent;
+    struct FieldHelpSavedEvent;
+
+    namespace ConfigEvents {
+        struct ConfigChangedEvent;
+    }  // namespace ConfigEvents
 
     namespace SceneEvents {
         struct SceneNodeEditedEvent;
@@ -39,7 +49,7 @@ namespace BECore {
      * In remote mode (`RemoteSessionRegistry::GetRemote`) it shows the attached program through `RemoteSceneView`, holds no node of the local scene,
      * ignores what would edit or save it (`scene.save` saves the attached program's scene, by the program), and keeps its unsaved flag for the return.
      */
-    class SceneEditorWidget : public IWidget, public ISceneEditorHost {
+    class SceneEditorWidget : public IWidget, public ISceneEditorHost, public IEditorPanel {
         BE_CLASS(SceneEditorWidget)
     public:
         SceneEditorWidget() = default;
@@ -57,6 +67,13 @@ namespace BECore {
         void AppendDocuments(Vector<EditorDocumentState>& out);
         void Update() override;
         void Draw() override;
+
+        [[nodiscard]] bool IsOpen() const override {
+            return _open;
+        }
+        void SetOpen(bool open) override {
+            _open = open;
+        }
 
         [[nodiscard]] SceneInspectedNode GetInspected() const override;
         void RenameInspected(StringView name) override;
@@ -81,10 +98,16 @@ namespace BECore {
         void ResetUISelection();
 
         /**
-         * @brief Runs `scene.save` (only with unsaved changes, so the Save button's command does nothing while it is disabled; in remote mode the program's) and `sceneEditor.addComponent`
-         * (asks for the Add Component dialog of the selected node, when it is alive and not locked)
+         * @brief Runs `scene.save` (only with unsaved changes, so the Save button's command does nothing while it is disabled; in remote mode the program's), `sceneEditor.addComponent`
+         * (asks for the Add Component dialog of the selected node, when it is alive and not locked) and the two steps through the selection history
          */
         void OnCommand(const EditorCommandEvent& event);
+
+        /// Selects and reveals the node of the previous, or with @p forward the next, entry of `_selectionHistory`; nothing without such a live node
+        void StepSelectionHistory(bool forward);
+
+        /// Selects @p node alone and reveals it in the hierarchy, when it is alive in @p scene; else does nothing
+        void SelectRevealed(Scene& scene, const SceneNode* node);
 
         /// Answers SelectSceneNodeRequestEvent: selects and reveals the node when it is alive in the active scene, else does nothing
         void OnSelectRequest(const SelectSceneNodeRequestEvent& event);
@@ -103,6 +126,12 @@ namespace BECore {
         /// Answers the end of a rubber-band drag: the nodes the box touches (ScenePick::PickInRect) replace the selection, or are added to it with Ctrl or Shift
         void OnViewportBoxSelect(const ViewportBoxSelectEvent& event);
 
+        /**
+         * @brief Answers a content file dropped onto the viewport: AddSceneNodeOfAsset puts its node into the active scene at the pointer, the node is selected and
+         * revealed and the scene is unsaved. A file that makes no node is one error line
+         */
+        void OnViewportAssetDrop(const ViewportAssetDropEvent& event);
+
         /// Answers the end of a gizmo drag: a Commit marks the scene as changed (Begin, Change and Cancel leave the nodes as the drag found them or put them back)
         void OnTransformEdit(const NodeTransformEditEvent& event);
         void OnSceneEdited(const SceneEditedEvent& event);
@@ -110,6 +139,10 @@ namespace BECore {
         void OnNodeEdited(const SceneEvents::SceneNodeEditedEvent& event);
         /// A control client saved the active scene, so nothing of it is unsaved, unless canvas edits still wait to go into their node files, which only this Save writes
         void OnSceneSaved(const SceneEvents::SceneSavedEvent& event);
+
+        /// A change of a field help file is read at once, so the next tooltip shows it
+        void OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event);
+        void OnFieldHelpSaved(const FieldHelpSavedEvent& event);
 
         /// Answers the Add Node dialog: the scene is unsaved and the parent of the new node is revealed, when the scene is the active one
         void OnNodeAdded(const SceneNodeAddedEvent& event);
@@ -129,6 +162,9 @@ namespace BECore {
         /// Sends UIElementSelectedEvent when the (node, element) pair of the "UI elements" selection, or its scene, differs from the last one announced
         void AnnounceUIElement(const Scene* scene);
 
+        /// The breadcrumbs of the primary node at the top of the inspector, nothing without a selection; a click on an ancestor selects and reveals it
+        void DrawSelectionPath(Scene& scene);
+
         /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" dialog (asked of
         /// `SceneDialogsModel` by SceneAddNodeRequestEvent)
         void ApplyHierarchyAnswers(Scene& scene);
@@ -138,8 +174,8 @@ namespace BECore {
 
         [[nodiscard]] ConfigManager& Configs() const;
 
-        /// The slot `sceneComponents` of the inspector bar: the components of the selected node with their remove buttons, the "UI elements" section and the
-        /// inspectors, disabled for a locked node; in remote mode the list of `RemoteSceneView`. Drawn directly when no inspector bar is registered, so a game
+        /// The slot `sceneComponents` of the inspector bar: a card per component of the selected node (ComponentCard) with the "UI elements" section and the
+        /// inspectors in it, disabled for a locked node; in remote mode the list of `RemoteSceneView`. Drawn directly when no inspector bar is registered, so a game
         /// without its asset line keeps the component list
         void DrawComponents();
 
@@ -152,9 +188,14 @@ namespace BECore {
         /// panel assets are updated before this widget, so its own Update has not yet dropped a node that died or a scene that was replaced
         [[nodiscard]] SceneNode* FindInspected() const;
 
-        HierarchyState _hierarchy;           // the primary node, the rename and the pending tree edit of the hierarchy panel
-        SceneSelection _selection;           // every selected node; its primary is `_hierarchy.selected`
+        HierarchyState _hierarchy;  // the primary node, the rename and the pending tree edit of the hierarchy panel
+        SceneSelection _selection;  // every selected node; its primary is `_hierarchy.selected`
+        SelectionHistory _selectionHistory;
+        ComponentDefaults _componentDefaults;
+        FieldHelp _fieldHelp;
+        FieldTooltips _fieldTooltips{_fieldHelp, _componentDefaults};
         Vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
+        Vector<SceneNode*> _pathAncestors;   // the same for the breadcrumbs
         Vector<SceneNode*> _announcedNodes;  // what SceneSelectionChangedEvent last told
         const Scene* _announcedNodesScene = nullptr;
         HierarchyModel::SelectionTracker _announcedSelection;  // what SceneNodeSelectedEvent last told
@@ -177,6 +218,7 @@ namespace BECore {
         EditorDocumentsHandle _documents;   // the source of `editor_state`, ends with the widget
         SceneEditorHostHandle _hostHandle;  // ends with the widget, so a model never reaches a dead one
         PanelSlotHandle _componentsSlot;    // the same for the inspector bar's slot
+        EditorPanelHandle _panelHandle;     // the workspaces open and close the panel through it
     };
 
 }  // namespace BECore

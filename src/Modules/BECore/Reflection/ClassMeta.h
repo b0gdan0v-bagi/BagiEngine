@@ -63,8 +63,11 @@ namespace BECore {
         StringView icon{};
         /// Part of an asset the class belongs to, from `BE_CLASS(..., PURPOSE=<part>)`; `Common` when it names none.
         AssetPurpose purpose = AssetPurpose::Common;
+        /// Name from `BE_CLASS(..., CATEGORY=<name>)` (kebab case); empty when the class names none, a base's is not
+        /// inherited. The editor maps it to a colour; the engine core gives it no meaning.
+        StringView category{};
 
-        /// Equality compares typeHash only (name, icon and purpose are ignored).
+        /// Equality compares typeHash only.
         constexpr bool operator==(const ClassMeta& other) const {
             return typeHash == other.typeHash;
         }
@@ -82,7 +85,7 @@ namespace BECore {
     /**
      * @brief ClassMeta of a reflected type at compile time (needs ReflectionTraits<T>::name)
      *
-     * Only hash and name are filled: icon and purpose stay default here, the generated GetStaticTypeMeta()
+     * Only hash and name are filled: the options of `BE_CLASS` stay default here, the generated GetStaticTypeMeta()
      * of a `BE_CLASS` carries them.
      */
     template <typename T>

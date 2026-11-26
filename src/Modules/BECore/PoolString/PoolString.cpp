@@ -26,6 +26,10 @@ namespace BECore {
 
     }  // namespace
 
+    Details::PoolStringStorage& Details::GetProcessPoolStorage() {
+        return Storage();
+    }
+
     PoolString PoolString::Intern(StringView str) {
         return Storage().Intern(str);
     }

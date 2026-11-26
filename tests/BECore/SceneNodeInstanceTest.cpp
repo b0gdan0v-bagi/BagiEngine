@@ -167,6 +167,21 @@ namespace BECore::Tests {
         ExpectBuilt(node, R"(<node ref="nodes/Box"/>)");
     }
 
+    TEST_F(SceneNodeInstanceTest, ADisabledComponentIsAnOverrideAndEnablingOneTheFileDisablesToo) {
+        SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
+        Require(node.GetComponent<QuadRendererComponent>()).SetEnabled(false);
+
+        ExpectBuilt(node, R"(<node ref="nodes/Box"><components><component type="QuadRendererComponent" enabled="false"/></components></node>)");
+
+        WriteFile(_dir / "nodes" / "Asleep.xml", R"(<node name="Asleep"><components><component type="QuadRendererComponent" enabled="false"/></components></node>)");
+        SceneNode& asleep = LoadNode(R"(<node ref="nodes/Asleep"/>)");
+        QuadRendererComponent& quad = Require(asleep.GetComponent<QuadRendererComponent>());
+        ASSERT_FALSE(quad.IsEnabled());
+        quad.SetEnabled(true);
+
+        ExpectBuilt(asleep, R"(<node ref="nodes/Asleep"><components><component type="QuadRendererComponent" enabled="true"/></components></node>)");
+    }
+
     TEST_F(SceneNodeInstanceTest, NameAndLayerAreWrittenWhenTheyDiffer) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
         node.SetName("Crate"_intern);
@@ -335,6 +350,19 @@ namespace BECore::Tests {
         Require(node.GetComponent<TransformComponent>())._rotation = 45.0f;
 
         ExpectBuilt(node, R"(<node ref="nodes/Box"><components><component type="TransformComponent" rotation="45"/></components></node>)");
+    }
+
+    TEST_F(SceneNodeInstanceTest, AComponentElementIsTheOneItsNodeElementHolds) {
+        SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
+        const IntrusivePtr<TransformComponent> transform = node.GetComponent<TransformComponent>();
+        pugi::xml_document alone;
+        pugi::xml_document inNode;
+
+        AppendComponentElement(alone, Require(transform.Get()), NodeWriteOptions{.skipDefaults = true});
+        AppendNodeElement(inNode, node, NodeWriteOptions{.skipDefaults = true});
+
+        EXPECT_EQ(XmlText(alone.first_child()), String(R"(<component type="TransformComponent" x="1" y="2" width="30" height="40"/>)"));
+        EXPECT_EQ(XmlText(inNode.child("node").child("components").first_child()), XmlText(alone.first_child()));
     }
 
     TEST_F(SceneNodeInstanceTest, AnInstanceWhoseOwnFieldCannotBeOverriddenIsRefused) {

@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<PanelAsset id="FieldHelp" title="Field Help" command="view.fieldHelp" open="false" width="900" height="520">
+  <sources>
+    <item name="help" model="FieldHelpPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="choice">
+      <elements>
+        <element type="PanelCombo" id="component" bind="help.classIndex" items="help.classes" width="20" tooltip="The component class whose fields are listed"/>
+        <element type="PanelCombo" id="target" bind="help.newEntryFile" width="7" text="New entries go to" tooltip="The file a description is made in; one that a file already holds stays there"/>
+      </elements>
+    </element>
+    <element type="PanelRow" id="actions">
+      <elements>
+        <element type="PanelButton" id="save" icon="save" text="Save" command="fieldHelp.save" enableWhen="help.dirty" tooltip="Write the changed help files"/>
+        <element type="PanelButton" id="revert" icon="undo-2" text="Revert" command="fieldHelp.revert" enableWhen="help.dirty" tooltip="Drop the changes and read the files again"/>
+        <element type="PanelText" id="unsaved" text="(unsaved changes)" style="Warning" visible="help.dirty"/>
+      </elements>
+    </element>
+    <element type="PanelEmptyState" id="noFields" icon="info" text="This component has no field to describe" visible="!help.hasRows"/>
+    <element type="PanelTable" id="fields" source="help.rows" borders="true" scrollRows="10" visible="help.hasRows">
+      <columns>
+        <item type="Selectable" id="name" title="Field" field="name" selectedField="selected" command="fieldHelp.select" argument="name"/>
+        <item type="Text" id="type" title="Type" field="type"/>
+        <item type="Text" id="range" title="Range" field="range"/>
+        <item type="Text" id="default" title="Default" field="defaultText"/>
+        <item type="Text" id="description" title="Description" field="description" tooltipField="fullDescription"/>
+        <item type="Text" id="source" title="From" field="source"/>
+      </columns>
+    </element>
+    <element type="PanelText" id="selected" bind="help.selectedField" visible="help.hasSelection"/>
+    <element type="PanelInput" id="text" bind="help.description" lines="5" hint="Description of the field; empty removes the entry" visible="help.hasSelection"/>
+    <element type="PanelText" id="choose" text="Select a field to edit its description" style="Disabled" visible="!help.hasSelection and help.hasRows"/>
+  </elements>
+</PanelAsset>

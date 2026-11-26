@@ -139,6 +139,33 @@ def test_range_is_fine_on_integers_and_other_types(parse):
     assert warnings == []
 
 
+@pytest.mark.parametrize("kind", ["Texture", "Font", "Sound", "UiDocument"])
+@pytest.mark.parametrize("type_name", ["PoolString", "String", "FixedString<64>"])
+def test_asset_on_a_string_field(parse, kind, type_name):
+    field, warnings = one_field(parse, f"BE_REFLECT_FIELD BE_FIELD_ATTRS(asset( {kind} )) {type_name} _x;")
+    assert field.attributes == FieldAttrs(asset=kind)
+    assert not field.attributes.is_empty()
+    assert warnings == []
+
+
+@pytest.mark.parametrize("attr, type_name, expected_message", [
+    ("asset", "PoolString", "'asset' takes one asset kind"),
+    ("asset()", "PoolString", "'asset' takes one asset kind"),
+    ("asset(Texture, Font)", "PoolString", "'asset' takes one asset kind"),
+    ("asset(Node)", "PoolString", "'asset' takes one asset kind"),
+    ("asset(texture)", "PoolString", "'asset' takes one asset kind"),
+    ('asset("Texture")', "PoolString", "'asset' takes one asset kind"),
+    ("asset(Texture)", "int32_t", "needs a string field"),
+    ("asset(Texture)", "bool", "needs a string field"),
+    ("asset(Texture)", "Vector<PoolString>", "needs a string field"),
+])
+def test_a_bad_asset_attribute_is_dropped_with_a_warning(parse, attr, type_name, expected_message):
+    field, warnings = one_field(parse, f"BE_REFLECT_FIELD BE_FIELD_ATTRS({attr}, hidden) {type_name} _x;")
+    assert field.attributes == FieldAttrs(hidden=True)
+    assert len(warnings) == 1
+    assert expected_message in warnings[0].message
+
+
 # ---------------------------------------------------------------------------
 # cache
 # ---------------------------------------------------------------------------
@@ -148,6 +175,8 @@ def test_cache_round_trip(parse):
     again = FieldData.from_dict(field.to_dict())
     assert again == field
     assert again.attributes == field.attributes
+    path_field, _ = one_field(parse, "BE_REFLECT_FIELD BE_FIELD_ATTRS(asset(Sound)) PoolString _p;")
+    assert FieldData.from_dict(path_field.to_dict()).attributes == FieldAttrs(asset="Sound")
 
 
 def test_a_cache_entry_without_attributes_reads_as_none():

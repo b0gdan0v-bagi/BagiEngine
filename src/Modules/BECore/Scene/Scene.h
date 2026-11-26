@@ -27,6 +27,9 @@ namespace BECore {
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
     public:
+        /// The nodes of the tree forget the scene: one that somebody still holds outlives it
+        ~Scene() override;
+
         void Initialize();
 
         /**
@@ -36,7 +39,7 @@ namespace BECore {
          * SceneUpdateEvent; see IComponent::OnAttached()) and then emits the event for the plain subscribers, which are not scene bound. The
          * lists run only while the scene is active, read once at the start: an inactive scene updates no component, and a handler that
          * switches the active scene does not cut the pass. Last registered runs first; a component a handler adds first runs in the next pass,
-         * one a handler removes (node or component) and that has not run yet does not run.
+         * one a handler removes (node or component) or disables and that has not run yet does not run.
          *
          * Reads the frame from CoreManager::GetTime(), so call it once per frame, after Time advanced. First it sends
          * SceneEvents::SceneViewChangedEvent when the active view changed since the last send (decided in Draw(), announced here).
@@ -47,7 +50,7 @@ namespace BECore {
          * @brief Draw every component in draw order: by SceneNode::GetLayer(), then scene order (depth-first, a parent before its children).
          *
          * SceneDrawSystem walks the draw list (SceneDrawList): it draws QuadRendererComponent and SpriteRendererComponent itself (the first of
-         * each per node) and calls IComponent::OnDraw() of every other component that has one; no event handler order is involved. The list is
+         * each per node) and calls IComponent::OnDraw() of every other component that has one, leaving the disabled ones out; no event handler order is involved. The list is
          * rebuilt only when a node, a component, a layer or the editor flags changed since the last build; a field of a component is read at draw
          * time, so a change of it shows in the next draw.
          * Nothing may add or remove nodes or components, or change a layer or the editor flags, while this runs (checked in Debug).
@@ -229,7 +232,7 @@ namespace BECore {
         /// Called by SceneNode::RemoveComponent() only, before the component can die: @p component leaves both update lists
         void RemoveUpdaters(IComponent& component, PassKey<SceneNode>);
 
-        /// How many components will be called by the list of @p kind in its next run
+        /// How many registrations the list of @p kind holds: its next run calls those whose component is enabled
         size_t GetUpdaterCount(SceneUpdateKind kind) const;
 
         /// Called by SceneNode::SetLayer() only: the ranks of the last pass no longer hold

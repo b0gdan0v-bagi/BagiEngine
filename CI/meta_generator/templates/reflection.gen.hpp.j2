@@ -307,7 +307,8 @@ const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
         ::BECore::StringUtils::GetHash(eastl::string_view{"{{ cls.name }}"}),
         eastl::string_view{"{{ cls.name }}"},
         eastl::string_view{"{{ cls.icon }}"},
-        ::BECore::AssetPurpose::{{ cls.purpose }}
+        ::BECore::AssetPurpose::{{ cls.purpose }},
+        eastl::string_view{"{{ cls.category }}"}
     };
     return meta;
 }

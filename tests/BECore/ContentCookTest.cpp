@@ -462,8 +462,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(ContentCookTest, ANodeFileWithAnUnknownKeyOrAReferenceOfItsOwnFailsTheCook) {
-        _tree.Write(0, "nodes/Typo.xml", R"(<node contentVersion="5" name="Typo" layr="1"/>)");
-        _tree.Write(0, "nodes/Loop.xml", R"(<node contentVersion="5" ref="nodes/Other"/>)");
+        _tree.Write(0, "nodes/Typo.xml", Format(R"(<node contentVersion="{}" name="Typo" layr="1"/>)", kContentVersion));
+        _tree.Write(0, "nodes/Loop.xml", Format(R"(<node contentVersion="{}" ref="nodes/Other"/>)", kContentVersion));
 
         const CookReport report = Cook();
         EXPECT_EQ(report.Count(CookOutcome::Failed), 2u) << report.ToText().c_str();
@@ -472,7 +472,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(ContentCookTest, ANodeFileOfASceneNodeSubclassFailsTheCook) {
-        _tree.Write(0, "nodes/Tagged.xml", R"(<node contentVersion="5" type="TaggedTestNode" name="Tagged"/>)");
+        _tree.Write(0, "nodes/Tagged.xml", Format(R"(<node contentVersion="{}" type="TaggedTestNode" name="Tagged"/>)", kContentVersion));
 
         const CookReport report = Cook();
         EXPECT_FALSE(report.Ok());

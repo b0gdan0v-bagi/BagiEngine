@@ -25,7 +25,7 @@ namespace BECore {
         virtual void Initialize() {}
 
         /**
-         * @brief Called when the component is attached to a node, with `_node` and `_scene` set: by WireToScene (after deserialization) and AddComponent (runtime).
+         * @brief Called when the component is attached to a node, with GetNode() and GetScene() ready: by WireToScene (after deserialization) and AddComponent (runtime).
          *
          * Use Initialize() for reflection hooks (it runs even when there is no node), OnAttached() for node-dependent setup (event subscriptions, resource lookups).
          * A component that updates registers in the update list of its scene from here (SubscribeInScene of SceneUpdateEvent or SceneFixedUpdateEvent); it
@@ -61,15 +61,53 @@ namespace BECore {
             return true;
         }
 
+        /**
+         * @brief The node and the scene of an attached component. Both assert where the matching TryGet is null.
+         *
+         * A component is detached before it is attached, after SceneNode::RemoveComponent (also the replacement inside AddComponent) and once its node
+         * died; code that may run on a detached one (a public method somebody who still holds it calls, a handler after it removed itself or its node)
+         * asks TryGetNode() / TryGetScene(). A destructor runs detached.
+         */
         Scene& GetScene() const;
         SceneNode& GetNode() const;
 
-        /// True while this component's scene is the active one (see Scene::IsActive()). False before the component is attached.
+        /**
+         * @brief False while the component sleeps: a saved state (`enabled="false"`), true unless a file or SetEnabled() says otherwise
+         *
+         * A sleeping component is skipped by the update and fixed update lists and by its SubscribeInScene handlers, Scene::Draw() leaves it out
+         * (OnDraw(), the quad or sprite drawn from its fields, the clip of a ClipRectComponent) and it takes no mouse input. It is still initialized
+         * and attached, gets OnPropertyWritten() and its plain Subscribe handlers (one that cares asks here), and answers the calls of code:
+         * SceneNode::GetComponent() returns it.
+         */
+        [[nodiscard]] bool IsEnabled() const {
+            return _enabled;
+        }
+
+        /// The one write of the flag at run time: calls OnEnabledChanged() when it changes. Works on a detached component too
+        void SetEnabled(bool enabled);
+
+        /// False for a component with nothing to switch off: an editor offers no way to disable it
+        virtual bool CanBeDisabled() const {
+            return true;
+        }
+
+        /// The node, or null while the component is detached
+        [[nodiscard]] SceneNode* TryGetNode() const {
+            return _node;
+        }
+
+        /// The scene of the node, or null while the component is detached and once the scene died. A node taken out by SceneNode::RemoveChild keeps its scene
+        [[nodiscard]] Scene* TryGetScene() const;
+
+        /// True while this component's scene is the active one (see Scene::IsActive()). False without a scene (TryGetScene()).
         bool IsSceneActive() const;
 
     protected:
+        /// Called by SetEnabled() after the flag changed, never by a load: for what a component keeps going between the calls the engine skips
+        virtual void OnEnabledChanged() {}
+
         /**
-         * @brief Subscribe to a global event, but run @p Handler only while this component's scene is active.
+         * @brief Subscribe to a global event, but run @p Handler only while this component is enabled and its scene is active.
          *
          * Scene and input events are global: every loaded scene's components receive them, not just the active scene's. Use this instead
          * of Subscribe for any handler that reads input or changes game state; plain Subscribe is for handlers that must run whichever
@@ -77,8 +115,8 @@ namespace BECore {
          *
          * SceneEvents::SceneUpdateEvent and SceneFixedUpdateEvent are not delivered through the global channel: the component joins the
          * update list of its scene, which Scene::Update() runs while the scene is active, the last registered first. That needs the scene,
-         * so call it from OnAttached(); before that (Initialize()) the event goes through the channel with the per-call filter below, and
-         * a hand SceneEvents::SceneUpdateEvent::Emit() reaches only that kind of subscriber. The component leaves the list when it leaves
+         * so call it from OnAttached(); without one (Initialize(), a removed component) the event goes through the channel with the per-call
+         * filter below, and a hand SceneEvents::SceneUpdateEvent::Emit() reaches only that kind of subscriber. The component leaves the list when it leaves
          * its node (SceneNode::RemoveComponent, RemoveChild); a node that only moves stays. For every other event the connection is
          * permanent and only the call is filtered, so switching the active scene never connects or disconnects anything.
          *
@@ -90,7 +128,7 @@ namespace BECore {
             constexpr bool isFrame = std::is_same_v<Event, SceneEvents::SceneUpdateEvent>;
             constexpr bool isFixed = std::is_same_v<Event, SceneEvents::SceneFixedUpdateEvent>;
             if constexpr (isFrame || isFixed) {
-                if (_scene != nullptr) {
+                if (TryGetScene() != nullptr) {
                     ASSERT(static_cast<IComponent*>(instance) == this);
                     RegisterSceneUpdate(isFrame ? SceneUpdateKind::Frame : SceneUpdateKind::Fixed, &InvokeSceneUpdate<Event, Handler, T>);
                     return;
@@ -104,22 +142,27 @@ namespace BECore {
     private:
         friend class SceneNode;
 
+        // Both invokers read the flag at each call, so a component disabled in the middle of a pass does not run and keeps its place
         template <typename Event, auto Handler, typename T>
         static void InvokeInActiveScene(T* self, const Event& event) {
-            if (self->IsSceneActive()) {
+            const IComponent& component = *self;
+            if (component._enabled && component.IsSceneActive()) {
                 (self->*Handler)(event);
             }
         }
 
         template <typename Event, auto Handler, typename T>
         static void InvokeSceneUpdate(IComponent* self, const void* event) {
-            (static_cast<T*>(self)->*Handler)(*static_cast<const Event*>(event));
+            if (self->_enabled) {
+                (static_cast<T*>(self)->*Handler)(*static_cast<const Event*>(event));
+            }
         }
 
-        /// Adds this component to the update list of its scene (SubscribeInScene only); needs `_scene`
+        /// Adds this component to the update list of its scene (SubscribeInScene only); needs a scene
         void RegisterSceneUpdate(SceneUpdateKind kind, SceneUpdateInvoker invoke);
 
-        Scene* _scene = nullptr;
+        /// Hidden from the generic editor and the by-name write, which would pass SetEnabled() by
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(hidden) bool _enabled = true;
     };
 
 }  // namespace BECore

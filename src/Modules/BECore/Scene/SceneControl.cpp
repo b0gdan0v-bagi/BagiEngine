@@ -4,6 +4,7 @@
 #include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlProperty.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/PropertyAccess.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneControlAnswers.h>
@@ -14,6 +15,9 @@
 namespace BECore {
 
     namespace {
+
+        /// The serialized name of IComponent::_enabled
+        constexpr StringView kEnabledPath = "enabled";
 
         /// What the handlers of one registration share
         struct SceneSource : RefCounted {
@@ -160,6 +164,22 @@ namespace BECore {
             String _path;
         };
 
+        /// The write of `scene_set`. The hidden field `enabled`, which the generic write refuses, goes through SetEnabled() and so through the component's hook
+        std::expected<void, PropertyError> WriteComponentField(IComponent& component, StringView path, const PropertyValue& value) {
+            if (path == kEnabledPath) {
+                const bool* const enabled = std::get_if<bool>(&value);
+                if (enabled == nullptr) {
+                    return std::unexpected(PropertyError{PropertyErrorCode::type_mismatch, Format("'{}' takes true or false", kEnabledPath)});
+                }
+                component.SetEnabled(*enabled);
+                return {};
+            }
+            // A written PoolString is interned and the pool never frees: only a text it holds already costs it nothing
+            const String* const text = std::get_if<String>(&value);
+            const SetOptions options{.allowInterning = text != nullptr && PoolString::Find(StringView(*text)).has_value()};
+            return SetProperty(TypedRef::Of(component), path, value, options);
+        }
+
         /// `{component, node, path, value}`. By hand: `value` is a `PropertyValue`, written as the bare scalar
         void WriteFieldAnswer(JsonWriter& writer, const ComponentRequest& request, StringView path, const PropertyValue& value) {
             writer.BeginObject();
@@ -246,7 +266,7 @@ namespace BECore {
             call.Reply([&](JsonWriter& writer) { WriteFieldAnswer(writer, *request, *path, *value); });
         }
 
-        void HandleSceneSet(ControlCall& call, SceneSource& source) {
+        void HandleSceneSet(ControlCall& call, ControlService& service, SceneSource& source) {
             const auto request = ReadComponentRequest(call.Params());
             if (!request) {
                 call.Fail(request.error());
@@ -267,11 +287,7 @@ namespace BECore {
                 call.Fail(target.error());
                 return;
             }
-            const TypedRef component = TypedRef::Of(*target->component);
-            // A written PoolString is interned and the pool never frees: only a text it holds already costs it nothing
-            const String* text = std::get_if<String>(&*value);
-            const SetOptions options{.allowInterning = text != nullptr && PoolString::Find(StringView(*text)).has_value()};
-            if (const auto written = SetProperty(component, *path, *value, options); !written) {
+            if (const auto written = WriteComponentField(*target->component, *path, *value); !written) {
                 if (written.error().code == PropertyErrorCode::interning) {
                     call.Fail(MakePropertyControlError({PropertyErrorCode::interning, "the field takes only a text the program already knows, so that a client cannot grow the string pool"}));
                 } else {
@@ -283,11 +299,12 @@ namespace BECore {
             const StringView field = StringView(*path).substr(0, StringView(*path).find_first_of(".["));
             target->component->OnPropertyWritten(field);
             // The answer is what the field holds now, which the component may have changed
-            const auto readBack = GetProperty(component, *path);
+            const auto readBack = GetProperty(TypedRef::Of(*target->component), *path);
             if (!readBack) {
                 call.Fail(ControlErrors::kInternalError, Format("the value was written but cannot be read back: {}", readBack.error().message));
                 return;
             }
+            ReportNodeTouched(service, *target->node, target->component->GetTypeMeta().typeName, field);
             SceneEvents::SceneNodeEditedEvent::Emit(target->scene, target->node);
             call.Reply([&](JsonWriter& writer) { WriteFieldAnswer(writer, *request, *path, *readBack); });
         }
@@ -298,22 +315,32 @@ namespace BECore {
         const IntrusivePtr<SceneSource> source = New<SceneSource>(std::move(activeScene));
         service.RegisterHandler("scene_tree", [source](ControlCall& call) { HandleSceneTree(call, *source); });
         service.RegisterHandler("scene_get", [source](ControlCall& call) { HandleSceneGet(call, *source); });
-        service.RegisterHandler("scene_set", [source](ControlCall& call) { HandleSceneSet(call, *source); });
+        service.RegisterHandler("scene_set", [&service, source](ControlCall& call) { HandleSceneSet(call, service, *source); });
 
         const ControlParamInfo node{"node", "string", true, "The path of the node: names below the scene root joined by '/', '[n]' for a later namesake"};
         const ControlParamInfo component{"component", "string", true, "The type name of a component of the node"};
         const ControlParamInfo index{"index", "integer", false, "Which component of that type, from 0"};
         service.DescribeMethod("scene_tree", {"The nodes of the active scene with their paths, layers and component types",
                                               {{"node", "string", false, "The path of a node: only it and what is below it"},
-                                               {"limit", "integer", false, Format("The most nodes to list, {} by default", SceneControlLimits::kDefaultTreeNodes)}}});
+                                               {"limit", "integer", false, Format("The most nodes to list, {} by default", SceneControlLimits::kDefaultTreeNodes)}},
+                                              /*quiet=*/true});
         service.DescribeMethod("scene_get", {"The fields of a component of a node, or one of them by its path",
-                                             {node, component, index, {"path", "string", false, "The field, as in get_property; all fields without it"}}});
+                                             {node, component, index, {"path", "string", false, "The field, as in get_property; all fields without it"}},
+                                             /*quiet=*/true});
         service.DescribeMethod("scene_set", {"Writes a field of a component of a node, as an edit in the inspector does",
                                              {node,
                                               component,
                                               index,
                                               {"path", "string", true, "The field, as in set_property"},
                                               {"value", "any", true, "A boolean, a number or a string; a name field takes only a text the program knows"}}});
+    }
+
+    void ReportNodeTouched(ControlService& service, const SceneNode& node, StringView component, StringView field) {
+        service.ReportTouch(node.GetRuntimeId(), component, field);
+    }
+
+    void ReportNodeTouched(const SceneNode& node, StringView component, StringView field) {
+        ReportNodeTouched(CoreManager::GetControlService(), node, component, field);
     }
 
 }  // namespace BECore

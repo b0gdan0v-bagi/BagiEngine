@@ -542,6 +542,40 @@ namespace BECore::Tests {
         EXPECT_TRUE(Call(*other, Request(2, "ping")).ok);
     }
 
+    TEST_F(WebSocketServerTest, EveryConnectionIsAClientOfItsOwnUntilItEnds) {
+        Vector<IntrusivePtr<ControlClient>> askers;
+        service.RegisterHandler("who", [&askers](ControlCall& call) {
+            askers.push_back(IntrusivePtr<ControlClient>(call.GetClient()));
+            call.ReplyEmpty();
+        });
+        const uint16_t port = StartServer();
+        auto first = Connect(port);
+        auto second = Connect(port);
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(second.has_value());
+
+        ASSERT_TRUE(Call(*first, Request(1, "who")).ok);
+        ASSERT_TRUE(Call(*second, Request(2, "who")).ok);
+        ASSERT_TRUE(Call(*first, Request(3, "who")).ok);
+
+        ASSERT_EQ(askers.size(), 3u);
+        ASSERT_TRUE(askers[0]);
+        ASSERT_TRUE(askers[1]);
+        EXPECT_EQ(askers[0].Get(), askers[2].Get());
+        EXPECT_NE(askers[0]->GetId(), askers[1]->GetId());
+        EXPECT_FALSE(askers[0]->IsLocal());
+        EXPECT_TRUE(askers[0]->IsConnected());
+        EXPECT_TRUE(askers[1]->IsConnected());
+
+        second->Drop();
+        ASSERT_TRUE(WaitUntil(service, [&] { return !askers[1]->IsConnected(); }));
+        EXPECT_TRUE(askers[0]->IsConnected());
+
+        server.Stop();
+        service.Drain();
+        EXPECT_FALSE(askers[0]->IsConnected());
+    }
+
     TEST_F(WebSocketServerTest, ClientCountFollowsTheOpenConnections) {
         EXPECT_EQ(server.GetClientCount(), 0u);
         const uint16_t port = StartServer();

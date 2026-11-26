@@ -166,8 +166,8 @@ public:
  * `ReflectionTraits<T>::fields` as a `FieldAttributes` (`Reflection/FieldAttributes.h`). It is not an argument of
  * `BE_REFLECT_FIELD` so that the marker keeps its one form everywhere.
  *
- * Attributes (comma separated, each at most once): `range(min, max)`, `step(s)`, `tooltip("text")`, `readonly`, `hidden`, `required`.
- * `range` and `step` need a numeric field. An attribute the generator cannot use is a reflection warning.
+ * Attributes (comma separated, each at most once): `range(min, max)`, `step(s)`, `tooltip("text")`, `readonly`, `hidden`, `required`,
+ * `asset(Texture | Font | Sound | UiDocument)`. `range` and `step` need a numeric field, `asset` a string one. An attribute the generator cannot use is a reflection warning.
  * `no_factory` is the generator's own flag, not a `FieldAttributes` member: the `IntrusivePtr<Base>` of the field is not a factory field, so the
  * generated file inlines no `FactoryTraits<Base>` for it (the scene tree: `Scene::_nodes`, `SceneNode::_children`).
  *

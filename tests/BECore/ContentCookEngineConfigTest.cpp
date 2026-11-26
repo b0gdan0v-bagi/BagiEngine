@@ -19,7 +19,7 @@ namespace BECore::Tests {
         };
 
         /// Files a cook copies: no reflected type reads them, so there is no cooker
-        constexpr Array<ListedConfig, 20> kCopied = {{
+        constexpr Array<ListedConfig, 26> kCopied = {{
             {"TextConfig", "read by hand: the font and text settings of the text system (entry config-xmlnode-by-hand)"},
             {"UIConfig", "read by hand: the UI environment (entry config-xmlnode-by-hand)"},
             {"WidgetsConfig", "the editor widgets start their runtime in Initialize (ImGui, the user's preferences folder, a hardware monitor thread), which a cook would run; Game mode never reads "
@@ -29,6 +29,7 @@ namespace BECore::Tests {
             {"ConfigEditorPanel", "an editor-only panel asset, like FileChangesPanel"},
             {"ConsolePanel", "an editor-only panel asset, like FileChangesPanel"},
             {"ProfilerPanel", "an editor-only panel asset, like FileChangesPanel"},
+            {"PoolStringsPanel", "an editor-only panel asset, like FileChangesPanel"},
             {"PreferencesPanel", "an editor-only panel asset, like FileChangesPanel"},
             {"EditorDialogsPanel", "an editor-only panel asset, like FileChangesPanel"},
             {"AttachPanel", "an editor-only panel asset, like FileChangesPanel"},
@@ -40,6 +41,11 @@ namespace BECore::Tests {
             {"SceneEditorToolbarPanel", "an editor-only panel asset, like FileChangesPanel"},
             {"SceneInspectorPanel", "an editor-only panel asset, like FileChangesPanel"},
             {"GeneratePanel", "an editor-only panel asset, like FileChangesPanel"},
+            {"AssetBrowserPanel", "an editor-only panel asset, like FileChangesPanel"},
+            {"ExportPanel", "an editor-only panel asset, like FileChangesPanel"},
+            {"ActivityPanel", "an editor-only panel asset, like FileChangesPanel"},
+            {"FieldHelpPanel", "an editor-only panel asset, like FileChangesPanel"},
+            {"FieldHelpConfig", "editor data: the scene editor's field help reads the XML through the file system, so that a file written during the run is read at once"},
             {"SDLWindowConfig", "the path in ApplicationConfig names the .xml, and the window config is read by SDLWindowConfig::Deserialize from that file"},
         }};
 

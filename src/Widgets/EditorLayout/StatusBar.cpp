@@ -23,9 +23,12 @@ namespace BECore {
         /// The space between the left group and the right one when the window is too narrow for both, in ems
         constexpr float kGroupGapInEm = 2.0f;
         constexpr size_t kMaxRightItems = 4;
+        constexpr float kProgressWidthInEm = 8.0f;
 
         constexpr const char* kFrameTooltip = "Frame rate and frame time (mean of the last frames); the colour is the 60 fps budget";
         constexpr const char* kAllocTooltip = "Heap allocations of the last frame";
+        constexpr const char* kProgressTooltip = "An operation of the editor in progress";
+        constexpr const char* kOtherOperationsTooltip = "More operations in progress";
         constexpr const char* kControlTooltip = "Control API: the port and the connected clients";
         constexpr const char* kGameTooltip = "Active game";
         constexpr const char* kSceneTooltip = "Active scene";
@@ -168,6 +171,12 @@ namespace BECore {
             }
         }
 
+        _progress = EditorProgressRegistry::GetInstance().Collect();
+        if (_progress.others != _shownOtherOperations) {
+            _shownOtherOperations = _progress.others;
+            std::snprintf(_otherOperationsText, sizeof(_otherOperationsText), "+%u", _progress.others);
+        }
+
         _controlStatus = CoreManager::GetControlService().GetServerStatus();
         if (_shownControlStatus != _controlStatus) {
             _shownControlStatus = _controlStatus;
@@ -194,6 +203,27 @@ namespace BECore {
             DrawContent();
         }
         ImGui::EndChild();
+    }
+
+    void StatusBar::DrawProgress() const {
+        const EditorProgress& progress = *_progress.first;
+        const float innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextUnformatted(ICON_LC_LOADER);
+        ImGui::PopStyleColor();
+        ImGui::SameLine(0.0f, innerSpacing);
+        ImGui::TextUnformatted(progress.label.data(), progress.label.data() + progress.label.size());
+        ItemTooltip(kProgressTooltip);
+        ImGui::SameLine(0.0f, innerSpacing);
+        // A negative fraction is ImGui's indeterminate bar, which moves with the time; it shows no percentage
+        const float fraction = progress.fraction ? *progress.fraction : -static_cast<float>(ImGui::GetTime());
+        ImGui::ProgressBar(fraction, ImVec2(ImGui::GetFontSize() * kProgressWidthInEm, 0.0f), progress.fraction ? nullptr : "");
+        ItemTooltip(kProgressTooltip);
+        if (_progress.others > 0) {
+            ImGui::SameLine(0.0f, innerSpacing);
+            ImGui::TextUnformatted(_otherOperationsText);
+            ItemTooltip(kOtherOperationsTooltip);
+        }
     }
 
     void StatusBar::DrawContent() {
@@ -225,6 +255,10 @@ namespace BECore {
         if (_hardwareText.visible) {
             ImGui::SameLine(0.0f, itemGap);
             DrawHardware(_hardwareReadings, _hardwareText, disabled, normal);
+        }
+        if (_progress.first) {
+            ImGui::SameLine(0.0f, itemGap);
+            DrawProgress();
         }
 
         // Right: the control API, the game, the scene and the branch (each only when there is one)

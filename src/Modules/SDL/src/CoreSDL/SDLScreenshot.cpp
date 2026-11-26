@@ -152,7 +152,8 @@ namespace BECore {
 
         service.DescribeMethod("screenshot",
                                {"A PNG of the next presented frame, as base64",
-                                {{"maxSize", "integer", false, Format("The longer side in pixels, {} to {} (default {})", kMinScreenshotSize, kMaxScreenshotSize, kDefaultScreenshotSize)}}});
+                                {{"maxSize", "integer", false, Format("The longer side in pixels, {} to {} (default {})", kMinScreenshotSize, kMaxScreenshotSize, kDefaultScreenshotSize)}},
+                                /*quiet=*/true});
     }
 
 }  // namespace BECore

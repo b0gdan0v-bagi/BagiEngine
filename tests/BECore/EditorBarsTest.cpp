@@ -8,6 +8,7 @@
 #include <Widgets/EditorLayout/Hardware/HardwareText.h>
 #include <Widgets/EditorLayout/MainToolbar.h>
 #include <Widgets/EditorLayout/StatusBar.h>
+#include <Widgets/Feedback/EditorProgress.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
@@ -27,6 +28,7 @@ namespace BECore::Tests {
         constexpr uint32_t kTestMemUsedMb = 9318;
         constexpr uint32_t kTestMemTotalMb = 12288;
         constexpr size_t kLineSize = 96;
+        constexpr float kTestFraction = 0.4f;
 
         /// Answers what the test last set, on the calling thread
         class SettableReader : public IHardwareReader {
@@ -234,6 +236,43 @@ namespace BECore::Tests {
             }
         });
         EXPECT_TRUE(statusBar.GetHardwareText().visible);
+    }
+
+    TEST_F(EditorBarsTest, AnOperationInProgressIsShownWhileItRunsAndCountsTheOnesBehindIt) {
+        Optional<float> fraction = kTestFraction;
+        bool running = false;
+        const EditorProgressHandle first = EditorProgressRegistry::GetInstance().Register(
+            [&]() -> Optional<EditorProgress> { return running ? Optional<EditorProgress>(EditorProgress{"Working", fraction}) : Optional<EditorProgress>(); });
+        RunFrame();
+        const int bare = StatusBarVertexCount();
+
+        running = true;
+        DrawBars();
+        const int one = StatusBarVertexCount();
+        EXPECT_GT(one, bare);
+
+        EditorProgressHandle second = EditorProgressRegistry::GetInstance().Register([] { return Optional<EditorProgress>(EditorProgress{"Waiting", {}}); });
+        DrawBars();
+        EXPECT_GT(StatusBarVertexCount(), one);
+
+        second.Reset();
+        running = false;
+        DrawBars();
+        EXPECT_EQ(StatusBarVertexCount(), bare);
+    }
+
+    TEST_F(EditorBarsTest, ASteadyFrameWithOperationsInProgressAllocatesNothing) {
+        const EditorProgressHandle known = EditorProgressRegistry::GetInstance().Register([] { return Optional<EditorProgress>(EditorProgress{"Working", kTestFraction}); });
+        const EditorProgressHandle unknown = EditorProgressRegistry::GetInstance().Register([] { return Optional<EditorProgress>(EditorProgress{"Waiting", {}}); });
+        for (int i = 0; i < kWarmUpFrames; ++i) {
+            RunFrame();
+        }
+
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                RunFrame();
+            }
+        });
     }
 
     TEST_F(EditorBarsTest, ASteadyFrameAllocatesNothing) {

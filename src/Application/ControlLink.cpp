@@ -126,7 +126,35 @@ namespace BECore {
 
     void ControlLink::Stop() {
         _stopped = true;
+        CloseChannels();
         _sender->Detach();
+    }
+
+    IntrusivePtr<ControlClient> ControlLink::ClientOf(uint64_t number) {
+        for (const Channel& channel : _channels) {
+            if (channel.number == number) {
+                return channel.client;
+            }
+        }
+        _channels.push_back(Channel{number, _service.OpenConnectionClient()});
+        return _channels.back().client;
+    }
+
+    void ControlLink::CloseChannel(uint64_t number) {
+        for (Channel& channel : _channels) {
+            if (channel.number == number) {
+                _service.CloseConnectionClient(std::move(channel.client));
+                _channels.erase(&channel);
+                return;
+            }
+        }
+    }
+
+    void ControlLink::CloseChannels() {
+        for (Channel& channel : _channels) {
+            _service.CloseConnectionClient(std::move(channel.client));
+        }
+        _channels.clear();
     }
 
     void ControlLink::Connect(ControlLinkTime now) {
@@ -173,13 +201,16 @@ namespace BECore {
             return;
         }
         if (space == StringView::npos) {
-            return;  // that control connection ended: the link keeps nothing per channel
+            CloseChannel(*channel);  // that control connection ended
+            return;
         }
-        _service.Post(message.substr(space + 1),
-                      [sender = _sender, connection = _sender->GetConnection(), channel = *channel](const String& response) { sender->Send(connection, channel, response); });
+        _service.Post(
+            message.substr(space + 1), [sender = _sender, connection = _sender->GetConnection(), channel = *channel](const String& response) { sender->Send(connection, channel, response); },
+            ClientOf(*channel));
     }
 
     void ControlLink::HandleClosed(ControlLinkTime now) {
+        CloseChannels();
         _sender->Detach();
         if (_event.closeCode == kRoomTransportPolicyViolation) {
             // The token or the second tab: asking again gets the same answer

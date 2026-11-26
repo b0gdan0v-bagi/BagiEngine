@@ -58,6 +58,9 @@ namespace BECore {
         if (SessionRecorder::IsInstanceCreated()) {
             SessionRecorder::GetInstance().Stop();
         }
+#if BE_WITH_EDITOR
+        _editorTools.Clear();  // before Stop(): no command may run in a game that is stopping
+#endif
         if (_active) {
             {
                 BE_MEM_TAG(Game);
@@ -80,6 +83,10 @@ namespace BECore {
             return;
         }
 
+#if BE_WITH_EDITOR
+        _editorTools.Clear();  // before Stop(): no command may run in a game that is stopping
+#endif
+
         if (_active) {
             BE_MEM_TAG(Game);
             _active->Stop();
@@ -95,6 +102,13 @@ namespace BECore {
             BE_MEM_TAG(Game);
             _active->Start();
         }
+
+#if BE_WITH_EDITOR
+        // A Start() that switched games again has had its target activated by that inner call
+        if (!_editorTools.IsActive()) {
+            _editorTools.Activate(*_active, CoreManager::GetControlService());
+        }
+#endif
 
         LOG_INFO("GameManager: switched to '{}'", _active->GetName().ToStringView());
     }

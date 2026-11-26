@@ -14,12 +14,16 @@
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <Generated/ViewportEvents.gen.hpp>
 #include <Generated/ViewportWidget.gen.hpp>
+#include <Widgets/AssetBrowser/AssetDrag.h>
+#include <Widgets/EditorLayout/ComponentCategories.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/RemoteEditor/RemoteSessionRegistry.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
+#include <Widgets/SceneEditor/SceneAssetDrop.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportUIDebug.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>
@@ -60,7 +64,9 @@ namespace BECore {
         constexpr float kSameRectTolerance = 0.5f;
         // The viewport pass runs at density 1: a window unit is an output pixel, what UISettings::minTouchSize is measured in
         constexpr float kViewportPixelDensity = 1.0f;
+        constexpr float kTouchOutlineThickness = 3.0f;  // wider than the selection's, so a touched node that is selected shows
         constexpr const char* kImageHitArea = "##ViewportImage";
+        constexpr float kMutedCategoryAlpha = 0.5f;  // a selected node that is not the primary one, outlined in its category's colour
 
         // The device of a shape for the Device safe area; none for a custom or an aspect shape and for an index this build lacks
         const PreviewDevice* DeviceOf(const PreviewShape& shape) {
@@ -73,6 +79,38 @@ namespace BECore {
 
         bool SameRect(const Rect& a, const Rect& b) {
             return std::abs(a.x - b.x) < kSameRectTolerance && std::abs(a.y - b.y) < kSameRectTolerance && std::abs(a.w - b.w) < kSameRectTolerance && std::abs(a.h - b.h) < kSameRectTolerance;
+        }
+
+        void DrawNodeOutlines(ImDrawList& drawList, const ViewportFrame& frame, const ScenePick::Outlines& outlines, ImU32 color, float thickness) {
+            for (size_t i = 0; i < outlines.count; ++i) {
+                Array<ImVec2, 4> corners;
+                for (size_t corner = 0; corner < corners.size(); ++corner) {
+                    corners[corner] = frame.ToScreen(outlines.quads[i][corner]);
+                }
+                drawList.AddPolyline(corners.data(), static_cast<int>(corners.size()), color, ImDrawFlags_Closed, thickness);
+            }
+        }
+
+        // The colour of the outline of a selected node: that of its category, else the accent colour of the theme; a node that is not the primary one is muted
+        ImU32 SelectionColor(const SceneNode& node, bool primary) {
+            if (const Optional<Color> color = CategoryColorOfNode(node)) {
+                const float alpha = static_cast<float>(color->a) * (primary ? 1.0f : kMutedCategoryAlpha);
+                return IM_COL32(color->r, color->g, color->b, static_cast<int>(alpha));
+            }
+            const ImGuiPalette& palette = GetImGuiPalette();
+            return ImGui::ColorConvertFloat4ToU32(primary ? palette.accent : palette.accentMuted);
+        }
+
+        // @p node and its descendants that flash, each as strong as its flash
+        void DrawTouchedSubtree(ImDrawList& drawList, const ViewportFrame& frame, const Scene& scene, const SceneNode& node) {
+            if (const float alpha = TouchHighlights::GetInstance().NodeAlpha(node.GetRuntimeId()); alpha > 0.0f) {
+                ImVec4 color = GetImGuiPalette().accent;
+                color.w *= alpha;
+                DrawNodeOutlines(drawList, frame, ScenePick::SelectionOutlines(scene, node), ImGui::GetColorU32(color), kTouchOutlineThickness);
+            }
+            for (const auto& child : node.GetChildren()) {
+                DrawTouchedSubtree(drawList, frame, scene, *child);
+            }
         }
 
     }  // namespace
@@ -94,6 +132,7 @@ namespace BECore {
         Subscribe<EditorCommandEvent, &ViewportWidget::OnCommand>(this);
         Subscribe<SceneSelectionChangedEvent, &ViewportWidget::OnSelectionChanged>(this);
         Subscribe<UIElementSelectedEvent, &ViewportWidget::OnUIElementSelected>(this);
+        _panelHandle = EditorPanelRegistry::GetInstance().Register(EditorPanelIds::kViewport, *this);
         return true;
     }
 
@@ -233,6 +272,8 @@ namespace BECore {
             const ImVec2 imageMin = ImGui::GetCursorScreenPos();
             ImGui::InvisibleButton(kImageHitArea, shown, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
             const bool imageHovered = ImGui::IsItemHovered();
+            // Taken while the hit area is the last item; sent once the frame of this pass is known
+            const Optional<AssetDragPayload> droppedAsset = AcceptAssetDrop(MakesSceneNode);
 
             // One walk of the tree confirms the whole selection; the outlines, the framing and the node gizmo take this list and never look a node up themselves
             if (activeScene && activeScene == _selectedScene) {
@@ -270,6 +311,12 @@ namespace BECore {
                 DrawSafeAreaOutline(frame, safeArea);
             }
             DrawSelectionOutlines(activeScene, frame);
+            DrawTouchOutlines(activeScene, frame);
+
+            if (droppedAsset) {
+                const Vec2 at = frame.ToTarget(ImGui::GetIO().MousePos);
+                ViewportAssetDropEvent::Emit(droppedAsset->kind, PoolString::Intern(StringView(droppedAsset->path)), at.x, at.y);
+            }
 
             // The gizmos go before the mouse is forwarded, so a press on a handle is consumed first. The UI element's handles come before the node gizmo, which stays out of a drag of
             // theirs and of a pointer over one of them
@@ -360,7 +407,7 @@ namespace BECore {
             const float minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             for (const auto& canvas : _overlayCanvases) {
                 const UICanvasLayout& layout = canvas->GetLayout();
-                if (!canvas->_visible || !layout.HasLayout()) {
+                if (!canvas->IsEnabled() || !canvas->_visible || !layout.HasLayout()) {
                     continue;
                 }
                 if (overlays.canvasBounds) {
@@ -420,7 +467,7 @@ namespace BECore {
         // The selected element in the shapes checked in the popup, nothing is probed while none is
         _uiShapes.SetShapes(toolbar.GetShapeMask(), toolbar.IsLandscapeShapes());
         const UISelectedElement selected = scene && _uiShapes.AnyChecked() ? _uiGizmos.FindSelected(scene) : UISelectedElement{};
-        if (selected && selected.canvas->_visible) {
+        if (selected && selected.canvas->IsEnabled() && selected.canvas->_visible) {
             _uiShapes.Draw(*drawList, frame, {outputSize.x, outputSize.y}, selected.canvas->GetLayout(), *selected.element);
         } else {
             _uiShapes.Release();
@@ -464,23 +511,23 @@ namespace BECore {
         if (!scene || scene != _selectedScene || _liveSelection.empty()) {
             return;
         }
-        const ImGuiPalette& palette = GetImGuiPalette();
-        const ImU32 primaryColor = ImGui::ColorConvertFloat4ToU32(palette.accent);
-        const ImU32 otherColor = ImGui::ColorConvertFloat4ToU32(palette.accentMuted);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
         const SceneNode* const primary = _selectedNodes.back();
         for (const SceneNode* const node : _liveSelection) {
-            const ImU32 color = node == primary ? primaryColor : otherColor;
-            const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(*scene, *node);
-            for (size_t i = 0; i < outlines.count; ++i) {
-                Array<ImVec2, 4> corners;
-                for (size_t corner = 0; corner < corners.size(); ++corner) {
-                    corners[corner] = frame.ToScreen(outlines.quads[i][corner]);
-                }
-                drawList->AddPolyline(corners.data(), static_cast<int>(corners.size()), color, ImDrawFlags_Closed, kSelectionOutlineThickness);
-            }
+            DrawNodeOutlines(*drawList, frame, ScenePick::SelectionOutlines(*scene, *node), SelectionColor(*node, node == primary), kSelectionOutlineThickness);
         }
+        drawList->PopClipRect();
+    }
+
+    void ViewportWidget::DrawTouchOutlines(Scene* scene, const ViewportFrame& frame) const {
+        // The walk of the tree is paid only while something flashes
+        if (!scene || !TouchHighlights::GetInstance().HasFlashes()) {
+            return;
+        }
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
+        DrawTouchedSubtree(*drawList, frame, *scene, scene->GetRootNode());
         drawList->PopClipRect();
     }
 

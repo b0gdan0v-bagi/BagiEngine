@@ -1,13 +1,15 @@
 // The content loader (Reflection/BinaryContent.h): a cooked version 3 file read straight into a pool block, the rules it refuses by
 // and the compact stream it keeps. Streams are made by BinaryStreamBuilder; texts come from FreshText so the shared pool is fresh for them.
 
-#include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/PoolStringSnapshot.h>
+#include <BECore/PoolString/PoolStringStorage.h>
 #include <BECore/Reflection/BinaryContent.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/SchemaHash.h>
 #include <Common/BinaryStreams.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <gtest/gtest.h>
 
@@ -108,6 +110,20 @@ namespace BECore::Tests {
             }
         }
 
+        /// The name a snapshot of the process pool gives the block `text` lies in
+        String BlockSourceOf(PoolString text) {
+            PoolStringSnapshot snapshot;
+            Details::GetProcessPoolStorage().TakeSnapshot(snapshot);
+            for (const PoolStringRow& row : snapshot.strings) {
+                if (row.text == text) {
+                    EXPECT_EQ(row.origin, PoolStringOrigin::Adopted);
+                    return row.block < snapshot.blocks.size() ? snapshot.blocks[row.block].source : String();
+                }
+            }
+            ADD_FAILURE() << "the snapshot has no row of the text";
+            return String();
+        }
+
         constexpr StringView kStampRoot = "StampRoot";
         constexpr StringView kStampSource = "config/Content.bin";
 
@@ -205,6 +221,26 @@ namespace BECore::Tests {
         EXPECT_EQ(loaded->section.bytes, cooked.SectionBytes());
         EXPECT_EQ(loaded->bytes.size(), cooked.bytes.size() - cooked.SectionBytes());
         EXPECT_EQ(loaded->section.entriesOffset, cooked.EntriesOffset());
+    }
+
+    TEST(BinaryContentTest, TheBlockOfAFileIsNamedByItsPathUnlessTheCallerNamesIt) {
+        TestTempFolder folder("BinaryContentTest");
+        const String path = folder.PathOf("named.bin");
+        const auto load = [&path](StringView sourceName) {
+            const Cooked cooked = Cook(Fresh(1));
+            WriteFile(Path(path), StringView(reinterpret_cast<const char*>(cooked.bytes.data()), cooked.bytes.size()));
+            BinaryContentOptions options = Verify(true);
+            options.sourceName = sourceName;
+            return LoadContentFile(Path(path), options);
+        };
+
+        const auto byPath = load({});
+        ASSERT_TRUE(byPath.has_value()) << byPath.error().c_str();
+        EXPECT_EQ(BlockSourceOf(At(byPath->strings, 0)), Path(path).View());
+
+        const auto named = load("content the test named");
+        ASSERT_TRUE(named.has_value()) << named.error().c_str();
+        EXPECT_EQ(BlockSourceOf(At(named->strings, 0)), "content the test named");
     }
 
     TEST(BinaryContentTest, TheCompactStreamIsTheFileWithoutTheEntriesOfTheSection) {

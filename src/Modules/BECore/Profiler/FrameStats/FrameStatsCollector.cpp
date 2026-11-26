@@ -108,6 +108,16 @@ namespace BECore {
 
         BE_PROFILE_COUNTER("Draw calls", draws.drawCalls);
         BE_PROFILE_COUNTER("Primitives", draws.primitives);
+        BE_PROFILE_COUNTER("Triangles", draws.triangles);
+        BE_PROFILE_COUNTER("Texture switches", draws.textureSwitches);
+        BE_PROFILE_COUNTER("Batch breaks: texture", draws.GetBatchBreaks(BatchBreak::Texture));
+        BE_PROFILE_COUNTER("Batch breaks: blend", draws.GetBatchBreaks(BatchBreak::Blend));
+        BE_PROFILE_COUNTER("Batch breaks: full", draws.GetBatchBreaks(BatchBreak::Full));
+        BE_PROFILE_COUNTER("Batch breaks: clip", draws.GetBatchBreaks(BatchBreak::Clip));
+        BE_PROFILE_COUNTER("Batch breaks: unbatched", draws.GetBatchBreaks(BatchBreak::Unbatched));
+        BE_PROFILE_COUNTER("Batch breaks: boundary", draws.GetBatchBreaks(BatchBreak::Boundary));
+        BE_PROFILE_COUNTER("Geometry upload bytes", draws.geometryUploadBytes);
+        BE_PROFILE_COUNTER("Texture upload bytes", draws.textureUploadBytes);
         BE_PROFILE_COUNTER("Allocations", _current.allocCount);
         BE_PROFILE_COUNTER("Live bytes", _current.liveBytes);
         if (_current.gpuMs > 0.0) {

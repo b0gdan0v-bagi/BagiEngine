@@ -11,8 +11,9 @@ namespace BECore {
 #endif
 
         /// What a browser cannot do: a command id, or with a trailing dot every command whose id starts so.
-        /// Generate needs the art service and ComfyUI as processes, File changes a watch of the project's files, the Chrome trace a file to open
-        constexpr StringView kNotInBrowser[] = {"view.generate", "artgen.", "view.fileChanges", "fileChanges.", "profiler.trace", "view.attach", "remote."};
+        /// Generate needs the art service and ComfyUI as processes, Export the build tools as processes, File changes a watch of the project's files, the
+        /// Chrome trace a file to open, and a page opens no control link to attach with
+        constexpr StringView kNotInBrowser[] = {"view.generate", "artgen.", "view.export", "export.", "view.fileChanges", "fileChanges.", "profiler.trace", "view.attach", "remote."};
 
         EditorHostKind& CurrentHost() {
             static EditorHostKind host = kBuildHost;

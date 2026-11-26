@@ -42,7 +42,7 @@ To keep a bug as a test, call record_start right after launch_game (or pass reco
 a scenario that replays from a fresh start of the game, and its calls become the test.
 """
 
-session = GameSession()
+session = GameSession(client_name="mcp")
 server = MCPServer("bagi", instructions=INSTRUCTIONS)
 
 
@@ -356,6 +356,59 @@ def ui_click(name: str, canvas: str | None = None, at: float | None = None) -> d
 
 @server.tool()
 @reports_errors
+def scene_tree(node: str | None = None, limit: int | None = None) -> dict[str, Any]:
+    """The nodes of the active scene, depth first: {scene, nodes: [{path, layer, name, components: [type names]}], truncated}.
+
+    A path is the names from below the scene root joined by '/' ("Board/Cell[2]"): a segment that ends in [n] is the n-th (from 0) child of that name, without
+    it the first; inside a name write \\/, \\[ and \\\\ for the character. Pass a listed path to scene_get and scene_set as it is. A path names a place, not an
+    object: after a node was added, removed or renamed list the tree again.
+    node: list only that node and what is below it. limit: the most nodes to list (1 to 5000, default 500); truncated says some are left out.
+    Errors: no_scene, node_not_found, invalid_params (a bad path or limit).
+    """
+    params: dict[str, Any] = {}
+    if node is not None:
+        params["node"] = node
+    if limit is not None:
+        params["limit"] = limit
+    return session.call("scene_tree", params)
+
+
+@server.tool()
+@reports_errors
+def scene_get(node: str, component: str, index: int | None = None, path: str | None = None) -> dict[str, Any]:
+    """Reads a component of a node of the active scene: {node, component, path, value} with `path`, else {node, component, fields} with every saved field.
+
+    node: a node path as scene_tree lists it ('/' between names, [n] for a later namesake). component: a type name of the node's components
+    ("TransformComponent"); index: which of several of that type, from 0. path: one field ("x", "color.r").
+    Errors: no_scene, node_not_found, component_not_found, invalid_params, and for path invalid_path, not_found, not_a_value, too_long.
+    """
+    params: dict[str, Any] = {"node": node, "component": component}
+    if index is not None:
+        params["index"] = index
+    if path is not None:
+        params["path"] = path
+    return session.call("scene_get", params)
+
+
+@server.tool()
+@reports_errors
+def scene_set(node: str, component: str, path: str, value: bool | int | float | str, index: int | None = None) -> dict[str, Any]:
+    """Writes one field of a component of a node, as an edit in the editor's inspector does, and answers {node, component, path, value}: what the field holds now.
+
+    node, component, index and path as in scene_get. The editor shows the user the node you changed, and the scene is unsaved until it is saved there. No node,
+    component or list element is added or removed, and a node's name and layer cannot be written.
+    A name field (a sprite id, an action, a texture path) takes only a text the game already knows, or "": a new text is refused as interning.
+    Errors: no_scene, node_not_found, component_not_found, invalid_params, invalid_path, not_found, not_a_value, too_long, type_mismatch,
+    out_of_range, read_only, hidden, interning. A refused write changes nothing.
+    """
+    params: dict[str, Any] = {"node": node, "component": component, "path": path, "value": value}
+    if index is not None:
+        params["index"] = index
+    return session.call("scene_set", params)
+
+
+@server.tool()
+@reports_errors
 def click_at(
     x: float, y: float, space: str = "output", button: str = "left", which: int | None = None
 ) -> dict[str, Any]:
@@ -484,6 +537,23 @@ def zone_allocs(top: int = 20, reset: bool = False) -> dict[str, Any]:
     the zone, name and size statistics after answering, to measure the next frames.
     """
     return session.call("zone_allocs", {"top": top, "reset": reset})
+
+
+@server.tool()
+@reports_errors
+def pool_strings(frames: int = 60, limit: int = 20, query: str | None = None, source: str | None = None, record: bool | None = None, reset: bool = False) -> dict[str, Any]:
+    """The pool of interned strings (PoolString, which never frees): {checks, growth, recording, search, summary}.
+
+    summary: counts and bytes by source, the blocks and the table. growth: the strings and bytes added in each of the last frames (1 to
+    240); runtime additions in a steady frame are a leak. search: the strings that hold query (ASCII case ignored; every string without
+    it) and come from source ("static", "runtime" or "adopted"): matched counts them all, rows lists the first limit (0 to 1000) by
+    text. checks: pairs of hash collisions and of texts held twice. recording: the new runtime strings by profiler zone, filled while
+    recording is on; record switches it before the answer (a build with the editor only, else not_available), reset drops the records
+    after the answer. Zones are named only in a build with ENGINE_PROFILER_ALLOC.
+    """
+    optional = {"query": query, "source": source, "record": record}
+    given = {name: value for name, value in optional.items() if value is not None}
+    return session.call("pool_strings", {"frames": frames, "limit": limit, "reset": reset, **given})
 
 
 @server.tool()

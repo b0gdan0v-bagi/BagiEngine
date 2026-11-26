@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<SceneManager contentVersion="5">
+<SceneManager contentVersion="6">
   <scenes>
     <!-- The scenes of BagiStress (the fourth, StressRmlUi, is shown only in a build with the RmlUi host); StressGame::GetSceneName() is the one chosen by --stress-scene. The Field node gets the scene's component, the Run node the measurement (after Field: a frame builds before it is judged). -->
     <scene type="Scene" name="StressSprites" viewWidth="1920" viewHeight="1080">

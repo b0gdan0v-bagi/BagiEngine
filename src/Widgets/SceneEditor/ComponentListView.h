@@ -5,7 +5,7 @@
 
 namespace BECore {
 
-    /// What the inspector's component list shows: the components of one node, of this process or of an attached one
+    /// A plain component list of the inspector: the components of a node that is no object of this process, so it gets no card (ComponentCard.h)
     class IComponentListSource {
     public:
         virtual ~IComponentListSource() = default;

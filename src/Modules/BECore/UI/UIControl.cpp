@@ -271,7 +271,7 @@ namespace BECore {
             UICanvasAnswer answer;
             answer.node = entry.node;
             answer.space = canvas._space;
-            answer.visible = canvas._visible;
+            answer.visible = canvas._visible && canvas.IsEnabled();
             answer.modal = canvas._modal;
             answer.inputEnabled = canvas._inputEnabled;
             answer.takesInput = canvas.TakesInput();
@@ -421,7 +421,10 @@ namespace BECore {
                     anyNamed = true;
                     ClickMiss miss = ClickMiss::None;
                     PoolString coveredBy;
-                    if (!entry.canvas->GetLayout().HasLayout()) {
+                    // A disabled canvas is never drawn: no step would lay it out
+                    if (!entry.canvas->IsEnabled()) {
+                        miss = ClickMiss::CanvasCannotTakeInput;
+                    } else if (!entry.canvas->GetLayout().HasLayout()) {
                         miss = ClickMiss::NotLaidOut;
                     } else if (!entry.canvas->TakesInput()) {
                         miss = ClickMiss::CanvasCannotTakeInput;
@@ -459,7 +462,7 @@ namespace BECore {
                 case ClickMiss::Covered:
                     return Format("'{}' is covered by '{}' in its canvas", text, target.coveredBy.ToStringView());
                 case ClickMiss::CanvasCannotTakeInput:
-                    return Format("the canvas '{}' of '{}' is hidden, has input off or is in a scene that is not active", target.canvasNode.ToStringView(), text);
+                    return Format("the canvas '{}' of '{}' is hidden or disabled, has input off or is in a scene that is not active", target.canvasNode.ToStringView(), text);
                 case ClickMiss::NotLaidOut:
                     return Format("the canvas '{}' of '{}' has not been drawn yet: step a frame first", target.canvasNode.ToStringView(), text);
                 case ClickMiss::None:
@@ -475,7 +478,7 @@ namespace BECore {
             static constexpr auto target = "target"_intern;
         };
 
-        void HandleUIClick(ControlCall& call) {
+        void HandleUIClick(ControlCall& call, ControlService& service) {
             const JsonView params = call.Params();
             const auto nameText = GetParamString(params, "name");
             if (!nameText || nameText->empty()) {
@@ -519,6 +522,7 @@ namespace BECore {
                 const float outputX = pressX * resolved.transform.scale + resolved.transform.offsetX;
                 const float outputY = pressY * resolved.transform.scale + resolved.transform.offsetY;
                 const PoolString canvasNode = target.canvasNode;
+                const uint64_t canvasNodeId = target.canvas->GetNode().GetRuntimeId();
                 // A composed button answers as a button; a disabled one emits nothing, so the answer carries nothing
                 const auto* clicker = target.element->GetComponent<UIInputClicker>();
                 const bool clickerEmits = clicker != nullptr && !target.element->IsDisabled();
@@ -547,6 +551,7 @@ namespace BECore {
                 const bool consumed = click.consumed;
                 // A handler above the element (a scene target, a modal canvas) that took the press left the element nothing to emit
                 const bool takenAbove = consumed && click.taker != canvasHandler;
+                service.ReportTouch(canvasNodeId, target.canvas->GetTypeMeta().typeName);
 
                 UIClickAnswer answer;
                 answer.clicked = TextView(StringView(nameText->c_str(), nameText->size()));
@@ -589,9 +594,9 @@ namespace BECore {
 
     void RegisterUIControl(ControlService& service) {
         service.RegisterHandler("ui_tree", HandleUITree);
-        service.RegisterHandler("ui_click", HandleUIClick);
+        service.RegisterHandler("ui_click", [&service](ControlCall& call) { HandleUIClick(call, service); });
 
-        service.DescribeMethod("ui_tree", {"The canvases and elements of the active scene with their rects and the validator's findings", {}});
+        service.DescribeMethod("ui_tree", {"The canvases and elements of the active scene with their rects and the validator's findings", {}, /*quiet=*/true});
         service.DescribeMethod("ui_click", {"Clicks a visible button, toggle or slider by its name as a person would",
                                             {{"name", "string", true, "The name of the element"},
                                              {"canvas", "string", false, "The scene node of the canvas, when the name is not unique"},

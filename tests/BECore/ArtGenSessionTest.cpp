@@ -1,13 +1,21 @@
 #include <BECore/ArtGenAnswerText.h>
+#include <BECore/Control/ControlActivity.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/ControlTouches.h>
 #include <BECore/Control/JsonViewOps.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNode.h>
 #include <Common/ControlTestSupport.h>
+#include <Common/EngineEnvironment.h>
 #include <Common/JsonDoc.h>
 #include <Common/JsonEdit.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ArtGen/ArtGenAccept.h>
@@ -97,6 +105,15 @@ namespace BECore::Tests {
             return reply;
         }
 
+        std::expected<ArtGenAcceptAnswer, ControlError> FailingAcceptor(const ArtGenVariant& /*variant*/, StringView /*sprite*/, const ArtGenImagePlan& /*plan*/, SceneNode* /*node*/) {
+            return std::unexpected(ControlError{String("artgen_accept_failed"), String("cannot write")});
+        }
+
+        constexpr StringView kArtNodes = R"(<node name="Hero"><components>
+  <component type="SpriteRendererComponent"/>
+  <component type="AudioSourceComponent"/>
+</components></node>)";
+
     }  // namespace
 
     class ArtGenSessionTest : public ::testing::Test {
@@ -107,10 +124,13 @@ namespace BECore::Tests {
         ControlReply Call(StringView method, StringView params = "{}") {
             ControlReply response;
             bool answered = false;
-            service.Post(MakeRequestText(++_nextId, method, params), [&](const String& reply) {
-                response = ControlReply(StringView(reply.c_str(), reply.size()));
-                answered = true;
-            });
+            service.Post(
+                MakeRequestText(++_nextId, method, params),
+                [&](const String& reply) {
+                    response = ControlReply(StringView(reply.c_str(), reply.size()));
+                    answered = true;
+                },
+                caller);
             for (int frame = 0; !answered && frame < kFrameGuard; ++frame) {
                 service.Drain();
                 service.EndFrame();
@@ -147,6 +167,7 @@ namespace BECore::Tests {
         double now = 100.0;
         ControlService service;
         ArtGenSession session;
+        IntrusivePtr<ControlClient> caller;  // who Call() asks as; none by default
 
     private:
         int64_t _nextId = 0;
@@ -314,6 +335,90 @@ namespace BECore::Tests {
         EXPECT_EQ(Call("artgen_accept", R"({"seed":5,"sprite":"q","useOnSelected":"yes"})").ErrorCode(), "invalid_params");
         EXPECT_EQ(Call("artgen_accept", R"({"seed":5,"useOnSelected":"yes"})").ErrorCode(), "invalid_params");
         EXPECT_EQ(gAccepted.calls, 0);
+    }
+
+    /// A session whose selected node is in the active scene and has what an accept puts art on
+    class ArtGenSessionTouchTest : public ArtGenSessionTest {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        void SetUp() override {
+            ArtGenSessionTest::SetUp();
+            XmlDeserializer deserializer;
+            const String xml = SceneConfigText(kArtNodes);
+            ASSERT_TRUE(deserializer.LoadFromString(xml.c_str()));
+            _manager = New<SceneManager>();
+            _manager->Deserialize(deserializer);
+            ASSERT_FALSE(deserializer.HasErrors());
+            _manager->Initialize();
+            EngineEnvironment::UseSceneManager(_manager);
+            Scene* scene = _manager->GetActiveScene();
+            ASSERT_NE(scene, nullptr);
+            ASSERT_FALSE(scene->GetRootNode().GetChildren().empty());
+            hero = scene->GetRootNode().GetChildren().front();
+            session.SetSelectedNode(hero);
+            session.SetAcceptor(&FakeAcceptor);
+            session.SetSoundAcceptor(&FakeSoundAcceptor);
+            caller = service.OpenLocalClient("tool");
+        }
+
+        void TearDown() override {
+            session.SetSelectedNode({});
+            hero.Reset();
+            EngineEnvironment::UseSceneManager({});
+            _manager.Reset();
+        }
+
+        /// The last report is of the selected node, with @p component and @p field, by the caller, and its call is listed with the node
+        void ExpectTouched(StringView component, StringView field) {
+            ASSERT_GT(service.Touches().Size(), 0u);
+            const ControlTouch& touch = service.Touches().At(service.Touches().Size() - 1);
+            EXPECT_EQ(touch.nodeId, hero->GetRuntimeId());
+            EXPECT_EQ(StringView(touch.component), component);
+            EXPECT_EQ(StringView(touch.field), field);
+            EXPECT_EQ(touch.client.Get(), caller.Get());
+            EXPECT_EQ(service.Activity().At(service.Activity().Size() - 1).node, hero->GetRuntimeId());
+        }
+
+        IntrusivePtr<SceneNode> hero;
+
+    private:
+        IntrusivePtr<SceneManager> _manager;
+    };
+
+    TEST_F(ArtGenSessionTouchTest, AnImageAcceptedOntoTheSelectedNodeTouchesTheSpriteItWrites) {
+        RunWithImages({5});
+
+        ASSERT_TRUE(Call("artgen_accept", R"({"seed":5,"sprite":"q"})").IsOk());
+        EXPECT_EQ(service.Touches().Size(), 0u) << "no node was asked for";
+
+        ASSERT_TRUE(Call("artgen_accept", R"({"seed":5,"sprite":"q","useOnSelected":true})").IsOk());
+        EXPECT_EQ(service.Touches().Size(), 1u);
+        ExpectTouched("SpriteRendererComponent", "spriteId");
+    }
+
+    TEST_F(ArtGenSessionTouchTest, ASoundAcceptedOntoTheSelectedNodeTouchesTheClip) {
+        const uint32_t id = Require(session.Request("wood", "knock", 1, Optional<int64_t>(7)));
+        Call("artgen_poll", kReadyPoll);
+        Call("artgen_image", Report(id, R"("kind":"audio","path":"D:/out/knock_7.flac","seed":7)"));
+
+        ASSERT_TRUE(Call("artgen_accept", R"({"name":"knock","seed":7,"useOnSelected":true})").IsOk());
+        EXPECT_EQ(service.Touches().Size(), 1u);
+        ExpectTouched("AudioSourceComponent", "clip");
+    }
+
+    TEST_F(ArtGenSessionTouchTest, AFailedAcceptAndThePanelsOwnAcceptTouchNothing) {
+        RunWithImages({5});
+        session.SetAcceptor(&FailingAcceptor);
+        EXPECT_EQ(Call("artgen_accept", R"({"seed":5,"sprite":"q","useOnSelected":true})").ErrorCode(), "artgen_accept_failed");
+
+        session.SetAcceptor(&FakeAcceptor);
+        ASSERT_TRUE(session.Accept(5, "q", true).has_value());  // outside any control call, as the panel's button
+        EXPECT_TRUE(gAccepted.withNode);
+
+        EXPECT_EQ(service.Touches().Size(), 0u);
     }
 
     TEST_F(ArtGenSessionTest, ARunCanKeepTheVariantsOfTheLastOne) {

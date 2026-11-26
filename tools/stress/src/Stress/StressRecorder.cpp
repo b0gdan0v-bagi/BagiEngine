@@ -12,7 +12,7 @@ namespace BECore::Stress {
         constexpr double kTail = 0.99;
         constexpr int kDecimals = 4;
         /// Room for the fixed line with large numbers in every key, so that writing it does not grow the string
-        constexpr size_t kLineReserve = 1536;
+        constexpr size_t kLineReserve = 2048;
 
         /// The sorted values of one field of the samples
         template <typename Field>
@@ -84,6 +84,9 @@ namespace BECore::Stress {
         sample.primitives = stats.draws.primitives;
         sample.triangles = stats.draws.triangles;
         sample.textureSwitches = stats.draws.textureSwitches;
+        sample.batchBreaks = stats.draws.batchBreaks;
+        sample.geometryUploadBytes = stats.draws.geometryUploadBytes;
+        sample.textureUploadBytes = stats.draws.textureUploadBytes;
         sample.allocCount = stats.allocCount;
         sample.allocBytes = stats.allocBytes;
         return sample;
@@ -181,6 +184,11 @@ namespace BECore::Stress {
             primitives += static_cast<double>(sample.primitives);
             triangles += static_cast<double>(sample.triangles);
             textureSwitches += sample.textureSwitches;
+            for (size_t i = 0; i < kBatchBreakCount; ++i) {
+                summary.batchBreaks[i] += sample.batchBreaks[i];
+            }
+            summary.geometryUploadBytes += static_cast<double>(sample.geometryUploadBytes);
+            summary.textureUploadBytes += static_cast<double>(sample.textureUploadBytes);
             allocCount += static_cast<double>(sample.allocCount);
             allocBytes += static_cast<double>(sample.allocBytes);
         }
@@ -191,6 +199,11 @@ namespace BECore::Stress {
         summary.primitives = primitives / n;
         summary.triangles = triangles / n;
         summary.textureSwitches = textureSwitches / n;
+        for (double& breaks : summary.batchBreaks) {
+            breaks /= n;
+        }
+        summary.geometryUploadBytes /= n;
+        summary.textureUploadBytes /= n;
         summary.allocsPerFrame = allocCount / n;
         summary.allocBytesPerFrame = allocBytes / n;
         summary.stages = stages.Mean();
@@ -209,6 +222,12 @@ namespace BECore::Stress {
         AddBool(line, "allocTracking", context.allocTracking);
         AddNumber(line, "allocsPerFrame", summary.allocsPerFrame);
         AddInteger(line, "atlases", context.atlases);
+        AddNumber(line, "batchBreakBlend", summary.batchBreaks[+BatchBreak::Blend]);
+        AddNumber(line, "batchBreakBoundary", summary.batchBreaks[+BatchBreak::Boundary]);
+        AddNumber(line, "batchBreakClip", summary.batchBreaks[+BatchBreak::Clip]);
+        AddNumber(line, "batchBreakFull", summary.batchBreaks[+BatchBreak::Full]);
+        AddNumber(line, "batchBreakTexture", summary.batchBreaks[+BatchBreak::Texture]);
+        AddNumber(line, "batchBreakUnbatched", summary.batchBreaks[+BatchBreak::Unbatched]);
         AddInteger(line, "batching", context.batching ? 1 : 0);
         AddInteger(line, "churn", context.load.churn);
         AddInteger(line, "count", context.count);
@@ -221,6 +240,7 @@ namespace BECore::Stress {
         AddNumber(line, "frameMsP50", summary.frameMsP50);
         AddNumber(line, "frameMsP99", summary.frameMsP99);
         AddInteger(line, "frames", summary.frames);
+        AddNumber(line, "geometryUploadBytes", summary.geometryUploadBytes);
         AddNumber(line, "gpuMs", summary.stages.gpuMs);
         AddNumber(line, "gpuMsP50", summary.stagesP50.gpuMs);
         AddNumber(line, "gpuMsP99", summary.gpuMsP99);
@@ -235,6 +255,7 @@ namespace BECore::Stress {
         AddNumber(line, "submitMs", summary.stages.submitMs);
         AddNumber(line, "submitMsP50", summary.stagesP50.submitMs);
         AddNumber(line, "textureSwitches", summary.textureSwitches);
+        AddNumber(line, "textureUploadBytes", summary.textureUploadBytes);
         AddNumber(line, "triangles", summary.triangles);
         AddNumber(line, "updateMs", summary.stages.updateMs);
         AddNumber(line, "updateMsP50", summary.stagesP50.updateMs);

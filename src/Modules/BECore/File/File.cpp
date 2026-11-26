@@ -388,6 +388,13 @@ namespace BECore {
         if (count < size && SDL_GetIOStatus(_stream) == SDL_IO_STATUS_ERROR) {
             return std::unexpected(Failure("read"));
         }
+        if (count < size) {
+            // libc's stream keeps its end-of-file mark and would read nothing more, also after the file has grown. A seek to where it is drops
+            // the mark; a relative seek by 0 would not, SDL answers that one without calling libc
+            if (const Sint64 position = SDL_TellIO(_stream); position >= 0) {
+                SDL_SeekIO(_stream, position, SDL_IO_SEEK_SET);
+            }
+        }
         return count;
     }
 

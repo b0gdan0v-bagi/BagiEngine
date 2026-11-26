@@ -9,6 +9,8 @@
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
 #include <Events/ConfigEvents.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorPanelRegistry.h>
+#include <Widgets/Feedback/UIMotion.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/PanelAssets/PanelInterpreter.h>
@@ -33,6 +35,10 @@ namespace BECore {
      * A change of the asset's config is only noted by the event and applied at the next `Update` or at the end of the command being run: the event can
      * come from inside a model's own command (applying the panel's file), and a reload may drop that very model.
      *
+     * **Fade.** A `Docked` or `Floating` window fades in when it is opened and out when it is closed; one that is open when the widget first reads its
+     * asset is opaque at once. While it fades out the panel counts as closed (no command, no `Update`, the models already told) and the window is
+     * still begun, with no input and an empty body. `SetOpen` (a workspace switch) skips the fade.
+     *
      * **Window kinds** (`PanelAsset::window`). `Docked` is an ordinary window. `Floating` is `ImGuiWindowFlags_NoDocking`. `Dialogs` is always open (the open flag is forced true every
      * `Update`, and the asset's `command`, when it has one, does not toggle it): the host is a one-pixel window that draws nothing and takes no input, with no close button, so the only
      * thing seen of it is the modals of its popups. A banner of a reload that failed is therefore not visible on a `Dialogs` host; the last good asset keeps working.
@@ -47,7 +53,7 @@ namespace BECore {
      *
      * A click is emitted as `EditorCommandEvent` after the window is closed, never inside the walk (`PanelInterpreter`). Editor only.
      */
-    class AssetPanelWidget : public IWidget, public IPanelBar {
+    class AssetPanelWidget : public IWidget, public IPanelBar, public IEditorPanel {
         BE_CLASS(AssetPanelWidget)
     public:
         AssetPanelWidget() = default;
@@ -67,9 +73,11 @@ namespace BECore {
         /// Names the config to read, as the `asset` attribute does; call before `Initialize`
         void SetAsset(StringView name);
 
-        [[nodiscard]] bool IsOpen() const {
+        [[nodiscard]] bool IsOpen() const override {
             return _open;
         }
+
+        void SetOpen(bool open) override;
 
         /// What `Begin` gets: the title and `###<asset id>`. The window's own `Name` keeps the first one in a floating window, so a test reads it here
         [[nodiscard]] const String& GetWindowTitle() const {
@@ -101,9 +109,13 @@ namespace BECore {
         void NotifyOpenChanged();
         void DrawBanner() const;
         void DrawBarBanner() const;
+        /// A frame of a closed window that has not faded out yet; nothing once it has
+        void DrawFadingOut();
         void EmitClick();
         /// Keeps the registration of a `Bar` asset and drops it when a reload made the asset another kind
         void SyncBarRegistration(bool bar);
+        /// Keeps a `Docked` asset, and no other kind, in EditorPanelRegistry under the asset's id
+        void SyncPanelRegistration(const PanelAsset& asset);
         /// The `EndUpdate` of a bar frame whose `Update` ran, once
         void EndBarFrame();
         void SyncTitle();
@@ -125,6 +137,10 @@ namespace BECore {
         bool _hasTitleBinding = false;
         /// False when the editor's host does not offer the asset's `command`
         bool _offered = true;
+        Fade _fade;
+        /// The size of what the open window drew last, which the empty body of a fading one keeps
+        float _contentWidth = 0.0f;
+        float _contentHeight = 0.0f;
         uint32_t _preparedVersion = 0;
         bool _open = false;
         bool _openDecided = false;
@@ -136,8 +152,11 @@ namespace BECore {
         String _pendingFailure;
         /// An `Update` of a `Bar` asset ran and its `EndUpdate` is still owed
         bool _barFrameOpen = false;
-        /// Declared last: it unregisters before the members the bar uses are gone
+        /// The id the panel is registered under in EditorPanelRegistry
+        String _panelId;
+        /// Declared last, as the next one: they unregister before the members the bar and the panel use are gone
         PanelBarHandle _barHandle;
+        EditorPanelHandle _panelHandle;
     };
 
 }  // namespace BECore

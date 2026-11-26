@@ -1,5 +1,6 @@
 #include "ArtGenSession.h"
 
+#include <BECore/Audio/AudioSourceComponent.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
@@ -9,7 +10,9 @@
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneControl.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
 #include <EASTL/sort.h>
@@ -27,6 +30,17 @@ namespace BECore {
         double SteadySeconds() {
             const auto now = std::chrono::steady_clock::now().time_since_epoch();
             return std::chrono::duration<double>(now).count();
+        }
+
+        /// Reports to @p service that its call running now wrote @p field of the node's TComponent; nothing without a service or the component
+        template <typename TComponent>
+        void ReportUsedOn(ControlService* service, const SceneNode& node, StringView field) {
+            if (service == nullptr) {
+                return;
+            }
+            if (const auto component = node.GetComponent<TComponent>()) {
+                ReportNodeTouched(*service, node, component->GetTypeMeta().typeName, field);
+            }
         }
 
     }  // namespace
@@ -113,7 +127,11 @@ namespace BECore {
         }
         ArtGenImagePlan plan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}};
         plan.atlas = atlas != nullptr ? *atlas : AtlasOfRun();
-        return _acceptor(*variant, sprite, plan, node);
+        auto accepted = _acceptor(*variant, sprite, plan, node);
+        if (accepted && node != nullptr) {
+            ReportUsedOn<SpriteRendererComponent>(_registeredOn, *node, "spriteId");
+        }
+        return accepted;
     }
 
     std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
@@ -134,7 +152,11 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
             }
         }
-        return _soundAcceptor(*variant, target, settings, node);
+        auto accepted = _soundAcceptor(*variant, target, settings, node);
+        if (accepted && node != nullptr) {
+            ReportUsedOn<AudioSourceComponent>(_registeredOn, *node, "clip");
+        }
+        return accepted;
     }
 
     void ArtGenSession::RegisterControl(ControlService& service) {
@@ -185,15 +207,21 @@ namespace BECore {
                               {ControlParamInfo{"job", "string", false, "a job of a set: cancel it (a pending one at once, the running one through the service)"},
                                ControlParamInfo{"set", "string", false, "the set of the job (default: the only active set that has the job), or with all the set to cancel"},
                                ControlParamInfo{"all", "boolean", false, "with set: cancel every pending job and the running one"}}});
-        service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, the current run with its images, and a summary of each set", {}});
+        service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, the current run with its images, and a summary of each set", {}, /*quiet=*/true});
         service.DescribeMethod("artgen_setup", ControlMethodInfo{"Asks the art generation service to plan, install, start or stop its generator (the panel's Set up / Start / Stop)",
                                                                  {ControlParamInfo{"action", "string", true, "Plan, Install, Start, Stop, or cancel (an install in work)"}}});
         Register<&ArtGenSession::HandleSavePreset>(service, *this, "artgen_save_preset");
         service.DescribeMethod("artgen_save_preset", ControlMethodInfo{"Writes a style preset of the game (artgen/presets/<name>.json), as the panel's Save does",
                                                                        {ControlParamInfo{"name", "string", true, "1 to 64 of A-Z a-z 0-9 _ -"},
                                                                         ControlParamInfo{"preset", "object", true, "the preset (tools/artgen/CLAUDE.md, \"Presets\")"}}});
-        service.DescribeMethod("artgen_poll",
-                               ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request (with outDir and name for a job of a set) or a cancel out", {}});
+        service.DescribeMethod(
+            "artgen_poll",
+            ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request (with outDir and name for a job of a set) or a cancel out", {}, /*quiet=*/true});
+        service.DescribeMethod("artgen_progress",
+                               ControlMethodInfo{"Called by the art generation service: how far the image in work is; stale when the request is not the current one", {}, /*quiet=*/true});
+        service.DescribeMethod("artgen_image", ControlMethodInfo{"Called by the art generation service: one finished image or sound of the request", {}, /*quiet=*/true});
+        service.DescribeMethod("artgen_done", ControlMethodInfo{"Called by the art generation service: the request ended, with an error when it failed", {}, /*quiet=*/true});
+        service.DescribeMethod("artgen_setup_report", ControlMethodInfo{"Called by the art generation service: the plan, the progress or the end of a setup action", {}, /*quiet=*/true});
     }
 
     std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants, Optional<ArtGenReference> reference) {

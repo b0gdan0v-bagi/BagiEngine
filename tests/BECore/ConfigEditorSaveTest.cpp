@@ -15,6 +15,7 @@
 #include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
 #include <Widgets/ConfigEditor/ReflectedConfigDocument.h>
 #include <Widgets/ConfigEditor/StagedChanges.h>
+#include <Widgets/Feedback/ToastEvents.h>
 
 namespace BECore::Tests {
 
@@ -323,6 +324,22 @@ namespace BECore::Tests {
             Vector<PoolString> _names;
         };
 
+        class ErrorToastRecorder : public SubscriptionHolder {
+        public:
+            ErrorToastRecorder() {
+                Subscribe<EditorToastEvent, &ErrorToastRecorder::OnToast>(this);
+            }
+
+            Vector<String> errors;
+
+        private:
+            void OnToast(const EditorToastEvent& event) {
+                if (event.level == ToastLevel::Error) {
+                    errors.push_back(event.text);
+                }
+            }
+        };
+
     }  // namespace
 
     /// The Config Editor over a manager of its own on a `config` folder in a temporary directory: the engine's files are never written
@@ -372,6 +389,20 @@ namespace BECore::Tests {
         EXPECT_NE(ReadFile(_dir / "PanelConfig.xml").find("two"), String::npos);
         EXPECT_TRUE(_model->GetStagedChanges().IsEmpty());
         EXPECT_FALSE(_model->ShowsChangedOnDiskNotice()) << "the event of its own save is not news to the panel";
+    }
+
+    TEST_F(ConfigEditorChangeTest, AFailedSaveAsksForAnErrorToastAndKeepsTheStagedEdits) {
+        const ErrorToastRecorder toasts;
+        StageNewValue("two");
+        // A folder where the file was: nothing can be written there
+        RemoveFileIfPresent(_dir / "PanelConfig.xml");
+        MakeDirectory(_dir / "PanelConfig.xml");
+
+        _model->SaveSelectedConfig();
+
+        ASSERT_EQ(toasts.errors.size(), 1u);
+        EXPECT_EQ(toasts.errors[0], "Save failed: PanelConfig");
+        EXPECT_FALSE(_model->GetStagedChanges().IsEmpty());
     }
 
     TEST_F(ConfigEditorChangeTest, AChangeOfTheSelectedConfigDropsTheStagedEditsAndSaysSo) {

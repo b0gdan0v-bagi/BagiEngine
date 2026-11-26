@@ -248,12 +248,14 @@ namespace BECore {
 
         service.DescribeMethod("frame_stats", {"The last frames with stage times, draws, allocations, arena and pool totals and counters, oldest first; arenas, pools: the counters of every arena and "
                                                "block pool; tags: the totals of every memory tag, each frame's tagAllocCount and tagLiveBytes by tag name",
-                                               {{"frames", "integer", false, Format("How many frames, 1 to {} (default 1)", FrameStatsCollector::kFrameHistory)}}});
+                                               {{"frames", "integer", false, Format("How many frames, 1 to {} (default 1)", FrameStatsCollector::kFrameHistory)}},
+                                               /*quiet=*/true});
         service.DescribeMethod("profiler_dump", {"Writes the Chrome trace of the run (the game has to record one)",
                                                  {{"path", "string", false, Format("A relative file name without '..' (default {})", kDefaultTracePath)}}});
         service.DescribeMethod("zone_allocs", {"Allocations per profiler zone, per zone and allocation name (names), per zone and size bucket (sizes) and the totals",
                                                {{"top", "integer", false, Format("How many zones, names and size histograms, 1 to {} (default {})", kMaxTopZones, kDefaultTopZones)},
-                                                {"reset", "boolean", false, "Clear the per-zone, per-name and per-size counts after answering"}}});
+                                                {"reset", "boolean", false, "Clear the per-zone, per-name and per-size counts after answering"}},
+                                               /*quiet=*/true});
     }
 
 }  // namespace BECore

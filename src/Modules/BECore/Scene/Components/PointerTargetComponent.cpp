@@ -68,6 +68,12 @@ namespace BECore {
         OnTargetDraw();
     }
 
+    void PointerTargetComponent::OnEnabledChanged() {
+        // The press stays with UIInput, so its release is still not the game's
+        _over.clear();
+        OnTargetEnabledChanged();
+    }
+
     void PointerTargetComponent::RefreshInputOrder() {
         // Unregister forgets a held press and the hover, so the order is touched only when the draw order really moved (a node
         // added, a layer edited). The pointers over the target are forgotten with them: no exit is told for those
@@ -100,7 +106,8 @@ namespace BECore {
     }
 
     bool PointerTargetComponent::ContainsPoint(float outputX, float outputY) const {
-        if (!IsSceneActive()) {
+        // Asked here too: before the first draw pass nothing else leaves a disabled target out
+        if (!IsEnabled() || !IsSceneActive()) {
             return false;
         }
         const Scene& scene = GetScene();
@@ -146,12 +153,26 @@ namespace BECore {
         _over.erase(eastl::remove_if(_over.begin(), _over.end(), [&](const OverPointer& over) { return over.which == which; }), _over.end());
     }
 
+    bool PointerTargetComponent::ForgetIfDeaf() {
+        if (IsEnabled() && TryGetScene() != nullptr) {
+            return false;
+        }
+        _over.clear();
+        return true;
+    }
+
     bool PointerTargetComponent::OnMouseButtonDown(const SDL_MouseButtonEvent& event) {
+        if (ForgetIfDeaf()) {
+            return false;
+        }
         const PointerEvent pointer = MakeEvent(event.which, event.button, event.clicks, event.x, event.y);
         return OnPointerPress(pointer);
     }
 
     bool PointerTargetComponent::OnMouseButtonUp(const SDL_MouseButtonEvent& event) {
+        if (ForgetIfDeaf()) {
+            return false;
+        }
         // A release that reached this target by the walk belongs to a press of the game, or of another button or pointer: not ours to take
         if (!CoreManager::GetUIInput().IsDeliveringCapture(*this)) {
             return false;
@@ -162,6 +183,9 @@ namespace BECore {
     }
 
     bool PointerTargetComponent::OnMouseMotion(const SDL_MouseMotionEvent& event) {
+        if (ForgetIfDeaf()) {
+            return false;
+        }
         const bool holdsPress = CoreManager::GetUIInput().HoldsPress(*this, event.which);
         // A button is held and this target did not take its press: a drag of the game, which passing over the shape does not interrupt
         if (!holdsPress && event.state != 0) {
@@ -178,7 +202,7 @@ namespace BECore {
         const bool entered = ContainsPoint(event.x, event.y) && NoteOver(pointer);
         if (entered) {
             OnPointerEnter(pointer);
-            if (guard.Destroyed()) {
+            if (guard.Destroyed() || ForgetIfDeaf()) {
                 return true;
             }
         }
@@ -189,7 +213,7 @@ namespace BECore {
         if (OnPointerMove(pointer)) {
             return true;
         }
-        if (entered && !guard.Destroyed()) {
+        if (entered && !guard.Destroyed() && !ForgetIfDeaf()) {
             // Not taken: UIInput records no hover for this target, so it will send no leave for this entry
             ForgetOver(pointer.which);
             OnPointerExit(pointer);
@@ -198,6 +222,9 @@ namespace BECore {
     }
 
     bool PointerTargetComponent::OnMouseWheel(const SDL_MouseWheelEvent& event) {
+        if (ForgetIfDeaf()) {
+            return false;
+        }
         PointerEvent pointer = MakeEvent(event.which, 0, 0, event.mouse_x, event.mouse_y);
         pointer.wheelX = event.x;
         pointer.wheelY = event.y;
@@ -205,6 +232,9 @@ namespace BECore {
     }
 
     void PointerTargetComponent::OnPointerLeave(uint32_t which) {
+        if (ForgetIfDeaf()) {
+            return;
+        }
         const auto it = eastl::find_if(_over.begin(), _over.end(), [&](const OverPointer& over) { return over.which == which; });
         if (it == _over.end()) {
             return;

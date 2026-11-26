@@ -44,7 +44,7 @@ namespace BECore {
      * **Regions.** The game publishes named rectangles with SetRegion() and an element places itself in one with `region="name"` (UIRectSpec::region).
      */
     class UICanvasComponent : public IComponent, public IUIInputHandler {
-        BE_CLASS(UICanvasComponent, ICON = layout - dashboard)
+        BE_CLASS(UICanvasComponent, ICON = layout - dashboard, CATEGORY = ui)
     public:
         UICanvasComponent() = default;
         ~UICanvasComponent() override;
@@ -78,7 +78,7 @@ namespace BECore {
 
         /// A screen in a file of its own, a UIDocument such as `assets/ui/hud.ui.xml`. Its elements and variants come first, the inline ones below come after them
         /// (drawn on top, and a later variant wins). The elements of a file belong to the file: they are not saved back with the scene
-        BE_REFLECT_FIELD PoolString _source;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(asset(UiDocument)) PoolString _source;
 
         /// The elements and variants written inline in the scene file (`<elements><element type="UIPanel" .../></elements>`, `<variants>`). Initialize() hands them to
         /// the layout; they stay here as the part of the screen that is saved back. Elements added in code are not in this list
@@ -158,7 +158,7 @@ namespace BECore {
             return _inputOrder;
         }
 
-        /// True while the canvas is shown, has input on and its scene is the active one: the only time it consumes an event. A canvas that is hiding takes none, unless `_transitionInput`
+        /// True while the canvas is enabled and shown, has input on and its scene is the active one: the only time it consumes an event. A canvas that is hiding takes none, unless `_transitionInput`
         [[nodiscard]] bool TakesInput() const;
 
         /// True between a mouse press that this canvas took and its release: the canvas keeps consuming the motion in between
@@ -174,6 +174,10 @@ namespace BECore {
 
         /// The same in every canvas of @p scene; true when at least one element was found
         static bool SetElementVisibleByName(Scene& scene, PoolString elementName, bool visible);
+
+    protected:
+        /// A canvas that goes to sleep forgets its hover, press, popups, tooltip and the buttons it took
+        void OnEnabledChanged() override;
 
     private:
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;

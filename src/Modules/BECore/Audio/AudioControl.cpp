@@ -139,7 +139,7 @@ namespace BECore {
         service.RegisterHandler("audio_state", [&manager](ControlCall& call) { HandleState(call, manager); });
         service.RegisterHandler("audio_set", [&manager](ControlCall& call) { HandleSet(call, manager); });
 
-        service.DescribeMethod("audio_state", {"The audio backend, the levels and the last sounds the game asked for", {}});
+        service.DescribeMethod("audio_state", {"The audio backend, the levels and the last sounds the game asked for", {}, /*quiet=*/true});
         service.DescribeMethod("audio_set", {"Sets the volume or the mute of the master or a bus",
                                              {{"bus", "string", true, "master, sfx, music or ui"},
                                               {"volume", "number", false, "slider position 0 to 1 (the gain is its cube)"},

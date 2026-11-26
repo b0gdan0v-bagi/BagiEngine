@@ -16,7 +16,7 @@
 
 ## Files
 
-`PoolString.h` (the type, `PoolStringStats`, `PoolAdoptOptions`, the opaque `PoolAdoptError`) and `PoolBlock.h` (`PoolBlock`, `PoolAdoptResult` and the `CORE_ENUM` of `PoolAdoptError`; a caller of `AdoptBlock` includes it) and `PoolString.cpp` (wrappers over the one process-wide storage); `PoolStringEntry.h` (the entry, `PoolEntryBytes`, `ConstructPoolEntry`: the header a cook and a loader may include); `PoolEntryTable.h` (the table); `PoolStringStorage.h/.cpp` (the pool itself); `PoolBlockSource.h/.cpp` (where blocks come from); `StaticPoolString.h`, `PoolStringMap.h`.
+`PoolString.h` (the type, `PoolStringStats`, `PoolAdoptOptions`, the opaque `PoolAdoptError`) and `PoolBlock.h` (`PoolBlock`, `PoolAdoptResult` and the `CORE_ENUM` of `PoolAdoptError`; a caller of `AdoptBlock` includes it) and `PoolString.cpp` (wrappers over the one process-wide storage); `PoolStringEntry.h` (the entry, `PoolEntryBytes`, `ConstructPoolEntry`: the header a cook and a loader may include); `PoolEntryTable.h` (the table); `PoolStringStorage.h/.cpp` (the pool itself); `PoolStringSnapshot.h` (the rows of a snapshot, `PoolStringOrigin`, `PoolBlockKind`; not in the PCH); `PoolStringObserver.h`; `PoolStringMonitor.h/.cpp`; `PoolStringAnalysis.h/.cpp`; `PoolStringsControl.h/.cpp` and `PoolStringsAnswers.h/.cpp` (the control method); `PoolBlockSource.h/.cpp` (where blocks come from); `StaticPoolString.h`, `PoolStringMap.h`.
 
 ## Storage (`PoolStringStorage.h/.cpp`)
 
@@ -30,6 +30,39 @@
 - **`RegisterStatic`**: puts the **pointer** of a `const` entry that lives for the whole process into the table (no hashing, copy or allocation of text; the pool never writes to it). The first entry of a text wins, whoever it was (`Intern`, another ready entry, an adopted block); each registration's `*value` is set to the winner, so a caller uses `*value` and not its own entry. The loser stays in the program image, counted in `staticDuplicates`. A batch that finds every text takes no unique lock.
 - **`AllocateBlock(bytes)` / `AdoptBlock(block, usedBytes, out, options)`**: for a loader that reads a cooked string section straight into pool memory. `AllocateBlock` gives a `PoolBlock` (a move-only, non-owning token; the pool owns the memory from then on, 8-aligned, content unspecified). **A successful `AdoptBlock` spends the token** (`Data()` null): the entries are read-only for everyone from then on, so no pointer a caller took from the token may be written through. The loader lays entries one after another in the layout of `PoolStringEntry.h` and adopts. **Validation comes first, linking after**: the walk checks `usedBytes` (at most the capacity, a multiple of 8), that every header, text and NUL lie inside it, that no text is longer than `maxTextBytes` (default: no limit; a loader of untrusted bytes passes its own, `TextTooLong`), that the walk ends exactly at it, and with `verifyHashes` (default on) every hash; one bad byte refuses the whole block (`PoolAdoptError`, a `CORE_ENUM`: its name goes into a log line) and links nothing, and the block stays adoptable. A token that is empty (moved from or spent) or of another storage is refused as `NotOwned`; a refusal leaves the token as it was. The checks run outside the unique lock (they hash every text); the link takes it once. A text already in the pool, or earlier in the block, keeps its older entry and the block's entry is **dead weight** (`deadStrings`, `deadBytes`), as is an entry of the empty text. `out[i]` is the string that won, so a caller must use `out` and never keep a pointer to its own entry. With `verifyHashes` off a wrong hash is the caller's contract. The corpus of untrusted bytes through it is `FuzzBinaryContent` (`tests/Fuzz/CLAUDE.md`).
 - **`Reserve(strings, bytes)`** is a hint: grows the table once and takes a block of `bytes` that becomes current when the current one has less free; it limits and fails nothing. The counts may come from a file header, so a part that is not sane is **ignored** (not clamped): `strings` when the table would pass `PoolEntryTable::kMaxReservedEntries` (the sum is checked before it is formed), `bytes` above `kDefaultReservedBytes` (a block the arena could not give would come from the heap, which aborts). `AllocateBlock` has no such leniency: its size is asserted, so a loader validates a size it read.
+
+## Inspection
+
+For tools that look at the pool or watch it grow (the editor's panel: `src/Widgets/PoolStrings/CLAUDE.md`); nothing here is on the hit path.
+
+- **Block records.** The storage records every block, its own ones included: kind, capacity, bytes used by entries, and for an adopted one its dead entries and its source name (`PoolAdoptOptions::sourceName`, copied, never interned; `LoadContentFile` gives the path). They are written under the unique lock only. No table slot or entry holds anything for this: an origin is derived from the address.
+- **`TakeSnapshot(snapshot)`** refills a `PoolStringSnapshot` with the statistics, every string of the table (`PoolStringOrigin`: an entry in no block of the pool is `Static`) and every block. Table and blocks are copied under one shared lock, so they agree; the origins are found after it is released. It walks the whole table: on demand, not per frame.
+- **`GetTotals()`** is the per-frame read: runtime and other (static and adopted) strings and bytes, with no walk over the thread counters.
+- **`SetObserver` / `RemoveObserver`** (`IPoolStringObserver`): one at a time, told each string `Intern` and `InternBatch` copy in, under the unique lock on the interning thread, so **it must not call the pool**. Both take that lock, so after a removal no call is running. A miss with no observer costs one null check.
+- `Details::GetProcessPoolStorage()` is the storage behind `PoolString`.
+- **Growth** (`PoolStringMonitor`, over the process storage: `CoreManager::GetPoolStringMonitor()`). A steady frame should copy nothing into the pool: `runtimeStrings` and `runtimeBytes` of a frame are the figure to watch, since a `PoolString` made every frame from changing data is a leak. `otherStrings` (registrations, adoptions) is apart: the first use of a constant is no leak. A frame is the change since the end of the one before, so nothing falls between frames (idle cycles of the manual clock count in the next); held frames are frames too. `CoreManager::OnGameCycle` brackets it with the number `frame_stats` gives the frame. A steady frame of the monitor allocates nothing.
+- **Recording** is off, with no observer installed, until `SetRecording(true)`. It keeps each new runtime string with the frame and the innermost profiler zone of the interning thread, up to `kMaxRecords` (the rest are counted as dropped), and `GroupByZone` gives them by zone. **Zones are known only with `ENGINE_PROFILER_ALLOC`** (`ProfileZone` tracks the current zone only for the allocation counts): elsewhere every record has no zone. The observer takes the monitor's mutex under the pool's lock, so the monitor never calls the pool while it holds that mutex.
+- **Checks** (`PoolStringAnalysis`, pure over a snapshot): `FindHashCollisions` (two texts, one hash: `Find` still tells them apart, a `consteval` equality does not), `FindDuplicateTexts` (one text in two entries, so two unequal strings; only an entry with a wrong hash can make one: an unverified block, or a hashed batch or `RegisterStatic` in a build without asserts) and `Search` (text part with ASCII case ignored, origin, block source, a sort key, either direction).
+
+## Control method
+
+`pool_strings` (`RegisterPoolStringsControl`, over the monitor of the process pool). The pool's view for tests and tools: each call takes a snapshot, so it is not for every frame, and it interns nothing of what the client sends.
+
+| Param | Value |
+|-------|-------|
+| `frames?` | 1 to `kFrameHistory` ended frames of `growth` (default 60) |
+| `limit?` | 0 to 1000 search rows (default 20) |
+| `query?`, `source?` | the search: a part of the text, ASCII case ignored; `static`, `runtime` or `adopted` |
+| `record?` | switches recording before the answer; only a build with the editor, else the code `not_available` |
+| `reset?` | drops the records after the answer |
+
+A wrong type or value is `invalid_params` and switches nothing. The answer (`PoolStringsAnswer`):
+
+- `checks {duplicateTexts, hashCollisions}`: numbers of pairs.
+- `growth {bytes, frames [{frame, otherStrings, runtimeBytes, runtimeStrings}], strings}`: the oldest frame first; `bytes` and `strings` sum the runtime additions of the frames listed.
+- `recording {dropped, enabled, zones [{bytes, file, lastFrame, line, strings, texts, zone}]}`: the most bytes first; `texts` are the first few strings of the zone; without a zone it is `(no zone)`.
+- `search {matched, rows [{file, hash, length, source, text}]}`: by text; `file` is the source name of the string's block; `hash` is 16 hex digits (64 bits do not fit a JSON double). `source` and `query` select rows only, not the other sections.
+- `summary`: the fields of `PoolStringStats` under their names, `tableLoad`, and `blocks [{capacity, deadBytes, deadStrings, kind, source, used}]` with `kind` `runtime`, `allocated` or `adopted`.
 
 ## Loading
 

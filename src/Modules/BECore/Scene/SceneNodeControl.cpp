@@ -13,7 +13,7 @@ namespace BECore {
 
     namespace {
 
-        void HandleSceneSetNode(ControlCall& call, SceneProvider& activeScene) {
+        void HandleSceneSetNode(ControlCall& call, ControlService& service, SceneProvider& activeScene) {
             const auto path = RequireParamString(call.Params(), "node");
             if (!path) {
                 call.Fail(path.error());
@@ -42,6 +42,7 @@ namespace BECore {
             }
             // Not a write of the reflected field: only SetLayer() tells the scene to order its draw list again
             (*node)->SetLayer(static_cast<int32_t>(*layer));
+            ReportNodeTouched(service, **node);
             SceneEvents::SceneNodeEditedEvent::Emit(scene, *node);
             SceneSetNodeAnswer answer;
             answer.layer = (*node)->GetLayer();
@@ -52,7 +53,7 @@ namespace BECore {
     }  // namespace
 
     void RegisterSceneNodeControl(ControlService& service, SceneProvider activeScene) {
-        service.RegisterHandler("scene_set_node", [scene = std::move(activeScene)](ControlCall& call) mutable { HandleSceneSetNode(call, scene); });
+        service.RegisterHandler("scene_set_node", [&service, scene = std::move(activeScene)](ControlCall& call) mutable { HandleSceneSetNode(call, service, scene); });
         service.DescribeMethod("scene_set_node", {"Sets the draw layer of a node of the active scene, as an edit in the inspector does",
                                                   {{"node", "string", true, "The path of the node, as in scene_get"}, {"layer", "integer", true, "The draw layer: a lower one is drawn first"}}});
     }

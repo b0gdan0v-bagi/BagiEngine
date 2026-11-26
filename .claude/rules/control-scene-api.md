@@ -16,7 +16,7 @@ paths:
 
 # The scene by name over the control API (`scene_tree`, `scene_get`, `scene_set`, `scene_set_node`, `scene_pick`, `scene_save`)
 
-Additive to protocol version 1. `RegisterSceneControl` (`BECore/Scene/SceneControl.h`, registered by `CoreManager`) works on the **active scene**, asked on every request, in both run modes. `scene_set_node`, `scene_pick` and `scene_save` have registrations of their own over the same scene (`RegisterSceneNodeControl`, `RegisterScenePickControl`, `RegisterSceneSaveControl`, each in the header of its name).
+Additive to protocol version 1. `RegisterSceneControl` (`BECore/Scene/SceneControl.h`, registered by `CoreManager`) works on the **active scene**, asked on every request, in both run modes. `scene_set_node`, `scene_pick` and `scene_save` have registrations of their own over the same scene (`RegisterSceneNodeControl`, `RegisterScenePickControl`, `RegisterSceneSaveControl`, each in the header of its name). The touch record these methods and games feed: `control-activity.md`.
 
 ## Node paths (`Scene/SceneNodePath.h`)
 
@@ -40,6 +40,8 @@ The names from below the scene root down to the node, joined by `/`: `Board/Cell
 | `scene_pick` | `{x, y}` | `{hit, node}` |
 | `scene_save` | none | `{file, notes, persistent, scene}` |
 
+`scene_tree`, `scene_get` and `scene_pick` are quiet (not in the activity journal), the writes (`scene_set`, `scene_set_node`, `scene_save`) are not.
+
 - `scene_tree` lists depth first, a parent before its children; with `node` that node and what is below it. `limit` is 1 to `kMaxTreeNodes` (default `kDefaultTreeNodes`). `truncated` says nodes are left out: the limit, or a node deeper or longer than a path may be. Every listed `path` reads back to its node.
 - `component` is a type name (`TransformComponent`); `index` picks among several of that type on one node, from 0.
 - `path` of `scene_get` and `scene_set` is a property path as in `get_property` (`color.r`, `viewWidth`) with its rules (`Reflection/CLAUDE.md`, "Reflection methods"); `fields` is every reflected field of the component as saved.
@@ -47,18 +49,30 @@ The names from below the scene root down to the node, joined by `/`: `Board/Cell
 
 ## Writing (`scene_set`)
 
-- The value rules and refusals are those of `set_property` (`type_mismatch`, `out_of_range` with a field's `range`, `read_only`, `hidden`); a refused write changes nothing and sends no event. It writes one leaf and adds or removes no node, component or list element; the layer of a node is `scene_set_node`'s.
+- The value rules and refusals are those of `set_property` (`type_mismatch`, `out_of_range` with a field's `range`, `read_only`, `hidden`); a refused write changes nothing and reports nothing. It writes one leaf and adds or removes no node, component or list element; the layer of a node is `scene_set_node`'s.
+- `enabled` is the one hidden field it writes: `true` or `false` (else `type_mismatch`), through `IComponent::SetEnabled`, then as any successful write; `scene_get` reads it (`Scene/CLAUDE.md`, "Component lifecycle").
 - A name field (`PoolString`) takes only a text the pool already holds (a known sprite, action or path, or `""`), else `interning`: a client must not grow the pool.
 - The editor's Locked and Hidden flags do not stop a write: they are the human editor's own state, and the method also works in the Game mode.
-- A successful write calls `IComponent::OnPropertyWritten(<top-level field>)` and sends `SceneEvents::SceneNodeEditedEvent`. For it the Scene Editor marks the active scene unsaved, unless the node or one above it is generated (Save leaves it out).
+- A successful write calls `IComponent::OnPropertyWritten(<top-level field>)`, reports a touch of the node with the component and that field (`control-activity.md`) and sends `SceneEvents::SceneNodeEditedEvent`. For it the Scene Editor marks the active scene unsaved, unless the node or one above it is generated (Save leaves it out).
 - A component rebuilds what it keeps from a field there: the sprite renderer its texture (`spriteId`, `texturePath`; a `texturePath` written while `spriteId` is set is replaced by the sprite's, which the answer shows), the audio source its clip (`clip`), a canvas its layout (`elements`). A component of a game overrides it for what it caches.
 - **Only at the next load** (after a save): a canvas's `source` and `variants`, and anything a component reads in `Initialize()` or `OnAttached()` alone.
 
 ## Writing what a node holds (`scene_set_node`)
 
 - `layer` is the node's draw layer, an `int32`. It goes through `SceneNode::SetLayer()`, which a write of the reflected field would bypass, leaving the draw order stale.
-- The event, the unsaved mark and the editor's flags are as for `scene_set`.
+- The event, the unsaved mark and the editor's flags are as for `scene_set`; it reports a touch of the node as a whole.
 - A node's name has no method: it is a `PoolString`, so a new name would grow the pool with a client's text.
+
+## Who reports a touch
+
+Besides `scene_set` and `scene_set_node`, a call of a client reports (`control-activity.md`):
+
+| Method | Node | Component, field |
+|--------|------|------------------|
+| `ui_click` that found its element | the canvas's | the canvas component, no field; also when something above took the press |
+| `artgen_accept` with `useOnSelected` that succeeded | the selected one | the sprite renderer's `spriteId`, or the audio source's `clip` |
+
+The Generate panel's own buttons record nothing, `artgen_accept_set` touches no node, and `click_at`, `wheel_at`, `imgui_input` and a game's `set_property` / `call_method` report none.
 
 ## Picking a node on the screen (`scene_pick`)
 

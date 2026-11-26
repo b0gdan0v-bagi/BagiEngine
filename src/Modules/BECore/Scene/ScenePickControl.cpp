@@ -74,7 +74,8 @@ namespace BECore {
         service.RegisterHandler("scene_pick", [scene = std::move(activeScene), onScreen = std::move(sceneIsOnScreen)](ControlCall& call) mutable { HandleScenePick(call, scene, onScreen); });
         service.DescribeMethod(
             "scene_pick", {"Names the topmost node or canvas element's node of the active scene under a point of the screen, as a click in the editor's viewport picks",
-                           {{"x", "number", true, "From 0 (left) to 1 (right) of the screen, and so of a screenshot of any size"}, {"y", "number", true, "From 0 (top) to 1 (bottom) of the screen"}}});
+                           {{"x", "number", true, "From 0 (left) to 1 (right) of the screen, and so of a screenshot of any size"}, {"y", "number", true, "From 0 (top) to 1 (bottom) of the screen"}},
+                           /*quiet=*/true});
     }
 
 }  // namespace BECore

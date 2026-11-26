@@ -1,4 +1,6 @@
 #include <Application/ControlLink.h>
+#include <BECore/Control/ControlActivity.h>
+#include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlParams.h>
 #include <BECore/Control/JsonWriter.h>
@@ -129,6 +131,18 @@ namespace BECore::Tests {
             Poll();
         }
 
+        /// The ids of the clients the journal says have gone, in that order
+        [[nodiscard]] Vector<uint64_t> Disconnected() {
+            Vector<uint64_t> ids;
+            const ControlActivity& activity = _service.Activity();
+            for (size_t i = 0; i < activity.Size(); ++i) {
+                if (activity.At(i).kind == ControlActivityKind::Disconnected) {
+                    ids.push_back(activity.At(i).client->GetId());
+                }
+            }
+            return ids;
+        }
+
         /// Whether a push reaches anything: the writer of a push runs only when somebody listens
         [[nodiscard]] bool IsListening() {
             bool written = false;
@@ -192,7 +206,32 @@ namespace BECore::Tests {
         EXPECT_EQ(_transports.Last().sent[1], R"(0 {"data":5,"event":"state_changed"})");
     }
 
-    TEST_F(ControlLinkTest, IgnoresTheNoticeThatAClientLeft) {
+    // Without a client of its own `client_hello` answers `no_client`, and the editor shows nobody
+    TEST_F(ControlLinkTest, AChannelIsAClientUntilItsNoticeOrTheEndOfTheConnection) {
+        RegisterControlBuiltins(_service);
+        Open();
+        Receive(R"(7 {"id":1,"method":"client_hello","params":{"name":"mcp"}})");
+        Receive(R"(9 {"id":1,"method":"client_hello","params":{"name":"artgen"}})");
+        Receive(R"(7 {"id":2,"method":"client_hello","params":{"name":"qa"}})");
+        _service.Drain();
+
+        const Vector<String>& sent = _transports.Last().sent;
+        ASSERT_EQ(sent.size(), 4u);
+        EXPECT_EQ(sent[1], R"(7 {"id":1,"ok":true,"result":{"id":1,"name":"mcp"}})");
+        EXPECT_EQ(sent[2], R"(9 {"id":1,"ok":true,"result":{"id":2,"name":"artgen"}})");
+        EXPECT_EQ(sent[3], R"(7 {"id":2,"ok":true,"result":{"id":1,"name":"qa"}})");
+
+        Receive("7");
+        _service.Drain();
+        EXPECT_EQ(Disconnected(), Vector<uint64_t>{1});
+
+        _transports.Last().PushClosed();
+        Poll();
+        _service.Drain();
+        EXPECT_EQ(Disconnected(), (Vector<uint64_t>{1, 2}));
+    }
+
+    TEST_F(ControlLinkTest, IgnoresTheNoticeThatAnUnknownChannelLeft) {
         Open();
         Receive("4");
         Receive(R"(5 {"id":1,"method":"count"})");

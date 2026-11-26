@@ -39,6 +39,12 @@ def echo_handler(method: str, params: dict | None):
         return {"width": 2, "height": 1, "png_base64": base64.b64encode(b"\x89PNG-fake").decode("ascii"), "params": params}
     if method == "ui_tree":
         return {"scene": "Fake", "canvases": []}
+    if method in ("scene_tree", "scene_get"):
+        return {"params": params}
+    if method == "scene_set":
+        if (params or {}).get("node") == "Nothing":
+            raise FakeError("node_not_found", "no node at 'Nothing'")
+        return {"params": params}
     if method == "set_window":
         return {"width": (params or {}).get("width"), "params": params}
     if method == "ui_click":
@@ -55,6 +61,8 @@ def echo_handler(method: str, params: dict | None):
         raise FakeError("not_recording", "the Chrome trace is not recording")
     if method == "zone_allocs":
         return {"enabled": False, "zones": [], "totals": {"count": 0}, "params": params}
+    if method == "pool_strings":
+        return {"checks": {"duplicateTexts": 0, "hashCollisions": 0}, "params": params}
     if method == "editor_state":
         return {"anyDirty": False, "documents": []}
     if method == "log_mark":
@@ -320,7 +328,8 @@ EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "click_at", "game_log", "quit",
     "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop", "image_diff",
     "log_mark", "log_since", "log_subscribe", "batch", "run_until", "set_window",
-    "imgui_find", "imgui_click", "imgui_type", "imgui_key", "editor_state",
+    "imgui_find", "imgui_click", "imgui_type", "imgui_key", "editor_state", "pool_strings",
+    "scene_tree", "scene_get", "scene_set",
 }
 
 
@@ -357,6 +366,15 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             tree = await client.call_tool("ui_tree", {})
             assert not tree.is_error and "canvases" in tree.content[0].text
 
+            assert not (await client.call_tool("scene_tree", {})).is_error
+            assert not (await client.call_tool("scene_tree", {"node": "Board", "limit": 5})).is_error
+            assert not (await client.call_tool("scene_get", {"node": "Board/Cell[2]", "component": "TransformComponent"})).is_error
+            assert not (await client.call_tool("scene_get", {"node": "Board", "component": "TransformComponent", "index": 1, "path": "x"})).is_error
+            for value in (2.5, 3, True, "5", "true"):
+                assert not (await client.call_tool("scene_set", {"node": "Board", "component": "C", "path": "p", "value": value})).is_error
+            lost = await client.call_tool("scene_set", {"node": "Nothing", "component": "C", "index": 1, "path": "p", "value": 1})
+            assert lost.is_error and "node_not_found" in lost.content[0].text
+
             resized = await client.call_tool("set_window", {"width": 390, "height": 844})
             assert not resized.is_error
             dense = await client.call_tool("set_window", {"width": 390, "height": 844, "density": 3.0, "user_scale": 1.5, "safe_area": [47, 0, 34, 0]})
@@ -386,6 +404,10 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             assert dumped.is_error and "not_recording" in dumped.content[0].text
             zones = await client.call_tool("zone_allocs", {"top": 5, "reset": True})
             assert not zones.is_error and "totals" in zones.content[0].text
+            pool = await client.call_tool("pool_strings", {})
+            assert not pool.is_error and "hashCollisions" in pool.content[0].text
+            searched = await client.call_tool("pool_strings", {"frames": 5, "limit": 0, "query": "ui", "source": "adopted", "record": False, "reset": True})
+            assert not searched.is_error
 
             editor = await client.call_tool("editor_state", {})
             assert not editor.is_error and '"anyDirty": false' in editor.content[0].text
@@ -413,6 +435,10 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
     assert requests_of(server, "frame_stats")[-1] == {"frames": 3}
     assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
     assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
+    assert requests_of(server, "pool_strings") == [
+        {"frames": 60, "limit": 20, "reset": False},
+        {"frames": 5, "limit": 0, "query": "ui", "source": "adopted", "record": False, "reset": True},
+    ]
     assert requests_of(server, "click_at")[:2] == [{"x": 10, "y": 20}, {"x": 1.5, "y": 2, "space": "scene", "button": "right", "which": 3}]
     assert requests_of(server, "log_since")[0] == {"mark": 5, "level": "error"}
     assert requests_of(server, "log_subscribe") == [{"enabled": True, "level": "warning"}]
@@ -427,6 +453,15 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
         {"width": 390, "height": 844, "density": 3.0, "userScale": 1.5, "safeArea": {"top": 47, "right": 0, "bottom": 34, "left": 0}},
     ]
     assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]
+    assert requests_of(server, "scene_tree") == [{}, {"node": "Board", "limit": 5}]
+    assert requests_of(server, "scene_get") == [
+        {"node": "Board/Cell[2]", "component": "TransformComponent"},
+        {"node": "Board", "component": "TransformComponent", "index": 1, "path": "x"},
+    ]
+    written = requests_of(server, "scene_set")
+    # By type as well as value: True == 1 in Python, and a text must not reach the game as a number
+    assert [(type(params["value"]), params["value"]) for params in written[:5]] == [(float, 2.5), (int, 3), (bool, True), (str, "5"), (str, "true")]
+    assert written[5] == {"node": "Nothing", "component": "C", "index": 1, "path": "p", "value": 1}
 
 
 def test_the_mcp_run_until_refuses_none_or_two_conditions_without_a_call(server):

@@ -115,6 +115,49 @@ In Tracy every `Mutex` and `SharedMutex` is a lockable named after its `BE_LOCK_
 - **0 means no value, not no work.** Average over the frames that have one. KosmicKrisp (Mesa on Metal) often answers with an earlier frame's timestamps when frames follow each other closely; the backend drops those, so on a light load most frames have no value.
 - **Which driver on macOS:** the instance asks for no portability drivers, so the loader hides MoltenVK and the game runs the other driver the SDK installs, KosmicKrisp; `VK_LOADER_DEBUG=driver` prints which.
 
+### CPU-bound or GPU-bound
+
+Settle this before optimising either side. The numbers are those of `frame_stats` and of the `BagiStress` line, in ms: `cpuMs` is the frame on the main thread, `Wait` and `Present` are stages inside it, `workMs` is `cpuMs` without both, `gpuMs` is the GPU's span above. The line of `headless_frames.py` is the exception: its `workMs` is `cpuMs` without `Present` alone, and headless there is no GPU to ask. `frameMs` also holds the time between frames (on the manual clock the idle between `step`s), so it decides nothing.
+
+Measure uncapped, so that no display paces the frame: `--hidden-window` turns vsync off (`tools/perf/stress_frames.py --backend` runs this way). Vulkan, which has both the stage and the GPU time:
+
+| Reading | The frame is |
+|---------|--------------|
+| `workMs` is most of `cpuMs`, `waitMs` near 0, `gpuMs` below `cpuMs` | CPU-bound: the CPU waits for nobody; the zones say where (`perf-investigate`) |
+| `waitMs` is most of `cpuMs`, `workMs` small, `gpuMs` close to `cpuMs` | GPU-bound: the CPU waits for the GPU |
+| `workMs` and `gpuMs` both close to `cpuMs` | both: gaining on one side alone moves the frame little |
+| `waitMs` large, `gpuMs` far below it | neither, as far as these tell: the swapchain or the driver holds the frame (a present mode that waits: the log line `Vulkan: swapchain ..., present mode ...`), or the GPU time misses work (texture uploads) |
+
+- **With vsync** (a window on the screen) a frame lasts a display period whatever the load, and the waiting sits in `Wait` (Vulkan) or `Present` (SDL, the browser): a large one says nothing about the GPU. Hold `workMs` and `gpuMs` against the frame budget, or measure uncapped.
+- **`gpuMs` of the newest frames:** it is two frames old and a 0 is no value (above). The line's `gpuMs` and `gpuMsP50` take the frames that have one, which on KosmicKrisp may be few of them, the fewer the lighter the load; with none they read 0.
+- **SDL** (`sdl-gpu`) has neither `gpuMs` nor `Wait`. `presentMs` holds the wait for the GPU and the drawable **and** CPU work (the queued geometry is uploaded and submitted there), so a large one does not by itself mean GPU-bound. Move the pixels and not the calls (`--stress-sprite-size`; a game: its large layers smaller, or a smaller window in its config) and see whether `presentMs` follows; or run the same scene on Vulkan; or record the Metal trace below. The headless software renderer rasterizes on the CPU inside `Present`: it has no GPU side at all.
+- **The check of a verdict** is to move one side: a GPU-bound frame gets shorter with fewer or smaller pixels, a CPU-bound one with fewer objects at the same pixels.
+
+### Tools outside the engine
+
+The engine has no per-pass GPU zones; what happens inside the GPU's frame is read with the platform's tool.
+
+- **macOS:** Metal System Trace (below).
+- **Windows and Linux, Vulkan:** RenderDoc (frame capture: every call, its state and overdraw views). Not tried on the engine's macOS machine, so no commands here.
+- **Browser:** a WebGL inspector extension of the browser. Not tried here.
+- **A frame for the eye:** `screenshot` of the control API on the SDL renderers (`tools/control/CLAUDE.md`, "Comparing backends": `bagi_backends.py` keeps the pictures of a scenario). Vulkan has no capture: `tools/stress/qa/vulkan_look.py` (it opens a window; `src/Modules/Vulkan/CLAUDE.md`, "Looking at the pixels").
+
+### Metal System Trace (macOS)
+
+Comes with Xcode and records both GPU backends: `--backend=vulkan` (KosmicKrisp runs on Metal) and `--backend=sdl-gpu`, for which it is the only GPU time. The run has to end by itself (`--stress-frames`; a game: a `quit` over the control API), and `--time-limit` stops one that does not.
+
+```bash
+cd build/macos-release/bin
+xcrun xctrace record --template 'Metal System Trace' --output /tmp/gpu.trace --time-limit 60s --target-stdout - \
+    --launch -- "$PWD/BagiStress" --control --control-port=0 --hidden-window --backend=vulkan \
+    --stress-scene=sprites --stress-count=5000 --stress-frames=300 --stress-warmup=30
+xcrun xctrace export --input /tmp/gpu.trace --toc
+xcrun xctrace export --input /tmp/gpu.trace --output /tmp/gpu.xml \
+    --xpath '/trace-toc/run[@number="1"]/data/table[@schema="metal-gpu-intervals"]'
+```
+
+`--target-stdout -` shows the game's own line beside the recording; `--toc` lists the tables of the trace. `metal-gpu-intervals` is XML with one row per interval the GPU worked, of **every process** on the machine: keep those whose `process` is the game. A row has `start`, `duration` (ns), `channel-name` (`Vertex`, `Fragment`, `Compute`), `frame-number` and `event-label`. The rows with a frame number are the encoders of that frame, labelled with their names (Vulkan: `MTL4 Render Command` and `MTL4 Compute Command`; SDL: `SDL metal renderer backbuffer`); rows labelled `GPU Execution` carry none. A value that repeats is written once with an `id` and then as `ref="<id>"`, so resolve the references before adding durations up. The `.trace` opens in Instruments for the timeline.
+
 ## Marking code
 
 ```cpp

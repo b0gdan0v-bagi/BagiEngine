@@ -5,11 +5,14 @@ label) is a constant here, the one place to fix when the editor renames it. What
 
 - **No scene method exists**, so nothing here opens a scene (a game's `reset` shows one in the Scene Editor) or reloads one.
 - **A click is a move first.** A header or a field takes a press only when the pointer was over it in an earlier frame, so `click_item` moves, then clicks.
-- **A control's name is not always an item.** The generic inspector draws a number's name as plain text after a field whose label is `##<index>` (the index
-  of the field in its component), and text is not in `imgui_find`; so a number is found by its component and index (`field_label`).
+- **A control's name is not always its label.** The generic inspector gives a number's field the label `##<index>` (the index of the field in its component)
+  and draws the name after it as an item of its own (`<name>##label_<index>`), which a drag changes the number by; so a number is found by its component
+  and index (`field_label`).
 - **A number is typed**: Ctrl+click on a drag field turns it into a text field (Ctrl is Cmd on macOS, which `imgui_input` means by `ctrl`), select all, text,
   Enter. A text field takes the same without the Ctrl.
 - **The dirty state is not an item** ("(unsaved changes)" is text): `dirty` reads the scene document of `editor_state`, which is what the marker shows.
+- **A workspace is a button of the main toolbar** and shows its own layout and panels a few frames after the click; "Reset to Defaults" brings back the
+  ready ones of the active workspace only.
 - **A panel is as wide as the dock gave it.** The default layout leaves the Scene Editor too narrow for its inspector, which is then clipped and has no
   items; `widen_left_dock` drags the splitter, as a person would.
 
@@ -43,18 +46,34 @@ NAME_FIELD = "##node_name"
 LAYER_FIELD = "##node_layer"
 PALETTE_QUERY_FIELD = "##query"
 PALETTE_LIST_CHILD = "##list"
+PALETTE_POPUP = "##Popup"  # starts the palette's window name; a panel may have a child called `##list` too (the Config Editor)
 PALETTE_CHORD = ("P", ("ctrl",))  # `view.commandPalette`, rebindable
 GAME_PANEL_CHORD = ("G", ("ctrl", "shift"))  # `view.game`, rebindable
 PALETTE_ESCAPES = 2  # the first Escape leaves the focused query field, the second closes the popup
 FIELD_LABEL_FORMAT = "##{}"
 ICON_ROW = re.compile("^[\ue000-\uf8ff] (?P<name>[^#]+)$")  # a hierarchy row is a Lucide glyph, a space and the node's name
 FIELD_LABEL = re.compile(r"^##\d+$")
-COMPONENT_TYPE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# the header of a component's card in the inspector: a Lucide glyph, a space, the type name and `##card`
+COMPONENT_TYPE = re.compile("^[\ue000-\uf8ff] (?P<type>[A-Za-z_][A-Za-z0-9_]*)##card$")
+CARD_MENU_MARK = "##card_menu"  # ends the label of the "..." button on a card's header, which is neither a header nor a field
+CARD_ENABLED_MARK = "##card_enabled"  # ends the label of the checkbox on a card's header, neither of those either
 
-LEFT_DOCK_SPLITTER = (211.0, 400.0)  # the gap between the left column and the viewport in the default layout (output pixels)
+LEFT_DOCK_SPLITTER_OFFSET = 1.0  # from the right edge of the Scene Editor into the gap to the viewport (output pixels)
+LEFT_DOCK_PRESS_Y = 400.0  # a height at which the left column is beside the viewport
 LEFT_DOCK_DRAG_TO = (500.0, 700.0)
 ROW_CLICK_OFFSET = 60.0  # a hierarchy row also holds hide and lock toggles at its right end: click near its left
 ITEM_LIMIT = 500
+MENU_RESET_LAYOUT = "Reset to Defaults"
+TOOLBAR_CHILD = "##MainToolbar"  # the child window of the main toolbar; a workspace's button there is labelled with the workspace's name alone
+WORKSPACE_FRAMES = 6  # the editor loads or builds the layout in the frames after the click, then docks the windows
+# the panels the ready layout of each workspace opens (`Workspaces.cpp`), by menu item
+WORKSPACE_PANELS = {
+    "Scene": ("Viewport", "Scene Editor", "Config Editor", "Sprite Library"),
+    "UI": ("Viewport", "Scene Editor", "Asset Browser", "Sprite Library", "Config Editor"),
+    "Animation": ("Viewport", "Scene Editor", "Asset Browser", "Sprite Library"),
+    "Profiling": ("Viewport", "Scene Editor", "Console", "Profiler"),
+}
+PANEL_CLOSE_FRAMES = 12  # at the default step, longer than the fade of a closing panel, whose window is drawn until it ends
 
 
 @dataclass(frozen=True)
@@ -72,12 +91,14 @@ PANELS = (
     Panel("Config Editor", "Config Editor"),
     Panel("File Changes", "File changes"),
     Panel("Sprite Library", "Sprite Library"),
+    Panel("Asset Browser", "Asset Browser"),
     Panel("Game Panel", "Game"),
     Panel("Console", "Console", contains=True),  # the title counts the errors and warnings
     Panel("Generate Art", "Generate", contains=True),  # the window is `Generate###Generate`
     Panel("Profiler", "Profiler"),
+    Panel("Field Help", "Field Help"),
 )
-VIEW_MENU_COMMANDS = ("Command Palette...", "Preferences...", "Layouts", "Save Layout As...", "Delete Layout", "Reset to Defaults")  # the items that are no panel
+VIEW_MENU_COMMANDS = ("Command Palette...", "Preferences...", "Layouts", "Save Layout As...", "Delete Layout", MENU_RESET_LAYOUT)  # the items that are no panel
 
 
 @dataclass(frozen=True)
@@ -129,9 +150,9 @@ def panel_open(session: Any, title: str) -> bool:
 
 
 def view_menu_items(session: Any) -> list[str]:
-    """The labels of the View menu in the order it lists them; the menu is closed again (Escape) when this returns."""
+    """The names of the View menu's items in the order it lists them (a label without its `###<id>`); the menu is closed again (Escape) when this returns."""
     click_item(session, find_item(session, label=MENU_BAR_VIEW))
-    labels = [item["label"] for item in find_items(session, VIEW_MENU_WINDOW) if item["label"]]
+    labels = [item["label"].split("##")[0] for item in find_items(session, VIEW_MENU_WINDOW) if item["label"]]
     session.imgui_key("Escape")
     return labels
 
@@ -157,20 +178,48 @@ def close_panel(session: Any, title: str) -> None:
     if not panel_open(session, title):
         return
     _toggle_from_menu(session, title)
+    session.step(PANEL_CLOSE_FRAMES)
     if panel_open(session, title):
         raise SessionError(f"the panel '{title}' did not close after View, {_panel(title).menu_item}")
 
 
 def _toggle_from_menu(session: Any, title: str) -> None:
+    _click_view_item(session, _panel(title).menu_item)
+
+
+def _click_view_item(session: Any, menu_item: str) -> None:
     click_item(session, find_item(session, label=MENU_BAR_VIEW))
-    click_item(session, find_item(session, VIEW_MENU_WINDOW, label=_panel(title).menu_item))
+    click_item(session, find_item(session, VIEW_MENU_WINDOW, label=menu_item))
+
+
+def switch_workspace(session: Any, name: str) -> None:
+    """Clicks the workspace's button in the main toolbar and lets the layout settle; the active one's button changes nothing."""
+    if name not in WORKSPACE_PANELS:
+        raise SessionError(f"'{name}' is not a workspace this module knows: {list(WORKSPACE_PANELS)}")
+    click_item(session, find_item(session, child=TOOLBAR_CHILD, label=name))
+    session.step(WORKSPACE_FRAMES)
+
+
+def closed_workspace_panels(session: Any, name: str) -> list[str]:
+    """The panels of the workspace's ready layout whose window was not drawn in the last frame."""
+    return [title for title in WORKSPACE_PANELS[name] if not panel_open(session, title)]
+
+
+def reset_layout(session: Any) -> None:
+    """View, "Reset to Defaults": the ready layout and panels of the active workspace."""
+    _click_view_item(session, MENU_RESET_LAYOUT)
+    session.step(WORKSPACE_FRAMES)
 
 
 def widen_left_dock(session: Any) -> None:
     """Drags the splitter between the left column and the viewport to the right, until the Scene Editor shows its inspector next to its hierarchy.
 
-    A press needs the pointer over the splitter in an earlier frame and a drag moves a step per frame, so each stage is its own call."""
-    x, y = LEFT_DOCK_SPLITTER
+    A press needs the pointer over the splitter in an earlier frame and a drag moves a step per frame, so each stage is its own call. The splitter is
+    found by the Scene Editor's window: how wide the column starts depends on the window's size and on the `imgui.ini` an earlier run left."""
+    windows = session.imgui_find(kind="window", label=SCENE_EDITOR)["matches"]
+    if not windows:
+        raise SessionError(f"no '{SCENE_EDITOR}' window: the left dock cannot be widened")
+    x, y = windows[0]["x"] + windows[0]["width"] + LEFT_DOCK_SPLITTER_OFFSET, LEFT_DOCK_PRESS_Y
     session.imgui_input([{"type": "move", "x": x, "y": y}])
     session.step(2)
     session.imgui_input([{"type": "down"}])
@@ -242,7 +291,7 @@ def _visible_rows(session: Any, name: str) -> list[HierarchyRow]:
 
 
 def inspector_labels(session: Any) -> list[str]:
-    """The labels of the inspector's items that have one, in drawn order: the name and layer fields, the component headers, the `##<index>` fields."""
+    """The labels of the inspector's items that have one, in drawn order: the name and layer fields, the card headers, checkboxes and menu buttons, the `##<index>` fields and their names."""
     return [item["label"] for item in find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD) if item["label"]]
 
 
@@ -257,16 +306,20 @@ def open_component(session: Any, component: str) -> None:
 
 
 def _component_header(session: Any, component: str) -> dict[str, Any]:
-    return find_item(session, CHILD_WINDOWS, INSPECTOR_CHILD, label=component)
+    items = find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD)
+    found = [item for item in items if item["visible"] and (match := COMPONENT_TYPE.match(item["label"])) and match["type"] == component]
+    if len(found) != 1:
+        shown = ", ".join(repr(item["label"]) for item in items if item["label"] and item["visible"])
+        raise SessionError(f"{len(found)} visible component cards are headed '{component}' in the inspector; it shows: {shown}")
+    return found[0]
 
 
 def _section_items(session: Any, header: dict[str, Any]) -> list[dict[str, Any]]:
-    """The items under a component's header, down to the next header: the controls are indented, a header is not."""
+    """The items of a component's card under its header, down to the next card's header; the cards' checkboxes and menu buttons are left out."""
     items = find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD)
-    headers = [item for item in items if COMPONENT_TYPE.match(item["label"]) and item["x"] <= header["x"] + 1]
-    below = [item for item in headers if item["y"] > header["y"]]
+    below = [item for item in items if COMPONENT_TYPE.match(item["label"]) and item["y"] > header["y"]]
     end = below[0]["y"] if below else float("inf")
-    return [item for item in items if header["y"] < item["y"] < end and item["label"]]
+    return [item for item in items if header["y"] < item["y"] < end and item["label"] and not item["label"].endswith((CARD_MENU_MARK, CARD_ENABLED_MARK))]
 
 
 def _field(session: Any, label: str, component: str | None) -> dict[str, Any]:
@@ -356,7 +409,8 @@ def open_palette(session: Any) -> None:
 
 def palette_rows(session: Any) -> list[str]:
     """The commands the open palette lists, in order."""
-    return [item["label"] for item in find_items(session, child=PALETTE_LIST_CHILD) if item["label"] and item["visible"]]
+    rows = find_items(session, child=PALETTE_LIST_CHILD)
+    return [item["label"] for item in rows if item["window"].startswith(PALETTE_POPUP) and item["label"] and item["visible"]]
 
 
 def close_palette(session: Any) -> None:

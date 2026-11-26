@@ -15,7 +15,7 @@ namespace BECore {
      * the rect is no target.
      */
     class ClipRectComponent : public IComponent {
-        BE_CLASS(ClipRectComponent, ICON = crop)
+        BE_CLASS(ClipRectComponent, ICON = crop, CATEGORY = render)
     public:
         ClipRectComponent() = default;
         ~ClipRectComponent() override = default;

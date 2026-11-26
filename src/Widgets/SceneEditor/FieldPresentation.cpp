@@ -13,10 +13,13 @@ namespace BECore::FieldPresentation {
             result.widget = NumberWidget::Slider;
             result.rangeMin = attributes.rangeMin;
             result.rangeMax = attributes.rangeMax;
+            result.speed = (attributes.rangeMax - attributes.rangeMin) * kRangeDragShare;
         }
         if (attributes.step > 0.0) {
             result.snapStep = attributes.step;
-            result.speed = attributes.step;
+            if (result.widget == NumberWidget::Drag) {
+                result.speed = attributes.step;
+            }
         }
         return result;
     }
@@ -43,6 +46,20 @@ namespace BECore::FieldPresentation {
             result = low <= high ? std::clamp(result, low, high) : presentation.rangeMin;
         }
         return result;
+    }
+
+    double Dragged(const Presentation& presentation, double atPress, double pixels) {
+        return Constrain(presentation, atPress + pixels * presentation.speed);
+    }
+
+    Axis AxisOf(StringView name) {
+        if (name == "x") {
+            return Axis::X;
+        }
+        if (name == "y") {
+            return Axis::Y;
+        }
+        return name == "z" ? Axis::Z : Axis::None;
     }
 
 }  // namespace BECore::FieldPresentation

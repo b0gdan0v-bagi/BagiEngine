@@ -27,7 +27,7 @@ namespace BECore::Stress {
      * node also gets a rotation from `SceneUpdateEvent`. Does nothing while the game is not the active `StressGame`.
      */
     class StressEntitiesComponent : public IComponent {
-        BE_CLASS(StressEntitiesComponent)
+        BE_CLASS(StressEntitiesComponent, CATEGORY = logic)
     public:
         StressEntitiesComponent() = default;
         ~StressEntitiesComponent() override = default;

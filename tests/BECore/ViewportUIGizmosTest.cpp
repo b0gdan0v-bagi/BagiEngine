@@ -308,6 +308,17 @@ namespace BECore::Tests {
         EXPECT_TRUE(_recorder.entries.empty());
     }
 
+    TEST_F(ViewportUIGizmosTest, ADragEndsAndNoneBeginsWhileTheCanvasIsDisabled) {
+        ASSERT_TRUE(BeginMove(*_child, UIDragHandle::Body, {150.0f, 80.0f}));
+
+        _canvas->SetEnabled(false);
+        EXPECT_FALSE(_session.CanContinue(&Main(), true));
+        _session.Abort(&Main());
+
+        EXPECT_FALSE(BeginMove(*_child, UIDragHandle::Body, {150.0f, 80.0f}));
+        EXPECT_FALSE(_session.BeginAnchor(Main(), *_hud, *_canvas, *_child, AnchorCorner::TopLeft));
+    }
+
     TEST_F(ViewportUIGizmosTest, ABeginDuringADragIsRefused) {
         ASSERT_TRUE(BeginMove(*_child, UIDragHandle::Body, {150.0f, 80.0f}));
         EXPECT_FALSE(BeginMove(*_panel, UIDragHandle::Body, {300.0f, 200.0f}));

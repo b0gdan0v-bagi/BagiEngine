@@ -119,7 +119,7 @@ namespace BECore {
         service.RegisterHandler("files_rescan", [&watcher](ControlCall& call) { HandleRescan(call, watcher); });
         service.RegisterHandler("files_apply", [&watcher](ControlCall& call) { HandleApply(call, watcher); });
 
-        service.DescribeMethod("files_rescan", {"Lists the files that differ on disk from the state at start or their last delivery, without delivering anything", {}});
+        service.DescribeMethod("files_rescan", {"Lists the files that differ on disk from the state at start or their last delivery, without delivering anything", {}, /*quiet=*/true});
         service.DescribeMethod("files_apply", {"Delivers the changes of files_rescan to their consumers (a config is read again), answered after a frame",
                                                {{"paths", "array", false, "Virtual paths to apply; all pending changes when omitted"}}});
     }

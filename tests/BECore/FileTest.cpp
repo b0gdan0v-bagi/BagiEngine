@@ -121,6 +121,20 @@ namespace BECore::Tests {
         EXPECT_EQ(*third, 0u);
     }
 
+    TEST_F(FileTest, AReadAfterTheEndSeesWhatWasAppended) {
+        const String path = _folder.PathOf("growing.log");
+        PutFile(path, "one");
+        auto reader = File::Open(path, FileMode::Read);
+        ASSERT_TRUE(reader.has_value()) << reader.error();
+        char piece[16];
+        EXPECT_EQ(reader->Read(piece, sizeof(piece)).value_or(0), 3u);
+        EXPECT_EQ(reader->Read(piece, sizeof(piece)).value_or(1), 0u);
+
+        PutFile(path, "two", FileMode::Append);
+        EXPECT_EQ(reader->Read(piece, sizeof(piece)).value_or(0), 3u);
+        EXPECT_EQ(StringView(piece, 3), "two");
+    }
+
     TEST_F(FileTest, ADirectoryCannotBeOpenedInAnyMode) {
         const String path = _folder.PathOf("folder");
         ASSERT_TRUE(CreateDirectories(path).has_value());

@@ -56,6 +56,18 @@ namespace BECore::Tests {
             }
         };
 
+        struct WorkspaceButton {
+            StringView label;
+            EditorWorkspace workspace;
+            PoolString command;
+        };
+        const Array<WorkspaceButton, 4> kWorkspaceButtons{{
+            {"Scene", EditorWorkspace::Scene, EditorCommandIds::kWorkspaceScene},
+            {"UI", EditorWorkspace::UI, EditorCommandIds::kWorkspaceUI},
+            {"Animation", EditorWorkspace::Animation, EditorCommandIds::kWorkspaceAnimation},
+            {"Profiling", EditorWorkspace::Profiling, EditorCommandIds::kWorkspaceProfiling},
+        }};
+
         Path ShippedFile() {
             return Path(__FILE__).Parent().Parent().Parent() / "config" / "panels" / "MainToolbarPanel.xml";
         }
@@ -149,11 +161,59 @@ namespace BECore::Tests {
             return nullptr;
         }
 
+        [[nodiscard]] const ImGuiWindow* Bar() const {
+            for (const ImGuiWindow* window : ImGui::GetCurrentContext()->Windows) {
+                if (window->Name != nullptr && std::strstr(window->Name, "MainToolbar") != nullptr) {
+                    return window;
+                }
+            }
+            return nullptr;
+        }
+
+        /// The visible button labelled @p label alone: a button with a text and no icon carries no element id in its label
+        const ImGuiItemRecord* FindText(StringView label) {
+            for (const ImGuiItemRecord& item : _index.Items()) {
+                if (item.visible && StringView(item.label) == label) {
+                    return &item;
+                }
+            }
+            return nullptr;
+        }
+
+        /// Whether the button labelled @p label is painted with the fill of an active tab
+        [[nodiscard]] bool IsFilled(StringView label) {
+            const ImGuiItemRecord* item = FindText(label);
+            const ImGuiWindow* bar = Bar();
+            if (item == nullptr || bar == nullptr) {
+                ADD_FAILURE() << "no button " << String(label).c_str();
+                return false;
+            }
+            const ImU32 fill = ImGui::GetColorU32(GetImGuiPalette().accentMuted);
+            for (const ImDrawVert& vertex : bar->DrawList->VtxBuffer) {
+                if (vertex.col == fill && vertex.pos.x >= item->minX && vertex.pos.x <= item->maxX && vertex.pos.y >= item->minY && vertex.pos.y <= item->maxY) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void Click(StringView id) {
             const ImGuiItemRecord* item = Find(id);
             ASSERT_NE(item, nullptr) << String(id.data(), id.size()).c_str();
+            ClickItem(*item);
+        }
+
+        void ClickText(StringView label) {
+            const ImGuiItemRecord* item = FindText(label);
+            ASSERT_NE(item, nullptr) << String(label.data(), label.size()).c_str();
+            ClickItem(*item);
+        }
+
+        void ClickItem(const ImGuiItemRecord& record) {
+            // The next frame rebuilds the index the record is in
+            const ImVec2 center(record.CenterX(), record.CenterY());
             ImGuiIO& io = ImGui::GetIO();
-            io.AddMousePosEvent(item->CenterX(), item->CenterY());
+            io.AddMousePosEvent(center.x, center.y);
             Frame();
             io.AddMouseButtonEvent(0, true);
             Frame();
@@ -223,23 +283,49 @@ namespace BECore::Tests {
         EXPECT_GT(_commands.Count(EditorCommandIds::kGameStep), 1u);
     }
 
-    TEST_F(MainToolbarAssetTest, TheButtonsSitInTheMiddleOfTheBarWithEqualGapsOnBothSides) {
+    TEST_F(MainToolbarAssetTest, TheButtonsSitInOneRowInTheMiddleOfTheBarWithEqualGapsOnBothSides) {
         ASSERT_NO_FATAL_FAILURE(StartWidget());
-        const ImGuiItemRecord* first = Find("play");
+        const ImGuiItemRecord* first = FindText(kWorkspaceButtons.front().label);
+        const ImGuiItemRecord* play = Find("play");
         const ImGuiItemRecord* last = Find("step");
         ASSERT_NE(first, nullptr);
+        ASSERT_NE(play, nullptr);
         ASSERT_NE(last, nullptr);
 
-        const ImGuiWindow* bar = nullptr;
-        for (const ImGuiWindow* window : ImGui::GetCurrentContext()->Windows) {
-            if (window->Name != nullptr && std::strstr(window->Name, "MainToolbar") != nullptr) {
-                bar = window;
-            }
-        }
+        const ImGuiWindow* bar = Bar();
         ASSERT_NE(bar, nullptr);
         const float left = first->minX - bar->Pos.x;
         const float right = bar->Pos.x + bar->Size.x - last->maxX;
         EXPECT_NEAR(left, right, kCenterTolerance);
+        EXPECT_LT(first->maxX, play->minX) << "the workspaces come before the play buttons";
+        EXPECT_EQ(first->minY, play->minY);
+    }
+
+    TEST_F(MainToolbarAssetTest, OnlyTheButtonOfTheActiveWorkspaceIsFilled) {
+        ASSERT_NO_FATAL_FAILURE(StartWidget());
+        for (const WorkspaceButton& active : kWorkspaceButtons) {
+            _host->workspace = active.workspace;
+            Settle();
+            for (const WorkspaceButton& button : kWorkspaceButtons) {
+                EXPECT_EQ(IsFilled(button.label), button.workspace == active.workspace) << String(button.label).c_str();
+            }
+        }
+    }
+
+    TEST_F(MainToolbarAssetTest, AWorkspaceButtonRunsItsCommandAndWithoutAHostNoneIsFilledOrPressed) {
+        ASSERT_NO_FATAL_FAILURE(StartWidget());
+        for (const WorkspaceButton& button : kWorkspaceButtons) {
+            ASSERT_NO_FATAL_FAILURE(ClickText(button.label));
+            EXPECT_EQ(_commands.Count(button.command), 1u) << String(button.label).c_str();
+        }
+
+        _hostHandle.Reset();
+        Settle();
+        for (const WorkspaceButton& button : kWorkspaceButtons) {
+            ASSERT_NO_FATAL_FAILURE(ClickText(button.label));
+            EXPECT_EQ(_commands.Count(button.command), 1u) << "a disabled button gives no click";
+            EXPECT_FALSE(IsFilled(button.label)) << String(button.label).c_str();
+        }
     }
 
     TEST_F(MainToolbarAssetTest, WithoutTheAssetTheToolbarIsAnEmptyBar) {

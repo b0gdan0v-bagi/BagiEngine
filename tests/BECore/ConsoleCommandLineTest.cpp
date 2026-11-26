@@ -1,3 +1,4 @@
+#include <BECore/Control/ControlActivity.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <Common/Printers.h>
@@ -247,6 +248,17 @@ namespace BECore::Tests {
         EXPECT_EQ(echoCalls, 1);
         EXPECT_EQ(lastParams, "{\"a\":1,\"b\":\"x\"}");
         EXPECT_EQ(Lines(session.GetOutput()), "I:echo a=1 b=x|R:{\"params\":{\"a\":1,\"b\":\"x\"}}");
+    }
+
+    TEST_F(ConsoleCommandLineTest, ASubmittedCommandIsInTheJournalAsTheConsoles) {
+        ASSERT_TRUE(session.Submit(service, "echo a=1").has_value());
+        service.Drain();
+
+        ASSERT_EQ(service.Activity().Size(), 1u);
+        const ControlActivityEntry& entry = service.Activity().At(0);
+        EXPECT_EQ(entry.method, "echo");
+        ASSERT_TRUE(entry.client);
+        EXPECT_EQ(entry.client->GetName(), "console");
     }
 
     TEST_F(ConsoleCommandLineTest, AnErrorOfTheHandlerIsPrintedAsCodeAndMessage) {

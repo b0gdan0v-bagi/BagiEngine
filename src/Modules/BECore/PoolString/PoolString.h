@@ -43,7 +43,7 @@ namespace BECore {
         size_t deadStrings = 0;         ///< Adopted entries whose text was already in the pool: kept in their block, not linked
         size_t deadBytes = 0;           ///< Their aligned sizes
         size_t staticDuplicates = 0;    ///< Registered static entries that lost to an entry of the same text
-        uint64_t writeLocks = 0;        ///< Calls that took the unique lock of the pool
+        uint64_t writeLocks = 0;        ///< Calls that took the unique lock of the pool to write it
         uint64_t batchCalls = 0;        ///< `InternBatch` calls
         uint64_t batchStrings = 0;      ///< Texts they were given
         size_t heapFallbackBlocks = 0;  ///< Blocks the heap gave because the block source returned none
@@ -64,6 +64,9 @@ namespace BECore {
         /// before anything is linked. A loader of untrusted bytes passes its own limit, so a size field cannot put a huge
         /// string in a pool that never frees. The default has no limit.
         size_t maxTextBytes = SIZE_MAX;
+
+        /// Names the adopted block in a snapshot of the pool (the file it was read from). The pool keeps a copy, never interns it.
+        StringView sourceName;
     };
 
     /// Why `PoolString::AdoptBlock` refused a block; the enumerators and `EnumUtils` are in `PoolBlock.h` (a `CORE_ENUM`

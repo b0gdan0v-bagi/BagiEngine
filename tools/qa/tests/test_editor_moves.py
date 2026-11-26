@@ -18,10 +18,15 @@ ROW_HEIGHT = 30.0
 FIELD_HEIGHT = 29.0
 SPLITTER_X = 211.0
 WIDE_DOCK = 400.0
-PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console": "Console (1 errors)###Console", "Game Panel": "Game###GamePanel", "Profiler": "Profiler"}
-MENU_ITEMS = ["Command Palette...", "Preferences...", "Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Layouts", "Reset to Defaults"]
+PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console": "Console (1 errors)###Console", "Game Panel": "Game###GamePanel", "Profiler": "Profiler", "Field Help": "Field Help###FieldHelp", "Config Editor": "Config Editor###ConfigEditor", "Sprite Library": "Sprite Library###SpriteLibrary", "Asset Browser": "Asset Browser###AssetBrowser"}
+# a menu item's label ends with the id of its element, as the engine draws it
+MENU_ITEMS = [f"{name}###{index}" for index, name in enumerate(["Command Palette...", "Preferences...", "Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Field Help", "Layouts", "Reset to Defaults"])]
+TOOLBAR = "##EditorRoot/##MainToolbar_1A2B3C4D"
 PALETTE_COMMANDS = ["Game Panel", "Switch Game and Editor", "Console", "Save Scene"]
 TRANSFORM_FIELDS = 7
+CARD_ICON = "\ue194"  # any glyph of the Lucide range
+CARD_MENU = "\ue0b7##card_menu"
+CARD_ENABLED = "##card_enabled"
 HIERARCHY = "Scene Editor/##hierarchy_8D0B9DE4"
 INSPECTOR = "Scene Editor/##inspector_828F5624"
 
@@ -34,6 +39,10 @@ def part_before_hashes(name):
     return name.split("##")[0]
 
 
+def card_header(component):
+    return f"{CARD_ICON} {component}##card"
+
+
 class FakeEditor:
     """A scene `Root` with the children Field and Run, a Transform with seven fields and a dirty flag, in the shape the real editor draws them."""
 
@@ -42,6 +51,8 @@ class FakeEditor:
         self.menu_items = menu_items or MENU_ITEMS
         self.save_clears = save_clears
         self.menu_open = False
+        self.workspace = "Scene"
+        self.stays_closed = set()  # panels a switch fails to open
         self.root_open = False
         self.search = ""
         self.names = {"Field": "Field", "Run": "Run"}
@@ -51,6 +62,7 @@ class FakeEditor:
         self.extra_documents = []
         self.not_editor = False
         self.sections = set()
+        self.cards = [("TransformComponent", TRANSFORM_FIELDS), ("StressRunComponent", 0)]  # the components of the selected node and the fields of each
         self.values = {}
         self.dock_width = SPLITTER_X - 1
         self.dragging = False
@@ -71,9 +83,10 @@ class FakeEditor:
 
     def items(self):
         found = [item("View", "##EditorRoot", **VIEW_ITEM)]
-        if self.menu_open:
-            for index, label in enumerate(self.menu_items):
-                found.append(item(label, "View###Menu_00", 94.0, 155.0 + index * MENU_ROW_HEIGHT, 217.0, MENU_ROW_HEIGHT))
+        if "Config Editor" in self.open_panels:
+            found.append(item("ConsolePanel##select", "Config Editor###ConfigEditor/##list_0F0F0F0F", 20.0, 700.0, 200.0, MENU_ROW_HEIGHT))
+        for index, name in enumerate(editor.WORKSPACE_PANELS):
+            found.append(item(name, TOOLBAR, 600.0 + index * 110.0, 28.0, 100.0, 24.0))
         if self.palette:
             found.append(item("##query", "##Popup_c0f026a4", 730.0, 224.0, 459.0, 24.0))
             commands = [command for command in PALETTE_COMMANDS if self.query in command.lower()]
@@ -93,15 +106,22 @@ class FakeEditor:
             found.append(item(" Add Node", HIERARCHY, 20.0, 300.0, 279.0, 24.0))
             if self.selected and self.dock_width >= WIDE_DOCK:
                 found += self.inspector_items()
+        # A popup is drawn over every window
+        if self.menu_open:
+            for index, label in enumerate(self.menu_items):
+                found.append(item(label, "View###Menu_00", 94.0, 155.0 + index * MENU_ROW_HEIGHT, 217.0, MENU_ROW_HEIGHT))
         return found
 
     def inspector_items(self):
         x = 318.0
         found = [item("##node_name", INSPECTOR, x + 54, 166.0, 241.0, 24.0), item("##node_layer", INSPECTOR, x + 52, 196.0, 183.0, 23.0), item("-", INSPECTOR, x + 241, 196.0, 23.0, 23.0)]
         y = 251.0
-        for component, fields in (("TransformComponent", TRANSFORM_FIELDS), ("StressRunComponent", 0)):
-            found.append(item(component, INSPECTOR, x + 5, y, 361.0, 24.0))
-            found.append(item("", INSPECTOR, x + 344, y + 5, 14.0, 14.0))
+        for component, fields in self.cards:
+            found.append(item(card_header(component), INSPECTOR, x + 5, y, 361.0, 24.0))
+            # a pixel lower than the header: the helper must leave it out by its label, not by its place
+            found.append(item(CARD_MENU, INSPECTOR, x + 342, y + 1, 23.0, 23.0))
+            if component != "TransformComponent":  # a component with nothing to switch off has no checkbox
+                found.append(item(CARD_ENABLED, INSPECTOR, x + 314, y + 1, 23.0, 23.0))
             y += 30.0
             if component in self.sections:
                 for index in range(fields):
@@ -111,7 +131,8 @@ class FakeEditor:
         return found
 
     def windows(self):
-        return [{"kind": "window", "label": PANEL_TITLES.get(title, title), "window": None, "x": 0, "y": 0, "width": 100, "height": 100, "visible": True, "hovered": False, "id": "0x2"} for title in sorted(self.open_panels)]
+        widths = {"Scene Editor": self.dock_width}  # the left column
+        return [{"kind": "window", "label": PANEL_TITLES.get(title, title), "window": None, "x": 0, "y": 0, "width": widths.get(title, 100), "height": 100, "visible": True, "hovered": False, "id": "0x2"} for title in sorted(self.open_panels)]
 
     # -- the session's methods
 
@@ -145,7 +166,7 @@ class FakeEditor:
                 if self.dragging:
                     self.dock_width = event["x"]
             elif kind == "down":
-                self.dragging = abs(self.pointer[0] - SPLITTER_X) <= 2
+                self.dragging = abs(self.pointer[0] - (self.dock_width + 1)) <= 2
             elif kind == "up":
                 self.dragging = False
             elif kind == "click":
@@ -199,15 +220,21 @@ class FakeEditor:
         label, window = target["label"], target["window"]
         if window == "View###Menu_00":
             self.menu_open = False
-            self.toggle_panel(label)
+            if part_before_hashes(label) == "Reset to Defaults":
+                self.show_workspace(self.workspace)
+            else:
+                self.toggle_panel(part_before_hashes(label))
+        elif window == TOOLBAR:
+            if label != self.workspace:
+                self.show_workspace(label)
         elif label == "View":
             self.menu_open = not self.menu_open
         elif label == "####clear_search":
             self.search = ""
         elif window == HIERARCHY and label.startswith(" "):
             self.selected = next(key for key in self.names if f" {self.names[key]}" == label)
-        elif label in ("TransformComponent", "StressRunComponent") and was_hovering == self.hover_target:
-            self.sections ^= {label}
+        elif label.endswith("##card") and was_hovering == self.hover_target:
+            self.sections ^= {label.split(" ", 1)[1].split("##")[0]}
         elif label.startswith("##") and label[2:].isdigit() and "ctrl" in event.get("mods", []):
             self.focus = label
         elif label.startswith("##") and label[2:].isdigit():
@@ -218,6 +245,10 @@ class FakeEditor:
 
     def toggle_panel(self, label):
         self.open_panels ^= {label}
+
+    def show_workspace(self, name):
+        self.workspace = name
+        self.open_panels = set(editor.WORKSPACE_PANELS[name]) - self.stays_closed
 
     def key(self, event):
         if event["key"] == "P" and "ctrl" in event.get("mods", []) and not self.palette:
@@ -269,6 +300,15 @@ def test_a_clipped_inspector_is_named_when_the_dock_was_not_widened(ed):
         editor.select_node(ed, "Run")
 
 
+def test_widen_left_dock_finds_the_splitter_of_a_column_of_another_width(ed):
+    ed.dock_width = 315.0  # the default layout of a larger window
+    editor.widen_left_dock(ed)
+    assert ed.dock_width == editor.LEFT_DOCK_DRAG_TO[-1]
+    ed.open_panels = {"Viewport"}
+    with pytest.raises(SessionError, match="no 'Scene Editor' window"):
+        editor.widen_left_dock(ed)
+
+
 def test_widen_left_dock_drags_the_splitter_so_the_inspector_has_items(ed):
     ed.selected = "Run"
     assert editor.inspector_labels(ed) == []
@@ -291,6 +331,28 @@ def test_a_section_that_is_open_is_not_toggled_shut_by_another_field(ed):
     editor.set_number_field(ed, editor.field_label(0), 1, "TransformComponent")
     editor.set_number_field(ed, editor.field_label(1), 2, "TransformComponent")
     assert ed.sections == {"TransformComponent"}
+
+
+def test_the_menu_button_of_a_card_is_neither_its_header_nor_a_field(ed):
+    editor.widen_left_dock(ed)
+    editor.select_node(ed, "Run")
+    editor.open_component(ed, "TransformComponent")
+    assert ed.sections == {"TransformComponent"}
+    with pytest.raises(SessionError, match=r"0 controls called '.*##card_menu'"):
+        editor.set_number_field(ed, CARD_MENU, 1, "TransformComponent")
+    with pytest.raises(SessionError, match=r"0 visible component cards are headed 'QuadRendererComponent'.*##card"):
+        editor.open_component(ed, "QuadRendererComponent")
+
+
+def test_the_checkbox_of_a_closed_card_does_not_pass_for_a_control_of_its_section(ed):
+    # not the last card: the Add Component button below counts for that one
+    ed.cards = [("QuadRendererComponent", 2), ("StressRunComponent", 0)]
+    editor.widen_left_dock(ed)
+    editor.select_node(ed, "Run")
+    editor.open_component(ed, "QuadRendererComponent")
+    assert ed.sections == {"QuadRendererComponent"}, "the header was clicked: the checkbox alone does not make the card open"
+    with pytest.raises(SessionError, match=r"0 controls called '##card_enabled'"):
+        editor.set_number_field(ed, CARD_ENABLED, 1, "QuadRendererComponent")
 
 
 def test_a_field_that_is_not_in_the_section_lists_what_is(ed):
@@ -347,6 +409,13 @@ def test_a_panel_whose_title_changes_is_found_by_part_of_it(ed):
     assert editor.panel_open(ed, "Console")
 
 
+def test_the_field_help_panel_opens_and_closes_through_the_view_menu(ed):
+    editor.open_panel(ed, "Field Help")
+    assert editor.panel_open(ed, "Field Help")
+    editor.close_panel(ed, "Field Help")
+    assert not editor.panel_open(ed, "Field Help")
+
+
 def test_a_panel_that_does_not_appear_is_an_error():
     broken = FakeEditor()
     broken.toggle_panel = lambda label: None
@@ -356,9 +425,31 @@ def test_a_panel_that_does_not_appear_is_an_error():
 
 def test_the_view_menu_lists_known_panels_and_names_what_it_does_not_know():
     known, unknown = editor.view_panels(FakeEditor())
-    assert known == ["Viewport", "Scene Editor", "Game Panel", "Console", "Profiler"] and unknown == []
-    known, unknown = editor.view_panels(FakeEditor(menu_items=[*MENU_ITEMS, "Timeline"]))
+    assert known == ["Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Field Help"] and unknown == []
+    known, unknown = editor.view_panels(FakeEditor(menu_items=[*MENU_ITEMS, "Timeline###timeline"]))
     assert unknown == ["Timeline"]
+
+
+def test_a_workspace_button_switches_to_the_panels_of_its_ready_layout(ed):
+    editor.switch_workspace(ed, "Profiling")
+    assert ed.workspace == "Profiling"
+    assert editor.closed_workspace_panels(ed, "Profiling") == []
+    assert editor.closed_workspace_panels(ed, "UI") == ["Asset Browser", "Sprite Library", "Config Editor"]
+    with pytest.raises(SessionError, match="not a workspace"):
+        editor.switch_workspace(ed, "Debugging")
+
+
+def test_a_panel_a_workspace_does_not_show_is_named(ed):
+    ed.stays_closed = {"Asset Browser"}
+    editor.switch_workspace(ed, "Animation")
+    assert editor.closed_workspace_panels(ed, "Animation") == ["Asset Browser"]
+
+
+def test_reset_layout_brings_back_the_panels_of_the_active_workspace(ed):
+    editor.switch_workspace(ed, "UI")
+    ed.open_panels = {"Viewport"}
+    editor.reset_layout(ed)
+    assert ed.workspace == "UI" and editor.closed_workspace_panels(ed, "UI") == []
 
 
 def test_an_item_that_is_not_there_names_the_labels_the_window_shows(ed):
@@ -373,6 +464,7 @@ def test_rows_matching_gives_the_rows_the_search_leaves_and_clears_it(ed):
 
 
 def test_the_palette_opens_by_its_chord_filters_and_takes_two_escapes_to_close(ed):
+    ed.open_panels.add("Config Editor")  # its list child is not the palette's
     editor.open_palette(ed)
     ed.imgui_type("game")
     assert editor.palette_rows(ed) == ["Game Panel", "Switch Game and Editor"]

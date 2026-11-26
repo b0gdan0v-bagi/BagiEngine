@@ -2,19 +2,21 @@
 
 ## Overview
 
-The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (`ping`, `status`, `step`, `quit` live here; the game methods are registered by `Games`, the screenshot by `SDL`). Tools: `tools/control/CLAUDE.md`; fuzz targets: `tests/Fuzz/CLAUDE.md`.
+The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (see "Methods"). Tools: `tools/control/CLAUDE.md`; fuzz targets: `tests/Fuzz/CLAUDE.md`.
 
 | File | Purpose |
 |------|---------|
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()` (a `JsonView`), `Reply()`, `Fail()`, `DeferFrames()`; it owns its text and tape (`RequestBuffers`) |
+| `ControlClient` | Who posts a request: a connection or a named part of the program (`Post()`, `call.GetClient()`, `client_hello`; `.claude/rules/control-activity.md`) |
+| `ControlActivity` | The journal of connects, names and answered calls that act (`service.Activity()`; same rule file) |
 | `ControlParams` | Checked readers of a call's params: `FindParam`, `GetParamString` / `Int` / `Number` / `Bool`; a wrong type or an absent key is nothing, a number is finite |
 | `ControlLog` | Totals of warnings and errors and the last `kLogCapacity` lines of Warning and above, from `LogEvent` (`service.Log()`; `log_*` methods) |
 | `ControlRoots` | The roots of a service: named providers of a `TypedRef` (`game` is the active game) that the by-name methods reach; names are `String`s, never interned; `allowInterning` (default off) lets a write intern client text |
 | `ReflectionControl` | `RegisterReflectionControl()`: the by-name methods, called by `RegisterControlBuiltins` |
 | `SchemaExport` | The type registry as JSON; pure over a `TypeRegistry`; its rules: `Reflection/CLAUDE.md`, "Schema export" |
 | `ControlBuiltins` | `RegisterControlBuiltins()`: the methods of its row in "Methods" |
-| `ControlBuiltinAnswers.h` | The reflected answers of `ControlBuiltins` (`ControlStatusAnswer : ControlClock`, `ControlBatchAnswer`, ...); `ControlListedParam` mirrors `ControlParamInfo`, which stays an aggregate (`BE_CLASS` adds a virtual) |
+| `ControlBuiltinAnswers.h` | The reflected answers of `ControlBuiltins` (`ControlStatusAnswer : ControlClock`, `ControlBatchAnswer`, ...) |
 | `ControlClock` | Reflected clock (`frame`, `totalTime`, `deltaTime`, `fixedDeltaTime`, `Read()`); the parent of every answer that carries the clock |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the reflected `ApplicationConfig`, the manual clock included, and the per-run flags `--backend` / `--hidden-window` (`ControlFlags`, no attribute; `Application/RenderBackendChoice.h`); pure |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients), `ControlParamInfo` / `ControlMethodInfo` (what a module says about a method) and `ControlMethodListing` (what `GetMethods()` returns) |
@@ -38,23 +40,23 @@ response  {"id": 1, "ok": true,  "result": {...}}
 push      {"event": "state_changed", "data": {"game": "Stress", "version": 12, "state": {...}}}
 ```
 
-Error codes are strings and part of the protocol (`ControlErrors`): `parse_error`, `invalid_request`, `invalid_params`, `unknown_method`, `request_too_large`, `internal_error`, `shutting_down`, `manual_clock`. A method adds its own (`illegal_action`, ...); the by-name methods add `unknown_root`, `no_object`, `unknown_type` and the codes of `Reflection/CLAUDE.md`, "Reflection methods". A request that cannot be parsed gets `"id": null`. `ping` reports `ControlService::kProtocolVersion`; change it when the format changes incompatibly.
+Error codes are strings and part of the protocol (`ControlErrors`): `parse_error`, `invalid_request`, `invalid_params`, `unknown_method`, `request_too_large`, `internal_error`, `shutting_down`, `manual_clock`, `no_client`. A method adds its own (`illegal_action`, ...); the by-name methods add `unknown_root`, `no_object`, `unknown_type` and the codes of `Reflection/CLAUDE.md`, "Reflection methods". A request that cannot be parsed gets `"id": null`. `ping` reports `ControlService::kProtocolVersion`; change it when the format changes incompatibly.
 
 `state_changed` (`GameControl` publishes it, `Games/CLAUDE.md`) is sent at the end of the frame in which the state version of the active game moved, whoever moved it; `data` is what `get_state` answers (`state` is left out when the game cannot give it). The first frame only records the version. `log` (one per new warning or error line while `log_subscribe` is on) is the other push.
 
 ## Frame and threads
 
-- `Post()` is the only thread-safe call. It tapes the text on the posting thread (`JsonTape`, no DOM) and queues the request; everything else (`RegisterHandler`, `Drain`, `EndFrame`, `Publish`, `Shutdown`, the handlers, the reply and the event sink) belongs to the main thread.
+- Only `Post()` and the opening and closing of clients are thread-safe. `Post()` tapes the text on the posting thread (`JsonTape`, no DOM) and queues the request; everything else (`RegisterHandler`, `Drain`, `EndFrame`, `Publish`, `Shutdown`, the handlers, the reply and the event sink) belongs to the main thread.
 - `CoreManager::OnGameCycle` calls `Drain()` as stage **1b**: after input, before `TaskManager::Update`. A command therefore sees this frame's input and what it changes is seen by this frame's logic and render. `Application::RunFrame` calls `EndFrame()` after the present.
 - A `Request` and a `ControlCall` are `BE_POOLED` (made on the posting thread, freed on the main one: the concurrent pool). `id` is the raw text of the request's own id (echoed as written) and `params` a `JsonView`, both into the request's `RequestBuffers` (the text copy and its tape, recycled through a free list of the service); the two queues are `Fifo`s that keep their capacity; `Drain()` walks the inbox once and sends a request held by the barrier to the back, which keeps the held ones in order.
 - Requests run in the order they were posted (per posting thread). Do not use `TaskManager` for commands: its main-thread queue is a priority queue and does not keep the order of equal priorities.
-- The handler table, the event sink and the hooks hold `MoveOnlyFunction`s. The handler that runs is moved out of its entry for the call and goes back after it unless the call replaced it: a handler may register methods, even its own name, and the replaced handler's capture must outlive the call that is using it. A frame end hook is held the same way.
+- The handler table, the event sink and the hooks hold `MoveOnlyFunction`s. The handler that runs is moved out of its entry for the call and goes back after it unless the call replaced or removed it: a handler may do both, even to its own name, and its capture must outlive the call that is using it. A frame end hook is held the same way.
 - A handler ends in exactly one of `Reply()`, `Fail()`, `DeferFrames()`; one that does none gets `internal_error` and an error log line.
 - `DeferFrames(n, done)` answers later: `done` runs at the end of the frame in which the counter (starting at `n`, at least 1) reaches zero. `DeferFrames(n, secondsPerFrame, done)` also says how long each frame lasts, which only the manual clock uses (negative or not a number is zero; the default is `kDefaultStepSeconds`, 1/60). While a call is deferred it is a **barrier**: the requests behind it wait, so a pipelined `step` + `get_state` gives the state after the step. A method registered with `bypassBarrier` (`quit`) still runs, but cannot defer itself.
 - `SetFrameEndHook(name, hook)` runs `hook` at every `EndFrame()`, before a deferred call completes (the state-change push uses it). Setting a name again replaces its hook, so a module that registers twice (`GameManager::Initialize()` does, once per test) adds nothing. A hook that sets another one is fine: the new one runs in the same frame.
 - `Shutdown()` (from `OnApplicationDeinit`) answers everything queued or deferred with `shutting_down`; a request posted later is answered at once on the posting thread. Stop the transport before it.
 - No `ASSERT` / `EXPECT` / `FATALERROR` on client data: a bad request is an error response, not an engine bug.
-- Method names live in a `HashMap<String, ...>`, not in `PoolString`: a client must not be able to grow the pool (`ControlServiceTest` checks it).
+- Method names live in a `HashMap<String, ...>`, not in `PoolString`: a client must not be able to grow the pool.
 
 ## JSON rules
 
@@ -63,7 +65,7 @@ There is no DOM and no exception: JSON is read through a `JsonTape` and written 
 - **A handler reads `call.Params()`** (a `JsonView` into the request's tape; `.claude/rules/json-tape.md`) with `ControlParams.h`: every read is checked, a number must be finite (`1e999` reads as nothing, so the handler answers `invalid_params`). A reflected type is read with `JsonDeserializer::Load(view)`.
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport. A request nested deeper than `kMaxRequestDepth` (128) is `invalid_request` with `id: null` (`IsJsonNestedDeeperThan` runs before the tape, whose own limit is 256 and a `parse_error`).
 - **JSON is written with `JsonWriter`.** A document that is passed on or kept is text (`JsonMemberMap` for unknown keys written back, `WriteJsonSorted` for keys in byte order) and is read through a `JsonTape`. A type with no native writer (a field with only `Serialize`) goes through `WriteSerializedMember` / `WriteSerializedObject`: `Serialize` into a `JsonStreamSerializer`, taped and written sorted; it allocates, so it is never a hot path.
-- A plain answer is a reflected struct of arena types and `TextView`s, a local of the handler or of `done`, `call.ReplyObject(answer)` (`Reflection/CLAUDE.md`, "Answers on the scratch arena"); an answer with the clock derives `ControlClock`. A foreign JSON value in it (the client's `id`, a game's document) is a `JsonPayload` member, by holder: `Streamed` for a game's document written straight into the writer (a failing callback answers its `ControlError` with `JsonWriter::Fail`), `Text` for ready text. A hand-written writer stays for the log lines (they stream from the ring), `frame_stats`, `explain_value` and `PropertyValue`.
+- A plain answer is a reflected struct of arena types and `TextView`s, a local of the handler or of `done`, `call.ReplyObject(answer)` (`Reflection/CLAUDE.md`, "Answers on the scratch arena"); an answer with the clock derives `ControlClock`. A foreign JSON value in it (the client's `id`, a game's document) is a `JsonPayload` member, by holder: `Streamed` for a game's document written straight into the writer (a failing callback answers its `ControlError` with `JsonWriter::Fail`), `Text` for ready text. A hand-written writer stays for the log lines (streamed from the ring), `frame_stats`, `explain_value` and `PropertyValue`.
 - Write a message with `JsonWriter` into a `String` that lives as a member (it keeps its capacity, so the second message allocates nothing); a reflected value writes itself with `value.WriteJson(writer)`. A hand-written object writes its keys in **alphabetical (byte) order** (`id`, `ok`, `result`): clients may rely on it. `Reply` and `Publish` take a writer callback; `TryReply` is for a writer that can fail (its error answers, nothing is sent).
 - The `const String&` a `ControlReplyFn` gets is valid for the call only (the service writes every reply into one scratch): a reply function that keeps the text copies it.
 
@@ -81,12 +83,12 @@ The two clocks differ in who runs the frames:
 
 While a step runs it is the barrier too. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (`screenshot` asks for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down.
 
-**The manual clock is a pause** (`CoreManager::GetPause()`, `Time/GamePause.h`; there is no second mechanism): `--manual-clock` starts with the pause set, and `Application::RunFrame` asks the pause for the kind of the frame. With the manual clock, which is always paused, `pause` is a no-op and `resume` fails with `manual_clock`. How a deferred call requests its frames, a `step` on a paused real clock (`N + 1` frames), the `pause` / `resume` answers and what a **held** frame runs: `.claude/rules/control-clock.md`.
+**The manual clock is a pause** (`CoreManager::GetPause()`, `Time/GamePause.h`; there is no second mechanism). How a deferred call requests its frames, a `step` on a paused real clock (`N + 1` frames), the `pause` / `resume` answers and what a **held** frame runs: `.claude/rules/control-clock.md`.
 
 What the manual clock means for a client:
 
-- Game time and the frame number stand still between steps. A request that changes the state (`perform_action`, `reset`) applies at once, in the idle cycle, but the scene reacts (logic, render, the `state_changed` push) in the next frame: send a `step` after it.
-- The window is not redrawn between steps. A frame renders as usual, including the present.
+- Game time and the frame number stand still between steps. A request that changes the state (`perform_action`, `reset`) applies at once, but the scene reacts (logic, render, the `state_changed` push) in the next frame: send a `step` after it.
+- The window is redrawn only by a step's frames.
 - Tasks, animations and fixed updates also move only with steps; `dt` 0 makes frames in which nothing moves.
 - `--manual-clock` without `--control` is an error: nobody could step the game.
 
@@ -98,15 +100,16 @@ Off by default (`--control`, `control="true"`); the command line beats the attri
 
 | Where | Methods |
 |-------|---------|
-| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`, `log` totals, `runMode`: `Editor` or `Game`, the mode that runs, `window`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `list_methods` (to `{methods: [{name, summary, params: [{name, type, required, description}]}]}`, sorted), `log_mark`, `log_since`, `log_subscribe`, `batch` (shapes, limits and traps: `.claude/rules/control-qa-api.md`), `quit` |
+| `BECore/Control/ControlBuiltins` | `client_hello` (`{name}` to `{id, name}`; `no_client`), `ping`, `status` (the clock, `manualClock`, `paused`, `log` totals, `runMode`: `Editor` or `Game`, the mode that runs, `window`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `list_methods` (sorted: name, summary, params), `log_mark`, `log_since`, `log_subscribe`, `batch` (shapes, limits and traps: `.claude/rules/control-qa-api.md`), `quit` |
 | `BECore/Control/ControlWindow` | `set_window` (`{width, height, density?, userScale?, safeArea?}` on a headless window, answered after a frame; `not_headless` on a real one) and the `window` object of `status`; `.claude/rules/control-window-api.md` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
-| `BECore/UI/UIControl` | `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real click on a visible button, toggle or slider, `at` 0..1 also sets a slider; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `.claude/rules/ui-control-api.md`) |
-| `BECore/Scene/Scene*Control` | `scene_tree`, `scene_get`, `scene_set`, `scene_set_node` (the active scene by node path), `scene_pick` (the node under a point of the screen), `scene_save` (into the program's `SceneConfig`); `.claude/rules/control-scene-api.md` |
+| `BECore/UI/UIControl` | answers are the reflected structs of `UIControlAnswers.h`; `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real click on a visible button, toggle or slider, `at` 0..1 also sets a slider; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `.claude/rules/ui-control-api.md`) |
+| `BECore/Scene/Scene*Control` | `scene_tree`, `scene_get`, `scene_set`, `scene_set_node`, `scene_pick`, `scene_save` (the active scene; `.claude/rules/control-scene-api.md`) |
 | `BECore/Input/InputControl` | `click_at` (`{x, y, space?, button?, which?}`; `Input/CLAUDE.md`), `wheel_at` (`{x, y, dx?, dy?, flipped?, which?}`: a wheel event at an output pixel to `{consumed, x, y}`) |
 | `BECore/Input/ImGuiInputControl` | `imgui_input` (`{events, space?}` to `{events, frames, wantCapture*, wantTextInput}`: events into `ImGuiIO`, answered once ImGui took the queue and a frame reacted; `no_imgui`, `invalid_params`, `imgui_timeout`), `imgui_find` (`{label?, labelContains?, id?, window?, kind?, visibleOnly?, limit?}` to the matches with rects in output pixels; no filter lists the windows); `Input/CLAUDE.md`, `.claude/rules/control-imgui-api.md` |
 | `BECore/Clipboard/ClipboardControl` | `clipboard_set` (`{text}` to `{ok}`), `clipboard_get` (to `{status, text}`; answered after frames, `clipboard_timeout` after 600), `clipboard_paste` (to `{}` once the `PasteEvent` has been delivered, as Cmd+V gives it); `Clipboard/CLAUDE.md` |
 | `BECore/Profiler/ProfilerControl` | `frame_stats` (`{frames?}` 1..240: the last frames, oldest first, with stage times, draws, allocations, arena and pool totals, counters; `Memory/CLAUDE.md`), `profiler_dump` (`{path?}` relative, no `..`: writes the Chrome trace; `not_recording` unless `--trace=` or `--profiler=chrome`), `zone_allocs` (`{top?, reset?}`: allocations per zone, `names`, `sizes`, totals; `enabled` false without `ENGINE_PROFILER_ALLOC`); `Profiler/CLAUDE.md` |
+| `BECore/PoolString/PoolStringsControl` | `pool_strings`; `PoolString/CLAUDE.md`, "Control method" |
 | `BECore/Control/ReflectionControl` | `get_property` (`{root, path}`), `set_property` (`{root, path, value}`), `call_method` (`{root, method, arguments?}`) over a root; `list_types` (`{base?, recursive?, creatable?}`), `describe_type` (`{name}`), `schema`; shapes and codes in `Reflection/CLAUDE.md`, "Reflection methods" |
 | `BECore/FileSystem/FileWatchControl` | `files_rescan` (to `{changes}`), `files_apply` (`{paths?}` to `{applied}`); codes `not_watching`, `invalid_params`; `FileSystem/CLAUDE.md` |
 | `BECore/Widgets/EditorStateControl` | `editor_state` (to `{anyDirty, documents}`); code `not_editor` in the Game mode; `.claude/rules/control-editor-api.md` |
@@ -120,8 +123,8 @@ The game methods describe only what `GameControl` itself reads; the parameters o
 
 1. Write a handler `void(ControlCall&)` in the module that owns the behaviour (BECore only for things that need nothing above it).
 2. Read `call.Params()` with `ControlParams.h`; answer with `call.Reply(writer)` (a `JsonWriter` callback, keys alphabetical), `call.ReplyObject(answer)` or `call.Fail(code, message)`. For an answer that needs frames to pass (step, screenshot) use `call.DeferFrames(...)`.
-3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler).
-4. Describe it with `DescribeMethod("name", {summary, params})` beside the registration, so `list_methods` and the editor's console can offer and complete it. For people only, never checked against the handler; a method without one still runs.
+3. Register it with `CoreManager::GetControlService().RegisterHandler("name", handler)` where the owning module starts up (registering again replaces the handler). A method that lasts shorter than the service is taken away by `UnregisterHandler("name")`, its description too.
+4. Describe it with `DescribeMethod("name", {summary, params})` beside the registration, so `list_methods` and the editor's console can offer and complete it. For people only, never checked against the handler; a method without one still runs. A method that acts on nothing sets `quiet`, which keeps it out of the activity journal.
 5. Test it with a `ControlService` of its own and a lambda as the reply function: no transport needed.
 6. Write the method and its codes into the protocol description of the owning module.
 
@@ -129,4 +132,4 @@ An object a client may read or write by name is offered as a root: `service.Root
 
 ## Tests
 
-`tests/BECore/ControlServiceTest.cpp` is the pattern. The transport has its own tests, see `RemoteControl/CLAUDE.md`.
+`tests/BECore/ControlServiceTest.cpp` is the pattern; the transport's tests: `RemoteControl/CLAUDE.md`.

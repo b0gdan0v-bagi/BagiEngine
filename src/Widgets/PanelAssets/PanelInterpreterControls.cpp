@@ -24,7 +24,8 @@ namespace BECore {
             if (on) {
                 ImGui::PushStyleColor(ImGuiCol_Button, palette.accentMuted);
             }
-            const bool clicked = ImGui::Button(label);
+            const ScopedHoverSnap snap(on);
+            const bool clicked = BlendedButton(label);
             ImGui::PopStyleColor((coloured ? 1 : 0) + (on ? 1 : 0));
             return clicked;
         }

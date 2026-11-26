@@ -28,6 +28,10 @@ namespace BECore::Tests {
             return hasPlayModel ? &playModel : nullptr;
         }
 
+        [[nodiscard]] Optional<EditorWorkspace> GetActiveWorkspace() const override {
+            return workspace;
+        }
+
         std::expected<void, String> SaveCurrentLayoutAs(StringView name) override {
             if (!layouts) {
                 return std::unexpected(String("no layouts folder"));
@@ -51,6 +55,8 @@ namespace BECore::Tests {
         /// The model the toolbar reads; the test drives it directly, as the widget's commands would
         EditorPlayModel playModel;
         bool hasPlayModel = true;
+        /// The active workspace the toolbar reads; none plays a host without workspaces
+        Optional<EditorWorkspace> workspace = EditorWorkspace::Scene;
         /// The names `LoadLayout` was asked for, in order
         Vector<String> loadedLayouts;
         int preferencesNotified = 0;

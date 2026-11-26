@@ -29,7 +29,7 @@ One WebSocket, text messages only. The page opens `ws://localhost:8766` by defau
 |---------|------|---------|
 | `{"bagiControlLink":1,"token":"<token>"}` | page, first, nothing before it | the hello; the token is 1 to 128 of `A-Z a-z 0-9 _ -`, the object has no other member |
 | `<channel> <request text>` | bridge | a request, one space, then the text as the client sent it |
-| `<channel>` | bridge | that control connection ended. A page may ignore it: it lets a per-client identity be added without a protocol change |
+| `<channel>` | bridge | that control connection ended |
 | `<channel> <response text>` | page | the answer to a request of that channel; dropped silently when the channel has gone |
 | `0 <push text>` | page | a push for every control client |
 
@@ -57,6 +57,7 @@ The page retries after every close but 1008: after 1 s, doubling to 10 s, and fr
 
 - An answer goes out only on the connection its request came on. A later reply is dropped, one after `Stop()` or the link's destruction too (`ControlService::Shutdown()` answers late): a restarted bridge counts its channels from 1 again, so an old answer would reach a stranger.
 - The link holds the service's event sink only while it is connected.
+- Each channel is a connection client of the service (`control-activity.md`), so `client_hello`, the journal and the touch record work as with a desktop game: opened by its first request (a connection that has sent nothing is unknown to the page), closed by its notice or with the link's connection.
 - A message without a channel aborts the connection like a refused send (a script cannot close with 1002), and what the transport still holds of it does not run.
 - A failed dial also puts one error of the browser's own into its console, which no script can silence: a page with no bridge shows one per retry. `localhost` reaches the bridge's 127.0.0.1 in Chromium and WebKit.
 - One Info line per outage, and the one Warning of a 1008: a QA run reads warnings as findings. The token is never logged.

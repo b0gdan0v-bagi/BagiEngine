@@ -1,32 +1,14 @@
 #include "ArtGenLaunch.h"
 
-#include <BECore/File/File.h>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_process.h>
 #include <SDL3/SDL_properties.h>
-#include <SDL3/SDL_stdinc.h>
+#include <Widgets/EditorLayout/EngineTools.h>
 
 namespace BECore {
 
     Optional<Path> FindArtGenBridge(const Vector<Path>& configLayers) {
-        for (const Path& layer : configLayers) {
-            Path script = layer.Parent() / kArtGenBridgeScript;
-            if (const auto info = GetFileInfo(script); info && info->kind == FileKind::File) {
-                return script;
-            }
-        }
-        return std::nullopt;
-    }
-
-    String ArtGenPython() {
-        if (const char* configured = SDL_getenv("BAGI_PYTHON"); configured != nullptr && configured[0] != '\0') {
-            return String(configured);
-        }
-#if defined(_WIN32)
-        return String("pythonw");
-#else
-        return String("python3");
-#endif
+        return FindEngineScript(configLayers, kArtGenBridgeScript);
     }
 
     Vector<String> BuildBridgeLaunch(StringView python, StringView script, uint16_t port, StringView log) {
@@ -43,7 +25,7 @@ namespace BECore {
 
     bool LaunchArtGenBridge(const Path& script, uint16_t port, const Path& log, String& error) {
         error.clear();
-        const String python = ArtGenPython();
+        const String python = EnginePython();
         const Vector<String> arguments = BuildBridgeLaunch(python, script.View(), port, log.View());
         Vector<const char*> argv;
         argv.reserve(arguments.size() + 1);

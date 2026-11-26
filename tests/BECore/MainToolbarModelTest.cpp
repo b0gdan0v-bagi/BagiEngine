@@ -80,6 +80,23 @@ namespace BECore::Tests {
         EXPECT_FALSE(noHost.canPause);
     }
 
+    TEST_F(MainToolbarModelTest, TheActiveWorkspaceIsReadFromTheHostAndThereIsNoneWithoutOne) {
+        _host->workspace = EditorWorkspace::Animation;
+        EXPECT_TRUE(Updated().hasWorkspace);
+        EXPECT_EQ(Updated().workspace, EditorWorkspace::Animation);
+
+        // The workspaces do not depend on the play model
+        _host->hasPlayModel = false;
+        EXPECT_TRUE(Updated().hasWorkspace);
+
+        _host->workspace.reset();
+        EXPECT_FALSE(Updated().hasWorkspace);
+
+        _host->workspace = EditorWorkspace::UI;
+        _handle.Reset();
+        EXPECT_FALSE(Updated().hasWorkspace);
+    }
+
     TEST_F(MainToolbarModelTest, TheModelRunsNoCommandBecauseTheLayoutWidgetOwnsThem) {
         EXPECT_FALSE(_model->RunCommand("game.play", {}));
         EXPECT_FALSE(_model->RunCommand("game.pause", {}));

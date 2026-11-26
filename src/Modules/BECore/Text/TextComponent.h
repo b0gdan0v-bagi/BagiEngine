@@ -19,15 +19,15 @@ namespace BECore {
      * The outline and the hard shadow are paint: the layout never counts them, and a Clip box cuts them.
      */
     class TextComponent : public IComponent {
-        BE_CLASS(TextComponent, ICON = type)
+        BE_CLASS(TextComponent, ICON = type, CATEGORY = render)
     public:
         TextComponent() = default;
         ~TextComponent() override = default;
 
         BE_REFLECT_FIELD String _text;
-        BE_REFLECT_FIELD PoolString _fontPath;        ///< a font path; empty: the face of `_fontFamily` and `_fontWeight`. A path wins over them
-        BE_REFLECT_FIELD PoolString _fontFamily;      ///< a family of the `families` table of TextConfig.xml; empty is its default family
-        BE_REFLECT_FIELD uint16_t _fontWeight = 400;  ///< the CSS weight (400 regular, 700 bold); the nearest face of the family is used
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(asset(Font)) PoolString _fontPath;  ///< a font path; empty: the face of `_fontFamily` and `_fontWeight`. A path wins over them
+        BE_REFLECT_FIELD PoolString _fontFamily;                            ///< a family of the `families` table of TextConfig.xml; empty is its default family
+        BE_REFLECT_FIELD uint16_t _fontWeight = 400;                        ///< the CSS weight (400 regular, 700 bold); the nearest face of the family is used
         BE_REFLECT_FIELD float _fontSize = 24.0f;
         BE_REFLECT_FIELD Color _color{255, 255, 255, 255};
         BE_REFLECT_FIELD TextAlign _align = TextAlign::Left;

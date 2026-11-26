@@ -159,7 +159,7 @@ namespace BECore {
                 BatchRect(x, y, w, h, color);
                 return;
             }
-            Flush();  // drawn at once below, so the batch before it goes first
+            Flush(BatchBreak::Unbatched);  // drawn at once below, so the batch before it goes first
         }
         if (_renderer && !IsClipEmpty()) {
             SDL_SetRenderDrawBlendMode(_renderer, ToSDLBlendMode(GetBlendMode()));
@@ -178,7 +178,7 @@ namespace BECore {
                 BatchTexture(texture, srcRect, dstX, dstY, dstW, dstH, tint);
                 return;
             }
-            Flush();
+            Flush(BatchBreak::Unbatched);
         }
         if (!_renderer || IsClipEmpty()) {
             return;
@@ -213,7 +213,7 @@ namespace BECore {
                 BatchTransformedTexture(texture, srcRect, dstX, dstY, dstW, dstH, tint, transform);
                 return;
             }
-            Flush();
+            Flush(BatchBreak::Unbatched);
         }
         if (!_renderer || IsClipEmpty() || texture.GetWidth() <= 0.0f || texture.GetHeight() <= 0.0f) {
             return;
@@ -268,6 +268,7 @@ namespace BECore {
             return {};
         }
         SDL_SetTextureBlendMode(handle, SDL_BLENDMODE_BLEND);
+        CountTextureUpload(width, height);
 
         auto texture = New<SDLTexture>();
         texture->SetLoaded(TexturePaths::memory, handle, static_cast<float>(width), static_cast<float>(height));
@@ -275,7 +276,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) {
-        Flush();  // not batched, so the quads before it are drawn first
+        Flush(BatchBreak::Unbatched);  // not batched, so the quads before it are drawn first
         if (!_renderer || IsClipEmpty() || vertices.empty() || indices.size() < kIndicesPerTriangle) {
             return;
         }
@@ -328,13 +329,15 @@ namespace BECore {
         } else {
             SDL_SetRenderDrawBlendMode(_renderer, blendMode);
         }
-        const bool drawn =
-            SDL_RenderGeometryRaw(_renderer, handle, _geometryPositions.data(), 2 * sizeof(float), reinterpret_cast<const SDL_FColor*>(_geometryColors.data()), kFloatsPerColor * sizeof(float),
-                                  _geometryTexCoords.data(), 2 * sizeof(float), vertexCount, indices.data(), static_cast<int>(indices.size() - indices.size() % kIndicesPerTriangle), sizeof(int));
+        const size_t indexCount = indices.size() - indices.size() % kIndicesPerTriangle;
+        const bool drawn = SDL_RenderGeometryRaw(_renderer, handle, _geometryPositions.data(), 2 * sizeof(float), reinterpret_cast<const SDL_FColor*>(_geometryColors.data()),
+                                                 kFloatsPerColor * sizeof(float), _geometryTexCoords.data(), 2 * sizeof(float), vertexCount, indices.data(), static_cast<int>(indexCount), sizeof(int));
         if (!drawn) {
             LOG_ERROR("SDLRendererBackend: DrawGeometry failed: {}", SDL_GetError());
+            return false;
         }
-        return drawn;
+        CountGeometryUpload((_geometryPositions.size() + _geometryColors.size() + _geometryTexCoords.size()) * sizeof(float) + indexCount * sizeof(int));
+        return true;
     }
 
     bool SDLRendererBackend::BatchesRect(float x, float y, float w, float h, const Color& color) const {

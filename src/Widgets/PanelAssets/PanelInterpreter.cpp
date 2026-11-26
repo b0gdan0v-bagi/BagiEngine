@@ -685,7 +685,7 @@ namespace BECore {
             _label.append(dropdown.text);
             _label.append(kIdSuffix);
             _label.append(dropdown.id);
-            clicked = ImGui::Button(_label.c_str());
+            clicked = BlendedButton(_label.c_str());
         }
         ElementTooltip(prepared);
         ImGui::EndDisabled();
@@ -904,7 +904,7 @@ namespace BECore {
         } else if (prepared.glyph != nullptr) {
             clicked = IconTextButton(prepared.glyph, button.text.c_str(), nullptr, widthPixels);
         } else {
-            clicked = ImGui::Button(button.text.empty() ? "##button" : button.text.c_str(), ImVec2(widthPixels, 0.0f));
+            clicked = BlendedButton(button.text.empty() ? "##button" : button.text.c_str(), widthPixels);
         }
         ElementTooltip(prepared);
         ImGui::PopItemFlag();
@@ -1168,7 +1168,7 @@ namespace BECore {
             _label.append(text.data(), text.size());
             _label.append(kIdSuffix);
             _label.append(column.id);
-            clicked = ImGui::Button(_label.c_str());
+            clicked = BlendedButton(_label.c_str());
         }
         RowTooltip(column.tooltip, list, row, column.tooltipField);
         ImGui::EndDisabled();

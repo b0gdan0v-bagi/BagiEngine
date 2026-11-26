@@ -29,6 +29,7 @@ namespace BECore {
      *
      * | Method | Params | Result |
      * |--------|--------|--------|
+     * | client_hello | {"name": 1 to kMaxControlClientNameBytes bytes, no control characters} | {"id","name"}; the code `no_client` for a call that has no client |
      * | ping   | none | {"pong":true,"protocol":ControlService::kProtocolVersion} |
      * | status | none | {"frame","totalTime","deltaTime","fixedDeltaTime"} of CoreManager::GetTime(), "manualClock", "paused" and "log":{"warnings","errors"} (totals since the start) |
      * | step   | {"frames": 1 to kMaxStepFrames (default 1), "dt": 0 to Time::kMaxFrameTime seconds (default 1/60)} | the clock as `status` gives it, after the last frame |

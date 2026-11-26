@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<SceneManager contentVersion="5">
+<SceneManager contentVersion="6">
   <scenes>
     <!-- The scene of BagiDemo, made to be browsed and edited: one group node per kind of component (tools/demo/CLAUDE.md) -->
     <scene type="Scene" name="DemoScene" viewWidth="1280" viewHeight="720">

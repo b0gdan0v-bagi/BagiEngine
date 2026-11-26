@@ -6,7 +6,7 @@ paths:
 
 # The benchmarks of this repository
 
-Read by the skills `perf` and `perf-investigate` and by the sentinel step of `todo-merge` (`.claude/skills/perf/SKILL.md`; the runner and the format of the set: `tools/perf/CLAUDE.md`). A game that carries this repository as the submodule `engine/` has a file of the same name with its own set (it can run `{engine}/tools/perf/headless_frames.py` on its own executable); the skills are the same text in both.
+Read by the skills `perf`, `perf-investigate` and `perf-render` and by the sentinel step of `todo-merge` (`.claude/skills/perf/SKILL.md`; the runner and the format of the set: `tools/perf/CLAUDE.md`). A game that carries this repository as the submodule `engine/` has a file of the same name with its own set (it can run `{engine}/tools/perf/headless_frames.py` on its own executable); the skills are the same text in both.
 
 ## Benchmark set
 
@@ -29,44 +29,67 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower"},
         "work_ms_p99": {"source": "json", "key": "workMsP99", "unit": "ms/frame", "better": "lower", "gate": false},
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
         "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
       }
     },
     {
       "name": "stress-sprites-gpu",
-      "about": "5000 spinning sprites over 4 atlases, 300 frames after 30 of warm-up, a run of about 2 s, in a hidden window with the present uncapped (no vsync wait); the benchmark is skipped (never failed) on a machine without the backend or a display. SDL's hardware renderer (Metal on macOS). work_ms_p50 is the frame without the present: the scene update and the IRenderer calls, the part the 2D batcher cuts (on the benchmark machine 0.28 ms batched, 0.52 ms with --no-batching; cpu_ms_p50 shows no gain: 0.7 to 1.5 ms batched, 1.2 ms unbatched, the present and the noise around it hide what work_ms shows); draw_calls is exact (23 batched against 5000 for one sprite per call), so a jump in it is a batcher regression and it gates at 1 %. cpu_ms_p50 and frame_ms_p50 include the present and are noisy on a laptop, so they only inform. `--no-batching` of stress_frames.py gives the unbatched side for a comparison by hand",
+      "about": "5000 spinning sprites over 4 atlases, 300 frames after 30 of warm-up, a run of about 2 s, in a hidden window with the present uncapped (no vsync wait); the benchmark is skipped (never failed) on a machine without the backend or a display. SDL's hardware renderer (Metal on macOS). work_ms_p50 is the frame without the present: the scene update and the IRenderer calls, the part the 2D batcher cuts (on the benchmark machine 0.28 ms batched, 0.52 ms with --no-batching; cpu_ms_p50 shows no gain: 0.7 to 1.5 ms batched, 1.2 ms unbatched, the present and the noise around it hide what work_ms shows); draw_calls is exact (23 batched against 5000 for one sprite per call), so any change of it is a change of the batcher. cpu_ms_p50 and frame_ms_p50 include the present and are noisy on a laptop, so they only inform. `--no-batching` of stress_frames.py gives the unbatched side for a comparison by hand",
       "fast": false,
       "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--backend", "sdl-gpu"],
       "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--backend", "sdl-gpu", "--trace", "{trace}"],
       "metrics": {
         "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower"},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 1},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
         "work_ms_p99": {"source": "json", "key": "workMsP99", "unit": "ms/frame", "better": "lower", "gate": false},
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "frame_ms_p50": {"source": "json", "key": "frameMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
+        "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_texture": {"source": "json", "key": "batchBreakTexture", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_blend": {"source": "json", "key": "batchBreakBlend", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_full": {"source": "json", "key": "batchBreakFull", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_clip": {"source": "json", "key": "batchBreakClip", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_unbatched": {"source": "json", "key": "batchBreakUnbatched", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_boundary": {"source": "json", "key": "batchBreakBoundary", "unit": "per frame", "better": "lower", "gate": false},
+        "geometry_upload_bytes": {"source": "json", "key": "geometryUploadBytes", "unit": "bytes/frame", "better": "lower", "gate": false}
       }
     },
     {
       "name": "stress-sprites-vulkan",
-      "about": "5000 spinning sprites over 4 atlases, 300 frames after 30 of warm-up, a run of about 2 s, in a hidden window with the present uncapped (no vsync wait); the benchmark is skipped (never failed) on a machine without the backend or a display. VulkanRendererBackend on the driver the instance picks (KosmicKrisp on the benchmark machine). work_ms_p50 is the frame without the present: the scene update and the IRenderer calls, the part the 2D batcher cuts (on the benchmark machine 0.24 ms batched, 2.9 ms with --no-batching, cpu_ms_p50 1.8 against 3.5); draw_calls is exact (23 batched against 5000 for one sprite per call), so a jump in it is a batcher regression and it gates at 1 %. cpu_ms_p50 and frame_ms_p50 include the present and are noisy on a laptop, so they only inform. `--no-batching` of stress_frames.py gives the unbatched side for a comparison by hand",
+      "about": "5000 spinning sprites over 4 atlases, 300 frames after 30 of warm-up, a run of about 2 s, in a hidden window with the present uncapped (no vsync wait); the benchmark is skipped (never failed) on a machine without the backend or a display. VulkanRendererBackend on the driver the instance picks (KosmicKrisp on the benchmark machine). work_ms_p50 is the frame without the present: the scene update and the IRenderer calls, the part the 2D batcher cuts (on the benchmark machine 0.24 ms batched, 2.9 ms with --no-batching, cpu_ms_p50 1.8 against 3.5); draw_calls is exact (23 batched against 5000 for one sprite per call), so any change of it is a change of the batcher. cpu_ms_p50 and frame_ms_p50 include the present and are noisy on a laptop, so they only inform. `--no-batching` of stress_frames.py gives the unbatched side for a comparison by hand",
       "fast": false,
       "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--backend", "vulkan"],
       "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "5000", "--frames", "300", "--warmup", "30", "--backend", "vulkan", "--trace", "{trace}"],
       "metrics": {
         "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower"},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 1},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
         "work_ms_p99": {"source": "json", "key": "workMsP99", "unit": "ms/frame", "better": "lower", "gate": false},
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "frame_ms_p50": {"source": "json", "key": "frameMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "gpu_ms_p50": {"source": "json", "key": "gpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
+        "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_texture": {"source": "json", "key": "batchBreakTexture", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_blend": {"source": "json", "key": "batchBreakBlend", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_full": {"source": "json", "key": "batchBreakFull", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_clip": {"source": "json", "key": "batchBreakClip", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_unbatched": {"source": "json", "key": "batchBreakUnbatched", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_boundary": {"source": "json", "key": "batchBreakBoundary", "unit": "per frame", "better": "lower", "gate": false},
+        "geometry_upload_bytes": {"source": "json", "key": "geometryUploadBytes", "unit": "bytes/frame", "better": "lower", "gate": false}
       }
     },
     {
       "name": "stress-sprites-vulkan-500k",
-      "about": "Where a heavy 2D frame goes: BagiStress sprites on Vulkan, 500000 spinning sprites over 4 atlases, 200 frames after 30 of warm-up in a hidden window with the present uncapped, a run of about 7 s; skipped where the backend or a display is missing. The stage metrics are the medians of the stages of the game's line (tools/stress/CLAUDE.md, Fixed mode): update_ms_p50 is the Update stage (the spin of every sprite), draw_ms_p50 the draw pass without the submissions (the draw-list walk and the quad building), submit_ms_p50 SubmitBatch (the vertex copy and the command record), present_ms_p50 the present, wait_ms_p50 the wait for the GPU and the swapchain. gpu_ms_p50 is the GPU time over the frames that have a value only (KosmicKrisp hands out stale timestamps, so about 6 frames in 10 had one at this count), 0 when none has. On a Mac16,7 (M4 Pro), macos-release, three runs on a machine at load average 5 to 7: work_ms_p50 24.4, cpu_ms_p50 24.6, frame_ms_p50 24.6, gpu_ms_p50 16.0, update 2.4, draw 18.4, submit 3.6, present 0.11, wait 0.06 ms, 1957 draw calls. At 200000 sprites (one run): cpu 10.0, gpu 6.3, update 1.0, draw 7.3, submit 1.4 ms, so every stage grows with the count in a straight line. The frame is CPU-bound there: the GPU takes two thirds of the CPU frame and the CPU waits for it next to nothing. Inside draw_ms, by two 10 s samples (Profiler/HowToProfile.md, Sampling profilers): the walk (SceneDrawSystem::Run with DrawSprite, the clips, the sprite fit, the texture sizes) 12 to 13 %, the quad building 87 to 88 % (the sine and cosine of the rotation 55 to 57 %, AppendQuad 21 to 22 %, BatchTransformedTexture and MakeTransformedQuad 10 to 11 %). gate false until a baseline shows the noise",
+      "about": "Where a heavy 2D frame goes: BagiStress sprites on Vulkan, 500000 spinning sprites over 4 atlases, 200 frames after 30 of warm-up in a hidden window with the present uncapped, a run of about 7 s; skipped where the backend or a display is missing. The stage metrics are the medians of the stages of the game's line (tools/stress/CLAUDE.md, Fixed mode): update_ms_p50 is the Update stage (the spin of every sprite), draw_ms_p50 the draw pass without the submissions (the draw-list walk and the quad building), submit_ms_p50 SubmitBatch (the vertex copy and the command record), present_ms_p50 the present, wait_ms_p50 the wait for the GPU and the swapchain. gpu_ms_p50 is the GPU time over the frames that have a value only (KosmicKrisp hands out stale timestamps, so about 6 frames in 10 had one at this count), 0 when none has. On a Mac16,7 (M4 Pro), macos-release, three runs on a machine at load average 5 to 7: work_ms_p50 24.4, cpu_ms_p50 24.6, frame_ms_p50 24.6, gpu_ms_p50 16.0, update 2.4, draw 18.4, submit 3.6, present 0.11, wait 0.06 ms, 1957 draw calls. At 200000 sprites (one run): cpu 10.0, gpu 6.3, update 1.0, draw 7.3, submit 1.4 ms, so every stage grows with the count in a straight line. The frame is CPU-bound there: the GPU takes two thirds of the CPU frame and the CPU waits for it next to nothing. Inside draw_ms, by two 10 s samples (Profiler/HowToProfile.md, Sampling profilers): the walk (SceneDrawSystem::Run with DrawSprite, the clips, the sprite fit, the texture sizes) 12 to 13 %, the quad building 87 to 88 % (the sine and cosine of the rotation 55 to 57 %, AppendQuad 21 to 22 %, BatchTransformedTexture and MakeTransformedQuad 10 to 11 %). The times inform until a baseline shows their noise",
       "fast": false,
       "repetitions": 3,
       "timeoutSeconds": 180,
@@ -82,12 +105,22 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "submit_ms_p50": {"source": "json", "key": "submitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "present_ms_p50": {"source": "json", "key": "presentMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "wait_ms_p50": {"source": "json", "key": "waitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
+        "batch_break_texture": {"source": "json", "key": "batchBreakTexture", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_blend": {"source": "json", "key": "batchBreakBlend", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_full": {"source": "json", "key": "batchBreakFull", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_clip": {"source": "json", "key": "batchBreakClip", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_unbatched": {"source": "json", "key": "batchBreakUnbatched", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_boundary": {"source": "json", "key": "batchBreakBoundary", "unit": "per frame", "better": "lower", "gate": false},
+        "geometry_upload_bytes": {"source": "json", "key": "geometryUploadBytes", "unit": "bytes/frame", "better": "lower", "gate": false}
       }
     },
     {
       "name": "stress-sprites-world-vulkan",
-      "about": "What culling of off-screen quads and sprites gains: the run of stress-sprites-vulkan-500k with --world 4, a field of 4 x 4 views under a moving emulated camera, so about one sprite in 14 is sent (tools/stress/src/Stress/CLAUDE.md, Loads); skipped where the backend or a display is missing. primitives is what the renderer was asked to draw; update_ms_p50 includes the camera shift of every sprite, draw_ms_p50 the walk and the cull test of all 500000 entries. On a Mac16,7 (M4 Pro), macos-release, medians of five runs alternated at load average 4 to 8, before culling against after it. With --world 4: work_ms_p50 23.4 against 12.2, draw 17.5 against 8.5, submit 3.4 against 1.25, update 2.5 against 2.4, gpu_ms_p50 1.36 against 1.15, primitives 500000 against 34783, 1957 draw calls both ways (a batch ends with each run of one blend mode, and every run keeps a visible sprite). The all-visible run (stress-sprites-vulkan-500k), where the test removes nothing: work_ms_p50 23.6 against 23.5, draw 17.8 against 17.7, submit 3.4 both, gpu 14.4 both. gate false until a baseline shows the noise",
+      "about": "What culling of off-screen quads and sprites gains: the run of stress-sprites-vulkan-500k with --world 4, a field of 4 x 4 views under a moving emulated camera, so about one sprite in 14 is sent (tools/stress/src/Stress/CLAUDE.md, Loads); skipped where the backend or a display is missing. primitives is what the renderer was asked to draw; update_ms_p50 includes the camera shift of every sprite, draw_ms_p50 the walk and the cull test of all 500000 entries. On a Mac16,7 (M4 Pro), macos-release, medians of five runs alternated at load average 4 to 8, before culling against after it. With --world 4: work_ms_p50 23.4 against 12.2, draw 17.5 against 8.5, submit 3.4 against 1.25, update 2.5 against 2.4, gpu_ms_p50 1.36 against 1.15, primitives 500000 against 34783, 1957 draw calls both ways (a batch ends with each run of one blend mode, and every run keeps a visible sprite). The all-visible run (stress-sprites-vulkan-500k), where the test removes nothing: work_ms_p50 23.6 against 23.5, draw 17.8 against 17.7, submit 3.4 both, gpu 14.4 both. The times inform until a baseline shows their noise",
       "fast": false,
       "repetitions": 3,
       "timeoutSeconds": 180,
@@ -100,13 +133,22 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "update_ms_p50": {"source": "json", "key": "updateMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "draw_ms_p50": {"source": "json", "key": "drawMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "submit_ms_p50": {"source": "json", "key": "submitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "gate": false},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
+        "batch_break_texture": {"source": "json", "key": "batchBreakTexture", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_blend": {"source": "json", "key": "batchBreakBlend", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_full": {"source": "json", "key": "batchBreakFull", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_clip": {"source": "json", "key": "batchBreakClip", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_unbatched": {"source": "json", "key": "batchBreakUnbatched", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_boundary": {"source": "json", "key": "batchBreakBoundary", "unit": "per frame", "better": "lower", "gate": false},
+        "geometry_upload_bytes": {"source": "json", "key": "geometryUploadBytes", "unit": "bytes/frame", "better": "lower", "gate": false}
       }
     },
     {
       "name": "stress-sprites-fill-vulkan",
-      "about": "Overdraw: 2000 spinning sprites of 512 x 512 over 4 atlases (--sprite-size, tools/stress/src/Stress/CLAUDE.md, Loads), about 250 views of pixels blended a frame, 300 frames after 30 of warm-up in a hidden window with the present uncapped, a run of about 3 s; skipped where the backend or a display is missing. gpu_ms_p50 is the number to read: the CPU does next to nothing (work_ms_p50) and waits for the GPU. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: gpu_ms_p50 7.53 to 7.54, cpu_ms_p50 and frame_ms_p50 7.64 to 7.66, wait 7.48 to 7.53, work_ms_p50 0.10 to 0.13 ms, 11 draw calls; the plain run of stress-sprites-vulkan, alternated with these, had gpu_ms_p50 0.20 to 0.22 ms. gate false until a baseline shows the noise",
+      "about": "Overdraw: 2000 spinning sprites of 512 x 512 over 4 atlases (--sprite-size, tools/stress/src/Stress/CLAUDE.md, Loads), about 250 views of pixels blended a frame, 300 frames after 30 of warm-up in a hidden window with the present uncapped, a run of about 3 s; skipped where the backend or a display is missing. gpu_ms_p50 is the number to read: the CPU does next to nothing (work_ms_p50) and waits for the GPU. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: gpu_ms_p50 7.53 to 7.54, cpu_ms_p50 and frame_ms_p50 7.64 to 7.66, wait 7.48 to 7.53, work_ms_p50 0.10 to 0.13 ms, 11 draw calls; the plain run of stress-sprites-vulkan, alternated with these, had gpu_ms_p50 0.20 to 0.22 ms. The times inform until a baseline shows their noise",
       "fast": false,
       "repetitions": 3,
       "timeoutSeconds": 180,
@@ -118,13 +160,22 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "frame_ms_p50": {"source": "json", "key": "frameMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "wait_ms_p50": {"source": "json", "key": "waitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "gate": false},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
+        "batch_break_texture": {"source": "json", "key": "batchBreakTexture", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_blend": {"source": "json", "key": "batchBreakBlend", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_full": {"source": "json", "key": "batchBreakFull", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_clip": {"source": "json", "key": "batchBreakClip", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_unbatched": {"source": "json", "key": "batchBreakUnbatched", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_boundary": {"source": "json", "key": "batchBreakBoundary", "unit": "per frame", "better": "lower", "gate": false},
+        "geometry_upload_bytes": {"source": "json", "key": "geometryUploadBytes", "unit": "bytes/frame", "better": "lower", "gate": false}
       }
     },
     {
       "name": "stress-sprites-churn-vulkan",
-      "about": "Despawn and spawn: 20000 spinning sprites of which the 100 oldest are replaced every frame (--churn, tools/stress/src/Stress/CLAUDE.md, Loads), 300 frames after 30 of warm-up in a hidden window with the present uncapped, a run of about 4 s; skipped where the backend or a display is missing. update_ms_p50 holds the removals, the spawns and the update of every sprite's Life, draw_ms_p50 the full draw list rebuild and the walk. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: work_ms_p50 6.97 to 7.40, update 5.06 to 5.25, draw 1.75 to 1.98, submit 0.16, gpu_ms_p50 0.64 ms, 83 draw calls. Alternated with these, the same count with --churn 1: work 2.06 to 2.18, update 0.15 to 0.17, draw 1.74 to 1.84; without churn: work 0.78 to 0.82, update 0.02 to 0.03, draw 0.61 to 0.64 ms. A Release build counts no allocations: read those of a churn frame with `perf.py --trace stress-sprites-churn-vulkan` (a macos-profile build) or by the allocation cases of StressSpritesTest there. gate false until a baseline shows the noise",
+      "about": "Despawn and spawn: 20000 spinning sprites of which the 100 oldest are replaced every frame (--churn, tools/stress/src/Stress/CLAUDE.md, Loads), 300 frames after 30 of warm-up in a hidden window with the present uncapped, a run of about 4 s; skipped where the backend or a display is missing. update_ms_p50 holds the removals, the spawns and the update of every sprite's Life, draw_ms_p50 the full draw list rebuild and the walk. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: work_ms_p50 6.97 to 7.40, update 5.06 to 5.25, draw 1.75 to 1.98, submit 0.16, gpu_ms_p50 0.64 ms, 83 draw calls. Alternated with these, the same count with --churn 1: work 2.06 to 2.18, update 0.15 to 0.17, draw 1.74 to 1.84; without churn: work 0.78 to 0.82, update 0.02 to 0.03, draw 0.61 to 0.64 ms. A Release build counts no allocations: read those of a churn frame with `perf.py --trace stress-sprites-churn-vulkan` (a macos-profile build) or by the allocation cases of StressSpritesTest there. The times inform until a baseline shows their noise",
       "fast": false,
       "repetitions": 3,
       "timeoutSeconds": 180,
@@ -137,13 +188,22 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "draw_ms_p50": {"source": "json", "key": "drawMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "submit_ms_p50": {"source": "json", "key": "submitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "gpu_ms_p50": {"source": "json", "key": "gpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "gate": false},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
+        "batch_break_texture": {"source": "json", "key": "batchBreakTexture", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_blend": {"source": "json", "key": "batchBreakBlend", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_full": {"source": "json", "key": "batchBreakFull", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_clip": {"source": "json", "key": "batchBreakClip", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_unbatched": {"source": "json", "key": "batchBreakUnbatched", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_boundary": {"source": "json", "key": "batchBreakBoundary", "unit": "per frame", "better": "lower", "gate": false},
+        "geometry_upload_bytes": {"source": "json", "key": "geometryUploadBytes", "unit": "bytes/frame", "better": "lower", "gate": false}
       }
     },
     {
       "name": "stress-sprites-mix-vulkan",
-      "about": "A field that breaks batches: 20000 objects of which about 13 in 16 are sprites and the rest texts, hexagons and particle emitters, over 4 node layers (--mix, tools/stress/src/Stress/CLAUDE.md, Loads), 300 frames after 90 of warm-up (the emitters fill their pools in the first second of game time) in a hidden window with the present uncapped, a run of about 4 s; skipped where the backend or a display is missing. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: work_ms_p50 6.00 to 6.40, cpu_ms_p50 6.55 to 6.96, update 0.25 to 0.35, draw 3.32 to 3.60, submit 2.33 to 2.56, present 0.49 to 0.52, gpu_ms_p50 1.30 to 1.31 ms, 6882 draw calls and 21236 primitives (the plain 20000 sprites: work 0.78 to 0.82 ms, 82 draw calls). gate false until a baseline shows the noise",
+      "about": "A field that breaks batches: 20000 objects of which about 13 in 16 are sprites and the rest texts, hexagons and particle emitters, over 4 node layers (--mix, tools/stress/src/Stress/CLAUDE.md, Loads), 300 frames after 90 of warm-up (the emitters fill their pools in the first second of game time) in a hidden window with the present uncapped, a run of about 4 s; skipped where the backend or a display is missing. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: work_ms_p50 6.00 to 6.40, cpu_ms_p50 6.55 to 6.96, update 0.25 to 0.35, draw 3.32 to 3.60, submit 2.33 to 2.56, present 0.49 to 0.52, gpu_ms_p50 1.30 to 1.31 ms, 6882 draw calls and 21236 primitives (the plain 20000 sprites: work 0.78 to 0.82 ms, 82 draw calls). The times inform until a baseline shows their noise",
       "fast": false,
       "repetitions": 3,
       "timeoutSeconds": 180,
@@ -157,8 +217,17 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "submit_ms_p50": {"source": "json", "key": "submitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "present_ms_p50": {"source": "json", "key": "presentMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "gpu_ms_p50": {"source": "json", "key": "gpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "gate": false},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
+        "batch_break_texture": {"source": "json", "key": "batchBreakTexture", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_blend": {"source": "json", "key": "batchBreakBlend", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_full": {"source": "json", "key": "batchBreakFull", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_clip": {"source": "json", "key": "batchBreakClip", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_unbatched": {"source": "json", "key": "batchBreakUnbatched", "unit": "per frame", "better": "lower", "gate": false},
+        "batch_break_boundary": {"source": "json", "key": "batchBreakBoundary", "unit": "per frame", "better": "lower", "gate": false},
+        "geometry_upload_bytes": {"source": "json", "key": "geometryUploadBytes", "unit": "bytes/frame", "better": "lower", "gate": false}
       }
     },
     {
@@ -171,7 +240,10 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower"},
         "work_ms_p99": {"source": "json", "key": "workMsP99", "unit": "ms/frame", "better": "lower", "gate": false},
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
         "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
       }
     },
@@ -196,7 +268,10 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower"},
         "work_ms_p99": {"source": "json", "key": "workMsP99", "unit": "ms/frame", "better": "lower", "gate": false},
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
-        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_switches": {"source": "json", "key": "textureSwitches", "unit": "per frame", "better": "lower", "thresholdPercent": 0},
+        "texture_upload_bytes": {"source": "json", "key": "textureUploadBytes", "unit": "bytes/frame", "better": "lower", "thresholdPercent": 0},
         "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
       }
     },
@@ -420,7 +495,8 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
 ## Notes
 
 - Headless, the present of the SDL software renderer is most of a frame whatever the scene draws; `work_ms` (the frame without the present) is the number that moves with scene and UI code.
-- The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). The stress scenes are the engine's frame benchmarks; the engine has no game of its own. Their baseline is the owner's word, like every other. `stress-sprites-gpu` and `stress-sprites-vulkan` run the same scene on a GPU backend in a hidden window (`--backend`, `--hidden-window`: `tools/stress/CLAUDE.md`), `stress-sprites-vulkan-500k` at a count where the frame is long enough to read its stages and GPU time (informing only), and the loads of the `sprites` scene have one each, informing only too: `stress-sprites-world-vulkan` (culling), `-fill-vulkan` (overdraw), `-churn-vulkan` (despawn and spawn) and `-mix-vulkan` (broken batches); all of these skip where the backend is missing (`tools/perf/CLAUDE.md`, exit codes); a machine under load of other workers moves their cpu and frame numbers, not draw_calls.
+- The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). The stress scenes are the engine's frame benchmarks; the engine has no game of its own. Their baseline is the owner's word, like every other. `stress-sprites-gpu` and `stress-sprites-vulkan` run the same scene on a GPU backend in a hidden window (`--backend`, `--hidden-window`: `tools/stress/CLAUDE.md`), `stress-sprites-vulkan-500k` at a count where the frame is long enough to read its stages and GPU time (its times inform only), and the loads of the `sprites` scene have one each, their times informing only too: `stress-sprites-world-vulkan` (culling), `-fill-vulkan` (overdraw), `-churn-vulkan` (despawn and spawn) and `-mix-vulkan` (broken batches); all of these skip where the backend is missing (`tools/perf/CLAUDE.md`, exit codes); a machine under load of other workers moves their cpu and frame numbers, not the counts.
+- **Exact counts gate at 0 %:** `draw_calls`, `primitives`, `texture_switches` and `texture_upload_bytes` of the benchmarks of the `sprites`, `ui` and `entities` scenes (the ramps and `editor-frame` aside) are what the renderer was asked to do on the manual clock, so any change of one is a change of the scene, of the engine's draws or of the batcher: no repeat with more runs makes it noise, and a change on purpose becomes the baseline on the owner's word. `batch_break_<reason>` and `geometry_upload_bytes` of the GPU benchmarks inform: they say why a gated count moved (`.claude/skills/perf-render/SKILL.md`).
 - `value-get` has a line per case and type (`ValueBench <type> <case> ns_per_get=<x>`: `plain`, `const`, `slot`, `tree_field`, `tree_slot`, then `formula_plain`, `formula_tree`, `formula_program`, `formula_native`, `formula_run` (printed, not in the set: `Run` without the look for a bound function), `formula_unfused`, `formula_cached` and `madd_plain`, `madd_program`, `madd_native`, `madd_unfused`; the `Vec3` `madd` program is fused like the numbers), then `ValueBench mask_<case>` with no type (`mask_plain`, `mask_program`, `mask_run` (printed, not in the set), `mask_native`), then `ValueBench derived_hit_1`, `derived_hit_2`, `derived_hit_sources` and `derived_hand` (a `Derived` hit over one level, two levels and one source counter against the hand-kept compare, no type), then `ValueBench trigger_plain` and `trigger_script` (a script of a cell over `RunEffects` against C++, no type), then `ValueBench int32_t list_<op>_<case>` and `ValueBench bool list_<op>_<case>` (`list_count`, `list_any`, `list_any_early`, `list_sum` and `list_nested`, each as `_plain`, `_program` and `_native`: a formula with a loop over a hand's lists against a C++ loop). Nothing in it gates. Only the ratios of one run mean anything, and a loaded machine (other worker loops) moves every one: take the lowest of several runs.
 - `editor-frame` names its own `preset` (`macos-release-editor`), so a run that selects it builds the editor too (a full editor build the first time), which is why it is not `fast`; its baseline is the owner's word like every other.
-- The sentinel (`todo-merge`): `ask`. Its commands: the fast run `python3 <engine>/tools/perf/perf.py --fast --json <scratchpad>/sentinel-<branch-id>.json` after the preflight of `.claude/skills/perf/SKILL.md` step 1; the repeat of the regressed ones `--only <names> --repetitions 10 --no-build`; the investigate command an entry ends with: `/perf-investigate <benchmark>`.
+- The sentinel (`todo-merge`): `ask`. Its commands: the fast run `python3 <engine>/tools/perf/perf.py --fast --json <scratchpad>/sentinel-<branch-id>.json` after the preflight of `.claude/skills/perf/SKILL.md` step 1; the repeat of the regressed ones `--only <names> --repetitions 10 --no-build`; the investigate command an entry ends with: `/perf-investigate <benchmark>`. A report whose baseline is unavailable (`baselineError`: no store) compared nothing: say that, never "no regression".

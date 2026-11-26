@@ -1,5 +1,7 @@
 // The control method that writes what a node holds itself, `scene_set_node`, over a scene loaded from a string.
 
+#include <BECore/Control/ControlClient.h>
+#include <BECore/Control/ControlTouches.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Renderer/RendererManager.h>
@@ -92,6 +94,18 @@ namespace BECore::Tests {
         ASSERT_EQ(_edits.size(), 1u);
         EXPECT_EQ(_edits[0].first, _scene);
         EXPECT_EQ(_edits[0].second, &back);
+    }
+
+    TEST_F(SceneNodeControlTest, AWriteOfAClientIsATouchOfTheNode) {
+        const IntrusivePtr<ControlClient> client = _service.OpenLocalClient("tool");
+
+        _service.Post(R"({"id":1,"method":"scene_set_node","params":{"node":"Back","layer":5}})", [](const String&) {}, client);
+        _service.Drain();
+
+        const ControlTouches& touches = _service.Touches();
+        ASSERT_EQ(touches.Size(), 1u);
+        EXPECT_EQ(touches.At(0).nodeId, Node("Back").GetRuntimeId());
+        EXPECT_TRUE(touches.At(0).component.empty());
     }
 
     TEST_F(SceneNodeControlTest, EveryValueOfTheLayerTypeIsTaken) {

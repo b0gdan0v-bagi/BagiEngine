@@ -14,11 +14,17 @@ namespace BECore::FieldPresentation {
     /// Slider = a field with a `range`, Drag = every other number
     CORE_ENUM(NumberWidget, uint8_t, Drag, Slider)
 
+    /// Which axis a number is, by its name: the inspector tints the field of one
+    CORE_ENUM(Axis, uint8_t, None, X, Y, Z)
+
     /// The speed of a drag with no `step`, per kind (ImGui units per pixel of mouse travel)
     inline constexpr double kIntegerDragSpeed = 1.0;
     inline constexpr double kFloatDragSpeed = 0.1;
 
-    /// How the inspector draws and constrains one numeric field: the decisions of `ImGuiPropertyVisitor`, as plain data
+    /// The share of its range a ranged number moves by per pixel of a drag
+    inline constexpr double kRangeDragShare = 1.0 / 200.0;
+
+    /// How the inspector draws and constrains one numeric field: the decisions of `DrawNumber`, as plain data
     struct Presentation {
         NumberKind kind = NumberKind::Float;
         NumberWidget widget = NumberWidget::Drag;
@@ -34,7 +40,8 @@ namespace BECore::FieldPresentation {
      * @brief The presentation of a numeric field with @p attributes
      *
      * A range with `rangeMin >= rangeMax` and a step `<= 0` count as absent: the field is a drag and an edit is not
-     * snapped. `speed` is the step when there is one, the default of the kind otherwise.
+     * snapped. `speed` is `kRangeDragShare` of the range of a slider; of a drag, the step when there is one and the default
+     * of the kind otherwise.
      */
     Presentation Describe(const FieldAttributes& attributes, NumberKind kind);
 
@@ -48,6 +55,16 @@ namespace BECore::FieldPresentation {
      * The result stays inside the range even when its `max` is not on the grid. A field with no range is not clamped.
      */
     double Constrain(const Presentation& presentation, double value);
+
+    /**
+     * @brief The value a drag of @p pixels leaves in a field that held @p atPress when the drag began
+     *
+     * Counted from the press, never from the frame before, so nothing drifts and a speed below one still moves an integer.
+     */
+    double Dragged(const Presentation& presentation, double atPress, double pixels);
+
+    /// The axis of a number named exactly `x`, `y` or `z`
+    Axis AxisOf(StringView name);
 
     /// @p value as a @p T: rounded for an integer type and clamped to the limits of @p T (a double above them does not overflow)
     template <typename T>

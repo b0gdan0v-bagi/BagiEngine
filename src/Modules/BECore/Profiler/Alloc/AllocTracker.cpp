@@ -385,6 +385,10 @@ namespace BECore {
         return previous;
     }
 
+    const ProfileSite* AllocTracker::GetCurrentZone() {
+        return t_state.zone;
+    }
+
     Vector<AllocSiteStats> AllocTracker::GetNameStats() {
 #if BE_PROFILER_ALLOC
         return g_nameTable.GetStats();

@@ -20,6 +20,7 @@ namespace BECore::Tests {
         bool takePress = true;
         bool takeMove = true;
         bool takeWheel = false;
+        int enabledChanges = 0;
 
         [[nodiscard]] size_t Count(TargetCall call) const {
             size_t count = 0;
@@ -41,6 +42,7 @@ namespace BECore::Tests {
         bool (*scenePredicate)(float sceneX, float sceneY) = nullptr;
 
     protected:
+        void OnTargetEnabledChanged() override;
         [[nodiscard]] bool ContainsScenePoint(float sceneX, float sceneY) const override;
         bool OnPointerPress(const PointerEvent& event) override;
         void OnPointerRelease(const PointerEvent& event) override;

@@ -21,6 +21,12 @@ namespace BECore {
         }
     }
 
+    void AudioSourceComponent::OnEnabledChanged() {
+        if (!IsEnabled()) {
+            Stop();
+        }
+    }
+
     void AudioSourceComponent::LoadClip() {
         _loadedPath = _clip;
         _loaded.Reset();

@@ -547,7 +547,8 @@ namespace BECore {
                                                {"window", "string", false, "Only what belongs to this window (its name, or its part before ##)"},
                                                {"kind", "string", false, "\"window\" or \"item\""},
                                                {"visibleOnly", "boolean", false, "true: leave out what is clipped or scrolled out of its window"},
-                                               {"limit", "integer", false, "At most this many matches, default 50, at most 500"}}});
+                                               {"limit", "integer", false, "At most this many matches, default 50, at most 500"}},
+                                              /*quiet=*/true});
     }
 
 }  // namespace BECore

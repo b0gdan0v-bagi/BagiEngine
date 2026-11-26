@@ -19,6 +19,10 @@ namespace BECore {
         bool HasOnDraw() const override {
             return false;
         }
+        /// Other components read its fields whatever the flag says
+        bool CanBeDisabled() const override {
+            return false;
+        }
 
         BE_REFLECT_FIELD float _x = 0.0f;
         BE_REFLECT_FIELD float _y = 0.0f;

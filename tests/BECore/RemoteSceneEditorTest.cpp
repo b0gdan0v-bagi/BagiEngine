@@ -23,6 +23,7 @@
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneEditorWidget.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
+#include <Widgets/Viewport/ViewportEvents.h>
 #include <Widgets/Viewport/ViewportWidget.h>
 #include <gtest/gtest.h>
 #include <imgui.h>
@@ -310,6 +311,21 @@ namespace BECore::Tests {
         Run(EditorCommandIds::kSceneSave);
         EXPECT_NE(ReadFile(_sceneFile), saved);
         EXPECT_FALSE(_editor->GetInspected().dirty);
+    }
+
+    TEST_F(RemoteSceneEditorTest, AttachedNeitherADroppedFileNorTheSelectionHistoryReachesTheLocalScene) {
+        SelectLocalNode();
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        const size_t children = LocalScene().GetRootNode().GetChildren().size();
+
+        ViewportAssetDropEvent::Emit(AssetKind::Sound, "sounds/drop.wav"_intern, 10.0f, 10.0f);
+        Run(EditorCommandIds::kSceneEditorSelectionBack);
+        _session->Detach();
+        Settle();
+
+        EXPECT_EQ(LocalScene().GetRootNode().GetChildren().size(), children);
+        EXPECT_FALSE(_editor->GetInspected().dirty);
+        EXPECT_FALSE(_editor->GetInspected().hasSelection);
     }
 
     TEST_F(RemoteSceneEditorTest, ALayerStepAndATypedTextReachTheAttachedProgramAndNotTheLocalScene) {

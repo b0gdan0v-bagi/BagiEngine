@@ -36,11 +36,13 @@ namespace BECore::Tests {
             }
 
             Vector<PoolString> names;
+            Vector<ConfigEvents::ConfigChangeCause> causes;
             std::thread::id lastThread;
 
         private:
             void OnChanged(const ConfigEvents::ConfigChangedEvent& event) {
                 names.push_back(event.name);
+                causes.push_back(event.cause);
                 lastThread = std::this_thread::get_id();
             }
         };
@@ -283,6 +285,22 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.names.size(), 2u);
         EXPECT_FALSE(_manager.ReloadConfig("NoSuchConfig"_intern));
         EXPECT_EQ(recorder.names.size(), 2u);
+    }
+
+    TEST_F(ConfigHotReloadTest, TheEventSaysWhetherTheDocumentWasSavedReloadedOrEdited) {
+        using Cause = ConfigEvents::ConfigChangeCause;
+        StartOnFake();
+        ChangeRecorder recorder;
+
+        ASSERT_TRUE(_manager.SaveConfig(kHot));
+        ASSERT_TRUE(_manager.ReloadConfig(kHot));
+        _manager.NotifyConfigChanged(kHot);
+        WriteFile(HotPath(), "<HotConfig value=\"two\"/>\n");
+        PostAndSettle(HotPath());
+        ConfigEvents::ConfigChangedEvent::Emit(kHot);
+
+        const Vector<Cause> expected = {Cause::Saved, Cause::Reloaded, Cause::Edited, Cause::Reloaded, Cause::Edited};
+        EXPECT_TRUE(recorder.causes == expected);
     }
 
     TEST_F(ConfigHotReloadTest, TheStatPollingBackendReloadsARealWrite) {

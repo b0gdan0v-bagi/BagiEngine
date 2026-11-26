@@ -7,6 +7,7 @@
 #include <RoomClient/RoomTransport.h>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 
@@ -19,6 +20,7 @@ namespace BECore {
      * The protocol, the limits and the retry rules: .claude/rules/control-web-link.md. Main thread only; call Poll() once per frame, before
      * ControlService::Drain(). The link owns the service's event sink while it is connected, and the service has to outlive the link. A reply the
      * service gives for an earlier connection, or after Stop() or the destruction of the link (ControlService::Shutdown() answers late), is dropped.
+     * Each channel is a connection client of the service (ControlClient), as a connection of the desktop server is.
      */
     class ControlLink {
     public:
@@ -45,6 +47,17 @@ namespace BECore {
         /// The sending end, shared with the replies and the event sink, which may outlive the link
         class Sender;
 
+        struct Channel {
+            uint64_t number = 0;
+            IntrusivePtr<ControlClient> client;
+        };
+
+        /// The client of channel @p number, opened by the first message of it
+        [[nodiscard]] IntrusivePtr<ControlClient> ClientOf(uint64_t number);
+        void CloseChannel(uint64_t number);
+        /// The channels end with their connection: another bridge counts them from 1 again
+        void CloseChannels();
+
         void Connect(ControlLinkTime now);
         void HandleOpened();
         void HandleText(StringView message);
@@ -57,6 +70,7 @@ namespace BECore {
         RoomTransportFactory _transportFactory;
         IntrusivePtr<Sender> _sender;
         RoomTransportEvent _event;  // a member so that its buffers keep their capacity
+        Vector<Channel> _channels;  // of the open connection, a handful
         Optional<ControlLinkTime> _retryAt;
         std::chrono::milliseconds _retryDelay;
         bool _outageReported = false;

@@ -57,7 +57,7 @@ class MyWidget : public IWidget {   // IWidget and IRenderer already derive from
 | `RenderEvents.h` | Rendering (`NewFrameEvent`, `RenderPresentEvent`, `ImGui*Event`) |
 | `InputEvents.h` | Input (`ActionEvent`) |
 | `SceneEvents.h` | Scene (`SceneUpdateEvent` and `SceneFixedUpdateEvent` carry `deltaTime`), declared with `BE_EVENT`. Global, not per scene: components subscribe with `IComponent::SubscribeInScene`. For the two update events that registers in the scene's `SceneUpdateList`, run by `Scene::Update()` (a hand `Emit()` reaches plain `Subscribe`rs only); for the others only the active scene's react (`BECore/Scene/CLAUDE.md`). Drawing is not an event: `Scene::Draw()` runs the draw system in sorted order: it draws the quad and the sprite itself and calls `IComponent::OnDraw()` of the other components |
-| `ConfigEvents.h` | `ConfigChangedEvent{name}`: a cached config document changed (file edited on disk, `SaveConfig`, `ReloadConfig`); `ConfigReloadFailedEvent{name, reason}`: the changed file could not be read, the old document is kept; `BECore/Config/CLAUDE.md`, "Hot reload" |
+| `ConfigEvents.h` | `ConfigChangedEvent{name, cause}`: a cached config document changed (file edited on disk, `SaveConfig`, `ReloadConfig`, `NotifyConfigChanged`); `ConfigReloadFailedEvent{name, reason}`: the changed file could not be read, the old document is kept; `BECore/Config/CLAUDE.md`, "Hot reload" |
 | `SDL/CoreSDL/SDLEvents.h` | Raw SDL input, defined in the SDL module |
 
 Other modules define their own events next to their code (for example `LogEvent` in `BECore/Logger`, `AssertEvent` in `BECore/Assert`).

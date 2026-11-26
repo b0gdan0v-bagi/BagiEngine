@@ -37,6 +37,8 @@ STATUS_REFRESH_S = 5.0
 RECONNECT_S = 2.0
 # How long a bridge started by the editor waits for that editor's control API before it gives up
 FIRST_CONNECT_S = 60.0
+# What the editor's activity journal calls the bridge
+CLIENT_NAME = "artgen"
 # The editor answers with this while the Generate panel has never been created (Game mode, an editor without the panel)
 UNKNOWN_METHOD = "unknown_method"
 # The name rule of the editor's sets (ArtGenAccept IsValidSpriteName): one segment of a set's folder, a file stem
@@ -276,10 +278,10 @@ def serve(host, port, generator, log=print, setup=None, exit_with_editor=False, 
     announced = False
     waiting_since = clock()
     while True:
-        client = BagiControlClient(host, port)
+        client = BagiControlClient(host, port, name=CLIENT_NAME)
         try:
             client.connect()
-        except OSError:
+        except (OSError, ConnectionClosed, ControlError):  # the last two: an editor that goes away while it is told the name
             if exit_with_editor and clock() - waiting_since >= FIRST_CONNECT_S:
                 log(f"no editor on {host}:{port}: exiting")
                 return

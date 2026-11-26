@@ -270,6 +270,17 @@ namespace BECore::Tests {
         EXPECT_FALSE(Plate());
     }
 
+    TEST_F(UICanvasTooltipTest, ADisabledCanvasForgetsItsTooltipAndWhatThePointerWasOver) {
+        HoverUntilShown("Icon");
+        ASSERT_TRUE(Plate().has_value());
+
+        _hud->SetEnabled(false);
+        _hud->SetEnabled(true);
+        Wait(UITooltip::kHoverDelay);
+
+        EXPECT_FALSE(Plate()) << "no motion since: the canvas knows of no pointer";
+    }
+
     TEST_F(UICanvasTooltipTest, ADisabledButtonStillExplainsItself) {
         HoverUntilShown("Off");
 

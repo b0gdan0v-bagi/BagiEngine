@@ -40,6 +40,9 @@ namespace BECore::Stress {
         uint64_t primitives = 0;  // what the renderer was asked to draw, whether or not it batched
         uint64_t triangles = 0;
         uint32_t textureSwitches = 0;
+        Array<uint32_t, kBatchBreakCount> batchBreaks{};  // by BatchBreak
+        uint64_t geometryUploadBytes = 0;
+        uint64_t textureUploadBytes = 0;
         uint64_t allocCount = 0;  // 0 without ENGINE_PROFILER_ALLOC
         uint64_t allocBytes = 0;
     };
@@ -72,6 +75,9 @@ namespace BECore::Stress {
         double primitives = 0.0;
         double triangles = 0.0;
         double textureSwitches = 0.0;
+        Array<double, kBatchBreakCount> batchBreaks{};  // by BatchBreak
+        double geometryUploadBytes = 0.0;
+        double textureUploadBytes = 0.0;
         double allocsPerFrame = 0.0;
         double allocBytesPerFrame = 0.0;
         StageTimes stages;     // means

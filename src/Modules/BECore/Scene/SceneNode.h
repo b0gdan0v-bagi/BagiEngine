@@ -45,7 +45,18 @@ namespace BECore {
         using ComponentList = SmallVector<IntrusivePtr<IComponent>, kInlineComponents>;
         using ChildList = SmallVector<IntrusivePtr<SceneNode>, kInlineChildren>;
 
-        ~SceneNode() override = default;
+        /// Detaches the components and the children that still name this node: both may outlive it in somebody's hands
+        ~SceneNode() override;
+
+        /**
+         * @brief The number of this node at run time: from 1, unique in the process and never reused
+         *
+         * Names a node where a pointer cannot, since the pool gives a dead node's address to a new one. No file and no copy keeps it: a duplicated or
+         * a reloaded node has a new one.
+         */
+        [[nodiscard]] uint64_t GetRuntimeId() const {
+            return _runtimeId;
+        }
 
         SceneNode* GetParent() const;
 
@@ -63,6 +74,7 @@ namespace BECore {
         void RemoveChild(SceneNode* child);
 
         void AddComponent(IntrusivePtr<IComponent> component);
+        /// Takes the component of this type out and detaches it (IComponent::TryGetNode() is null afterwards)
         void RemoveComponent(PoolString typeName);
         IntrusivePtr<IComponent> GetComponent(StringView typeName) const;
 
@@ -119,19 +131,31 @@ namespace BECore {
 
     private:
         friend class Scene;
+        friend class IComponent;
 
         void WireToScene(Scene* scene, SceneNode* parent);
 
-        BE_REFLECT_FIELD PoolString _name;
-        BE_REFLECT_FIELD int32_t _layer = 0;
-        BE_REFLECT_FIELD PoolString _sourceRef;
-        int32_t _drawRank = 0;  // index of the node in SceneDrawList::items, written by Scene::DrawRanksWritten(); read through Scene::GetDrawRank() only
-        Scene* _scene = nullptr;
-        SceneNode* _parent = nullptr;
+        /// Clears the node of @p component unless it was attached to another node since it joined this one
+        void Detach(IComponent& component) const;
+
+        /// The next id of GetRuntimeId(); any thread may make a node
+        [[nodiscard]] static uint64_t NextRuntimeId();
+
+        // The members that are not reflected sit where the alignment of their neighbours would leave padding: nodes are many
         EditorFlags _editorFlags = EditorFlags::None;
         bool _generated = false;
+        BE_REFLECT_FIELD PoolString _name;
+        BE_REFLECT_FIELD int32_t _layer = 0;
+        int32_t _drawRank = 0;  // index of the node in SceneDrawList::items, written by Scene::DrawRanksWritten(); read through Scene::GetDrawRank() only
+        BE_REFLECT_FIELD PoolString _sourceRef;
+        Scene* _scene = nullptr;
+        SceneNode* _parent = nullptr;
+        const uint64_t _runtimeId = NextRuntimeId();
         BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) ComponentList _components;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) ChildList _children;
     };
+
+    /// The node with the id @p id (SceneNode::GetRuntimeId()) among @p root and its descendants, or null. A walk of the tree that allocates nothing
+    [[nodiscard]] SceneNode* FindNodeByRuntimeId(SceneNode& root, uint64_t id);
 
 }  // namespace BECore

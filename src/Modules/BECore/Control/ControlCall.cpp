@@ -6,6 +6,26 @@
 
 namespace BECore {
 
+    namespace {
+
+        /// The answer of a nested call: the text @p writeResult wrote, or the error that answers in its place
+        ControlAnswer CaptureAnswer(WriteResultFn writeResult) {
+            String text;
+            JsonWriter writer(text);
+            if (const std::expected<void, ControlError> written = writeResult(writer); !written) {
+                return std::unexpected(written.error());
+            }
+            if (const ControlError* failure = writer.GetFailure()) {
+                return std::unexpected(*failure);
+            }
+            if (!writer.IsComplete()) {
+                return std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
+            }
+            return text;
+        }
+
+    }  // namespace
+
     std::expected<void, ControlError> TryAppendOkResponse(String& out, StringView id, WriteResultFn writeResult) {
         const size_t start = out.size();
         ScratchScope scratch;  // the envelope may hold arena members; this also runs on a posting thread (a request after Shutdown), and a scope ends where it began
@@ -61,10 +81,12 @@ namespace BECore {
         return JsonView(tape, 0);
     }
 
-    ControlCall::ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply)
-        : _service(&service), _buffers(std::move(buffers)), _method(std::move(method)), _id(id), _params(params), _reply(std::move(reply)) {}
+    ControlCall::ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply,
+                             IntrusivePtr<ControlClient> client)
+        : _service(&service), _buffers(std::move(buffers)), _method(std::move(method)), _id(id), _params(params), _reply(std::move(reply)), _client(std::move(client)) {}
 
-    ControlCall::ControlCall(PassKey<ControlService>, String method, JsonView params) : _method(std::move(method)), _params(params), _capturing(true) {}
+    ControlCall::ControlCall(PassKey<ControlService>, ControlService& service, String method, JsonView params, IntrusivePtr<ControlClient> client)
+        : _service(&service), _method(std::move(method)), _params(params), _client(std::move(client)), _capturing(true) {}
 
     void ControlCall::ReplyEmpty() {
         Reply([](JsonWriter& writer) {
@@ -87,27 +109,11 @@ namespace BECore {
         }
         _answered = true;
         if (!_capturing) {
-            _service->SendOk(_reply, _id, writeResult);
+            _service->SendOk(*this, writeResult);
             return;
         }
-
-        // A nested call keeps the text the handler wrote as its answer
-        String text;
-        JsonWriter writer(text);
-        const std::expected<void, ControlError> written = writeResult(writer);
-        if (!written) {
-            _captured = std::unexpected(written.error());
-            return;
-        }
-        if (const ControlError* failure = writer.GetFailure()) {
-            _captured = std::unexpected(*failure);
-            return;
-        }
-        if (writer.IsComplete()) {
-            _captured = ControlAnswer(std::move(text));
-        } else {
-            _captured = std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler wrote a result that is not one JSON value"));
-        }
+        _captured = CaptureAnswer(writeResult);
+        _service->RecordCall(*this, _captured->has_value() ? StringView() : StringView(_captured->error().code));
     }
 
     void ControlCall::Fail(StringView code, StringView message) {
@@ -120,6 +126,7 @@ namespace BECore {
             return;
         }
         _answered = true;
+        _service->RecordCall(*this, error.code);
         if (_capturing) {
             _captured = std::unexpected(error);
             return;

@@ -8,6 +8,9 @@ namespace BECore {
     /// The id of the one request the application posts to itself, so it needs no other meaning
     inline constexpr int64_t kReplayRequestId = 1;
 
+    /// What the control service's journal calls the application when it posts the request of `--replay`
+    inline constexpr StringView kReplayClientName = "replay";
+
     /// The text of the `replay` request for the file @p path, keys in the order the DOM wrote them (`id`, `method`, `params`)
     [[nodiscard]] String MakeReplayRequestText(StringView path);
 

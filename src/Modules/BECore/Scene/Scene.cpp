@@ -13,6 +13,18 @@
 
 namespace BECore {
 
+    Scene::~Scene() {
+        const auto forget = [](auto&& self, SceneNode& node) -> void {
+            node._scene = nullptr;
+            for (const auto& child : node._children) {
+                self(self, *child);
+            }
+        };
+        if (_rootNode) {
+            forget(forget, *_rootNode);
+        }
+    }
+
     void Scene::Initialize() {
         InvalidateDrawOrder();
         _rootNode = BECore::New<SceneNode>();

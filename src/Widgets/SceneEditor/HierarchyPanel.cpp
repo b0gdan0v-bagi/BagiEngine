@@ -2,8 +2,11 @@
 
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Scene/IComponent.h>
+#include <Widgets/EditorLayout/ComponentCategories.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/IconTable.h>
+#include <Widgets/Feedback/TouchFlashDraw.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
@@ -171,6 +174,14 @@ namespace BECore {
             ImGui::EndDragDropTarget();
         }
 
+        // The icon of the row just drawn again, in the colour of the node's category. Drawn over the label, so the item keeps its `<glyph> <name>` label
+        void TintRowIcon(const SceneNode& node, float rowLeft) {
+            if (const Optional<Color> color = CategoryColorOfNode(node)) {
+                const ImVec2 position(rowLeft + ImGui::GetTreeNodeToLabelSpacing(), ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - ImGui::GetFontSize()) * 0.5f);
+                ImGui::GetWindowDrawList()->AddText(position, IM_COL32(color->r, color->g, color->b, color->a), IconOfNode(node));
+            }
+        }
+
         void DrawRow(IHierarchySource& source, HierarchyState& state, HierarchyRow row, bool filterOn, bool ancestorHidden) {
             SceneNode* const node = source.EditableNode(row);
             const size_t childCount = source.GetChildCount(row);
@@ -195,11 +206,18 @@ namespace BECore {
             if (dimmed) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
             }
+            const float rowLeft = ImGui::GetCursorScreenPos().x;
             const void* const id = source.GetId(row);
             const char* const icon = source.GetIcon(row);
             const bool isOpen = renaming ? ImGui::TreeNodeEx(id, flags, "%s", icon) : ImGui::TreeNodeEx(id, flags, "%s %s", icon, source.GetName(row));
             if (dimmed) {
                 ImGui::PopStyleColor();
+            } else if (node != nullptr) {
+                TintRowIcon(*node, rowLeft);
+            }
+            // Touches are recorded for the nodes of this process only
+            if (node != nullptr) {
+                FillItemWithTouchFlash(TouchHighlights::GetInstance().NodeAlpha(node->GetRuntimeId()));
             }
             if ((node != nullptr && state.scrollTo == node) || source.IsRevealTarget(row)) {
                 ImGui::SetScrollHereY();

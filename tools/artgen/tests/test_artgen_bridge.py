@@ -491,7 +491,7 @@ def test_a_bridge_without_a_local_generator_refuses_setup(game):
 
 def test_a_bridge_started_by_the_editor_gives_up_without_one(monkeypatch):
     class NoEditor:
-        def __init__(self, host, port):
+        def __init__(self, host, port, name):
             pass
 
         def connect(self):
@@ -535,11 +535,18 @@ def test_the_editor_can_tell_the_bridge_to_exit(game, monkeypatch):
             self.closed = True
 
     editor = ShuttingEditor(game)
-    monkeypatch.setattr(artgen_bridge, "BagiControlClient", lambda host, port: editor)
+    names = []
+
+    def connect_to(host, port, name):
+        names.append(name)
+        return editor
+
+    monkeypatch.setattr(artgen_bridge, "BagiControlClient", connect_to)
     monkeypatch.setattr(artgen_bridge.time, "sleep", lambda s: None)
     lines = []
     artgen_bridge.serve("127.0.0.1", 1, FakeGenerator(), log=lines.append)  # returns: no reconnect after a shutdown
     assert len(editor.polls) == 2 and editor.closed
+    assert names == [artgen_bridge.CLIENT_NAME]
     assert any("asked the service to stop" in line for line in lines)
 
 

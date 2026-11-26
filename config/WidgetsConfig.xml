@@ -33,6 +33,10 @@
         b="50"
         a="255" />
     </widget>
+    <!-- Before the Config Editor, so that its unsaved row of a config wins in editor_state -->
+    <widget
+      type="AssetPanelWidget"
+      asset="FieldHelpPanel" />
     <widget
       type="AssetPanelWidget"
       asset="ConfigEditorPanel" />
@@ -55,6 +59,9 @@
       asset="ProfilerPanel" />
     <widget
       type="AssetPanelWidget"
+      asset="PoolStringsPanel" />
+    <widget
+      type="AssetPanelWidget"
       asset="ConsolePanel" />
     <widget
       type="AssetPanelWidget"
@@ -65,5 +72,14 @@
     <widget
       type="AssetPanelWidget"
       asset="GeneratePanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="AssetBrowserPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="ExportPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="ActivityPanel" />
   </widgets>
 </root>

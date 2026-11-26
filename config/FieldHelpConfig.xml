@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<root>
+  <entries>
+    <item component="AudioSourceComponent" field="bus" text="The bus the sound plays on; each bus has its own volume and mute under the master ones." />
+    <item component="AudioSourceComponent" field="clip" text="The sound file to play (.wav or .ogg)." />
+    <item component="AudioSourceComponent" field="playAction" text="An action of this name plays the clip; empty means none." />
+    <item component="AudioSourceComponent" field="playOnStart" text="Plays the clip at the first update of its scene as the active one." />
+    <item component="AudioSourceComponent" field="volume" text="The volume of this source: 0 is silent, 1 is full." />
+    <item component="ChangeToRandomColorDebugComponent" field="actionFilter" text="Debug helper: this action gives the quad of the node a random colour; empty reacts to any action." />
+    <item component="ClickableComponent" field="actionName" text="The action a click on the node emits; empty emits none." />
+    <item component="ClickableComponent" field="blocksInput" text="Takes the press, the release and the motion over the shape even with no action, and emits nothing: a shield for what is drawn below." />
+    <item component="ClickableComponent" field="shape" text="The clickable area inside the node's rect: the rect itself, or the ellipse inscribed in it." />
+    <item component="ParticleEmitterComponent" field="burstAction" text="An action of this name fires a burst of the effect's burst count at the centre of the node; empty means none." />
+    <item component="ParticleEmitterComponent" field="effect" text="The particle effect as data: how many particles, where they are born, how they move and look." />
+    <item component="ParticleEmitterComponent" field="playOnStart" text="Starts the effect when the component is attached; a one-shot effect then fires at the first update." />
+    <item component="QuadRendererComponent" field="blend" text="How the quad blends with what is behind it; Alpha is straight alpha. A renderer may ignore it and draw with Alpha." />
+    <item component="QuadRendererComponent" field="color" text="The fill colour of the node's rect, alpha included." />
+    <item component="RmlUiDocumentComponent" field="extendToOutput" text="SceneView only: the document covers the whole output, so it also lays out the bars around the view." />
+    <item component="RmlUiDocumentComponent" field="inputEnabled" text="Whether a shown document takes mouse input." />
+    <item component="RmlUiDocumentComponent" field="match" text="ScaleWithScreen only: 0 follows the width of the output, 1 its height, a value between them blends the two." />
+    <item component="RmlUiDocumentComponent" field="maxScale" text="The highest scale of a Screen canvas; 0 or less sets no limit." />
+    <item component="RmlUiDocumentComponent" field="minScale" text="The lowest scale of a Screen canvas; 0 or less sets no limit." />
+    <item component="RmlUiDocumentComponent" field="modal" text="While shown, no mouse event gets past this document." />
+    <item component="RmlUiDocumentComponent" field="referenceHeight" text="The height the screen was designed for, in UI units; ScaleWithScreen scales against it." />
+    <item component="RmlUiDocumentComponent" field="referenceWidth" text="The width the screen was designed for, in UI units; ScaleWithScreen scales against it." />
+    <item component="RmlUiDocumentComponent" field="scaleMode" text="How a Screen canvas gets its scale: a UI unit is a window unit (ConstantPixelSize), the same times the user's display scale (ConstantPhysicalSize), or the output size against the reference size (ScaleWithScreen)." />
+    <item component="RmlUiDocumentComponent" field="source" text="The .rml document to load; empty means the markup is set by code." />
+    <item component="RmlUiDocumentComponent" field="space" text="What the document fills: the whole output (Screen), the fitted view of the scene (SceneView) or the node's box (World)." />
+    <item component="RmlUiDocumentComponent" field="useSafeArea" text="Lays the content out inside the safe area of the display (Screen and SceneView only)." />
+    <item component="RmlUiDocumentComponent" field="visible" text="Whether the document is drawn and, with input enabled, takes input." />
+    <item component="SpriteRendererComponent" field="blend" text="How the sprite blends with what is behind it; Alpha is straight alpha. A renderer may ignore it and draw with Alpha." />
+    <item component="SpriteRendererComponent" field="fit" text="Stretch covers the whole rect of the node; Contain keeps the aspect of the source and centres the picture in the rect." />
+    <item component="SpriteRendererComponent" field="flipX" text="Mirrors the picture left to right about its own centre." />
+    <item component="SpriteRendererComponent" field="flipY" text="Mirrors the picture top to bottom about its own centre." />
+    <item component="SpriteRendererComponent" field="spriteId" text="A sprite of the Sprite Library. While it names one, the library gives the texture and the source rect." />
+    <item component="SpriteRendererComponent" field="srcRect" text="The part of the texture that is drawn, in texture pixels; an empty rect draws the whole texture." />
+    <item component="SpriteRendererComponent" field="texturePath" text="The image file to draw, used when no sprite of the library is chosen." />
+    <item component="TextComponent" field="align" text="Where each line stands horizontally in the node's rect." />
+    <item component="TextComponent" field="color" text="The colour of the glyphs, alpha included." />
+    <item component="TextComponent" field="fontFamily" text="A family of the families table of TextConfig.xml; empty is its default family. A font path wins over it." />
+    <item component="TextComponent" field="fontPath" text="A font file; empty uses the face of the family and the weight." />
+    <item component="TextComponent" field="fontSize" text="The size of the font in scene units." />
+    <item component="TextComponent" field="fontWeight" text="The CSS weight (400 regular, 700 bold); the nearest face of the family is used." />
+    <item component="TextComponent" field="lineSpacing" text="A factor of the line height of the font." />
+    <item component="TextComponent" field="minFontSize" text="The smallest size AutoFit shrinks the font to, in scene units." />
+    <item component="TextComponent" field="outlineColor" text="The colour of the outline; a transparent one draws none." />
+    <item component="TextComponent" field="outlineWidth" text="The width of the outline in scene units; 0 draws none." />
+    <item component="TextComponent" field="overflow" text="What happens to text that does not fit the rect: Clip cuts it, Ellipsis ends it with an ellipsis, AutoFit shrinks the font down to the minimum size." />
+    <item component="TextComponent" field="shadowColor" text="The colour of the hard shadow; a transparent one draws none." />
+    <item component="TextComponent" field="shadowOffsetX" text="How far the shadow is to the right of the text, in scene units; two zero offsets draw no shadow." />
+    <item component="TextComponent" field="shadowOffsetY" text="How far the shadow is below the text, in scene units; two zero offsets draw no shadow." />
+    <item component="TextComponent" field="text" text="The text drawn in the node's rect." />
+    <item component="TextComponent" field="wrap" text="Breaks a long line at the width of the rect." />
+    <item component="TransformComponent" field="height" text="The height of the node's rect, in scene units." />
+    <item component="TransformComponent" field="pivotX" text="The horizontal place of the rotation pivot in the node's rect: 0 is the left edge, 1 the right edge." />
+    <item component="TransformComponent" field="pivotY" text="The vertical place of the rotation pivot in the node's rect: 0 is the top edge, 1 the bottom edge." />
+    <item component="TransformComponent" field="rotation" text="Turns the node's quad or sprite about the pivot, in degrees, clockwise on the screen. Text, UI and hit tests ignore it." />
+    <item component="TransformComponent" field="width" text="The width of the node's rect, in scene units." />
+    <item component="TransformComponent" field="x" text="The left edge of the node's rect, in scene units." />
+    <item component="TransformComponent" field="y" text="The top edge of the node's rect, in scene units; y grows downwards." />
+    <item component="UICanvasComponent" field="elements" text="The elements written in the scene file. They are saved with the scene and drawn after those of the source file." />
+    <item component="UICanvasComponent" field="extendToOutput" text="SceneView only: the canvas covers the whole output, so it also reaches the bars around the view." />
+    <item component="UICanvasComponent" field="inputEnabled" text="Whether a shown canvas takes mouse input." />
+    <item component="UICanvasComponent" field="match" text="ScaleWithScreen only: 0 follows the width of the output, 1 its height, a value between them blends the two." />
+    <item component="UICanvasComponent" field="maxScale" text="The highest scale of a Screen canvas; 0 or less sets no limit." />
+    <item component="UICanvasComponent" field="minScale" text="The lowest scale of a Screen canvas; 0 or less sets no limit." />
+    <item component="UICanvasComponent" field="modal" text="While shown, no mouse event gets past this canvas." />
+    <item component="UICanvasComponent" field="opacity" text="The alpha factor, 0 to 1, the tree and the popups are drawn with; paint only, and the tooltip is not faded." />
+    <item component="UICanvasComponent" field="referenceHeight" text="The height the screen was designed for, in UI units; ScaleWithScreen scales against it." />
+    <item component="UICanvasComponent" field="referenceWidth" text="The width the screen was designed for, in UI units; ScaleWithScreen scales against it." />
+    <item component="UICanvasComponent" field="scaleMode" text="How a Screen canvas gets its scale: a UI unit is a window unit (ConstantPixelSize), the same times the user's display scale (ConstantPhysicalSize), or the output size against the reference size (ScaleWithScreen)." />
+    <item component="UICanvasComponent" field="source" text="A screen in a file of its own (.ui.xml); its elements come first, those of the scene after them." />
+    <item component="UICanvasComponent" field="space" text="What the canvas fills: the whole output (Screen), the fitted view of the scene (SceneView) or the node's box (World)." />
+    <item component="UICanvasComponent" field="transitionDuration" text="The seconds a show of the canvas takes; 0 or less shows it at once." />
+    <item component="UICanvasComponent" field="transitionEase" text="The easing curve of the show and hide transition." />
+    <item component="UICanvasComponent" field="transitionFade" text="Fades the canvas during a transition." />
+    <item component="UICanvasComponent" field="transitionHideDuration" text="The seconds a hide takes; a negative value uses the duration of the show." />
+    <item component="UICanvasComponent" field="transitionInput" text="Whether the canvas takes input while it is showing or hiding." />
+    <item component="UICanvasComponent" field="transitionScaleFrom" text="The scale of the hidden end of the transition, about the centre of the canvas; 1 does not scale." />
+    <item component="UICanvasComponent" field="transitionSlideX" text="How far to the right the hidden end of the transition is moved, in canvas units; 0 does not slide." />
+    <item component="UICanvasComponent" field="transitionSlideY" text="How far down the hidden end of the transition is moved, in canvas units; 0 does not slide." />
+    <item component="UICanvasComponent" field="useSafeArea" text="Lays the content out inside the safe area of the display (Screen and SceneView only)." />
+    <item component="UICanvasComponent" field="variants" text="Responsive variants: overrides of elements that apply while their condition holds for the size of the canvas." />
+    <item component="UICanvasComponent" field="visible" text="Whether the canvas is drawn and, with input enabled, takes input. A change starts the transition." />
+  </entries>
+</root>

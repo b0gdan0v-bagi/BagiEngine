@@ -2,7 +2,10 @@
 
 #include <BECore/Audio/AudioSourceComponent.h>
 #include <BECore/AudioTestSupport.h>
+#include <BECore/ComponentEnabledTest.h>
+#include <BECore/Control/ControlActivity.h>
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/Control/ControlTouches.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/PoolString/PoolString.h>
@@ -292,8 +295,12 @@ namespace BECore::Tests {
             }
 
             /// `scene_set` of `Thing`; @p value is a JSON value
-            ControlReply Set(StringView component, StringView path, StringView value) {
-                return Call("scene_set", Format(R"({{"node":"Thing","component":"{}","path":"{}","value":{}}})", component, path, value));
+            ControlReply Set(StringView component, StringView path, StringView value, const IntrusivePtr<ControlClient>& client = {}) {
+                const String params = Format(R"({{"node":"Thing","component":"{}","path":"{}","value":{}}})", component, path, value);
+                ControlReply reply;
+                _service.Post(MakeRequestText(1, "scene_set", params), [&reply](const String& text) { reply = ControlReply(StringView(text)); }, client);
+                _service.Drain();
+                return reply;
             }
 
             /// The text of the `value` that `scene_get` reads
@@ -329,20 +336,22 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneControlSetTest, ARefusedWriteChangesNothingAndReportsNothing) {
+        const IntrusivePtr<ControlClient> client = _service.OpenLocalClient("tool");
         const NodeEdits edits;
 
-        EXPECT_EQ(Set("AudioSourceComponent", "volume", "2").ErrorCode(), "out_of_range");
-        EXPECT_EQ(Set("TransformComponent", "x", R"("wide")").ErrorCode(), "type_mismatch");
-        EXPECT_EQ(Set("QuadRendererComponent", "color.r", "300").ErrorCode(), "out_of_range");
-        EXPECT_EQ(Set("QuadRendererComponent", "color", "1").ErrorCode(), "not_a_value");
-        EXPECT_EQ(Set("QuadRendererComponent", "colour", "1").ErrorCode(), "not_found");
-        EXPECT_EQ(Set("TransformComponent", "x", "[1]").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Set("AudioSourceComponent", "volume", "2", client).ErrorCode(), "out_of_range");
+        EXPECT_EQ(Set("TransformComponent", "x", R"("wide")", client).ErrorCode(), "type_mismatch");
+        EXPECT_EQ(Set("QuadRendererComponent", "color.r", "300", client).ErrorCode(), "out_of_range");
+        EXPECT_EQ(Set("QuadRendererComponent", "color", "1", client).ErrorCode(), "not_a_value");
+        EXPECT_EQ(Set("QuadRendererComponent", "colour", "1", client).ErrorCode(), "not_found");
+        EXPECT_EQ(Set("TransformComponent", "x", "[1]", client).ErrorCode(), "invalid_params");
         EXPECT_EQ(Call("scene_set", R"({"node":"Thing","component":"TransformComponent","value":1})").ErrorCode(), "invalid_params");
         EXPECT_EQ(Call("scene_set", R"({"node":"Thing","component":"TransformComponent","path":"x"})").ErrorCode(), "invalid_params");
 
         EXPECT_EQ(Read("AudioSourceComponent", "volume"), "0.5");
         EXPECT_EQ(Read("TransformComponent", "x"), "1.0");
         EXPECT_EQ(Read("QuadRendererComponent", "color.r"), "10");
+        EXPECT_EQ(_service.Touches().Size(), 0u);
         EXPECT_TRUE(edits.edits.empty());
     }
 
@@ -402,12 +411,43 @@ namespace BECore::Tests {
         EXPECT_FALSE(layout.IsValid());
     }
 
-    TEST_F(SceneControlSetTest, AWriteIsAnEditOfTheNode) {
+    TEST_F(SceneControlSetTest, TheEnabledFlagIsWrittenThroughSetEnabledAndReportedAsAnyWrite) {
+        const IntrusivePtr<ControlClient> client = _service.OpenLocalClient("tool");
+        const NodeEdits edits;
+        const IntrusivePtr<EnabledProbeComponent> probe = New<EnabledProbeComponent>();
+        Node("Thing").AddComponent(probe);
+        EXPECT_EQ(Read("EnabledProbeComponent", "enabled"), "true");
+
+        const ControlReply reply = Set("EnabledProbeComponent", "enabled", "false", client);
+
+        ASSERT_TRUE(reply.IsOk()) << reply.ErrorMessage().c_str();
+        EXPECT_EQ(RawOf(reply.Result(), "value"), "false");
+        EXPECT_EQ(Read("EnabledProbeComponent", "enabled"), "false");
+        EXPECT_EQ(probe->enabledChanges, 1);
+        EXPECT_EQ(probe->written, (Vector<String>{"enabled"}));
+        ASSERT_EQ(_service.Touches().Size(), 1u);
+        EXPECT_EQ(_service.Touches().At(0).field, "enabled");
+        EXPECT_EQ(edits.edits.size(), 1u);
+
+        EXPECT_EQ(Set("EnabledProbeComponent", "enabled", "0", client).ErrorCode(), "type_mismatch");
+        EXPECT_FALSE(probe->IsEnabled());
+    }
+
+    TEST_F(SceneControlSetTest, AWriteIsATouchOfTheTopFieldAndAnEditOfTheNode) {
+        const IntrusivePtr<ControlClient> client = _service.OpenLocalClient("tool");
         const NodeEdits edits;
         const SceneNode& node = Node("Thing");
 
-        ASSERT_TRUE(Set("QuadRendererComponent", "color.g", "5").IsOk());
+        ASSERT_TRUE(Set("QuadRendererComponent", "color.g", "5", client).IsOk());
 
+        ASSERT_EQ(_service.Touches().Size(), 1u);
+        const ControlTouch& touch = _service.Touches().At(0);
+        EXPECT_EQ(touch.nodeId, node.GetRuntimeId());
+        EXPECT_EQ(touch.component, "QuadRendererComponent");
+        EXPECT_EQ(touch.field, "color");
+        EXPECT_EQ(touch.client.Get(), client.Get());
+        ASSERT_EQ(_service.Activity().Size(), 1u);
+        EXPECT_EQ(_service.Activity().At(0).node, node.GetRuntimeId());
         ASSERT_EQ(edits.edits.size(), 1u);
         EXPECT_EQ(edits.edits[0].first, _scene);
         EXPECT_EQ(edits.edits[0].second, &node);

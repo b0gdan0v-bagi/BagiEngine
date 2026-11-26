@@ -48,7 +48,7 @@ Arms `ImGuiItemIndex`, waits one frame, answers from that frame's list and disar
 
 ## ImGui's clock
 
-On the manual clock `io.DeltaTime` is the frame's `dt` (`ImGuiFrameSeconds`, at least `kMinImGuiFrameSeconds` because ImGui asserts on 0, which `screenshot` and these methods use), not the wall time the SDL backend measures. A double click, a tooltip delay, the caret blink and window fades are then the same on every run, and `step` means the same time to ImGui and to the game. A double click is `count: 2` in one event: ImGui reads it from the clock between the presses. With the real clock nothing changes.
+On the manual clock `io.DeltaTime` is the frame's `dt` (`ImGuiFrameSeconds`, at least `kMinImGuiFrameSeconds` because ImGui asserts on 0, which `screenshot` and these methods use), not the wall time the SDL backend measures. A double click, a tooltip delay, the caret blink and window fades are then the same on every run, and `step` means the same time to ImGui and to the game. The editor's own motion runs on this clock too (`src/Widgets/Feedback/CLAUDE.md`, "Motion"): after closing an asset panel `step` past its fade before expecting the window gone. A double click is `count: 2` in one event: ImGui reads it from the clock between the presses. With the real clock nothing changes.
 
 ## What it cannot reach
 

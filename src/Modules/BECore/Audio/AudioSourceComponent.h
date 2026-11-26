@@ -22,10 +22,11 @@ namespace BECore {
      *
      * Plays when asked (Play()), when an InputEvents::ActionEvent of `_playAction` comes while its scene is active, and with `_playOnStart`
      * at the first update of its scene as the active one (every loaded scene attaches its components, so not at attach). One sound at a
-     * time: Play() while it plays starts it again on a new voice and Stop() stops the latest.
+     * time: Play() while it plays starts it again on a new voice and Stop() stops the latest. Disabling the component stops its sound
+     * and enabling does not start it again.
      */
     class AudioSourceComponent : public IComponent {
-        BE_CLASS(AudioSourceComponent, ICON = volume - 2)
+        BE_CLASS(AudioSourceComponent, ICON = volume - 2, CATEGORY = audio)
     public:
         AudioSourceComponent() = default;
         ~AudioSourceComponent() override = default;
@@ -33,7 +34,7 @@ namespace BECore {
             return false;
         }
 
-        BE_REFLECT_FIELD PoolString _clip;  ///< the path of a .wav or .ogg
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(asset(Sound)) PoolString _clip;  ///< the path of a .wav or .ogg
         BE_REFLECT_FIELD AudioBus _bus = AudioBus::Sfx;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1)) float _volume = 1.0f;
         BE_REFLECT_FIELD bool _playOnStart = false;
@@ -56,6 +57,9 @@ namespace BECore {
         [[nodiscard]] const AudioClip* GetLoadedClip() const {
             return _loaded.Get();
         }
+
+    protected:
+        void OnEnabledChanged() override;
 
     private:
         void OnUpdate(const SceneEvents::SceneUpdateEvent& e);

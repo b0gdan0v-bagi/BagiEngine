@@ -9,7 +9,7 @@ description: Plays the game of this repository over its control API by a charter
 
 For the unattended walk (a seeded monkey over a time budget, with a seed log and the same filing) use `/qa-loop` (`.claude/skills/qa-loop/SKILL.md`).
 
-Terms (defined in that file): `<engine>`, `<R>`, `<product>`, `<invariants>`, `<out>`; `<exe>` is `<R>/build/<preset>/bin/<product>` (`.exe` on Windows), `<scratchpad>` the temporary folder of the session, outside every repository. `todo` is `python3 <engine>/tools/todo/todo.py --actor qa`. Commands run from the root of the repository. `dry` (or a CLI that has no token: `todo ping` fails) means nothing is filed: the drafts are listed instead.
+Terms (defined in that file): `<engine>`, `<R>`, `<product>`, `<invariants>`, `<out>`; `<exe>` is `<R>/build/<preset>/bin/<product>` (`.exe` on Windows), `<scratchpad>` the temporary folder of the session, outside every repository. `todo` is `python3 <engine>/tools/todo/todo.py --actor qa`. Commands run from the root of the repository. `dry` (or no store: `todo ping` fails for want of a token or a sign-in, or of an answer) means nothing is filed: the drafts are listed instead, and no later `todo` call is made.
 
 ## Steps
 
