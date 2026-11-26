@@ -8,6 +8,7 @@ Turns a game into a folder that runs without the sources or the build: a desktop
 export.py build (--exe <path> | --project <dir> --target <name>) --config debug|release [--platform desktop|web]
                 [--out <dir>] [--preset <p>] [--exclude-scene <name>]... [--cancel-on-stdin-close] [--dry-run]
 export.py run --dir <package>
+export.py serve --dir <web package> [--port <p>] [--open] [--cancel-on-stdin-close]
 ```
 
 - `--exe` takes the executable of a build (what a running editor knows of itself): the first `CMakeCache.txt` above it names the project, its file name the target. A packaged executable has none and cannot export.
@@ -15,11 +16,15 @@ export.py run --dir <package>
 - **Output** `--out`, by default `<project>/dist/<target>-<config>`, on the web `<project>/dist/<target>-web-<config>`.
 - `run` (desktop packages only) starts the executable the marker names with `--game`, the package as its working folder, detached and with no standard streams.
 
+## Serving a web package
+
+`serve` listens on `127.0.0.1` (`--port`, default 0: a free one) through `make_server` of `tools/web/serve.py`, with the isolation headers `manifest.json` asks for and nothing else of that server: the `BASIC_AUTH_*`, sign-in and match store of the environment are not read. It prints `== serve: http://127.0.0.1:<port>/` once it listens and with `--open` then opens that address in the system browser (a browser that does not open is a line, not a failure). It lives until cancelled ("Cancel") and so ends with `== export cancelled`; there is no `== export ok:`. A folder without the marker, or a desktop package, is refused, as `run` refuses a web one. On Windows a taken `--port` may not be refused (`SO_REUSEADDR`).
+
 ## Output
 
 The editor parses it, so a change here changes `src/Widgets/Export/` too. Stdout, UTF-8, flushed before each child (which writes to the same place):
 
-- `== step <k>/<n>: <name>` per step (`configure`, `build`, `package`), and `$ <command>` before each command;
+- `== step <k>/<n>: <name>` per step (`configure`, `build`, `package`), and `$ <command>` before each command; `== serve: <url>` of `serve`;
 - the last line is one of `== export ok: <absolute folder>`, `== export failed: <reason on one line>`, `== export cancelled`.
 
 Exit codes: 0 ok, 1 failed, 2 a wrong command line (no result line), 3 cancelled.
@@ -76,4 +81,4 @@ The checks compare the folders themselves, not their spelling, so a link or anot
 
 ## Tests
 
-`.venv/bin/python -m pytest tools/export/tests`: a fake built game in a temp folder and a fake runner for the commands; no build is made. The cancel cases start real processes.
+`.venv/bin/python -m pytest tools/export/tests`: a fake built game in a temp folder and a fake runner for the commands; no build is made. The cancel cases start real processes, the serve cases a real server on a free port.

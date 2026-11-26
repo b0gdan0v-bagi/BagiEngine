@@ -8,6 +8,7 @@ run it too. The command line, the output lines and the cancel contract: tools/ex
     python3 tools/export/export.py build --exe build/macos-debug/bin/BagiStress --config debug
     python3 tools/export/export.py build --project . --target BagiStress --config release --platform web
     python3 tools/export/export.py run --dir dist/BagiStress-release
+    python3 tools/export/export.py serve --dir dist/BagiStress-web-release --open
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import sys
 import threading
 import time
 import traceback
+import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 
@@ -34,6 +36,7 @@ import dev  # noqa: E402
 import package_desktop  # noqa: E402
 import package_web  # noqa: E402
 import scenes  # noqa: E402
+import serve as web_server  # noqa: E402
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -43,6 +46,9 @@ EXIT_CANCELLED = 3  # 2 is argparse's own: a wrong command line
 RESULT_OK = "== export ok: "
 RESULT_FAILED = "== export failed: "
 RESULT_CANCELLED = "== export cancelled"
+# The editor reads this one too: the address of `serve`, printed once it listens
+SERVE_LINE = "== serve: "
+SERVE_HOST = "127.0.0.1"  # this machine only: the page is served to whoever exported it
 
 STEPS = ("configure", "build", "package")
 DESKTOP = "desktop"
@@ -291,21 +297,26 @@ def export(args: argparse.Namespace, cancel: Cancel, runner: Runner, system: str
     return out
 
 
-# --- run ---------------------------------------------------------------------------------------------------
+# --- run and serve -----------------------------------------------------------------------------------------
 
 
-def launch(package_dir: Path) -> Path:
-    """Starts the game of a package, in its folder and on its own: it lives on after this script."""
+def read_marker(package_dir: Path) -> tuple[Path, str]:
+    """(folder, first line of its marker) of an exported package: the file it starts with."""
     folder = package_dir.resolve()
     marker = folder / package_desktop.MARKER_NAME
     if not marker.is_file():
         raise ExportError(f"{folder} is no exported package (no {package_desktop.MARKER_NAME})")
     lines = marker.read_text(encoding="utf-8").splitlines()
-    name = lines[0].strip() if lines else ""
+    return folder, lines[0].strip() if lines else ""
+
+
+def launch(package_dir: Path) -> Path:
+    """Starts the game of a package, in its folder and on its own: it lives on after this script."""
+    folder, name = read_marker(package_dir)
     if name == package_web.INDEX_NAME:
         raise ExportError(f"{folder} is a web package: serve it with `export.py serve --dir`")
     if not name or Path(name).name != name or not (folder / name).is_file():
-        raise ExportError(f"{marker} names no executable of the package: {name!r}")
+        raise ExportError(f"{folder / package_desktop.MARKER_NAME} names no executable of the package: {name!r}")
     options = ({"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
                else {"start_new_session": True})
     try:
@@ -314,6 +325,38 @@ def launch(package_dir: Path) -> Path:
     except OSError as error:
         raise ExportError(f"cannot start {folder / name}: {error}") from error
     return folder
+
+
+def serve(package_dir: Path, port: int, cancel: Cancel, opener: Callable[[str], object] | None) -> None:
+    """Serves a web package until the cancel, which it raises. `opener` gets the address once the server listens."""
+    folder, name = read_marker(package_dir)
+    if name != package_web.INDEX_NAME or not (folder / name).is_file():
+        raise ExportError(f"{folder} is no web package: a desktop one starts with `export.py run --dir`")
+    isolation, _ = web_server.decide_cross_origin_isolation(None, None, folder)
+    try:
+        # Only these arguments: no password, sign-in or match store, whatever the environment of a deploy says
+        server = web_server.make_server(folder, SERVE_HOST, port, isolation, quiet=True)
+    except (OSError, OverflowError) as error:
+        raise ExportError(f"cannot serve on port {port}: {error}") from error
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": POLL_SECONDS}, daemon=True)
+    thread.start()
+    try:
+        url = f"http://{SERVE_HOST}:{server.server_address[1]}/"
+        say(SERVE_LINE + url)
+        if opener:
+            try:
+                opened = opener(url)
+            except Exception as error:
+                say(f"cannot open a browser ({error}): open {url} yourself")
+            else:
+                if not opened:
+                    say(f"no browser opened: open {url} yourself")
+        while True:
+            cancel.check()
+            time.sleep(POLL_SECONDS)
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 # --- command line ------------------------------------------------------------------------------------------
@@ -335,8 +378,13 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
                        help="a scene of SceneConfig.xml the package leaves out; once per scene")
     build.add_argument("--cancel-on-stdin-close", action="store_true", help="give up on a `cancel` line or the end of stdin")
     build.add_argument("--dry-run", action="store_true", help="print the commands and the folder; run and write nothing")
-    run = commands.add_parser("run", help="start an exported game")
+    run = commands.add_parser("run", help="start an exported desktop game")
     run.add_argument("--dir", type=Path, required=True, help="the package folder")
+    web = commands.add_parser("serve", help="serve an exported web game on this machine until cancelled")
+    web.add_argument("--dir", type=Path, required=True, help="the web package folder")
+    web.add_argument("--port", type=int, default=0, help="the port (default 0: a free one)")
+    web.add_argument("--open", action="store_true", help="open the page in the system browser")
+    web.add_argument("--cancel-on-stdin-close", action="store_true", help="stop on a `cancel` line or the end of stdin")
     args = parser.parse_args(argv)
     if args.command == "build" and bool(args.target) != bool(args.project):
         build.error("--target goes with --project, and --project needs it")
@@ -344,17 +392,19 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None, *, runner: Runner = run_child, system: str | None = None,
-         emsdk_dir: Path = build_and_deploy.EMSDK_DIR) -> int:
+         emsdk_dir: Path = build_and_deploy.EMSDK_DIR, opener: Callable[[str], object] = webbrowser.open) -> int:
     args = parse_arguments(argv)
     cancel = Cancel()
     previous = {}
-    if args.command == "build":
+    if args.command != "run":
         previous = {number: signal.signal(number, cancel.request) for number in (signal.SIGINT, signal.SIGTERM)}
         if args.cancel_on_stdin_close:
             threading.Thread(target=watch_input, args=(cancel, 0), daemon=True).start()
     try:
         if args.command == "run":
             folder = launch(args.dir)
+        elif args.command == "serve":
+            serve(args.dir, args.port, cancel, opener if args.open else None)  # ends only by raising
         else:
             folder = export(args, cancel, runner, system or platform.system(), emsdk_dir)
     except Cancelled:
