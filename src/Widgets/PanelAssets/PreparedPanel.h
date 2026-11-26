@@ -42,6 +42,8 @@ namespace BECore {
     struct PreparedElement {
         const PanelElement* element = nullptr;
         PreparedKind kind = PreparedKind::Unknown;
+        /// False for a button or a menu item whose command the editor's host does not offer (`IsEditorCommandAvailable`): it is never drawn
+        bool offered = true;
         PreparedCondition visible;
         /// The `enableWhen` of a button, a dropdown, a menu, a menu item, an input, a checkbox, a combo, a number or a radio
         PreparedCondition enableWhen;

@@ -1,6 +1,7 @@
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Logger/FileSink.h>
+#include <BECore/Logger/LogHistorySink.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -72,7 +73,7 @@ namespace BECore::Tests {
         EXPECT_GT(window.attribute("height").as_int(), 0);
     }
 
-    TEST(WebConfigTest, LoggerWritesToTheConsoleOnlyWithoutColors) {
+    TEST(WebConfigTest, LoggerWritesToTheConsoleOnlyWithoutColorsAndKeepsAHistoryForTheEditor) {
         const Path path = WebConfigPath("LoggerConfig.xml");
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromFile(path));
@@ -81,8 +82,9 @@ namespace BECore::Tests {
         const auto manager = New<LoggerManager>();
         manager->Deserialize(deserializer);
         EXPECT_FALSE(deserializer.HasErrors());
-        EXPECT_EQ(manager->GetSinks().size(), 1u);
+        EXPECT_EQ(manager->GetSinks().size(), 2u);
         EXPECT_NE(manager->GetSink<ConsoleSink>(), nullptr);
+        EXPECT_NE(manager->GetSink<LogHistorySink>(), nullptr) << "the Console panel of the web editor has nothing to show without it";
         EXPECT_EQ(manager->GetSink<FileSink>(), nullptr);
         EXPECT_EQ(manager->GetSink<OutputSink>(), nullptr);
 

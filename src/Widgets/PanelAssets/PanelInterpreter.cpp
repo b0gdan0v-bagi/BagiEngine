@@ -4,6 +4,7 @@
 #include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/EditorLayout/EditorHost.h>
 #include <Widgets/EditorLayout/IconTable.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/PanelAssets/PanelDrawSupport.h>
@@ -74,6 +75,20 @@ namespace BECore {
                 prepared.state = PreparedBindingState::Bad;
             }
             return prepared;
+        }
+
+        /// The command of a control that is nothing but that command; empty for every other kind
+        StringView CommandOf(PreparedKind kind, const PanelElement& element) {
+            switch (kind) {
+                case PreparedKind::Button:
+                    return element.Cast<PanelButton>()->command;
+                case PreparedKind::MenuItem:
+                    return element.Cast<PanelMenuItem>()->command;
+                case PreparedKind::MenuItems:
+                    return element.Cast<PanelMenuItems>()->command;
+                default:
+                    return {};
+            }
         }
 
         const char* GlyphOf(StringView icon) {
@@ -273,6 +288,7 @@ namespace BECore {
             PreparedElement& prepared = out.emplace_back();
             prepared.element = element.Get();
             prepared.kind = KindOf(*element);
+            prepared.offered = IsEditorCommandAvailable(CommandOf(prepared.kind, *element));
             prepared.visible = PrepareCondition(element->visible);
             prepared.tooltip = PrepareBinding(element->tooltipBind, BindingForm::Field);
             switch (prepared.kind) {
@@ -432,7 +448,7 @@ namespace BECore {
     }
 
     bool PanelInterpreter::IsVisible(const PreparedElement& prepared) {
-        return ReadCondition(prepared.visible);
+        return prepared.offered && ReadCondition(prepared.visible);
     }
 
     void PanelInterpreter::NoteClick(StringView command, StringView argument) {

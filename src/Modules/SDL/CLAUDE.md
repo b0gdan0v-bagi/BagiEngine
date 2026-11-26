@@ -106,7 +106,7 @@ The browser build (`ENGINE_TARGET_WEB`, presets `web-release` / `web-debug` and 
 - **Clipboard.** SDL has none on the web: `SDLClipboard.cpp` has `EM_ASM` glue over `navigator.clipboard` and the `paste` event (`BECore/Clipboard/CLAUDE.md`, "Browser").
 - **Posting data.** `SDLWebPost` calls `window.bagiWebPost` (`web/shell.html`): `start` returns an id (0 = refused), `poll` -1 pending, 0 failed, else the HTTP status once; main thread only, the body read from a `HEAPU8.slice` (a view of shared memory is refused). Limits: `SDLWebPost.h`; server end: `serve.py` (`tools/web/CLAUDE.md`).
 - **Tests.** `FitWindowSize` and `SafeAreaFromInsets` run on the desktop (`WebCanvasTest`). EM_ASM code is stringized as written: keep it between `// clang-format off/on`.
-- **Checked** in headless Chromium and Edge (emulated touch and pixel ratio): the canvas fills the window and follows `set_viewport_size`. **Not checked:** the fullscreen, safe area, clipboard and posting glue (compiled, not run), a real phone, a real GPU, Firefox and Safari.
+- **Checked** in headless Chromium and Edge (emulated touch and pixel ratio): the canvas fills the window and follows `set_viewport_size`. **Not checked:** the fullscreen, safe area and posting glue (compiled, not run), a real phone, a real GPU, Firefox and Safari.
 
 ## ImGui + SDL3
 

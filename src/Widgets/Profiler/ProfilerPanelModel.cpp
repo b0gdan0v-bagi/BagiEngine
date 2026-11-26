@@ -10,6 +10,7 @@
 #include <EASTL/algorithm.h>
 #include <Generated/ProfilerPanelModel.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorHost.h>
 
 namespace BECore {
 
@@ -74,6 +75,7 @@ namespace BECore {
         FillLabels(_view.spikeModeLabels, kSpikeModeTexts);
         _view.zonesRecorded = BE_PROFILER != 0;
         _view.allocTracked = AllocTracker::kEnabled;
+        _view.traceFileSupported = IsEditorCommandAvailable(PoolString(EditorCommandIds::kProfilerTrace).ToStringView());
     }
 
     ProfilerPanelModel::~ProfilerPanelModel() {

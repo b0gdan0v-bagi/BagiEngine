@@ -5,6 +5,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/CommandPalette.h>
+#include <Widgets/EditorLayout/EditorBrowserInput.h>
 #include <Widgets/EditorLayout/EditorChordText.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorPlayModel.h>
@@ -24,6 +25,8 @@ namespace BECore {
     // at the bottom (both children of the host, so the dock layout and imgui.ini do not know them).
     // Must be registered after ImGuiWidget and the `Bar` assets it draws (`MainToolbarPanel`, `MainMenuPanel`: their models update before
     // this widget draws them) and before the other editor windows, so they dock into this space.
+    //
+    // In a browser it also shows, once per page load, that nothing changed here is kept (EditorHost.h).
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
     // (EditorCommandEvent): quit, switch mode, reset the layout and open the palette (`view.preferences` is the Preferences asset's own command, `view.saveLayout` is run by `EditorDialogsModel`). It
@@ -68,6 +71,8 @@ namespace BECore {
         void ApplyPreferences(const EditorPreferences& preferences);
 
         void DrawMenuBar();
+        /// The modal that says a browser editor keeps nothing; opened on the first Update after Initialize took the notice
+        void DrawReloadNotice();
         /// Emits the command of every chord pressed this frame
         void DispatchHotkeys();
         /// Pause / Resume through the model, written to the engine's GamePause (the pause of a manual clock is not lifted)
@@ -87,12 +92,14 @@ namespace BECore {
         StatusBar _statusBar;
 
         CommandPalette _palette;
+        Optional<EditorBrowserInput> _browserInput;  // only in the browser host
 
         String _pendingLayoutText;  // a named layout waiting for the next frame start
 
         EditorLayoutHostHandle _hostHandle;
         bool _preferencesNotified = false;  // NotifyPreferencesChanged waits here for the next Update
         bool _preferencesAnnounced = false;
+        bool _reloadNoticePending = false;
         bool _layoutInitialized = false;
         bool _forceResetLayout = false;
     };

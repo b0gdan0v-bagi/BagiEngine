@@ -67,6 +67,8 @@ namespace BECore {
         BE_REFLECT_FIELD bool zonesRecorded = false;
         /// This build counts allocations (ENGINE_PROFILER_ALLOC)
         BE_REFLECT_FIELD bool allocTracked = false;
+        /// The editor's host can give the user a Chrome trace file (`profiler.trace` is offered)
+        BE_REFLECT_FIELD bool traceFileSupported = true;
         /// The Chrome trace recorder is the primary backend
         BE_REFLECT_FIELD bool recording = false;
         BE_REFLECT_FIELD bool spikeOpened = false;

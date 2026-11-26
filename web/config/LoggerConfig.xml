@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Web build overlay. The console sink writes to the browser console (stdout / stderr of the page); no file log
+    Web build overlay. The history sink feeds the Console panel of the browser editor (preset web-editor). The console sink
+    writes to the browser console (stdout / stderr of the page); no file log
     (the in-memory file system of the page is lost on reload) and no OutputSink (it has no web output). Colors would
     show as escape codes in the console, so they are off.
 -->
@@ -9,5 +10,6 @@
         <sink type="OutputSink" enabled="false" priority="0" minLevel="Debug" />
         <sink type="ConsoleSink" enabled="true" priority="0" minLevel="Info" colorEnabled="false" />
         <sink type="FileSink" enabled="false" priority="100" minLevel="Info" filename="engine.log" append="false" />
+        <sink type="LogHistorySink" enabled="true" priority="50" minLevel="Debug" capacity="2048" />
     </sinks>
 </root>

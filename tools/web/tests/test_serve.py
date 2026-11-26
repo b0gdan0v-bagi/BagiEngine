@@ -17,6 +17,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from web_fixtures import CONTENT, GAME, FakeBrotli, write_build_output
@@ -617,6 +618,60 @@ class ArgumentsTest(unittest.TestCase):
         self.assertEqual(serve.accepted_encodings("GZIP"), {"gzip"})
         self.assertEqual(serve.accepted_encodings("*, br;q=0"), {"gzip"})
         self.assertEqual(serve.accepted_encodings("gzip;q=junk"), set())
+
+
+class EditorPageTest(unittest.TestCase):
+    """main() with a root whose manifest says `editor`; no server is started."""
+
+    BASIC = {"BASIC_AUTH_USER": "studio", "BASIC_AUTH_PASSWORD": "password"}
+    SIGN_IN = {"GOOGLE_CLIENT_ID": "client", "GOOGLE_CLIENT_SECRET": "secret", "PUBLIC_URL": "https://studio.example.com",
+               "SESSION_SECRET": "s" * 64}
+    ALLOW = {**SIGN_IN, "SIGNIN_ALLOW": "me@example.com"}
+
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.root = Path(self._temp.name)
+
+    def start(self, host: str, environ: dict, manifest: dict) -> tuple[int, bool, str]:
+        """(exit code, whether a server was made, stderr)"""
+        (self.root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        server = unittest.mock.MagicMock()
+        server.server_address = (host, 1)
+        errors = io.StringIO()
+        with unittest.mock.patch.dict(os.environ, environ, clear=True), \
+                unittest.mock.patch.object(serve, "make_server", return_value=server) as make_server, \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(errors):
+            code = serve.main(["--root", str(self.root), "--host", host])
+        return code, make_server.called, errors.getvalue()
+
+    def test_an_editor_page_that_others_can_reach_does_not_start_without_access_control(self):
+        cases = {
+            "open": ("0.0.0.0", {}),
+            "sign-in without a list": ("0.0.0.0", self.SIGN_IN),
+            "another address": ("192.0.2.1", {}),
+            **{f"loopback with {marker}": ("127.0.0.1", {marker: "x"}) for marker in serve.RAILWAY_MARKERS},
+        }
+        for name, (host, environ) in cases.items():
+            with self.subTest(name):
+                code, made, errors = self.start(host, environ, {"editor": True})
+                self.assertEqual((code, made), (1, False))
+                self.assertIn("editor page", errors)
+
+    def test_an_editor_page_starts_behind_a_door_or_for_this_machine_only(self):
+        cases = {
+            "Basic": ("0.0.0.0", {**self.BASIC, "RAILWAY_SERVICE_ID": "x"}),
+            "an allowlist": ("0.0.0.0", {**self.ALLOW, "RAILWAY_SERVICE_ID": "x"}),
+            **{host: (host, {}) for host in serve.LOOPBACK_HOSTS},
+        }
+        for name, (host, environ) in cases.items():
+            with self.subTest(name):
+                code, made, errors = self.start(host, environ, {"editor": True})
+                self.assertEqual((code, made), (0, True), errors)
+
+    def test_a_page_without_the_editor_starts_open_as_before(self):
+        code, made, errors = self.start("0.0.0.0", {"RAILWAY_SERVICE_ID": "x"}, {"threads": True})
+        self.assertEqual((code, made), (0, True), errors)
 
 
 class StandaloneTest(unittest.TestCase):

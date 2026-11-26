@@ -2,6 +2,7 @@
 
 #include <Generated/PreferencesHotkeys.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorHost.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
 
 namespace BECore {
@@ -26,6 +27,8 @@ namespace BECore {
                     return "Use Ctrl or Alt with a key, or an F key";
                 case AssignRefusal::Reserved:
                     return "The editor keeps this shortcut for itself";
+                case AssignRefusal::Browser:
+                    return "The browser keeps this shortcut for itself";
                 case AssignRefusal::None:
                     break;
             }
@@ -43,6 +46,9 @@ namespace BECore {
     void PreferencesHotkeys::Rebuild(const HotkeyMap& hotkeys) {
         _rows.clear();
         for (const EditorCommand& command : GetEditorCommands()) {
+            if (!IsEditorCommandAvailable(command.id.ToStringView())) {
+                continue;
+            }
             const Optional<KeyChord> chord = hotkeys.GetChord(command.id);
             HotkeyRow row;
             row.id = String(command.id.ToStringView());

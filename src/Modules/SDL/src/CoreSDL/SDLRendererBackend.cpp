@@ -557,10 +557,23 @@ namespace BECore {
 
     void SDLRendererBackend::OnImGuiRender() {
         BE_PROFILE_SCOPE("SDLRenderer::ImGuiRender");
-        Flush();
-        if (_renderer) {
-            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), _renderer);
+        if (ImDrawData* data = ImGui::GetDrawData()) {
+            DrawImGui(*data);
         }
+    }
+
+    void SDLRendererBackend::DrawImGui(ImDrawData& data) {
+        Flush();
+        if (!_renderer) {
+            return;
+        }
+        // ImGui's backend leaves the vertices in window units and expects SDL to scale them: without this a high density window shows ImGui in a corner
+        float scaleX = 1.0f;
+        float scaleY = 1.0f;
+        SDL_GetRenderScale(_renderer, &scaleX, &scaleY);
+        SDL_SetRenderScale(_renderer, data.FramebufferScale.x, data.FramebufferScale.y);
+        ImGui_ImplSDLRenderer3_RenderDrawData(&data, _renderer);
+        SDL_SetRenderScale(_renderer, scaleX, scaleY);
     }
 
 }  // namespace BECore

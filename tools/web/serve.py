@@ -23,6 +23,9 @@ Access control is optional HTTP Basic: with BASIC_AUTH_USER and BASIC_AUTH_PASSW
 GET /healthz needs them (401 and `WWW-Authenticate` otherwise, the isolation headers included); with neither set the server is open;
 with one only, it does not start. The secret lives in the variables of the service, never in a file of the image.
 
+An editor page (`"editor": true` in manifest.json, package.py) can change everything, so the server does not start with it unless Basic
+auth or sign-in with SIGNIN_ALLOW is on, or --host is a loopback address outside Railway.
+
 Match logs (off unless MATCH_STORE names a folder; behind the same Basic auth when it is set, without it every endpoint below is open
 to anybody, post, list, read and delete, and the start line says so; with it, anyone who holds the shared password may read and delete
 every log): a page posts a match log piece by piece,
@@ -1318,7 +1321,7 @@ def sign_in_from(environ, host: str, port: int, basic_auth, error) -> dict | Non
     if basic_auth:
         error(f"sign-in and {BASIC_AUTH_USER_VARIABLE} / {BASIC_AUTH_PASSWORD_VARIABLE} exclude each other: remove one")
     if fake_email:
-        if host not in LOOPBACK_HOSTS or any(environ.get(marker) for marker in RAILWAY_MARKERS):
+        if not is_local_only(host, environ):
             error(f"{SIGNIN_FAKE_EMAIL_VARIABLE} is for local tests only: --host must be a loopback address, and not on Railway")
         if "@" not in fake_email or len(fake_email) > EMAIL_MAX_CHARS:
             error(f"{SIGNIN_FAKE_EMAIL_VARIABLE} must be an email address")
@@ -1374,14 +1377,40 @@ def match_versions_from(text: str, error) -> tuple[int, int] | None:
     return low, high
 
 
-def manifest_threads(root: Path) -> bool | None:
-    """The `threads` member of manifest.json in `root`: True or False, None when there is no manifest, it cannot be read or it has no boolean `threads`."""
+def read_manifest(root: Path) -> dict:
+    """manifest.json of `root`; empty when there is none or it is not a JSON object."""
     try:
         manifest = json.loads((root / MANIFEST_NAME).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None
-    threads = manifest.get("threads") if isinstance(manifest, dict) else None
+        return {}
+    return manifest if isinstance(manifest, dict) else {}
+
+
+def manifest_threads(root: Path) -> bool | None:
+    """The `threads` member of manifest.json in `root`: True or False, None when there is no manifest, it cannot be read or it has no boolean `threads`."""
+    threads = read_manifest(root).get("threads")
     return threads if isinstance(threads, bool) else None
+
+
+def manifest_editor(root: Path) -> bool:
+    """Whether manifest.json in `root` says `editor`: the page has the editor and needs editor_door()."""
+    return bool(read_manifest(root).get("editor"))
+
+
+def editor_door(basic_auth: tuple[str, str] | None, sign_in: dict | None) -> str | None:
+    """The access control an editor page may be published behind, from what basic_auth_from() and sign_in_from() returned: Basic, or
+    sign-in with an allowlist; None when there is neither. Sign-in without SIGNIN_ALLOW lets in any account and guests, so it is no
+    access control. build_and_deploy.py asks the same about the variables of a service."""
+    if basic_auth:
+        return "Basic auth"
+    if sign_in and sign_in["allow"]:
+        return "sign-in with an allowlist"
+    return None
+
+
+def is_local_only(host: str, environ) -> bool:
+    """Whether a server on `host` with this environment answers this machine only: a loopback address, and not on Railway."""
+    return host in LOOPBACK_HOSTS and not any(environ.get(marker) for marker in RAILWAY_MARKERS)
 
 
 def decide_cross_origin_isolation(explicit: bool | None, source: str | None, root: Path) -> tuple[bool, str]:
@@ -1437,6 +1466,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if not args.root.is_dir():
         print(f"serve.py: {args.root} is not a folder", file=sys.stderr)
+        return 1
+    if manifest_editor(args.root) and not editor_door(args.basic_auth, args.sign_in) and not is_local_only(args.host, os.environ):
+        print(f"serve.py: {args.root} holds an editor page, which needs access control: set {BASIC_AUTH_USER_VARIABLE} and "
+              f"{BASIC_AUTH_PASSWORD_VARIABLE}, or the sign-in with {SIGNIN_ALLOW_VARIABLE} (tools/web/ACCESS.md). Without it the page "
+              "is served to this machine only: --host 127.0.0.1, outside Railway", file=sys.stderr)
         return 1
     isolation, reason = decide_cross_origin_isolation(args.cross_origin_isolation, args.isolation_source, args.root)
     try:

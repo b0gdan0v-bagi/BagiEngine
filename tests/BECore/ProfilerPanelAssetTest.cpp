@@ -276,6 +276,14 @@ namespace BECore::Tests {
         EXPECT_NE(Combo(1), nullptr);
     }
 
+    TEST_F(ProfilerPanelAssetTest, AHostThatCanGiveNoTraceFileHasNoChromeTraceSection) {
+        View().traceFileSupported = false;
+        AddFrame(kSteadyFrameTicks);
+        Settle();
+        EXPECT_EQ(Find("Chrome trace"), nullptr);
+        EXPECT_NE(Find("Memory"), nullptr);
+    }
+
     TEST_F(ProfilerPanelAssetTest, ABuildWithNoZoneRecordingHasNoSectionsThatNeedZones) {
         AddFrame(kSteadyFrameTicks);
         Settle();

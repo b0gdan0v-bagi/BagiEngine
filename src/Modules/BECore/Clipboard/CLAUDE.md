@@ -1,6 +1,6 @@
 # Clipboard Guidelines
 
-The text clipboard of the game: `CoreManager::GetClipboard()` (`Clipboard`), with a pluggable backend (`IClipboardBackend`). Plain text only; no images, files, rich text or primary selection. ImGui's own clipboard in the editor is separate (it keeps using the SDL backend of ImGui). Main thread only.
+The text clipboard of the game: `CoreManager::GetClipboard()` (`Clipboard`), with a pluggable backend (`IClipboardBackend`). Plain text only; no images, files, rich text or primary selection. ImGui's own clipboard in the editor is separate (it keeps using the SDL backend of ImGui), except in a browser, where it goes through this one (`src/Widgets/EditorLayout/CLAUDE.md`, "Input"). Main thread only.
 
 | File | Purpose |
 |------|---------|
@@ -44,11 +44,11 @@ The Emscripten half of `SDLClipboard.cpp` (`WebClipboardBackend`, made by `MakeP
 - **`PollRead`** costs one `EM_ASM_INT` only while a read is pending; a read that has not finished after `kReadTimeoutMs` (a prompt nobody answers) or was lost is `Refused`, so the facade never waits for ever. The text is copied in two steps (`lengthBytesUTF8`, then `stringToUTF8` into a buffer the C++ side sized) and a text over `kMaxClipboardBytes` is `Refused` before it is copied.
 - **`TakePasted`**: the `paste` listener of the window queues `clipboardData.getData('text/plain')` (a short queue, the oldest dropped); an empty one is `Empty` and the facade ignores it. One `EM_ASM_INT` per frame.
 - A refusal or a missing API is a value everywhere: one `LOG_WARNING` per reason per page load, no log per call.
-- **Not checked:** no real browser has run it (Chrome, Safari desktop and iOS with the paste bubble and a write inside a tap, Firefox, a denied permission, plain `http://`): the owner's look, best with a game that has `Copy` / `Paste` buttons.
+- **Checked** in headless Chromium through the editor page (a copy, a paste, a refused read). **Not checked:** Safari desktop and iOS with the paste bubble and a write inside a tap, Firefox, plain `http://`: the owner's look, best with a game that has `Copy` / `Paste` buttons.
 
 ## Control API
 
-`RegisterClipboardControl` (`ClipboardControl.h`, called by `InitializeCoreServices()`): `clipboard_set {text}` answers `{ok}` (a missing or non-string `text` is `invalid_params`); `clipboard_get` answers `{status, text}` with the words of `ToString`; `clipboard_paste` answers `{}`. The two that wait defer their answer one frame of zero seconds at a time until the clipboard has answered (a read is answered from the next `Update()`), so they work with the manual clock, and fail with `clipboard_timeout` after `kMaxClipboardWaitFrames` frames. `clipboard_paste` answers when no request is pending any more, so the `PasteEvent` has reached the game by then. A browser page cannot reach this API, so the later look in a browser needs a game with `Copy` / `Paste` buttons.
+`RegisterClipboardControl` (`ClipboardControl.h`, called by `InitializeCoreServices()`): `clipboard_set {text}` answers `{ok}` (a missing or non-string `text` is `invalid_params`); `clipboard_get` answers `{status, text}` with the words of `ToString`; `clipboard_paste` answers `{}`. The two that wait defer their answer one frame of zero seconds at a time until the clipboard has answered (a read is answered from the next `Update()`), so they work with the manual clock, and fail with `clipboard_timeout` after `kMaxClipboardWaitFrames` frames. `clipboard_paste` answers when no request is pending any more, so the `PasteEvent` has reached the game by then. A browser page cannot reach this API, so the look at a game's own paste in a browser needs a game with `Copy` / `Paste` buttons.
 
 ## Tests
 

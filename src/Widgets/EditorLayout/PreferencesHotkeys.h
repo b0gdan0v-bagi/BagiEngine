@@ -41,7 +41,7 @@ namespace BECore {
      */
     class PreferencesHotkeys {
     public:
-        /// Makes the rows of the command table from @p hotkeys
+        /// Makes the rows from @p hotkeys: one per command of the table that the editor's host offers
         void Rebuild(const HotkeyMap& hotkeys);
 
         /// Forgets the dialog and the message, as when the panel opens

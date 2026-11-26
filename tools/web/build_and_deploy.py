@@ -5,6 +5,7 @@
     python tools/web/build_and_deploy.py --game BagiStress --single-thread       # the page without threads (no COOP / COEP needed)
     python tools/web/build_and_deploy.py --game BagiStress --deploy --service bagi-web
     python tools/web/build_and_deploy.py --target mahjong-editor --dry-run       # game, preset and service of web/targets.json
+    python tools/web/build_and_deploy.py --game BagiStress --preset web-editor   # the editor page, into build/web-editor-dist
 
 Run it from the root of the project that has the web presets (the engine, or a game that carries it); `--source-dir` names another.
 The steps, in order:
@@ -17,6 +18,10 @@ The steps, in order:
      dist/ in one folder and run `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
      `railway link`, or RAILWAY_TOKEN of the project; the service must exist and its settings (builder Dockerfile, health check
      /healthz) come from the game's Railway IaC file, not from the upload: tools/web/CLAUDE.md).
+An editor page (a web-editor* preset, or a package whose manifest.json says `editor`) can change everything: a web-editor* preset
+packages into build/web-editor-dist, --deploy of an editor page needs the service named (--service or the target), and before the
+staging `railway variable list` of that service must show Basic auth or sign-in with SIGNIN_ALLOW (serve.editor_door). An answer that
+fails or cannot be read is a refusal, no option skips the check, and nothing of the answer is printed.
 --target NAME takes the game, preset and service from <source>/web/targets.json (deploy_targets.py) and refuses every free option of
 the command line (REFUSED_WITH_TARGET); only --deploy, --dry-run, --source-dir, --status-file and --checkout-dir go with it.
 --fetch (implied by --target) builds in a checkout of its own instead of the working copy (deploy_checkout.py): a detached worktree of
@@ -29,11 +34,12 @@ run records into the default results file.
 (deploy_status.py); `done` at deploy means railway accepted the upload, not that the page is live. A dry run writes nothing.
 package.py gets --commit engine=<sha> --commit game=<sha> when git answers, so the deployed manifest.json names its commits.
 tools/web/DEPLOY.md has the whole story.
-Standard library only. Nothing here reads or writes a secret.
+Standard library only. Nothing here writes a secret; the variables of an editor service are read for that check and dropped.
 """
 
 import argparse
 import contextlib
+import json
 import os
 import shlex
 import shutil
@@ -49,6 +55,7 @@ import alltests_results  # noqa: E402
 import deploy_checkout  # noqa: E402
 import deploy_status  # noqa: E402
 import deploy_targets  # noqa: E402
+import serve  # noqa: E402  (the access rule of an editor page is the server's own)
 
 PACKAGE_SCRIPT = "package.py"
 STAGED_FILES = ("Dockerfile", "serve.py")
@@ -73,6 +80,11 @@ SINGLE_THREAD_SUFFIX = "-single-thread"
 BIN_FOLDER = "bin"
 STAGE_FOLDER = Path("build") / "web-deploy"
 DIST_FOLDER = Path("dist")
+# The presets of the editor page and its package folder: apart from dist/, so the release package is never overwritten, and inside
+# build/, which a game ignores already
+EDITOR_PRESET_PREFIX = "web-editor"
+EDITOR_DIST_FOLDER = Path("build") / "web-editor-dist"
+RAILWAY_VARIABLES_TIMEOUT_SECONDS = 60
 # The options of a hand run that --target refuses: a target is the whole description of a deploy, and an agent that starts it must not
 # be able to add arguments (attribute of the parsed arguments -> the flag)
 REFUSED_WITH_TARGET = {
@@ -85,6 +97,10 @@ APP_FILE = Path("web") / "app.json"
 
 class DeployError(Exception):
     """A precondition is missing; the message says what to do."""
+
+
+class RefusedSettings(Exception):
+    """The variables of a service are settings serve.py does not start with. No message is kept: the server's ones quote values."""
 
 
 class CheckoutPlan(NamedTuple):
@@ -108,9 +124,13 @@ class Step(NamedTuple):
 def resolve_target(args: argparse.Namespace, source_dir: Path) -> None:
     """Fills game, preset and service: from the target of --target (refusing the free options), else from the options and defaults."""
     args.target_info = None
+    # The default service is the page the testers play, so an editor page goes only to a service somebody named
+    args.service_named = bool(args.service) or args.target is not None
     if args.target is None:
         args.game = args.game or DEFAULT_GAME
         args.preset = args.preset or DEFAULT_PRESET
+        if args.deploy and is_editor_preset(args.preset) and not args.service_named:
+            raise DeployError(f"--deploy of an editor page ({args.preset}) needs --service: the default {DEFAULT_SERVICE} is the release page's")
         args.service = args.service or DEFAULT_SERVICE
         return
     refused = [flag for name, flag in REFUSED_WITH_TARGET.items() if getattr(args, name)]
@@ -128,6 +148,10 @@ def resolve_preset(args: argparse.Namespace) -> str:
     if args.single_thread and not args.preset.endswith(SINGLE_THREAD_SUFFIX):
         return args.preset + SINGLE_THREAD_SUFFIX
     return args.preset
+
+
+def is_editor_preset(preset: str) -> bool:
+    return preset.startswith(EDITOR_PRESET_PREFIX)
 
 
 def output_folder(preset: str) -> Path:
@@ -236,6 +260,44 @@ def stage(dist: Path, stage_dir: Path, source_dir: Path, tools_dir: Path = TOOLS
     shutil.copytree(dist, stage_dir / "dist")
 
 
+def refuse_settings(_message: str):
+    raise RefusedSettings
+
+
+def editor_access(service: str, stage_dir: Path, which, runner) -> str:
+    """The door of `service` for an editor page, by its variables and the rule of serve.py; DeployError when it has none or the answer
+    of the Railway CLI fails or cannot be read. The answer holds the secrets of the service: no part of it goes into a message."""
+    # Where `railway up` will run, so both resolve the same linked project; the staging may not exist yet, and its parent resolves alike
+    cwd = next(folder for folder in (stage_dir.resolve(), *stage_dir.resolve().parents) if folder.is_dir())
+    command = ["railway", "variable", "list", "--service", service, "--json"]
+    print(f"+ ({cwd}) {format_command(command)}", flush=True)
+    unread = f"cannot check the access of the service {service}, so the editor page is not deployed"
+    try:
+        completed = runner([which(command[0]) or command[0], *command[1:]], cwd=cwd, check=False, capture_output=True,
+                           timeout=RAILWAY_VARIABLES_TIMEOUT_SECONDS)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise DeployError(f"{unread}: `railway variable list` did not run to its end ({type(error).__name__})") from None
+    if completed.returncode != 0:
+        raise DeployError(f"{unread}: `railway variable list` failed with exit code {completed.returncode} (run it by hand to see why)")
+    try:
+        variables = json.loads(completed.stdout)
+    except ValueError:
+        variables = None
+    if not isinstance(variables, dict) or not all(isinstance(value, str) for value in variables.values()):
+        raise DeployError(f"{unread}: the answer of `railway variable list` is not a JSON object of strings")
+    try:
+        basic_auth = serve.basic_auth_from(variables, refuse_settings)
+        door = serve.editor_door(basic_auth, serve.sign_in_from(variables, serve.DEFAULT_HOST, serve.DEFAULT_PORT, basic_auth, refuse_settings))
+    except (RefusedSettings, ValueError):
+        # ValueError: an address urlsplit rejects, in a message that quotes it
+        door = None
+    if door is None:
+        raise DeployError(f"the service {service} has no access control an editor page may be published behind: set "
+                          f"{serve.BASIC_AUTH_USER_VARIABLE} and {serve.BASIC_AUTH_PASSWORD_VARIABLE}, or a complete sign-in with "
+                          f"{serve.SIGNIN_ALLOW_VARIABLE} (tools/web/ACCESS.md); nothing was staged or deployed")
+    return door
+
+
 def fail(status: deploy_status.Status, message: str, code: int) -> int:
     print(f"build_and_deploy.py: {message}", file=sys.stderr)
     status.fail(message)
@@ -252,10 +314,10 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     parser.add_argument("--single-thread", action="store_true", help=f"build the page without threads: the preset gets the suffix {SINGLE_THREAD_SUFFIX}, the page is built into build/<preset>/bin")
     parser.add_argument("--build-dir", type=Path, help="the folder the build writes the page to (default: <source>/build/<preset>/bin, e.g. build/web-release/bin)")
     parser.add_argument("--app", type=Path, help=f"the game's web app settings for package.py (default: <source>/{APP_FILE.as_posix()} when it exists)")
-    parser.add_argument("--dist", type=Path, help=f"the packaged folder (default: <source>/{DIST_FOLDER.as_posix()})")
+    parser.add_argument("--dist", type=Path, help=f"the packaged folder (default: <source>/{DIST_FOLDER.as_posix()}, of a {EDITOR_PRESET_PREFIX}* preset <source>/{EDITOR_DIST_FOLDER.as_posix()})")
     parser.add_argument("--stage-dir", type=Path, help=f"the folder `railway up` runs in (default: <source>/{STAGE_FOLDER.as_posix()})")
     parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`")
-    parser.add_argument("--service", help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE})")
+    parser.add_argument("--service", help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE}; an editor page has no default)")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and run nothing")
     parser.add_argument("--skip-alltests", action="store_true", help="deploy even when HEAD of the source has no green full test run or the tree has uncommitted changes (tools/alltests)")
     parser.add_argument("--alltests-results", type=Path, help="the results file of tools/alltests (default: the one of the source's repository)")
@@ -355,7 +417,8 @@ def build_and_package(args: argparse.Namespace, project: Path, tools_dir: Path, 
     """Everything after the project is known: `project` is the folder that is built (the checkout in checkout mode) and `tools_dir` the folder of
     package.py, serve.py and the Dockerfile that travel with it. In checkout mode the gate runs after the fetch, so a dry run says
     so instead of asking it about a checkout that does not exist."""
-    dist = args.dist or project / DIST_FOLDER
+    editor_preset = is_editor_preset(resolve_preset(args))
+    dist = args.dist or project / (EDITOR_DIST_FOLDER if editor_preset else DIST_FOLDER)
     stage_dir = args.stage_dir or project / STAGE_FOLDER
     if args.deploy:
         if plan and not args.skip_alltests and not args.dry_run:
@@ -374,6 +437,19 @@ def build_and_package(args: argparse.Namespace, project: Path, tools_dir: Path, 
         program = step.command[0]
         status.enter(step.stage)
         if step.is_deploy:
+            if args.dry_run:
+                if editor_preset:
+                    print(f"editor page: before the staging, the access of the service {args.service} would be checked "
+                          "(`railway variable list`)", flush=True)
+            # The manifest says what was packaged (--build-dir may point anywhere); the preset counts too, in case a package says less
+            elif editor_preset or serve.manifest_editor(dist):
+                if not args.service_named:
+                    return fail(status, f"{dist} holds an editor page: --deploy of it needs --service", 2)
+                try:
+                    door = editor_access(args.service, step.cwd, which, runner)
+                except DeployError as error:
+                    return fail(status, str(error), 2)
+                print(f"editor page: the service {args.service} is behind {door}", flush=True)
             print(f"stage {dist} and {', '.join(STAGED_FILES)} into {stage_dir}", flush=True)
             if not args.dry_run:
                 try:

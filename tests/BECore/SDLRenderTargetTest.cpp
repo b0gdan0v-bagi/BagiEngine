@@ -5,7 +5,9 @@
 #include <CoreSDL/SDLRenderTarget.h>
 #include <CoreSDL/SDLRendererBackend.h>
 #include <SDL3/SDL.h>
+#include <backends/imgui_impl_sdlrenderer3.h>
 #include <gtest/gtest.h>
+#include <imgui.h>
 
 namespace BECore::Tests {
 
@@ -92,6 +94,31 @@ namespace BECore::Tests {
         };
 
     }  // namespace
+
+    TEST_F(SDLRenderTargetTest, AnImGuiFrameOfAHighDensityWindowIsDrawnAtItsFramebufferScale) {
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.IniFilename = nullptr;
+        io.DisplaySize = ImVec2(100.0f, 100.0f);
+        io.DisplayFramebufferScale = ImVec2(2.0f, 2.0f);
+        ASSERT_TRUE(ImGui_ImplSDLRenderer3_Init(renderer->GetSDLRenderer()));
+        ImGui::NewFrame();
+        ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(20.0f, 20.0f), ImVec2(40.0f, 40.0f), IM_COL32(255, 0, 0, 255));
+        ImGui::Render();
+
+        renderer->Clear(kBackground);
+        renderer->DrawImGui(*ImGui::GetDrawData());
+        const PixelBuffer image = PresentAndRead();
+        ImGui_ImplSDLRenderer3_Shutdown();
+        ImGui::DestroyContext();
+
+        EXPECT_EQ(PixelAt(image, 60.0f, 60.0f), AsPixel(kRed)) << "inside the rect at twice its window units";
+        EXPECT_EQ(PixelAt(image, 30.0f, 30.0f), AsPixel(kBackground)) << "the rect was drawn in window units";
+        float scaleX = 0.0f;
+        float scaleY = 0.0f;
+        SDL_GetRenderScale(renderer->GetSDLRenderer(), &scaleX, &scaleY);
+        EXPECT_EQ(scaleX, 1.0f) << "the engine's own draws are in output pixels";
+    }
 
     TEST_F(SDLRenderTargetTest, TargetHasItsSizeAndATextureId) {
         const auto target = renderer->CreateRenderTarget(64, 32);

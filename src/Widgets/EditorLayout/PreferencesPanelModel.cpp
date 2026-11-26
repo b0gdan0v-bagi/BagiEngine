@@ -2,6 +2,7 @@
 
 #include <Generated/PreferencesPanelModel.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorHost.h>
 #include <Widgets/EditorLayout/IEditorLayoutHost.h>
 #include <imgui.h>
 
@@ -28,7 +29,9 @@ namespace BECore {
 
     }  // namespace
 
-    PreferencesPanelModel::PreferencesPanelModel() : _readChord(ReadImGuiChord) {}
+    PreferencesPanelModel::PreferencesPanelModel() : _readChord(ReadImGuiChord) {
+        _view.externalEditorSupported = GetEditorHost() == EditorHostKind::Desktop;
+    }
 
     void PreferencesPanelModel::SetChordReader(ChordReader reader) {
         _readChord = std::move(reader);
