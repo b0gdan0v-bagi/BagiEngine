@@ -426,6 +426,59 @@ namespace BECore::Tests {
         EXPECT_EQ(loaded.label, "loaded");
     }
 
+    TEST_F(TypeRegistryTest, FieldThunksCopyOneFieldOfItsOwnAndOfAParentAndNoOther) {
+        RegDerived source;
+        source.baseValue = 10;
+        source.ownValue = 20;
+        source.nested.value = 30;
+        RegDerived target;
+
+        for (const FieldRef& ref : registry.AllFields(Get("RegDerived"))) {
+            if (ref.field->name == "nested") {
+                continue;
+            }
+            ASSERT_NE(ref.field->save, nullptr);
+            ASSERT_NE(ref.field->load, nullptr);
+            // The thunks take the object of the declaring type, as `address` does
+            const size_t owner = ref.offset - ref.field->offset;
+            XmlSerializer saved;
+            ref.field->save(reinterpret_cast<char*>(&source) + owner, saved);
+            XmlDeserializer reader;
+            ASSERT_TRUE(reader.LoadFromString(StringView(saved.SaveToString())));
+            ref.field->load(reinterpret_cast<char*>(&target) + owner, reader);
+            EXPECT_FALSE(reader.HasErrors());
+        }
+
+        EXPECT_EQ(target.baseValue, 10);
+        EXPECT_EQ(target.ownValue, 20);
+        EXPECT_EQ(target.nested.value, 0);
+    }
+
+    TEST_F(TypeRegistryTest, FieldLoadReplacesTheValueAndARefusedOneKeepsIt) {
+        const TypeInfo& info = Get("RegAllKinds");
+        RegAllKinds all;
+        all.maybe = 4;
+        all.items = {1, 2};
+        all.count = 5;
+
+        XmlDeserializer nothing;
+        ASSERT_TRUE(nothing.LoadFromString("<root/>"));
+        FindField(info, "maybe")->load(&all, nothing);
+        EXPECT_FALSE(all.maybe.has_value());
+
+        XmlDeserializer shorter;
+        ASSERT_TRUE(shorter.LoadFromString("<root><items><item value=\"7\"/></items></root>"));
+        FindField(info, "items")->load(&all, shorter);
+        EXPECT_EQ(all.items, (Vector<int32_t>{7}));
+
+        XmlDeserializer bad;
+        bad.SetStrictValues(true);
+        ASSERT_TRUE(bad.LoadFromString("<root count=\"many\"/>"));
+        FindField(info, "count")->load(&all, bad);
+        EXPECT_TRUE(bad.HasErrors());
+        EXPECT_EQ(all.count, 5);
+    }
+
     TEST_F(TypeRegistryTest, AnEventHasNoVisitorAndAClassHasOne) {
         EXPECT_EQ(Get("RegEvent").acceptVisitor, nullptr);
         EXPECT_NE(Get("RegEvent").serialize, nullptr);
