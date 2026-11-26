@@ -2,6 +2,7 @@
 
 #include <BECore/File/Path.h>
 #include <Widgets/AssetBrowser/AssetBrowserPanelModel.h>
+#include <Widgets/AssetBrowser/AssetDrag.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
@@ -163,12 +164,21 @@ namespace BECore {
         ImGui::PopID();
         // The clipper submits whole rows: a tile that does not show draws and loads nothing
         const bool visible = ImGui::IsItemVisible();
-        ItemTooltip(file.path.CStr());
+        const float em = ImGui::GetFontSize();
+        const bool dragged = DrawAssetDragSource(file.kind, file.path.ToStringView(), [this, &file, name, em] {
+            const float side = em * kPictureEm;
+            const ImVec2 min = ImGui::GetCursorScreenPos();
+            ImGui::Dummy(ImVec2(side, side));
+            DrawPicture(file, min, side);
+            ImGui::TextUnformatted(name.data(), name.data() + name.size());
+        });
+        if (!dragged) {
+            ItemTooltip(file.path.CStr());
+        }
         if (!visible) {
             return;
         }
 
-        const float em = ImGui::GetFontSize();
         const float padding = em * kTilePaddingEm;
         const float side = em * kPictureEm;
         const ImVec2 pictureMin(origin.x + (size.x - side) * kHalf, origin.y + padding);

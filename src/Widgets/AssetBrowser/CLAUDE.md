@@ -31,3 +31,11 @@ The window is an asset, `config/panels/AssetBrowserPanel.xml` (`Asset Browser###
 - **The tree** starts with a root row, "All content" (the empty folder path), above the mounts; the root and the mounts start open. A tree node's ImGui id is the folder's path.
 - **Only a tile in view loads a texture**: the grid is clipped by rows, and a tile outside the clip rect draws and loads nothing. The thumbnails are a `SpriteTextureCache` (an evicted texture is loaded again; a failed load is remembered and shows a warning icon until the catalog is made again, by a file change or Rescan). Closing the panel lets every thumbnail go. A tile's id is the file's path under the label `##<file name>`, which the control API finds it by.
 
+## Drag and drop
+
+`AssetDrag.{h,cpp}` is the whole contract: a panel draws a source with `DrawAssetDragSource` and takes a drop with `AcceptAssetDrop`, and none handles the ImGui payload (`BE_ASSET`) itself (`AssetDropInspectorTest`).
+
+- **Sources.** A tile of the grid, of a draggable kind (`IsDraggableAsset`): `Texture`, `Font`, `Sound`, `UiDocument`, `Node`. A path that does not fit the payload starts no drag, because a cut path would name another file.
+- **Targets** take one kind each and no disabled item, so a read-only field and a locked node take nothing and show no highlight.
+- **An inspector field** takes a file when it is a string marked `BE_FIELD_ATTRS(asset(<Kind>))` (a game's field the same way; `reflection-module.md`): `ImGuiPropertyVisitor` writes the virtual path. An unmarked string takes nothing, since a dropped path would silently spoil a free text. A custom inspector asks for the drop itself, as the sprite renderer's texture combo does (not while a sprite id locks it).
+

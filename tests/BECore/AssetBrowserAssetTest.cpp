@@ -3,7 +3,6 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/ImGuiItemIndex.h>
-#include <BECore/RefCounted/New.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
@@ -12,6 +11,7 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Generated/AssetBrowserTestModel.gen.hpp>
+#include <Widgets/AssetBrowser/AssetDrag.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
@@ -284,6 +284,31 @@ namespace BECore::Tests {
 
         Toggle();
         EXPECT_EQ(held(), 0);
+    }
+
+    TEST_F(AssetBrowserAssetTest, ADragOfATileCarriesItsFile) {
+        CacheProbe(kBoard);
+        ASSERT_NO_FATAL_FAILURE(Open());
+        const ImGuiItemRecord* tile = Find("##browser_probe_click.wav");
+        ASSERT_NE(tile, nullptr);
+        const ImVec2 from(tile->CenterX(), tile->CenterY());
+
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddMousePosEvent(from.x, from.y);
+        Frame();
+        io.AddMouseButtonEvent(0, true);
+        Frame();
+        io.AddMousePosEvent(kDisplaySize.x * 0.5f, kDisplaySize.y * 0.5f);
+        Settle();
+
+        const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+        ASSERT_NE(payload, nullptr);
+        ASSERT_TRUE(payload->IsDataType(kAssetDragPayload));
+        const auto& dragged = *static_cast<const AssetDragPayload*>(payload->Data);
+        EXPECT_EQ(dragged.kind, AssetKind::Sound);
+        EXPECT_STREQ(dragged.path, "assets/browser_probe_click.wav");
+        io.AddMouseButtonEvent(0, false);
+        Settle();
     }
 
     TEST_F(AssetBrowserAssetTest, ASteadyFrameAllocatesNothing) {

@@ -10,6 +10,7 @@
 #include <BECore/Scene/Components/ClickableComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <EASTL/unordered_map.h>
+#include <Widgets/AssetBrowser/AssetDrag.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
@@ -86,7 +87,8 @@ namespace BECore {
                 }
             }
 
-            if (ImGui::BeginCombo("Texture##sprite_texture", currentIndex >= 0 ? cachedAssets[currentIndex].CStr() : "(none)")) {
+            // The path itself: a dropped file may be one the cached list does not have
+            if (ImGui::BeginCombo("Texture##sprite_texture", s._texturePath.Empty() ? "(none)" : s._texturePath.CStr())) {
                 for (int i = 0; i < static_cast<int>(cachedAssets.size()); ++i) {
                     const bool isSelected = (currentIndex == i);
                     if (ImGui::Selectable(cachedAssets[i].CStr(), isSelected)) {
@@ -100,6 +102,11 @@ namespace BECore {
                     }
                 }
                 ImGui::EndCombo();
+            }
+            if (const Optional<AssetDragPayload> dropped = AcceptAssetDrop(AssetKind::Texture)) {
+                s._texturePath = PoolString::Intern(StringView(dropped->path));
+                s.ReloadTexture();
+                changed = true;
             }
 
             ImGui::SameLine();
