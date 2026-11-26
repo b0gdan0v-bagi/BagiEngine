@@ -15,15 +15,19 @@
 #include <Widgets/Feedback/TouchFlashDraw.h>
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
-#include <Widgets/ImGuiFonts.h>
 #include <Widgets/SceneEditor/ComponentDefaults.h>
 #include <Widgets/SceneEditor/DefaultMarkDraw.h>
 #include <Widgets/SceneEditor/ImGuiPropertyVisitor.h>
+#include <Widgets/SceneEditor/NumberField.h>
 #include <imgui.h>
 
 namespace BECore {
 
     namespace {
+
+        constexpr float kSourceRectFieldWidth = 60.0f;
+        /// Pixels of the source rect per pixel of mouse travel
+        constexpr double kSourceRectDragSpeed = 0.5;
 
         HashMap<uint64_t, InspectorFunc>& GetRegistry() {
             static HashMap<uint64_t, InspectorFunc> reg;
@@ -50,6 +54,12 @@ namespace BECore {
                 }
             }
             return clicked;
+        }
+
+        bool DrawSourceRectNumber(StringView name, const char* id, float& value) {
+            FieldPresentation::Presentation presentation = FieldPresentation::Describe(FieldAttributes{}, FieldPresentation::NumberKind::Float);
+            presentation.speed = kSourceRectDragSpeed;
+            return DrawNumber(name, id, presentation, value, ImGuiDataType_Float);
         }
 
         bool InspectSpriteRenderer(SpriteRendererComponent& s) {
@@ -142,28 +152,14 @@ namespace BECore {
 
             ImGui::TextUnformatted("Source Rect:");
 
-            {
-                const ScopedMonoFont mono;
-                ImGui::PushItemWidth(60.0f);
-                if (ImGui::DragFloat("X##srcRect_x", &s._srcRect.x, 0.5f)) {
-                    changed = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::DragFloat("Y##srcRect_y", &s._srcRect.y, 0.5f)) {
-                    changed = true;
-                }
-                ImGui::PopItemWidth();
-
-                ImGui::PushItemWidth(60.0f);
-                if (ImGui::DragFloat("W##srcRect_w", &s._srcRect.w, 0.5f, 0.0f)) {
-                    changed = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::DragFloat("H##srcRect_h", &s._srcRect.h, 0.5f, 0.0f)) {
-                    changed = true;
-                }
-                ImGui::PopItemWidth();
-            }
+            ImGui::PushItemWidth(kSourceRectFieldWidth);
+            changed |= DrawSourceRectNumber("x", "srcRect_x", s._srcRect.x);
+            ImGui::SameLine();
+            changed |= DrawSourceRectNumber("y", "srcRect_y", s._srcRect.y);
+            changed |= DrawSourceRectNumber("w", "srcRect_w", s._srcRect.w);
+            ImGui::SameLine();
+            changed |= DrawSourceRectNumber("h", "srcRect_h", s._srcRect.h);
+            ImGui::PopItemWidth();
 
             if (lockedBySprite) {
                 ImGui::EndDisabled();

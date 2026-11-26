@@ -22,3 +22,13 @@ The rest of the Scene Editor (selection, hierarchy, dialogs, Save, the viewport)
 - A `readonly` field and a disabled scope (a locked node) have the bar and no arrow. A field whose visitor draws nothing has neither; the card's "Reset" still covers it.
 - A custom inspector cannot mark its own controls, so the card lists one line per differing field above it; its signature does not change, so a game's inspector gets the arrows too.
 - A click is applied after the inspector has run, makes the scene unsaved and removes that field's touch mark only.
+
+## Numbers
+
+A number of the generic inspector and of the sprite's source rect is drawn by `DrawNumber` (`NumberField.h`), which another custom inspector may call; the UI element section (`UIRectInspector`) draws its own fields. The decisions are in `FieldPresentation`, which needs no ImGui.
+
+- A press on the name and a horizontal drag change the number: the value at the press plus the whole drag times the presentation's speed, through `Constrain`. Counted from the press, so nothing drifts, an integer moves under a speed below one, and a value clamped at an end comes back with the pointer. A click that never moved is no edit.
+- A drag is an edit like any other (it makes the scene unsaved and drops the touch mark); a disabled field does not drag.
+- The name is an item of its own, `<name>##label_<id>`, over the text and without room in the layout. The field keeps `##<id>`, which the QA helpers match, so the name's label never holds it.
+- A field named exactly `x`, `y` or `z`, at any depth (a transform, a `Vec2`, a `Rect`), has its frame mixed with the axis colour of the palette.
+

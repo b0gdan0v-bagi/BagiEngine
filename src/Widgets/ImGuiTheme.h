@@ -19,6 +19,10 @@ namespace BECore {
         ImVec4 accentHover;
         ImVec4 accentActive;
         ImVec4 accentMuted;  ///< A fill that sits behind text: a selected row, a pressed field
+        // The frame of a number named after an axis is mixed with these
+        ImVec4 axisX;
+        ImVec4 axisY;
+        ImVec4 axisZ;
         // Status
         ImVec4 success;
         ImVec4 warning;

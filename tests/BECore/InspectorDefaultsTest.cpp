@@ -1,8 +1,8 @@
-// The marks and reset arrows of the fields that differ from their defaults, as the component inspector draws them, in an ImGui context with no backend.
-
-#include "ComponentDefaultsTest.h"
+// The marks and reset arrows of the fields that differ from their defaults, and the numbers dragged by their names and tinted by their axis, as the
+// component inspector draws them, in an ImGui context with no backend.
 
 #include <BECore/Audio/AudioSourceComponent.h>
+#include <BECore/ComponentDefaultsTest.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Input/ImGuiItemIndex.h>
 #include <BECore/Reflection/ClassMeta.h>
@@ -17,6 +17,7 @@
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/ComponentDefaults.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
+#include <Widgets/SceneEditor/FieldPresentation.h>
 #include <gtest/gtest.h>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -134,6 +135,36 @@ namespace BECore::Tests {
                 Settle();
             }
 
+            /// Presses the item and keeps the button down
+            void Press(StringView part) {
+                Hover(part);
+                _pressed = ImGui::GetIO().MousePos;
+                ImGui::GetIO().AddMouseButtonEvent(0, true);
+                Frame();
+            }
+
+            /// Moves the held pointer to @p pixels right of where it was pressed
+            void DragTo(float pixels) {
+                ImGui::GetIO().AddMousePosEvent(_pressed.x + pixels, _pressed.y);
+                Frame();
+            }
+
+            void Release() {
+                ImGui::GetIO().AddMouseButtonEvent(0, false);
+                Settle();
+            }
+
+            /// The colour, alpha left out, of the first thing the last frame drew inside the item: the frame of a field
+            [[nodiscard]] ImU32 FrameColour(StringView part) const {
+                const ImGuiItemRecord& item = Require(Find(part));
+                for (const ImDrawVert& vertex : ImGui::FindWindowByName("Inspector")->DrawList->VtxBuffer) {
+                    if (vertex.pos.x >= item.minX && vertex.pos.x <= item.maxX && vertex.pos.y >= item.minY && vertex.pos.y <= item.maxY) {
+                        return vertex.col & ~IM_COL32_A_MASK;
+                    }
+                }
+                return 0;
+            }
+
             void Touch(const IComponent& component, StringView field) {
                 _service.ReportTouch(_agent.Get(), kNode, component.GetTypeMeta().typeName, field);
                 _highlights.Update(0.0f);
@@ -152,6 +183,7 @@ namespace BECore::Tests {
             ComponentDefaults _defaults;
             IComponent* _component = nullptr;
             String _text;
+            ImVec2 _pressed;
             size_t _accentVertices = 0;
             bool _compared = true;
             bool _disabled = false;
@@ -292,6 +324,83 @@ namespace BECore::Tests {
 
         EXPECT_GT(_accentVertices, unmarked);
         EXPECT_EQ(Arrows(), 0u);
+    }
+
+    TEST_F(InspectorDefaultsTest, ADragOfANumbersNameCountsFromThePressAndIsAnEditOfTheUser) {
+        const IntrusivePtr<AudioSourceComponent> audio = New<AudioSourceComponent>();
+        _component = audio.Get();
+        Touch(*audio, "volume");
+        // The pixels that cross the range 0..1 of the volume
+        const float range = static_cast<float>(1.0 / FieldPresentation::kRangeDragShare);
+
+        Press("volume##label_2");
+        EXPECT_FALSE(_changed);
+        DragTo(-range * 0.75f);
+
+        EXPECT_FLOAT_EQ(audio->_volume, 0.25f);
+        EXPECT_TRUE(_changed);
+        EXPECT_EQ(ImGui::GetMouseCursor(), ImGuiMouseCursor_ResizeEW);
+        EXPECT_EQ(Mark(*audio, "volume"), nullptr);
+
+        // Far past the end and back: what was clamped away does not stay away
+        DragTo(-range * 4.0f);
+        EXPECT_FLOAT_EQ(audio->_volume, 0.0f);
+        DragTo(-range * 0.5f);
+        EXPECT_FLOAT_EQ(audio->_volume, 0.5f);
+        Release();
+
+        _changed = false;
+        DragTo(0.0f);
+        EXPECT_FLOAT_EQ(audio->_volume, 0.5f) << "a released name follows the pointer no more";
+        EXPECT_FALSE(_changed);
+    }
+
+    TEST_F(InspectorDefaultsTest, AClickOnANumbersNameIsNoEdit) {
+        const IntrusivePtr<AudioSourceComponent> audio = New<AudioSourceComponent>();
+        _component = audio.Get();
+        audio->_volume = 3.0f;  // outside the range, which only an edit applies
+
+        Click("volume##label_2");
+
+        EXPECT_FLOAT_EQ(audio->_volume, 3.0f);
+        EXPECT_FALSE(_changed);
+    }
+
+    TEST_F(InspectorDefaultsTest, TheNameOfAReadOnlyNumberDoesNotDrag) {
+        const IntrusivePtr<DefaultsProbeComponent> probe = New<DefaultsProbeComponent>();
+        _component = probe.Get();
+
+        Press("serial##label_");
+        DragTo(50.0f);
+
+        EXPECT_EQ(probe->serial, 1);
+        EXPECT_FALSE(_changed);
+        EXPECT_NE(ImGui::GetMouseCursor(), ImGuiMouseCursor_ResizeEW);
+        Release();
+    }
+
+    TEST_F(InspectorDefaultsTest, TheSourceRectOfASpriteDragsByItsNamesAndTintsItsAxes) {
+        const IntrusivePtr<SpriteRendererComponent> sprite = New<SpriteRendererComponent>();
+        _component = sprite.Get();
+        Settle();
+        const ImU32 plain = ImGui::GetColorU32(GetImGuiPalette().frameBg) & ~IM_COL32_A_MASK;
+        const auto channel = [](ImU32 colour, int shift) { return (colour >> shift) & 0xFFu; };
+        const ImU32 x = FrameColour("##srcRect_x");
+        const ImU32 y = FrameColour("##srcRect_y");
+
+        EXPECT_GT(channel(x, IM_COL32_R_SHIFT), channel(x, IM_COL32_G_SHIFT));
+        EXPECT_GT(channel(x, IM_COL32_R_SHIFT), channel(x, IM_COL32_B_SHIFT));
+        EXPECT_GT(channel(y, IM_COL32_G_SHIFT), channel(y, IM_COL32_R_SHIFT));
+        EXPECT_GT(channel(y, IM_COL32_G_SHIFT), channel(y, IM_COL32_B_SHIFT));
+        EXPECT_EQ(FrameColour("##srcRect_w"), plain) << "the tint ends with its field";
+
+        Press("w##label_srcRect_w");
+        DragTo(40.0f);
+        Release();
+
+        EXPECT_GT(sprite->_srcRect.w, 0.0f);
+        EXPECT_FLOAT_EQ(sprite->_srcRect.x, 0.0f);
+        EXPECT_TRUE(_changed);
     }
 
     TEST_F(InspectorDefaultsTest, ASteadyFrameWithADifferenceAllocatesNothing) {

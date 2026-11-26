@@ -7,17 +7,15 @@
 #include <Widgets/Feedback/TouchFlashDraw.h>
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
-#include <Widgets/ImGuiFonts.h>
 #include <Widgets/SceneEditor/ComponentDefaults.h>
 #include <Widgets/SceneEditor/DefaultMarkDraw.h>
-#include <Widgets/SceneEditor/FieldPresentation.h>
+#include <Widgets/SceneEditor/NumberField.h>
 #include <imgui.h>
 
 namespace BECore {
 
     namespace {
 
-        constexpr size_t kHiddenLabelSize = 24;
         /// Room for a list's label, `name (size)###id`
         constexpr size_t kListLabelSize = 160;
         /// Room for a button id, a hidden label or an alternative's index
@@ -72,43 +70,13 @@ namespace BECore {
             }
         }
 
-        /// A number field in the mono font, its name after it in the UI font (ImGui draws the label of a drag field with the
-        /// font of the field, so the label is hidden and drawn here). The item width is the same as with the label inside.
-        /// The tooltip shows over the field and over its name.
-        template <typename Draw>
-        bool DrawNumber(StringView name, int id, const FieldAttributes& attributes, Draw&& draw) {
-            const DisabledScope disabled(attributes);
-            char hiddenLabel[kHiddenLabelSize];
-            snprintf(hiddenLabel, sizeof(hiddenLabel), "##%d", id);
-            bool changed = false;
-            {
-                const ScopedMonoFont mono;
-                changed = draw(hiddenLabel);
-            }
-            FieldTooltip(attributes);
-            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-            ImGui::TextUnformatted(name.data(), name.data() + name.size());
-            FieldTooltip(attributes);
-            return changed;
-        }
-
-        /// A number of type @p T: a slider with a `range`, a drag otherwise; an edit is clamped and snapped (`FieldPresentation::Constrain`)
+        /// A reflected number of type @p T: a slider with a `range`, a drag otherwise (`DrawNumber`)
         template <typename T>
         bool DrawTyped(StringView name, int id, const FieldAttributes& attributes, T& value, ImGuiDataType dataType) {
             constexpr FieldPresentation::NumberKind kind = std::is_floating_point_v<T> ? FieldPresentation::NumberKind::Float : FieldPresentation::NumberKind::Integer;
-            const FieldPresentation::Presentation presentation = FieldPresentation::Describe(attributes, kind);
-            const bool changed = DrawNumber(name, id, attributes, [&](const char* label) {
-                if (presentation.widget == FieldPresentation::NumberWidget::Slider) {
-                    const T low = FieldPresentation::FromDouble<T>(presentation.rangeMin);
-                    const T high = FieldPresentation::FromDouble<T>(presentation.rangeMax);
-                    return ImGui::SliderScalar(label, dataType, &value, &low, &high);
-                }
-                return ImGui::DragScalar(label, dataType, &value, static_cast<float>(presentation.speed));
-            });
-            if (changed) {
-                value = FieldPresentation::FromDouble<T>(FieldPresentation::Constrain(presentation, static_cast<double>(value)));
-            }
-            return changed;
+            char idText[kIdSize];
+            snprintf(idText, sizeof(idText), "%d", id);
+            return DrawNumber(name, idText, FieldPresentation::Describe(attributes, kind), value, dataType);
         }
 
         /// The trace as a tree of `label = value`, a node's children under it; stops at `kMaxFormattedLines` because a node several parents read is drawn under each

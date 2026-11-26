@@ -5,8 +5,9 @@ label) is a constant here, the one place to fix when the editor renames it. What
 
 - **No scene method exists**, so nothing here opens a scene (a game's `reset` shows one in the Scene Editor) or reloads one.
 - **A click is a move first.** A header or a field takes a press only when the pointer was over it in an earlier frame, so `click_item` moves, then clicks.
-- **A control's name is not always an item.** The generic inspector draws a number's name as plain text after a field whose label is `##<index>` (the index
-  of the field in its component), and text is not in `imgui_find`; so a number is found by its component and index (`field_label`).
+- **A control's name is not always its label.** The generic inspector gives a number's field the label `##<index>` (the index of the field in its component)
+  and draws the name after it as an item of its own (`<name>##label_<index>`), which a drag changes the number by; so a number is found by its component
+  and index (`field_label`).
 - **A number is typed**: Ctrl+click on a drag field turns it into a text field (Ctrl is Cmd on macOS, which `imgui_input` means by `ctrl`), select all, text,
   Enter. A text field takes the same without the Ctrl.
 - **The dirty state is not an item** ("(unsaved changes)" is text): `dirty` reads the scene document of `editor_state`, which is what the marker shows.
@@ -246,7 +247,7 @@ def _visible_rows(session: Any, name: str) -> list[HierarchyRow]:
 
 
 def inspector_labels(session: Any) -> list[str]:
-    """The labels of the inspector's items that have one, in drawn order: the name and layer fields, the card headers and menu buttons, the `##<index>` fields."""
+    """The labels of the inspector's items that have one, in drawn order: the name and layer fields, the card headers and menu buttons, the `##<index>` fields and their names."""
     return [item["label"] for item in find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD) if item["label"]]
 
 
