@@ -4,6 +4,7 @@
 #include <BECore/Math/Vec2.h>
 #include <BECore/Renderer/BlendMode.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <Stress/StressSettings.h>
 #include <cstdint>
 
@@ -28,6 +29,17 @@ namespace BECore::Stress {
     /// How fast the emulated camera moves along each axis, in scene units per second
     inline constexpr float kCameraSpeedX = 480.0f;
     inline constexpr float kCameraSpeedY = 270.0f;
+
+    /// What an object of a mixed field (`--stress-mix`) is
+    CORE_ENUM(MixKind, uint8_t, Sprite, Text, Shape, Particles)
+    /// A mixed field gives each kind so many parts of kMixParts; the sprites take the rest
+    inline constexpr uint32_t kMixParts = 16;
+    inline constexpr uint32_t kMixTextParts = 1;
+    inline constexpr uint32_t kMixShapeParts = 1;
+    inline constexpr uint32_t kMixParticleParts = 1;
+    inline constexpr uint32_t kMixSpriteParts = kMixParts - kMixTextParts - kMixShapeParts - kMixParticleParts;
+    /// The node layers a mixed field is spread over
+    inline constexpr uint32_t kMixLayers = 4;
 
     /// Where and how one sprite is drawn. Everything but the atlas and the blend mode depends on the index alone, so growing the count keeps the first sprites in place.
     struct SpritePlacement {
@@ -58,6 +70,11 @@ namespace BECore::Stress {
      * a world of one view leaves it no room.
      */
     Vec2 CameraOffset(double seconds, uint32_t world, const FieldView& view);
+
+    /// The kind of object @p index of a mixed field, the same on every machine; it depends on the index alone
+    MixKind MixKindOf(uint32_t index);
+    /// The node layer of object @p index of a mixed field, 0..kMixLayers - 1; independent of the kind, so every layer holds all kinds
+    int32_t MixLayerOf(uint32_t index);
 
     /// How many consecutive sprites share an atlas when the sprites are in runs: `count / atlases`, at least 1
     uint32_t AtlasRunLength(uint32_t count, uint32_t atlases);

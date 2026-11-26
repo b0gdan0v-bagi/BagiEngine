@@ -2,6 +2,7 @@
 #include <Stress/Components/StressEntitiesComponent.h>
 #include <Stress/Components/StressLifeComponent.h>
 #include <Stress/Components/StressRunComponent.h>
+#include <Stress/Components/StressShapeComponent.h>
 #include <Stress/Components/StressSpritesComponent.h>
 #include <Stress/Components/StressUiComponent.h>
 #include <gtest/gtest.h>
@@ -11,6 +12,10 @@
 #endif
 
 namespace BECore::Stress::Tests {
+
+    TEST(StressHasOnDrawTest, TheShapeOfAMixedFieldDrawsItself) {
+        EXPECT_TRUE(StressShapeComponent().HasOnDraw());
+    }
 
     /// Components that never draw stay out of the scene's draw list
     TEST(StressHasOnDrawTest, TheSceneComponentsDrawNothingThemselves) {

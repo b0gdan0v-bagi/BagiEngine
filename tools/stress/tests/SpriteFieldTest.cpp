@@ -177,6 +177,29 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(CountChanges(interleaved, kCount, false), kCount - 1);
     }
 
+    TEST(SpriteFieldTest, AMixIsMostlySpritesAndEveryLayerHoldsEveryKind) {
+        constexpr uint32_t kObjects = 1600 * kMixParts;
+        constexpr double kTolerance = 0.1;  // of a share: the kinds follow a hash, not a pattern
+        uint32_t kinds[4] = {};
+        uint32_t onLayer[kMixLayers][4] = {};
+        for (uint32_t i = 0; i < kObjects; ++i) {
+            const size_t kind = static_cast<size_t>(MixKindOf(i));
+            const int32_t layer = MixLayerOf(i);
+            ASSERT_GE(layer, 0) << i;
+            ASSERT_LT(layer, static_cast<int32_t>(kMixLayers)) << i;
+            ++kinds[kind];
+            ++onLayer[layer][kind];
+        }
+        const uint32_t parts[4] = {kMixSpriteParts, kMixTextParts, kMixShapeParts, kMixParticleParts};
+        for (size_t kind = 0; kind < 4; ++kind) {
+            const double expected = static_cast<double>(kObjects) * parts[kind] / kMixParts;
+            EXPECT_NEAR(kinds[kind], expected, expected * kTolerance) << kind;
+            for (uint32_t layer = 0; layer < kMixLayers; ++layer) {
+                EXPECT_NEAR(onLayer[layer][kind], expected / kMixLayers, expected / kMixLayers * 2 * kTolerance) << kind << " on " << layer;
+            }
+        }
+    }
+
     TEST(SpriteFieldTest, AFewerAtlasesStaysInRange) {
         StressSettings settings = Settings(false);
         settings.atlases = 1;

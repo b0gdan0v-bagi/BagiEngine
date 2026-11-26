@@ -226,6 +226,7 @@ namespace BECore::Stress {
         AddNumber(line, "gpuMsP99", summary.gpuMsP99);
         AddBool(line, "interleave", context.interleave);
         AddBool(line, "manualClock", context.manualClock);
+        AddBool(line, "mix", context.load.mix);
         AddNumber(line, "presentMs", summary.stages.presentMs);
         AddNumber(line, "presentMsP50", summary.stagesP50.presentMs);
         AddNumber(line, "primitives", summary.primitives);

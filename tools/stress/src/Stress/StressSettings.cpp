@@ -124,6 +124,7 @@ namespace BECore::Stress {
             ReadNumber(commandLine, StressFlags::kSpriteSize, 1, kMaxSpriteSize, settings.load.spriteSize),
             ReadNumber(commandLine, StressFlags::kWorld, 1, kMaxWorld, settings.load.world),
             ReadNumber(commandLine, StressFlags::kChurn, 1, kMaxCount, settings.load.churn),
+            CheckBareFlag(commandLine, StressFlags::kMix),
         };
         for (const auto& error : errors) {
             if (error) {
@@ -135,6 +136,7 @@ namespace BECore::Stress {
         settings.ramp = commandLine.HasFlag(StressFlags::kRamp);
         settings.interleave = commandLine.HasFlag(StressFlags::kInterleave);
         settings.noBatching = commandLine.HasFlag(StressFlags::kNoBatching);
+        settings.load.mix = commandLine.HasFlag(StressFlags::kMix);
         return settings;
     }
 

@@ -53,6 +53,7 @@ namespace BECore::Stress {
         inline constexpr StringView kSpriteSize = "--stress-sprite-size";
         inline constexpr StringView kWorld = "--stress-world";
         inline constexpr StringView kChurn = "--stress-churn";
+        inline constexpr StringView kMix = "--stress-mix";
     }  // namespace StressFlags
 
     /// What loads the `sprites` scene beyond its plain field; the loads combine, the defaults are the plain field, and the line of a run carries each
@@ -60,6 +61,7 @@ namespace BECore::Stress {
         uint32_t spriteSize = 0;  // the side of every sprite (1..kMaxSpriteSize); 0: each has its own, from the spread of SpriteField
         uint32_t world = 1;       // the field is this many views wide and tall (1..kMaxWorld); above 1 an emulated camera moves over it
         uint32_t churn = 0;       // so many of the oldest sprites are replaced by new ones every update (up to kMaxCount; all when it exceeds the count)
+        bool mix = false;         // the objects of the field are sprites, texts, shapes and particle emitters (SpriteField's MixKindOf) on several layers
     };
 
     /// What a run is asked to do; the defaults are what a plain `BagiStress` shows
@@ -103,6 +105,7 @@ namespace BECore::Stress {
      * | --stress-sprite-size= | 1..kMaxSpriteSize |
      * | --stress-world= | 1..kMaxWorld |
      * | --stress-churn= | 1..kMaxCount |
+     * | --stress-mix | bare flag |
      *
      * A flag that is wrong (a bad or empty value, a value on a bare flag, no value on a valued one) is an error that names the flag;
      * the caller decides what to do with it, nothing is defaulted silently. Flags of other parts of the program are ignored.

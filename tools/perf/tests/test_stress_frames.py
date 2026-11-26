@@ -38,6 +38,7 @@ def make_args(*argv: str) -> argparse.Namespace:
         sprite_size=None,
         world=None,
         churn=None,
+        mix=False,
     )
     for item in argv:
         name, _, value = item.partition("=")
@@ -72,7 +73,8 @@ def test_a_load_of_the_sprites_scene_is_passed_only_when_asked_for():
     assert "--stress-sprite-size=256" in stress_frames.stress_flags(make_args("--sprite-size=256"))
     assert "--stress-world=4" in stress_frames.stress_flags(make_args("--world=4"))
     assert "--stress-churn=100" in stress_frames.stress_flags(make_args("--churn=100"))
-    assert not any(flag.startswith(("--stress-sprite-size", "--stress-world", "--stress-churn")) for flag in stress_frames.stress_flags(make_args()))
+    assert "--stress-mix" in stress_frames.stress_flags(make_args("--mix"))
+    assert not any(flag.startswith(("--stress-sprite-size", "--stress-world", "--stress-churn", "--stress-mix")) for flag in stress_frames.stress_flags(make_args()))
 
 
 def test_the_software_backend_is_the_headless_run_and_a_gpu_backend_a_hidden_window():

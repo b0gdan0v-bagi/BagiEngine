@@ -15,8 +15,8 @@ time limit) is an error with the end of the game's log on stderr and exit code 1
 `software`, the default, is the headless run). A machine without the backend cannot start the game, which logs `BACKEND_UNAVAILABLE_MARKER`
 before it exits: that is not an error here but the line `skip: <the game's own words>` on stdout and exit code 77 (`EXIT_SKIPPED`), which
 `perf.py` reports as a skipped benchmark. Any other early exit stays an error. `--no-batching` passes `--stress-no-batching`, `--budget-ms`
-passes `--stress-budget-ms` (the frame time a `--ramp` holds; the game checks the value). `--sprite-size`, `--world` and `--churn`, the loads
-of the `sprites` scene (`tools/stress/src/Stress/CLAUDE.md`), are passed only when given and checked by the game too.
+passes `--stress-budget-ms` (the frame time a `--ramp` holds; the game checks the value). `--sprite-size`, `--world`, `--churn` and `--mix`,
+the loads of the `sprites` scene (`tools/stress/src/Stress/CLAUDE.md`), are passed only when given and checked by the game too.
 """
 
 import argparse
@@ -78,6 +78,8 @@ def stress_flags(args: argparse.Namespace) -> list[str]:
         flags.append(f"--stress-world={args.world}")
     if args.churn is not None:
         flags.append(f"--stress-churn={args.churn}")
+    if args.mix:
+        flags.append("--stress-mix")
     if args.trace:
         flags.append(f"--trace={Path(args.trace).resolve()}")
     return flags
@@ -189,6 +191,7 @@ def main() -> int:
     parser.add_argument("--sprite-size", help="the side of every sprite of the sprites scene (the game's default: 16..48 by sprite)")
     parser.add_argument("--world", help="views per side of the field of the sprites scene, with an emulated camera (the game's default: 1)")
     parser.add_argument("--churn", help="sprites of the sprites scene despawned and spawned every frame (the game's default: none)")
+    parser.add_argument("--mix", action="store_true", help="make the objects of the sprites scene sprites, texts, shapes and particle emitters on several layers")
     parser.add_argument("--chunk", type=int, default=DEFAULT_CHUNK, help=f"frames per step (default {DEFAULT_CHUNK})")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS, help=f"seconds the whole run may take (default {DEFAULT_TIMEOUT_SECONDS:g})")
     parser.add_argument("--trace", help="record a Chrome trace into this file (a profile build)")

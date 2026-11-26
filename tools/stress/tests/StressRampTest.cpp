@@ -393,6 +393,7 @@ namespace BECore::Stress::Tests {
         context.load.spriteSize = 256;
         context.load.world = 4;
         context.load.churn = 12;
+        context.load.mix = true;
 
         const String line = FormatRampLine(result, StressMeasure::Cpu, context);
 
@@ -426,9 +427,9 @@ namespace BECore::Stress::Tests {
             }
             at = line.find('"', end + 1);
         }
-        const Vector<String> expected = {"aborted",    "allocTracking", "atlases",  "budgetMs",      "capped",   "churn",          "drawMs",    "frames", "gpuMs",
-                                         "interleave", "manualClock",   "measure",  "measureFrames", "mode",     "objectsAt60fps", "presentMs", "scene",  "settleFrames",
-                                         "spriteSize", "steps",         "submitMs", "updateMs",      "verified", "waitMs",         "world"};
+        const Vector<String> expected = {"aborted",      "allocTracking", "atlases", "budgetMs",      "capped",   "churn",    "drawMs",         "frames",    "gpuMs",
+                                         "interleave",   "manualClock",   "measure", "measureFrames", "mix",      "mode",     "objectsAt60fps", "presentMs", "scene",
+                                         "settleFrames", "spriteSize",    "steps",   "submitMs",      "updateMs", "verified", "waitMs",         "world"};
         EXPECT_EQ(keys, expected);
         EXPECT_EQ(keys.size(), parsed.Root().Size());
         for (size_t i = 1; i < keys.size(); ++i) {
@@ -437,6 +438,7 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetParamInt(parsed.Root(), "spriteSize").value_or(0), 256);
         EXPECT_EQ(GetParamInt(parsed.Root(), "world").value_or(0), 4);
         EXPECT_EQ(GetParamInt(parsed.Root(), "churn").value_or(0), 12);
+        EXPECT_EQ(GetParamBool(parsed.Root(), "mix"), Optional(true));
     }
 
 }  // namespace BECore::Stress::Tests

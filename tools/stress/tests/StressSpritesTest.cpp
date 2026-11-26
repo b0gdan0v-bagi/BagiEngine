@@ -1,5 +1,8 @@
+#include <BECore/Scene/Components/ParticleEmitterComponent.h>
+#include <BECore/Text/TextComponent.h>
 #include <Common/AllocCheck.h>
 #include <Stress/Components/StressLifeComponent.h>
+#include <Stress/Components/StressShapeComponent.h>
 #include <Stress/Components/StressSpritesComponent.h>
 #include <Stress/SpriteField.h>
 #include <Stress/StressNames.h>
@@ -69,9 +72,19 @@ namespace BECore::Stress::Tests {
             return life ? life->GetAge() : -1.0f;
         }
 
+        /// How many nodes of the field have a component of type @p T
+        template <typename T>
+        size_t CountWith() const {
+            size_t count = 0;
+            for (const auto& node : Field().GetChildren()) {
+                count += node->GetComponent<T>() ? 1 : 0;
+            }
+            return count;
+        }
+
         /// Runs enough frames for every list of a frame to reach its size, then expects further frames to allocate nothing
         void ExpectSteadyFramesToAllocateNothing() {
-            constexpr int kWarmup = 8;
+            constexpr int kWarmup = 96;  // three seconds of frames: the pool of an emitter is full by then
             constexpr int kMeasured = 64;
             // Without an output size nothing is culled: the recorder gets the storage of a call for every sprite, however many a later frame draws
             const float width = _renderer->width;
@@ -142,7 +155,7 @@ namespace BECore::Stress::Tests {
         SetCount(400);
         Update();
         ASSERT_EQ(Field().GetChildren().size(), 400u);
-        EXPECT_EQ(Component().GetSpriteCount(), 400u);
+        EXPECT_EQ(Component().GetObjectCount(), 400u);
         for (size_t i = 0; i < first.size(); ++i) {
             EXPECT_EQ(Field().GetChildren()[i].Get(), first[i]) << i;
         }
@@ -302,7 +315,7 @@ namespace BECore::Stress::Tests {
                 ASSERT_NE(after[i].Get(), old.Get()) << i;
             }
         }
-        EXPECT_EQ(Component().GetSpriteCount(), 100u);
+        EXPECT_EQ(Component().GetObjectCount(), 100u);
         EXPECT_EQ(_renderer->calls.size(), 100u);
     }
 
@@ -402,6 +415,125 @@ namespace BECore::Stress::Tests {
         _renderer->width = GetScene("StressSprites").GetViewWidth();
         _renderer->height = GetScene("StressSprites").GetViewHeight();
         SetCount(kCount);
+
+        ExpectSteadyFramesToAllocateNothing();
+    }
+
+    TEST_F(StressSpritesTest, WithoutTheMixEveryObjectIsASpriteOnTheLayerOfTheField) {
+        StartSprites();
+        SetCount(200);
+        Update();
+
+        EXPECT_EQ(CountWith<SpriteRendererComponent>(), 200u);
+        for (const auto& node : Field().GetChildren()) {
+            ASSERT_EQ(node->GetLayer(), 0);
+        }
+    }
+
+    TEST_F(StressSpritesTest, AMixHasEveryKindOnEveryLayer) {
+        StartSprites({"--stress-mix"});
+        SetCount(kCount);
+        Update();
+
+        const size_t sprites = CountWith<SpriteRendererComponent>();
+        const size_t texts = CountWith<TextComponent>();
+        const size_t shapes = CountWith<StressShapeComponent>();
+        const size_t emitters = CountWith<ParticleEmitterComponent>();
+        EXPECT_EQ(sprites + texts + shapes + emitters, kCount);
+        EXPECT_GT(sprites, kCount / 2);
+        EXPECT_GT(texts, 0u);
+        EXPECT_GT(shapes, 0u);
+        EXPECT_GT(emitters, 0u);
+        bool layers[kMixLayers] = {};
+        for (const auto& node : Field().GetChildren()) {
+            layers[node->GetLayer()] = true;
+        }
+        for (const bool used : layers) {
+            EXPECT_TRUE(used);
+        }
+    }
+
+    TEST_F(StressSpritesTest, EveryKindOfAMixDraws) {
+        constexpr uint32_t kMixed = 320;
+        constexpr size_t kQuadVertices = 4;
+        StartSprites({"--stress-mix"});
+        SetCount(kMixed);
+        for (int frame = 0; frame < 8; ++frame) {
+            Update();
+        }
+        Draw();
+
+        size_t spriteDraws = 0;
+        size_t glyphs = 0;
+        size_t shapes = 0;
+        size_t particles = 0;
+        for (const DrawCall& call : _renderer->calls) {
+            ASSERT_FALSE(call.clip.has_value()) << "a text fits its box";
+            if (call.kind == BECore::Tests::DrawKind::Texture) {
+                ++glyphs;  // the sprites spin, so theirs are geometry
+            } else if (call.texture == nullptr) {
+                ASSERT_EQ(call.vertices.size(), StressShapeComponent::kCorners + 1);
+                ++shapes;
+            } else if (call.vertices.size() > kQuadVertices) {
+                ++particles;
+            } else {
+                ++spriteDraws;
+            }
+        }
+        EXPECT_EQ(spriteDraws, CountWith<SpriteRendererComponent>());
+        EXPECT_EQ(shapes, CountWith<StressShapeComponent>());
+        EXPECT_EQ(particles, CountWith<ParticleEmitterComponent>());
+        EXPECT_GE(glyphs, CountWith<TextComponent>());
+    }
+
+    TEST_F(StressSpritesTest, AMixBreaksTheBatchesOfThePlainField) {
+        constexpr uint32_t kMixed = 320;
+        const auto submissions = [this](const Vector<String>& arguments) {
+            StartSprites(arguments);
+            _renderer->SetBatchingEnabled(true);
+            SetCount(kMixed);
+            for (int frame = 0; frame < 8; ++frame) {
+                Update();
+            }
+            Draw();
+            const size_t calls = _renderer->calls.size();
+            TearDown();  // the next game of the comparison starts from nothing
+            return calls;
+        };
+        const size_t plain = submissions({});
+        const size_t mixed = submissions({"--stress-mix"});
+
+        EXPECT_GT(mixed, plain * 8);
+    }
+
+    TEST_F(StressSpritesTest, AMixWithChurnKeepsTheCountAndLeavesNothingBehind) {
+        StartSprites({"--stress-mix", "--stress-churn=40"});
+        SetCount(0);
+        Update();
+        const size_t withoutObjects = Updaters();
+
+        for (const uint32_t count : {320u, 100u, 400u}) {
+            SetCount(count);
+            for (int frame = 0; frame < 12; ++frame) {
+                Update();
+                Draw();
+            }
+            ASSERT_EQ(Field().GetChildren().size(), count);
+            // A life for every object and the update of every emitter
+            ASSERT_EQ(Updaters(), withoutObjects + count + CountWith<ParticleEmitterComponent>());
+        }
+
+        SetCount(0);
+        Update();
+        Draw();
+        EXPECT_TRUE(Field().GetChildren().empty());
+        EXPECT_TRUE(_renderer->calls.empty());
+        EXPECT_EQ(Updaters(), withoutObjects);
+    }
+
+    TEST_F(StressSpritesTest, ASteadyMixedFrameAllocatesNothing) {
+        StartSprites({"--stress-mix"});
+        SetCount(400);
 
         ExpectSteadyFramesToAllocateNothing();
     }

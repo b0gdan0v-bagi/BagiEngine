@@ -41,6 +41,7 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(result->load.spriteSize, 0u);
         EXPECT_EQ(result->load.world, 1u);
         EXPECT_EQ(result->load.churn, 0u);
+        EXPECT_FALSE(result->load.mix);
     }
 
     TEST(StressSettingsTest, OtherFlagsOfTheProgramAreIgnored) {
@@ -150,6 +151,11 @@ namespace BECore::Stress::Tests {
         for (const char* wrong : {"--stress-churn=0", "--stress-churn=4000001", "--stress-churn=-1", "--stress-churn=", "--stress-churn"}) {
             ExpectErrorNaming({wrong}, "--stress-churn");
         }
+    }
+
+    TEST(StressSettingsTest, TheMixIsABareFlag) {
+        EXPECT_TRUE(Parse({"--stress-mix"})->load.mix);
+        ExpectErrorNaming({"--stress-mix=1"}, "--stress-mix");
     }
 
     TEST(StressSettingsTest, AnUnknownChoiceNamesItsFlagAndTheChoices) {

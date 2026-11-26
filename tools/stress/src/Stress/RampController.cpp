@@ -161,6 +161,7 @@ namespace BECore::Stress {
         AddBool(line, "manualClock", context.manualClock);
         AddText(line, "measure", ToFlagValue(measure));
         AddInteger(line, "measureFrames", kMeasureFrames);
+        AddBool(line, "mix", context.load.mix);
         AddText(line, "mode", "ramp");
         AddInteger(line, "objectsAt60fps", result.objectsAt60fps);
         AddNumber(line, "presentMs", result.stages.presentMs);

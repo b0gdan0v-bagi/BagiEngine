@@ -21,6 +21,8 @@ namespace BECore::Stress {
         constexpr uint64_t kSaltSize = 3;
         constexpr uint64_t kSaltSpin = 4;
         constexpr uint64_t kSaltCell = 5;
+        constexpr uint64_t kSaltKind = 6;
+        constexpr uint64_t kSaltLayer = 7;
 
         /// A colour channel of cell @p cell of atlas @p atlas: spread over 40..255 so that no two cells of one atlas look alike
         uint8_t Channel(uint32_t atlas, uint32_t cell, uint64_t channel) {
@@ -43,6 +45,21 @@ namespace BECore::Stress {
     Vec2 CameraOffset(double seconds, uint32_t world, const FieldView& view) {
         const float viewsToCross = static_cast<float>(std::max<uint32_t>(1, world) - 1);
         return Vec2(PingPong(seconds, kCameraSpeedX, viewsToCross * view.width), PingPong(seconds, kCameraSpeedY, viewsToCross * view.height));
+    }
+
+    MixKind MixKindOf(uint32_t index) {
+        const uint32_t part = static_cast<uint32_t>(Hash(index, kSaltKind) % kMixParts);
+        if (part < kMixSpriteParts) {
+            return MixKind::Sprite;
+        }
+        if (part < kMixSpriteParts + kMixTextParts) {
+            return MixKind::Text;
+        }
+        return part < kMixSpriteParts + kMixTextParts + kMixShapeParts ? MixKind::Shape : MixKind::Particles;
+    }
+
+    int32_t MixLayerOf(uint32_t index) {
+        return static_cast<int32_t>(Hash(index, kSaltLayer) % kMixLayers);
     }
 
     uint32_t AtlasRunLength(uint32_t count, uint32_t atlases) {
