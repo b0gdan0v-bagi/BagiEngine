@@ -209,32 +209,32 @@ namespace BECore::Tests {
 
     TEST(ConsoleLogViewTest, TheTitleCountsErrorsAndWarnings) {
         LogHistory history(16);
-        EXPECT_EQ(Title(history), "Console###Console");
+        EXPECT_EQ(Title(history), "Console");
 
         AddLine(history, LogLevel::Info, "info");
         AddLine(history, LogLevel::Debug, "debug");
-        EXPECT_EQ(Title(history), "Console###Console");
+        EXPECT_EQ(Title(history), "Console");
 
         AddLine(history, LogLevel::Error, "e1");
-        EXPECT_EQ(Title(history), "Console (1 error)###Console");
+        EXPECT_EQ(Title(history), "Console (1 error)");
         AddLine(history, LogLevel::Error, "e2");
         AddLine(history, LogLevel::Error, "e3");
-        EXPECT_EQ(Title(history), "Console (3 errors)###Console");
+        EXPECT_EQ(Title(history), "Console (3 errors)");
 
         for (int i = 0; i < 5; ++i) {
             AddLine(history, LogLevel::Warning, "w");
         }
-        EXPECT_EQ(Title(history), "Console (3 errors, 5 warnings)###Console");
+        EXPECT_EQ(Title(history), "Console (3 errors, 5 warnings)");
     }
 
     TEST(ConsoleLogViewTest, TheTitleLeavesOutALevelWithNoLinesAndCountsFatalAsAnError) {
         LogHistory history(16);
         AddLine(history, LogLevel::Warning, "w");
-        EXPECT_EQ(Title(history), "Console (1 warning)###Console");
+        EXPECT_EQ(Title(history), "Console (1 warning)");
 
         AddLine(history, LogLevel::Fatal, "f");
         AddLine(history, LogLevel::Error, "e");
-        EXPECT_EQ(Title(history), "Console (2 errors, 1 warning)###Console");
+        EXPECT_EQ(Title(history), "Console (2 errors, 1 warning)");
     }
 
     TEST(ConsoleLogViewTest, CompileTimeChecks) {

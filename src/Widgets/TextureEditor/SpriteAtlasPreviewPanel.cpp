@@ -1,7 +1,6 @@
 #include "SpriteAtlasPreviewPanel.h"
 
-#include <Widgets/EditorLayout/EditorControls.h>
-#include <Widgets/Icons/IconsLucide.h>
+#include <Generated/SpriteAtlasPreviewPanel.gen.hpp>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/TextureEditor/SpriteLibraryPanel.h>
@@ -37,34 +36,8 @@ namespace BECore {
 
     }  // namespace
 
-    PoolString SpriteAtlasPreviewPanel::Render(const TextureLibrary& library, const SpriteEntry& entry, const PackSettings& settings, SpriteTextureCache& textures) {
-        if (!ImGui::CollapsingHeader(ICON_LC_LAYOUT_GRID " Atlas preview")) {
-            return {};
-        }
-        const PoolString group = entry.atlas.has_value() ? entry.atlas->name : PoolString{};
-        if (group.Empty()) {
-            ImGui::TextDisabled("No atlas: name a group in the Atlas section to preview it");
-            return {};
-        }
+    PoolString SpriteAtlasPreviewPanel::DrawBody(const TextureLibrary& library, PoolString group, AtlasPreviewMode mode, const PackSettings& settings, SpriteTextureCache& textures) {
         BindGroup(group);
-
-        // Without a packed member there is no current atlas to show, so the plan is what is left
-        const bool anyPacked = AtlasSummary(library, group.ToStringView()).packed > 0;
-        AtlasPreviewMode mode = anyPacked ? _mode : AtlasPreviewMode::Plan;
-        ImGui::BeginDisabled(!anyPacked);
-        if (ImGui::RadioButton("Current##atlas_preview_mode", mode == AtlasPreviewMode::Current)) {
-            _mode = AtlasPreviewMode::Current;
-            mode = _mode;
-        }
-        ImGui::EndDisabled();
-        ItemTooltip("The packed sprites as the library has them, on the atlas file");
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Pack plan##atlas_preview_mode", mode == AtlasPreviewMode::Plan)) {
-            _mode = AtlasPreviewMode::Plan;
-            mode = _mode;
-        }
-        ItemTooltip("What Pack would make with the settings above, from the sprites' sources; nothing is written");
-
         EnsureBuilt(library, mode, settings, textures);
 
         if (_hasError) {

@@ -5,12 +5,13 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/CommandPalette.h>
+#include <Widgets/EditorLayout/EditorChordText.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorPlayModel.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
+#include <Widgets/EditorLayout/IEditorLayoutHost.h>
 #include <Widgets/EditorLayout/LayoutStore.h>
 #include <Widgets/EditorLayout/MainToolbar.h>
-#include <Widgets/EditorLayout/PreferencesWindow.h>
 #include <Widgets/EditorLayout/StatusBar.h>
 #include <expected>
 #include <imgui.h>
@@ -21,14 +22,17 @@ namespace BECore {
 
     // Full-screen DockSpace host that provides the unified editor layout, with the main toolbar under the menu bar and the status bar
     // at the bottom (both children of the host, so the dock layout and imgui.ini do not know them).
-    // Must be registered immediately after ImGuiWidget so all other editor
-    // windows dock into this space.
+    // Must be registered after ImGuiWidget and the `Bar` assets it draws (`MainToolbarPanel`, `MainMenuPanel`: their models update before
+    // this widget draws them) and before the other editor windows, so they dock into this space.
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
-    // (EditorCommandEvent): quit, switch mode, reset and save the layout, open the palette and the preferences. It also turns the chords
-    // of the hotkey map into those events. The toolbar's Pause and Step and the commands game.pause and game.step drive the engine's
-    // GamePause, which is the single truth: the model copies its flag every frame.
-    class EditorLayoutWidget : public IWidget {
+    // (EditorCommandEvent): quit, switch mode, reset the layout and open the palette (`view.preferences` is the Preferences asset's own command, `view.saveLayout` is run by `EditorDialogsModel`). It
+    // also turns the chords of the hotkey map into those events. The menu bar is the asset `MainMenuPanel` and the toolbar's buttons the asset `MainToolbarPanel`, both drawn through
+    // `PanelBarsRegistry`; the commands game.play, game.pause and game.step drive the engine's GamePause, which is the single truth: the model copies its flag every frame.
+    //
+    // It is the IEditorLayoutHost of the editor (registered in Initialize, for its lifetime): the models of the panel assets reach the
+    // settings and the layouts through it. A NotifyPreferencesChanged is applied and announced in the next Update.
+    class EditorLayoutWidget : public IWidget, public IEditorLayoutHost {
         BE_CLASS(EditorLayoutWidget)
     public:
         EditorLayoutWidget() = default;
@@ -38,6 +42,14 @@ namespace BECore {
         bool Initialize(IDeserializer& deserializer) override;
         void Update() override;
         void Draw() override;
+
+        [[nodiscard]] EditorSettings* GetSettings() override;
+        [[nodiscard]] LayoutStore* GetLayouts() override;
+        [[nodiscard]] const EditorPlayModel* GetPlayModel() const override;
+        /// Needs an ImGui context: the text is ImGui's ini of the moment
+        std::expected<void, String> SaveCurrentLayoutAs(StringView name) override;
+        void LoadLayout(StringView name) override;
+        void NotifyPreferencesChanged() override;
 
     private:
         void BuildDefaultLayout(ImGuiID dockspaceId, ImVec2 size);
@@ -56,8 +68,6 @@ namespace BECore {
         void ApplyPreferences(const EditorPreferences& preferences);
 
         void DrawMenuBar();
-        void DrawLayoutsMenu();
-        void DrawSaveLayoutPopup();
         /// Emits the command of every chord pressed this frame
         void DispatchHotkeys();
         /// Pause / Resume through the model, written to the engine's GamePause (the pause of a manual clock is not lifted)
@@ -68,32 +78,20 @@ namespace BECore {
         void WritePauseToEngine();
         /// Tells the panels the preferences they read (EditorPreferencesChangedEvent)
         void AnnouncePreferences() const;
-        /// A menu item that emits the command @p id, with its chord shown right-aligned
-        void CommandMenuItem(PoolString id, const char* label, bool enabled = true);
-
-        /// Reads the layout @p name and keeps its text until the next ImGuiNewFrameEvent
-        void QueueLayout(const String& name);
-        /// Writes the current dock layout under @p name; the error is a sentence for the popup
-        std::expected<void, String> SaveCurrentLayout(StringView name);
 
         Optional<EditorSettings> _settings;
         Optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
-        LayoutNameCache _layoutNames;    // stale when a Layouts menu opens and after a save or a delete
-        MenuOpenTracker _layoutsMenuOpen;
-        MenuOpenTracker _deleteLayoutMenuOpen;
 
         EditorPlayModel _playModel;
-        MainToolbar _toolbar;
+        EditorChordText _chordText;
         StatusBar _statusBar;
 
         CommandPalette _palette;
-        PreferencesWindow _preferencesWindow;
 
         String _pendingLayoutText;  // a named layout waiting for the next frame start
-        char _layoutNameBuffer[kMaxLayoutNameLength + 1] = {};
-        String _saveLayoutError;
-        bool _openSaveLayoutPopup = false;
 
+        EditorLayoutHostHandle _hostHandle;
+        bool _preferencesNotified = false;  // NotifyPreferencesChanged waits here for the next Update
         bool _preferencesAnnounced = false;
         bool _layoutInitialized = false;
         bool _forceResetLayout = false;

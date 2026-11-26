@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<PanelAsset id="GenerateControls" title="Generate" command="view.generate" open="false" width="520" height="700">
+  <sources>
+    <source name="art" model="ArtGenPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelText" id="service" bind="art.service.status" icon="plug" tooltipBind="art.service.reason"/>
+    <element type="PanelProgress" id="download" bind="art.setup.fraction" textBind="art.setup.overlay" width="20"/>
+    <element type="PanelTable" id="plan" source="art.setup.plan">
+      <columns>
+        <column id="what" type="Text" field="what" tooltipField="tooltip"/>
+      </columns>
+    </element>
+    <element type="PanelRow" id="presetRow">
+      <elements>
+        <element type="PanelCombo" id="preset" bind="art.preset.index" items="art.preset.rows" itemField="label" enableField="enabled" tooltipField="tooltip" previewBind="art.preset.preview" text="Preset"/>
+        <element type="PanelDropdown" id="saveAs" icon="save-all" openCommand="artgen.saveAsOpened">
+          <elements>
+            <element type="PanelInput" id="saveAsName" bind="art.preset.saveAsName" text="Name"/>
+            <element type="PanelButton" id="saveAsSave" text="Save" command="artgen.preset" argument="saveAs" enableWhen="art.preset.saveAsValid" closePopup="true"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelInput" id="name" bind="art.preset.name" fill="false"/>
+    <element type="PanelInput" id="prompt" bind="art.preset.prompt" text="Prompt" lines="4"/>
+    <element type="PanelSection" id="settings" title="Settings" look="Tree" defaultOpen="false">
+      <elements>
+        <element type="PanelNumber" id="padding" bind="art.accept.padding" min="0" max="50" slider="true" unit="%" decimals="0"/>
+        <element type="PanelNumber" id="weight" bind="art.presetRef.weight" min="0" max="2" slider="true" decimals="2"/>
+        <element type="PanelNumber" id="trimDb" bind="art.sound.trimDb" min="-90" max="0" slider="true" unit=" dB" decimals="6"/>
+      </elements>
+    </element>
+    <element type="PanelTabs" id="tabs">
+      <elements>
+        <element type="PanelTab" id="generateTab" title="Generate" icon="image">
+          <elements>
+            <element type="PanelProgress" id="images" bind="art.run.progress"/>
+          </elements>
+        </element>
+        <element type="PanelTab" id="setTab" title="Set" icon="list-checks"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

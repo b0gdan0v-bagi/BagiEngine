@@ -32,7 +32,7 @@ Paths are from the engine root (`engine/` in a game).
 | Access control, a global service | `CLAUDE.md` DO (`PassKey`, `Singleton`) | `src/Modules/BECore/Time/Time.h` (`Tick(PassKey<Application>)`), `src/Modules/Games/src/Games/GameManager.h` |
 | Steady-frame allocations, zones | `src/Modules/BECore/Profiler/CLAUDE.md` | `tests/BECore/EditorBarsTest.cpp` (`AllocTracker::GetThreadCounters()`) |
 | UI (canvases, controls, layout) | `src/Modules/BECore/UI/CLAUDE.md` "Where to read", `.claude/rules/ui-*.md` | the files that doc names |
-| An editor panel | `.claude/rules/widgets-module.md` | `src/Widgets/Console/ConsoleWidget.cpp` |
+| An editor panel | `.claude/rules/widgets-module.md` | `src/Widgets/Console/ConsoleSlots.cpp` |
 | Saves | `src/Modules/BECore/Save/CLAUDE.md` | `src/Modules/BECore/Save/SaveGame.cpp` |
 | A control API method | `src/Modules/BECore/Control/CLAUDE.md`, `.claude/rules/ui-control-api.md` | the methods that doc names |
 | Tests | `.claude/rules/tests-module.md` | a test of the same module in `tests/` |

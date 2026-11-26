@@ -4,7 +4,6 @@
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
-#include <Widgets/EditorLayout/EditorPlayModel.h>
 #include <Widgets/EditorLayout/Hardware/HardwareMonitor.h>
 #include <Widgets/EditorLayout/Hardware/HardwareText.h>
 #include <Widgets/EditorLayout/MainToolbar.h>
@@ -22,8 +21,6 @@ namespace BECore::Tests {
         constexpr float kFrameSeconds = 1.0f / 60.0f;
         constexpr int kWarmUpFrames = 3;
         constexpr int kSteadyFrames = 10;
-        /// Long enough at the frame time of the fixture for ImGui's key repeat to start and fire
-        constexpr int kHoldFrames = 60;
 
         constexpr int32_t kTestTemperatureC = 64;
         constexpr uint32_t kTestLoadPercent = 87;
@@ -98,14 +95,13 @@ namespace BECore::Tests {
                 ImGui::SetNextWindowSize(kDisplaySize);
                 constexpr ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground;
                 ImGui::Begin("##Host", nullptr, hostFlags);
-                const MainToolbar::Presses presses = toolbar.Draw(model);
-                stepPresses += presses.step ? 1 : 0;
+                MainToolbar::Draw();
                 statusBar.Draw();
                 ImGui::End();
                 ImGui::Render();
             }
 
-            /// The centre of the toolbar's window, where its middle button (Pause) sits; the others are a button and a gap away
+            /// The centre of the toolbar's window
             [[nodiscard]] ImVec2 ToolbarCenter() const {
                 const ImGuiContext& context = *ImGui::GetCurrentContext();
                 for (const ImGuiWindow* window : context.Windows) {
@@ -115,17 +111,6 @@ namespace BECore::Tests {
                 }
                 ADD_FAILURE() << "the toolbar window was not found";
                 return {};
-            }
-
-            /// Moves the mouse over (@p x, @p y), presses and releases the left button: three frames, the click lands on the last
-            void Click(float x, float y) {
-                ImGuiIO& io = ImGui::GetIO();
-                io.AddMousePosEvent(x, y);
-                RunFrame();
-                io.AddMouseButtonEvent(0, true);
-                RunFrame();
-                io.AddMouseButtonEvent(0, false);
-                RunFrame();
             }
 
             /// Gives the status bar a monitor over a reader of the test's; the test polls it on its own thread, so no worker runs
@@ -163,9 +148,6 @@ namespace BECore::Tests {
             IntrusivePtr<SceneManager> sceneManager;
             ImGuiFontBuffers buffers;
             ImGuiFonts fonts;
-            EditorPlayModel model;
-            uint32_t stepPresses = 0;  // frames in which the Step button asked for a step
-            MainToolbar toolbar;
             StatusBar statusBar;
         };
 
@@ -177,64 +159,6 @@ namespace BECore::Tests {
         EXPECT_GT(MainToolbar::GetHeight(), ImGui::GetFrameHeight());
         EXPECT_GT(StatusBar::GetHeight(), ImGui::GetFrameHeight());
         EXPECT_NE(ToolbarCenter().x, 0.0f);
-    }
-
-    TEST_F(EditorBarsTest, ThePlayButtonStartsAndStopsTheModel) {
-        RunFrame();
-        const ImVec2 center = ToolbarCenter();
-        const float step = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
-
-        Click(center.x - step, center.y);
-        EXPECT_EQ(model.GetState(), EditorPlayState::Playing);
-
-        Click(center.x - step, center.y);
-        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
-    }
-
-    TEST_F(EditorBarsTest, PauseWorksInEveryStateAndStepOnlyWhilePaused) {
-        RunFrame();
-        const ImVec2 center = ToolbarCenter();
-        const float step = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
-
-        Click(center.x + step, center.y);
-        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
-        EXPECT_EQ(model.GetStepCount(), 0u);
-
-        Click(center.x, center.y);
-        EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
-        Click(center.x, center.y);
-        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
-
-        model.PressPlay();
-        Click(center.x + step, center.y);
-        EXPECT_EQ(model.GetStepCount(), 0u);
-
-        Click(center.x, center.y);
-        EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
-
-        Click(center.x + step, center.y);
-        EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
-        EXPECT_EQ(model.GetStepCount(), 1u);
-    }
-
-    TEST_F(EditorBarsTest, HoldingTheStepButtonRepeatsTheStep) {
-        model.PressPause();
-        RunFrame();
-        const ImVec2 center = ToolbarCenter();
-        const float step = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
-
-        ImGuiIO& io = ImGui::GetIO();
-        io.AddMousePosEvent(center.x + step, center.y);
-        RunFrame();
-        io.AddMouseButtonEvent(0, true);
-        for (int i = 0; i < kHoldFrames; ++i) {
-            RunFrame();
-        }
-        io.AddMouseButtonEvent(0, false);
-        RunFrame();
-
-        EXPECT_GT(stepPresses, 1u);
-        EXPECT_EQ(model.GetStepCount(), stepPresses);
     }
 
     TEST_F(EditorBarsTest, NoHardwareItemIsDrawnWithoutAMonitorOrWithoutReadings) {

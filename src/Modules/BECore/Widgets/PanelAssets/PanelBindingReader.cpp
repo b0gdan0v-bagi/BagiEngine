@@ -100,11 +100,17 @@ namespace BECore {
             }
         }
 
-        /// The name of the enumerator at @p address; empty when the stored value is not one of them
-        StringView EnumNameAt(const TypeDesc& type, const uint8_t* address) {
+        /// The index of the enumerator stored at @p address; `names.size()` when the stored value is not one of them
+        size_t EnumIndexAt(const TypeDesc& type, const uint8_t* address) {
             uint64_t index = 0;
             std::memcpy(&index, address, std::min(type.enumBytes, sizeof(index)));
-            return index < type.names.size() ? type.names[static_cast<size_t>(index)] : StringView{};
+            return index < type.names.size() ? static_cast<size_t>(index) : type.names.size();
+        }
+
+        /// The name of the enumerator at @p address; empty when the stored value is not one of them
+        StringView EnumNameAt(const TypeDesc& type, const uint8_t* address) {
+            const size_t index = EnumIndexAt(type, address);
+            return index < type.names.size() ? type.names[index] : StringView{};
         }
 
         /// What a read through `GetProperty` could not give: a path that leads nowhere now against a value of another kind
@@ -241,10 +247,13 @@ namespace BECore {
         return PanelReadStatus::Ok;
     }
 
-    PanelReadStatus PanelBindingReader::AsNumber(const Located& at, double& out) {
+    PanelReadStatus PanelBindingReader::AsNumber(const Located& at, double& out, bool* isInteger) {
         if (at.address != nullptr && at.type->kind != TypeKind::Optional) {
             if (!IsNumberKind(at.type->kind)) {
                 return PanelReadStatus::WrongType;
+            }
+            if (isInteger != nullptr) {
+                *isInteger = at.type->kind != TypeKind::Float && at.type->kind != TypeKind::Double;
             }
             out = NumberAt(at.type->kind, at.address);
             return PanelReadStatus::Ok;
@@ -262,8 +271,15 @@ namespace BECore {
             out = static_cast<double>(*unsignedValue);
         } else if (const double* floating = std::get_if<double>(&*value)) {
             out = *floating;
+            if (isInteger != nullptr) {
+                *isInteger = false;
+            }
+            return PanelReadStatus::Ok;
         } else {
             return PanelReadStatus::WrongType;
+        }
+        if (isInteger != nullptr) {
+            *isInteger = true;
         }
         return PanelReadStatus::Ok;
     }
@@ -324,6 +340,18 @@ namespace BECore {
         return PanelReadStatus::Ok;
     }
 
+    PanelReadStatus PanelBindingReader::AsEnumIndex(const Located& at, size_t& out) {
+        if (at.address == nullptr || at.type->kind != TypeKind::Enum) {
+            return PanelReadStatus::WrongType;
+        }
+        const size_t index = EnumIndexAt(*at.type, at.address);
+        if (index >= at.type->names.size()) {
+            return PanelReadStatus::BadValue;
+        }
+        out = index;
+        return PanelReadStatus::Ok;
+    }
+
     PanelReadStatus PanelBindingReader::ReadBool(const PanelDataSources& sources, const PanelBinding& binding, bool& out) {
         const Located at = LocateBinding(sources, binding);
         if (at.status != PanelReadStatus::Ok) {
@@ -337,14 +365,31 @@ namespace BECore {
         return status;
     }
 
-    PanelReadStatus PanelBindingReader::ReadNumber(const PanelDataSources& sources, const PanelBinding& binding, double& out) {
+    PanelReadStatus PanelBindingReader::ReadNumber(const PanelDataSources& sources, const PanelBinding& binding, double& out, bool* isInteger) {
         const Located at = LocateBinding(sources, binding);
-        return at.status != PanelReadStatus::Ok ? at.status : AsNumber(at, out);
+        return at.status != PanelReadStatus::Ok ? at.status : AsNumber(at, out, isInteger);
     }
 
     PanelReadStatus PanelBindingReader::ReadText(const PanelDataSources& sources, const PanelBinding& binding, String& scratch, StringView& out) {
         const Located at = LocateBinding(sources, binding);
         return at.status != PanelReadStatus::Ok ? at.status : AsText(at, scratch, out);
+    }
+
+    PanelReadStatus PanelBindingReader::ReadEnumIndex(const PanelDataSources& sources, const PanelBinding& binding, size_t& out) {
+        const Located at = LocateBinding(sources, binding);
+        return at.status != PanelReadStatus::Ok ? at.status : AsEnumIndex(at, out);
+    }
+
+    PanelReadStatus PanelBindingReader::EnumNames(const PanelDataSources& sources, const PanelBinding& binding, Span<const StringView>& out) {
+        const Located at = LocateBinding(sources, binding);
+        if (at.status != PanelReadStatus::Ok) {
+            return at.status;
+        }
+        if (at.address == nullptr || at.type->kind != TypeKind::Enum) {
+            return PanelReadStatus::WrongType;
+        }
+        out = at.type->names;
+        return PanelReadStatus::Ok;
     }
 
     PanelReadStatus PanelBindingReader::ListCount(const PanelDataSources& sources, const PanelBinding& list, size_t& count) {

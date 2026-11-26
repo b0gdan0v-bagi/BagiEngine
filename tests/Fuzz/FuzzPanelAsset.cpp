@@ -4,6 +4,7 @@
 #include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelAssetLoader.h>
 #include <BECore/Widgets/PanelAssets/PanelBinding.h>
+#include <BECore/Widgets/PanelAssets/PanelCondition.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Fuzz/FuzzChecks.h>
 #include <Fuzz/FuzzTargets.h>
@@ -13,6 +14,8 @@ namespace BECore::Fuzz {
     namespace {
 
         constexpr StringView kMoreIssuesPart = "more issues";
+        constexpr uint8_t kFirstPrintable = 0x20;
+        constexpr uint8_t kDelete = 0x7F;
 
         bool IsIdCharacter(char c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == '-';
@@ -54,6 +57,8 @@ namespace BECore::Fuzz {
                 Text(asset.id);
                 Text(asset.title);
                 Text(asset.command);
+                Text(asset.titleBind);
+                Binding(asset.titleBind, false);
                 if (!IsWellFormedId(asset.id) || asset.width < 0.0f || asset.height < 0.0f || asset.sources.size() > PanelAssetLimits::kMaxSources) {
                     Fail();
                 }
@@ -65,7 +70,11 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                 }
-                Elements(asset.elements, 1);
+                if ((asset.window == PanelWindowKind::Dialogs || asset.window == PanelWindowKind::Bar) && !asset.open) {
+                    Fail();
+                }
+                _window = asset.window;
+                Elements(asset.elements, 1, nullptr);
             }
 
             [[nodiscard]] bool Violated() const {
@@ -112,8 +121,37 @@ namespace BECore::Fuzz {
                 }
             }
 
+            /// Written as comparisons so a NaN fails them
+            void Number(const PanelNumber& number) {
+                constexpr float kLimit = PanelAssetLimits::kMaxNumberExtent;
+                if (!(number.min >= -kLimit && number.min <= kLimit && number.max >= -kLimit && number.max <= kLimit && number.min <= number.max)) {
+                    Fail();
+                }
+                if (number.slider && !(number.min < number.max)) {
+                    Fail();
+                }
+                if (!(number.step >= 0.0f && number.step <= kLimit)) {
+                    Fail();
+                }
+                if (!(number.stepFast >= 0.0f && number.stepFast <= kLimit) || (number.stepFast != 0.0f && !number.stepper)) {
+                    Fail();
+                }
+                if (number.stepper && (number.slider || number.input)) {
+                    Fail();
+                }
+            }
+
+            /// A literal as a condition's: within the text limit and read by the condition's own literal reader under `==`
+            void RadioValue(const String& value) {
+                PanelConditionTerm term;
+                term.compare = PanelCompare::Equal;
+                if (value.empty() || value.size() > PanelAssetLimits::kMaxTextBytes || !ParsePanelConditionLiteral(value, term)) {
+                    Fail();
+                }
+            }
+
             void Condition(const String& text) {
-                if (!text.empty() && !ParseCondition(text)) {
+                if (!text.empty() && !ParsePanelCondition(text)) {
                     Fail();
                 }
             }
@@ -124,7 +162,16 @@ namespace BECore::Fuzz {
                 }
             }
 
-            void Elements(const Vector<IntrusivePtr<PanelElement>>& list, size_t depth) {
+            void Literal(const String& text) {
+                for (const char c : text) {
+                    const auto byte = static_cast<uint8_t>(c);
+                    if (byte < kFirstPrintable || byte == kDelete) {
+                        Fail();
+                    }
+                }
+            }
+
+            void Elements(const Vector<IntrusivePtr<PanelElement>>& list, size_t depth, const PanelElement* parent) {
                 if (list.empty()) {
                     return;
                 }
@@ -139,31 +186,44 @@ namespace BECore::Fuzz {
                     if (++_elementCount > PanelAssetLimits::kMaxElements) {
                         Fail();
                     }
-                    Element(*element);
+                    Element(*element, parent);
                     const bool isPopup = element->Is<PanelPopup>();
+                    const bool isMenu = element->Is<PanelMenu>();
+                    const bool isDropdown = element->Is<PanelDropdown>();
                     _popupDepth += isPopup ? 1 : 0;
-                    Elements(element->elements, depth + 1);
+                    _menuDepth += isMenu ? 1 : 0;
+                    _dropdownDepth += isDropdown ? 1 : 0;
+                    Elements(element->elements, depth + 1, element.Get());
                     _popupDepth -= isPopup ? 1 : 0;
+                    _menuDepth -= isMenu ? 1 : 0;
+                    _dropdownDepth -= isDropdown ? 1 : 0;
                 }
             }
 
-            void Element(const PanelElement& element) {
+            void Element(const PanelElement& element, const PanelElement* parent) {
                 Text(element.id);
                 Text(element.visible);
                 Text(element.tooltip);
+                Text(element.tooltipBind);
+                Binding(element.tooltipBind, false);
                 if (!IsWellFormedId(element.id) || !_ids.insert(element.id).second) {
                     Fail();
                 }
                 Condition(element.visible);
-                if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>() && !element.Is<PanelChild>() && !element.Is<PanelPopup>()) {
+                if (!element.elements.empty() && !element.Is<PanelSection>() && !element.Is<PanelRow>() && !element.Is<PanelChild>() && !element.Is<PanelPopup>() && !element.Is<PanelDropdown>() &&
+                    !element.Is<PanelTabs>() && !element.Is<PanelTab>() && !element.Is<PanelMenu>()) {
                     Fail();
                 }
 
                 if (const auto* section = element.Cast<PanelSection>()) {
                     Text(section->title);
+                    Text(section->icon);
+                    Text(section->openBind);
+                    Binding(section->openBind, false);
                 } else if (const auto* text = element.Cast<PanelText>()) {
                     Text(text->text);
                     Text(text->bind);
+                    Text(text->icon);
                     if (text->text.empty() && text->bind.empty()) {
                         Fail();
                     }
@@ -180,21 +240,134 @@ namespace BECore::Fuzz {
                     Text(input->bind);
                     Text(input->hint);
                     Text(input->icon);
+                    Text(input->submitCommand);
+                    Text(input->commitCommand);
+                    Text(input->text);
+                    Text(input->enableWhen);
                     Binding(input->bind, true);
+                    Condition(input->enableWhen);
+                    if (input->focus && _popupDepth == 0) {
+                        Fail();
+                    }
                     if (input->width < 0.0f) {
                         Fail();
                     }
+                    AtMost(input->lines, PanelAssetLimits::kMaxInputLines);
+                    if (input->lines > 0 && !input->submitCommand.empty()) {
+                        Fail();
+                    }
+                } else if (const auto* checkbox = element.Cast<PanelCheckbox>()) {
+                    Text(checkbox->bind);
+                    Text(checkbox->text);
+                    Text(checkbox->labelBind);
+                    Text(checkbox->icon);
+                    Text(checkbox->enableWhen);
+                    Binding(checkbox->bind, true);
+                    Binding(checkbox->labelBind, false);
+                    if (checkbox->text.empty() && checkbox->labelBind.empty()) {
+                        Fail();
+                    }
+                    Condition(checkbox->enableWhen);
+                } else if (const auto* combo = element.Cast<PanelCombo>()) {
+                    Text(combo->bind);
+                    Text(combo->items);
+                    Text(combo->itemField);
+                    Text(combo->separatorField);
+                    Text(combo->enableWhen);
+                    Text(combo->enableField);
+                    Text(combo->tooltipField);
+                    Text(combo->previewBind);
+                    Text(combo->text);
+                    Binding(combo->bind, true);
+                    Binding(combo->items, false);
+                    Binding(combo->previewBind, false);
+                    if (combo->items.empty() && (!combo->itemField.empty() || !combo->separatorField.empty() || !combo->enableField.empty() || !combo->tooltipField.empty())) {
+                        Fail();
+                    }
+                    RelativePath(combo->itemField);
+                    RelativePath(combo->separatorField);
+                    RelativePath(combo->enableField);
+                    RelativePath(combo->tooltipField);
+                    Extent(combo->width);
+                    Condition(combo->enableWhen);
+                } else if (const auto* number = element.Cast<PanelNumber>()) {
+                    Text(number->bind);
+                    Text(number->text);
+                    Text(number->commitCommand);
+                    Text(number->enableWhen);
+                    Text(number->unit);
+                    Literal(number->unit);
+                    AtMost(number->decimals, PanelAssetLimits::kMaxNumberDecimals);
+                    Binding(number->bind, true);
+                    Extent(number->width);
+                    Number(*number);
+                    Condition(number->enableWhen);
+                    if (number->input && number->slider) {
+                        Fail();
+                    }
+                } else if (const auto* radio = element.Cast<PanelRadio>()) {
+                    Text(radio->bind);
+                    Text(radio->value);
+                    Text(radio->text);
+                    Text(radio->icon);
+                    Text(radio->enableWhen);
+                    Binding(radio->bind, true);
+                    RadioValue(radio->value);
+                    if (radio->text.empty() && radio->icon.empty()) {
+                        Fail();
+                    }
+                    Condition(radio->enableWhen);
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Text(button->text);
                     Text(button->icon);
                     Text(button->command);
                     Text(button->argument);
                     Text(button->enableWhen);
+                    Text(button->fillWhen);
                     if (button->command.empty()) {
                         Fail();
                     }
                     Condition(button->enableWhen);
-                    RelativePath(button->argument);
+                    Condition(button->fillWhen);
+                    if (!button->fillWhen.empty() && button->fill == PanelButtonFill::None) {
+                        Fail();
+                    }
+                    Literal(button->argument);
+                    if (button->width != kPanelFillLineWidth) {
+                        Extent(button->width);
+                    }
+                    if (button->closePopup && _dropdownDepth == 0) {
+                        Fail();
+                    }
+                } else if (const auto* progress = element.Cast<PanelProgress>()) {
+                    Text(progress->bind);
+                    Text(progress->textBind);
+                    Binding(progress->bind, true);
+                    Binding(progress->textBind, false);
+                    Extent(progress->width);
+                } else if (const auto* menu = element.Cast<PanelMenu>()) {
+                    Menu(*menu);
+                } else if (const auto* item = element.Cast<PanelMenuItem>()) {
+                    Text(item->text);
+                    Text(item->icon);
+                    Text(item->command);
+                    Text(item->argument);
+                    Text(item->enableWhen);
+                    if (parent == nullptr || !parent->Is<PanelMenu>() || item->text.empty() || item->command.empty()) {
+                        Fail();
+                    }
+                    Condition(item->enableWhen);
+                    Literal(item->argument);
+                } else if (const auto* items = element.Cast<PanelMenuItems>()) {
+                    Text(items->source);
+                    Text(items->itemField);
+                    Text(items->command);
+                    Text(items->icon);
+                    if (parent == nullptr || !parent->Is<PanelMenu>() || items->command.empty()) {
+                        Fail();
+                    }
+                    Binding(items->source, true);
+                    RelativePath(items->itemField);
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Text(table->source);
                     Binding(table->source, true);
@@ -216,11 +389,55 @@ namespace BECore::Fuzz {
                 } else if (const auto* popup = element.Cast<PanelPopup>()) {
                     Text(popup->title);
                     Text(popup->open);
-                    if (popup->open.empty() || !ParseCondition(popup->open) || _popupDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
+                    Text(popup->closeCommand);
+                    if (popup->open.empty() || !ParsePanelCondition(popup->open) || _popupDepth > 0 || _dropdownDepth > 0 || ++_popupCount > PanelAssetLimits::kMaxPopups) {
+                        Fail();
+                    }
+                } else if (const auto* dropdown = element.Cast<PanelDropdown>()) {
+                    Text(dropdown->text);
+                    Text(dropdown->icon);
+                    Text(dropdown->enableWhen);
+                    Text(dropdown->openCommand);
+                    if ((dropdown->text.empty() && dropdown->icon.empty()) || _dropdownDepth > 0 || _popupDepth > 0 || ++_dropdownCount > PanelAssetLimits::kMaxDropdowns) {
+                        Fail();
+                    }
+                    Condition(dropdown->enableWhen);
+                } else if (const auto* tabs = element.Cast<PanelTabs>()) {
+                    Tabs(*tabs);
+                } else if (const auto* tab = element.Cast<PanelTab>()) {
+                    Text(tab->title);
+                    Text(tab->icon);
+                    if (parent == nullptr || !parent->Is<PanelTabs>() || tab->title.empty() || ++_tabCount > PanelAssetLimits::kMaxTabs) {
                         Fail();
                     }
                 } else if (!element.Is<PanelRow>()) {
                     Fail();  // the base class: no `type`, or one that is no kind
+                }
+            }
+
+            void Menu(const PanelMenu& menu) {
+                Text(menu.title);
+                Text(menu.enableWhen);
+                Text(menu.openCommand);
+                if (_window != PanelWindowKind::Bar || menu.title.empty() || _menuDepth >= PanelAssetLimits::kMaxMenuDepth || ++_menuCount > PanelAssetLimits::kMaxMenus) {
+                    Fail();
+                }
+                Condition(menu.enableWhen);
+                for (const IntrusivePtr<PanelElement>& child : menu.elements) {
+                    if (child != nullptr && !child->Is<PanelMenu>() && !child->Is<PanelMenuItem>() && !child->Is<PanelMenuItems>() && !child->Is<PanelSeparator>() && !child->Is<PanelText>()) {
+                        Fail();
+                    }
+                }
+            }
+
+            void Tabs(const PanelTabs& tabs) {
+                if (tabs.elements.empty() || tabs.elements.size() > PanelAssetLimits::kMaxTabsPerBar) {
+                    Fail();
+                }
+                for (const IntrusivePtr<PanelElement>& child : tabs.elements) {
+                    if (child != nullptr && !child->Is<PanelTab>()) {
+                        Fail();
+                    }
                 }
             }
 
@@ -231,8 +448,8 @@ namespace BECore::Fuzz {
                         Fail();
                         return;
                     }
-                    for (const String* text : {&column.id, &column.title, &column.field, &column.styleField, &column.enableField, &column.selectedField, &column.hint, &column.command,
-                                               &column.argument, &column.icon, &column.tooltip}) {
+                    for (const String* text : {&column.id, &column.title, &column.field, &column.styleField, &column.enableField, &column.selectedField, &column.labelField, &column.hint,
+                                               &column.command, &column.argument, &column.icon, &column.tooltip, &column.tooltipField}) {
                         Text(*text);
                     }
                     if (!IsWellFormedId(column.id) || !ids.insert(column.id).second) {
@@ -254,7 +471,12 @@ namespace BECore::Fuzz {
                         Fail();
                     }
                     RelativePath(column.selectedField);
+                    if (column.type != PanelColumnType::Checkbox && !column.labelField.empty()) {
+                        Fail();
+                    }
+                    RelativePath(column.labelField);
                     RelativePath(column.argument);
+                    RelativePath(column.tooltipField);
                 }
             }
 
@@ -263,6 +485,12 @@ namespace BECore::Fuzz {
             size_t _columnCount = 0;
             size_t _popupCount = 0;
             size_t _popupDepth = 0;
+            size_t _tabCount = 0;
+            size_t _menuCount = 0;
+            size_t _menuDepth = 0;
+            size_t _dropdownCount = 0;
+            size_t _dropdownDepth = 0;
+            PanelWindowKind _window = PanelWindowKind::Docked;
             bool _violated = false;
         };
 

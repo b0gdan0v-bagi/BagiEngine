@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<PanelAsset id="Dialogs" title="Dialogs" open="true" window="Dialogs">
+  <sources>
+    <item name="save" model="EditorDialogsModel"/>
+  </sources>
+  <elements>
+    <element type="PanelPopup" id="saveLayout" title="Save Layout" open="save.open" closeCommand="saveLayout.close">
+      <elements>
+        <element type="PanelInput" id="name" bind="save.name" hint="Layout name" focus="true" submitCommand="saveLayout.submit" commitCommand="saveLayout.edited"/>
+        <element type="PanelText" id="warning" bind="save.warning" style="Warning" visible="save.hasWarning"/>
+        <element type="PanelRow" id="buttons">
+          <elements>
+            <element type="PanelButton" id="save" text="Save" command="saveLayout.submit" enableWhen="save.canSave"/>
+            <element type="PanelButton" id="cancel" text="Cancel" command="saveLayout.close"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelNumber" id="scale" bind="save.scale" min="0.5" max="2" slider="true" commitCommand="saveLayout.scaleDone"/>
+  </elements>
+</PanelAsset>

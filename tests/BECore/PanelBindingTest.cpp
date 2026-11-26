@@ -9,7 +9,10 @@
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
 #include <Generated/PanelBindingProbe.gen.hpp>
+#include <cstring>
 #include <gtest/gtest.h>
+#include <limits>
+#include <tuple>
 
 namespace BECore::Tests {
 
@@ -285,6 +288,20 @@ namespace BECore::Tests {
         EXPECT_EQ(value, -1.25);
     }
 
+    TEST_F(PanelBindingReadTest, TellsAnIntegerFieldFromAFloatOneAlsoWhenItIsReachedThroughTheLiveObject) {
+        bool isInteger = false;
+        double value = 0.0;
+        EXPECT_EQ(reader.ReadNumber(sources, Bind("small"), value, &isInteger), PanelReadStatus::Ok);
+        EXPECT_TRUE(isInteger);
+        EXPECT_EQ(reader.ReadNumber(sources, Bind("ratio"), value, &isInteger), PanelReadStatus::Ok);
+        EXPECT_FALSE(isInteger);
+        EXPECT_EQ(reader.ReadNumber(sources, Bind("wide"), value, &isInteger), PanelReadStatus::Ok);
+        EXPECT_FALSE(isInteger);
+        probe.numbers = {1, 2, 3};
+        EXPECT_EQ(reader.ReadNumber(sources, Bind("numbers[1]"), value, &isInteger), PanelReadStatus::Ok);
+        EXPECT_TRUE(isInteger);
+    }
+
     TEST_F(PanelBindingReadTest, ReadsATextOfEveryKind) {
         probe.flag = true;
         probe.ratio = 0.1f;
@@ -424,6 +441,39 @@ namespace BECore::Tests {
         EXPECT_EQ(text, "5");
     }
 
+    TEST_F(PanelBindingReadTest, ReadsTheIndexAndTheNamesOfAnEnum) {
+        size_t index = 99;
+        EXPECT_EQ(reader.ReadEnumIndex(sources, Bind("mode"), index), PanelReadStatus::Ok);
+        EXPECT_EQ(index, 1u);
+        probe.inner.mode = PanelProbeMode::Failed;
+        EXPECT_EQ(reader.ReadEnumIndex(sources, Bind("inner.mode"), index), PanelReadStatus::Ok);
+        EXPECT_EQ(index, 2u);
+        EXPECT_EQ(reader.ReadEnumIndex(sources, Bind("rows[1].mode"), index), PanelReadStatus::WrongType) << "a list position in the path is not read in place";
+
+        Span<const StringView> names;
+        EXPECT_EQ(reader.EnumNames(sources, Bind("mode"), names), PanelReadStatus::Ok);
+        ASSERT_EQ(names.size(), 3u);
+        EXPECT_EQ(names[0], "Idle");
+        EXPECT_EQ(names[2], "Failed");
+    }
+
+    TEST_F(PanelBindingReadTest, AnEnumReadOfAnotherKindOrAMissingFieldIsAStatus) {
+        size_t index = 99;
+        Span<const StringView> names;
+        EXPECT_EQ(reader.ReadEnumIndex(sources, Bind("count"), index), PanelReadStatus::WrongType);
+        EXPECT_EQ(reader.ReadEnumIndex(sources, Bind("title"), index), PanelReadStatus::WrongType);
+        EXPECT_EQ(reader.ReadEnumIndex(sources, Bind("nope"), index), PanelReadStatus::BadPath);
+        EXPECT_EQ(reader.EnumNames(sources, Bind("flag"), names), PanelReadStatus::WrongType);
+        EXPECT_EQ(reader.EnumNames(sources, Bind("nope"), names), PanelReadStatus::BadPath);
+        EXPECT_EQ(index, 99u);
+        EXPECT_TRUE(names.empty());
+
+        const uint8_t outsideTheNames = 200;
+        std::memcpy(&probe.mode, &outsideTheNames, sizeof(outsideTheNames));
+        EXPECT_EQ(reader.ReadEnumIndex(sources, Bind("mode"), index), PanelReadStatus::BadValue);
+        EXPECT_EQ(index, 99u);
+    }
+
     TEST_F(PanelBindingReadTest, ASteadyReadAllocatesNothing) {
         for (size_t i = 0; i < kManyRows; ++i) {
             probe.rows.push_back(MakeRow("some/file.txt", static_cast<int32_t>(i), i % 2 == 0));
@@ -447,6 +497,10 @@ namespace BECore::Tests {
             EXPECT_EQ(reader.ReadText(sources, tag, scratch, text), PanelReadStatus::Ok);
             EXPECT_EQ(reader.ReadText(sources, mode, scratch, text), PanelReadStatus::Ok);
             EXPECT_EQ(reader.ReadText(sources, count, scratch, text), PanelReadStatus::Ok);
+            size_t index = 0;
+            Span<const StringView> names;
+            EXPECT_EQ(reader.ReadEnumIndex(sources, mode, index), PanelReadStatus::Ok);
+            EXPECT_EQ(reader.EnumNames(sources, mode, names), PanelReadStatus::Ok);
             EXPECT_EQ(reader.ListCount(sources, rows, listCount), PanelReadStatus::Ok);
             for (size_t row = 0; row < listCount; ++row) {
                 EXPECT_EQ(reader.ReadRowText(sources, rows, row, "path", scratch, text), PanelReadStatus::Ok);
@@ -548,6 +602,266 @@ namespace BECore::Tests {
         writeAll();
         const size_t compiled = reader.CompiledCount();
         EXPECT_GT(compiled, 0u) << "the writer compiles its paths in the reader's cache";
+
+        ExpectNoAllocations(writeAll);
+        EXPECT_EQ(reader.CompiledCount(), compiled);
+    }
+
+    namespace {
+
+        constexpr StringView kNumbersSource = "n";
+        constexpr int16_t kNeighbourBefore = 0x1111;
+        constexpr int16_t kNeighbourAfter = 0x2222;
+
+        PanelBinding BindNumbers(StringView path) {
+            PanelBinding binding;
+            binding.source = String(kNumbersSource);
+            binding.path = String(path);
+            return binding;
+        }
+
+        /// Every scalar of the object, so a write that touched a neighbour shows as a difference
+        auto Scalars(const PanelProbeNumbers& value) {
+            return std::make_tuple(value.i8, value.u8, value.i16, value.u16, value.i32, value.u32, value.i64, value.u64, value.f32, value.f64, value.flag, value.mode, value.level, value.inner.before,
+                                   value.inner.flag, value.inner.small, value.inner.ratio, value.inner.level, value.inner.after, value.rows[0].before, value.rows[0].small, value.rows[0].after,
+                                   value.rows[1].before, value.rows[1].flag, value.rows[1].small, value.rows[1].ratio, value.rows[1].level, value.rows[1].after, value.numbers[1]);
+        }
+
+        class PanelBindingNumbersTest : public ::testing::Test {
+        protected:
+            void SetUp() override {
+                values.inner.before = kNeighbourBefore;
+                values.inner.after = kNeighbourAfter;
+                values.rows.resize(2);
+                for (PanelProbeCells& row : values.rows) {
+                    row.before = kNeighbourBefore;
+                    row.after = kNeighbourAfter;
+                }
+                values.numbers = {1, 2, 3};
+                values.i8 = 1;
+                values.u8 = 2;
+                values.i16 = 3;
+                values.u16 = 4;
+                values.i32 = 5;
+                values.u32 = 6;
+                values.i64 = 7;
+                values.u64 = 8;
+                values.f32 = 9.0f;
+                values.f64 = 10.0;
+                handle = sources.Register(kNumbersSource, [this] { return current != nullptr ? TypedRef::Of(*current) : TypedRef{}; });
+            }
+
+            /// Writes @p value at @p path of the numbers and checks that the one field changed and no other
+            template <typename TField>
+            void ExpectWritten(StringView path, double value, TField PanelProbeNumbers::* field, TField expected) {
+                const PanelProbeNumbers before = values;
+                EXPECT_EQ(writer.WriteNumber(sources, BindNumbers(path), value), PanelReadStatus::Ok) << String(path).c_str();
+                PanelProbeNumbers want = before;
+                want.*field = expected;
+                EXPECT_EQ(Scalars(values), Scalars(want)) << String(path).c_str() << " <- " << value;
+            }
+
+            PanelDataSources sources;
+            PanelBindingReader reader;
+            PanelBindingWriter writer{reader};
+            PanelProbeNumbers values;
+            PanelProbeNumbers* current = &values;
+            PanelSourceHandle handle;
+        };
+
+        template <typename T>
+        constexpr double Limit(T value) {
+            return static_cast<double>(value);
+        }
+
+    }  // namespace
+
+    TEST_F(PanelBindingNumbersTest, WritesABoolAtTheTopLevelEmbeddedAndInARow) {
+        EXPECT_EQ(writer.WriteBool(sources, BindNumbers("flag"), true), PanelReadStatus::Ok);
+        EXPECT_TRUE(values.flag);
+        EXPECT_EQ(writer.WriteBool(sources, BindNumbers("inner.flag"), true), PanelReadStatus::Ok);
+        EXPECT_TRUE(values.inner.flag);
+        EXPECT_EQ(writer.WriteRowBool(sources, BindNumbers("rows"), 1, "flag", true), PanelReadStatus::Ok);
+        EXPECT_TRUE(values.rows[1].flag);
+        EXPECT_FALSE(values.rows[0].flag);
+        EXPECT_EQ(writer.WriteBool(sources, BindNumbers("flag"), false), PanelReadStatus::Ok);
+        EXPECT_FALSE(values.flag);
+        EXPECT_EQ(values.inner.before, kNeighbourBefore);
+        EXPECT_EQ(values.inner.after, kNeighbourAfter);
+        EXPECT_EQ(values.rows[1].before, kNeighbourBefore);
+        EXPECT_EQ(values.rows[1].after, kNeighbourAfter);
+    }
+
+    TEST_F(PanelBindingNumbersTest, WritesEveryNumberWidthAndLeavesItsNeighboursAlone) {
+        ExpectWritten("i8", -7, &PanelProbeNumbers::i8, static_cast<int8_t>(-7));
+        ExpectWritten("u8", 200, &PanelProbeNumbers::u8, static_cast<uint8_t>(200));
+        ExpectWritten("i16", -30000, &PanelProbeNumbers::i16, static_cast<int16_t>(-30000));
+        ExpectWritten("u16", 60000, &PanelProbeNumbers::u16, static_cast<uint16_t>(60000));
+        ExpectWritten("i32", -2000000000, &PanelProbeNumbers::i32, -2000000000);
+        ExpectWritten("u32", 4000000000.0, &PanelProbeNumbers::u32, 4000000000u);
+        ExpectWritten("i64", -9000000000000000000.0, &PanelProbeNumbers::i64, int64_t{-9000000000000000000});
+        ExpectWritten("u64", 18000000000000000000.0, &PanelProbeNumbers::u64, uint64_t{18000000000000000000u});
+        ExpectWritten("f32", 0.5, &PanelProbeNumbers::f32, 0.5f);
+        ExpectWritten("f64", 1.0e100, &PanelProbeNumbers::f64, 1.0e100);
+    }
+
+    TEST_F(PanelBindingNumbersTest, AnIntegerIsRoundedAndAFloatIsNot) {
+        ExpectWritten("i32", 2.4, &PanelProbeNumbers::i32, 2);
+        ExpectWritten("i32", 2.5, &PanelProbeNumbers::i32, 3);
+        ExpectWritten("i32", -2.5, &PanelProbeNumbers::i32, -3);
+        ExpectWritten("f64", 2.4, &PanelProbeNumbers::f64, 2.4);
+    }
+
+    TEST_F(PanelBindingNumbersTest, AValueIsClampedToTheFieldsTypeAtBothEnds) {
+        ExpectWritten("i8", 1000, &PanelProbeNumbers::i8, std::numeric_limits<int8_t>::max());
+        ExpectWritten("i8", -1000, &PanelProbeNumbers::i8, std::numeric_limits<int8_t>::lowest());
+        ExpectWritten("u8", 300, &PanelProbeNumbers::u8, std::numeric_limits<uint8_t>::max());
+        ExpectWritten("u8", -5, &PanelProbeNumbers::u8, uint8_t{0});
+        ExpectWritten("i16", 1.0e6, &PanelProbeNumbers::i16, std::numeric_limits<int16_t>::max());
+        ExpectWritten("i16", -1.0e6, &PanelProbeNumbers::i16, std::numeric_limits<int16_t>::lowest());
+        ExpectWritten("u16", 1.0e6, &PanelProbeNumbers::u16, std::numeric_limits<uint16_t>::max());
+        ExpectWritten("u16", -1.0, &PanelProbeNumbers::u16, uint16_t{0});
+        ExpectWritten("i32", 3.0e9, &PanelProbeNumbers::i32, std::numeric_limits<int32_t>::max());
+        ExpectWritten("i32", -3.0e9, &PanelProbeNumbers::i32, std::numeric_limits<int32_t>::lowest());
+        ExpectWritten("u32", 5.0e9, &PanelProbeNumbers::u32, std::numeric_limits<uint32_t>::max());
+        ExpectWritten("u32", -1.0, &PanelProbeNumbers::u32, uint32_t{0});
+        ExpectWritten("i64", 1.0e30, &PanelProbeNumbers::i64, std::numeric_limits<int64_t>::max());
+        ExpectWritten("i64", -1.0e30, &PanelProbeNumbers::i64, std::numeric_limits<int64_t>::lowest());
+        ExpectWritten("i64", Limit(std::numeric_limits<int64_t>::max()), &PanelProbeNumbers::i64, std::numeric_limits<int64_t>::max());
+        ExpectWritten("u64", 1.0e30, &PanelProbeNumbers::u64, std::numeric_limits<uint64_t>::max());
+        ExpectWritten("u64", -1.0e30, &PanelProbeNumbers::u64, uint64_t{0});
+        ExpectWritten("u64", Limit(std::numeric_limits<uint64_t>::max()), &PanelProbeNumbers::u64, std::numeric_limits<uint64_t>::max());
+        ExpectWritten("f32", 1.0e300, &PanelProbeNumbers::f32, std::numeric_limits<float>::max());
+        ExpectWritten("f32", -1.0e300, &PanelProbeNumbers::f32, std::numeric_limits<float>::lowest());
+    }
+
+    TEST_F(PanelBindingNumbersTest, NotANumberAndInfinityAreRefusedAndWriteNothing) {
+        const auto before = Scalars(values);
+        for (const StringView path : {"i8", "u64", "f32", "f64"}) {
+            EXPECT_EQ(writer.WriteNumber(sources, BindNumbers(path), std::numeric_limits<double>::quiet_NaN()), PanelReadStatus::BadValue) << String(path).c_str();
+            EXPECT_EQ(writer.WriteNumber(sources, BindNumbers(path), std::numeric_limits<double>::infinity()), PanelReadStatus::BadValue) << String(path).c_str();
+            EXPECT_EQ(writer.WriteNumber(sources, BindNumbers(path), -std::numeric_limits<double>::infinity()), PanelReadStatus::BadValue) << String(path).c_str();
+        }
+        EXPECT_EQ(Scalars(values), before);
+    }
+
+    TEST_F(PanelBindingNumbersTest, WritesAnEnumByTheIndexOfItsNameInOneAndFourBytes) {
+        EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers("mode"), 2), PanelReadStatus::Ok);
+        EXPECT_EQ(values.mode, PanelProbeMode::Failed);
+        EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers("level"), 3), PanelReadStatus::Ok);
+        EXPECT_EQ(values.level, PanelProbeLevel::Max);
+        EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers("inner.level"), 2), PanelReadStatus::Ok);
+        EXPECT_EQ(values.inner.level, PanelProbeLevel::High);
+        EXPECT_EQ(writer.WriteRowEnumIndex(sources, BindNumbers("rows"), 1, "level", 1), PanelReadStatus::Ok);
+        EXPECT_EQ(values.rows[1].level, PanelProbeLevel::Mid);
+        EXPECT_EQ(values.rows[0].level, PanelProbeLevel::Low);
+        EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers("level"), 0), PanelReadStatus::Ok);
+        EXPECT_EQ(values.level, PanelProbeLevel::Low) << "the high bytes of a four byte enum are written too";
+
+        EXPECT_EQ(values.inner.after, kNeighbourAfter);
+        EXPECT_EQ(values.rows[1].after, kNeighbourAfter);
+        EXPECT_EQ(values.u64, 8u);
+        size_t index = 99;
+        EXPECT_EQ(reader.ReadEnumIndex(sources, BindNumbers("mode"), index), PanelReadStatus::Ok);
+        EXPECT_EQ(index, 2u);
+    }
+
+    TEST_F(PanelBindingNumbersTest, AnEnumIndexPastTheNamesIsRefusedAndWritesNothing) {
+        values.mode = PanelProbeMode::Busy;
+        values.level = PanelProbeLevel::High;
+        EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers("mode"), 3), PanelReadStatus::BadValue);
+        EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers("level"), 4), PanelReadStatus::BadValue);
+        EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers("level"), std::numeric_limits<size_t>::max()), PanelReadStatus::BadValue);
+        EXPECT_EQ(writer.WriteRowEnumIndex(sources, BindNumbers("rows"), 0, "level", 4), PanelReadStatus::BadValue);
+        EXPECT_EQ(values.mode, PanelProbeMode::Busy);
+        EXPECT_EQ(values.level, PanelProbeLevel::High);
+        EXPECT_EQ(values.rows[0].level, PanelProbeLevel::Low);
+    }
+
+    TEST_F(PanelBindingNumbersTest, AFieldOfAnotherKindIsWrongTypeForEachWriteAndStaysAsItWas) {
+        const auto before = Scalars(values);
+        for (const StringView path : {"flag", "mode", "level", "text", "rows", "maybe", "inner"}) {
+            EXPECT_EQ(writer.WriteNumber(sources, BindNumbers(path), 1.0), PanelReadStatus::WrongType) << String(path).c_str();
+        }
+        for (const StringView path : {"i32", "f32", "mode", "text", "rows", "maybe", "inner"}) {
+            EXPECT_EQ(writer.WriteBool(sources, BindNumbers(path), true), PanelReadStatus::WrongType) << String(path).c_str();
+        }
+        for (const StringView path : {"i32", "f32", "flag", "text", "rows", "maybe", "inner"}) {
+            EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers(path), 1), PanelReadStatus::WrongType) << String(path).c_str();
+        }
+        EXPECT_EQ(writer.WriteNumber(sources, BindNumbers("text"), std::numeric_limits<double>::quiet_NaN()), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteRowBool(sources, BindNumbers("numbers"), 0, "", true), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteRowEnumIndex(sources, BindNumbers("numbers"), 0, "", 1), PanelReadStatus::WrongType);
+        EXPECT_EQ(Scalars(values), before);
+        EXPECT_TRUE(values.text.empty());
+        EXPECT_FALSE(values.maybe.has_value());
+    }
+
+    TEST_F(PanelBindingNumbersTest, WritesANumberOfAnEmbeddedObjectARowAndAListOfScalars) {
+        EXPECT_EQ(writer.WriteNumber(sources, BindNumbers("inner.ratio"), 0.25), PanelReadStatus::Ok);
+        EXPECT_EQ(values.inner.ratio, 0.25f);
+        EXPECT_EQ(writer.WriteRowNumber(sources, BindNumbers("rows"), 1, "small", 300), PanelReadStatus::Ok);
+        EXPECT_EQ(values.rows[1].small, std::numeric_limits<uint8_t>::max());
+        EXPECT_EQ(values.rows[1].before, kNeighbourBefore);
+        EXPECT_EQ(values.rows[1].ratio, 0.0f);
+        EXPECT_EQ(values.rows[0].small, 0);
+        EXPECT_EQ(writer.WriteRowNumber(sources, BindNumbers("numbers"), 1, "", 40.0), PanelReadStatus::Ok);
+        EXPECT_EQ(values.numbers, (Vector<int32_t>{1, 40, 3}));
+
+        double number = 0.0;
+        EXPECT_EQ(reader.ReadNumber(sources, BindNumbers("inner.ratio"), number), PanelReadStatus::Ok);
+        EXPECT_EQ(number, 0.25);
+    }
+
+    TEST_F(PanelBindingNumbersTest, AMissingSourcePathOrRowIsAStatusForEveryWrite) {
+        PanelBinding other = BindNumbers("i32");
+        other.source = "nowhere";
+        EXPECT_EQ(writer.WriteNumber(sources, other, 1.0), PanelReadStatus::UnknownSource);
+        EXPECT_EQ(writer.WriteBool(sources, other, true), PanelReadStatus::UnknownSource);
+        EXPECT_EQ(writer.WriteEnumIndex(sources, other, 1), PanelReadStatus::UnknownSource);
+        EXPECT_EQ(writer.WriteNumber(sources, BindNumbers("nope"), 1.0), PanelReadStatus::BadPath);
+        EXPECT_EQ(writer.WriteRowNumber(sources, BindNumbers("rows"), 2, "small", 1.0), PanelReadStatus::NoRow);
+        EXPECT_EQ(writer.WriteRowBool(sources, BindNumbers("rows"), 0, "nope", true), PanelReadStatus::BadPath);
+        EXPECT_EQ(writer.WriteRowEnumIndex(sources, BindNumbers("i32"), 0, "level", 1), PanelReadStatus::NotAList);
+
+        current = nullptr;
+        EXPECT_EQ(writer.WriteNumber(sources, BindNumbers("i32"), 1.0), PanelReadStatus::NoObject);
+        EXPECT_EQ(writer.WriteRowBool(sources, BindNumbers("rows"), 0, "flag", true), PanelReadStatus::NoObject);
+    }
+
+    TEST_F(PanelBindingNumbersTest, AConstSourceObjectIsNotWritten) {
+        const PanelProbeNumbers& frozen = values;
+        current = nullptr;
+        const PanelSourceHandle constHandle = sources.Register(kNumbersSource, [&frozen] { return TypedRef::Of(frozen); });
+        const auto before = Scalars(values);
+
+        EXPECT_EQ(writer.WriteNumber(sources, BindNumbers("i32"), 99.0), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteBool(sources, BindNumbers("flag"), true), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteEnumIndex(sources, BindNumbers("level"), 1), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteNumber(sources, BindNumbers("inner.ratio"), 1.0), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteRowNumber(sources, BindNumbers("rows"), 0, "small", 1.0), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteRowBool(sources, BindNumbers("rows"), 0, "flag", true), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteRowEnumIndex(sources, BindNumbers("rows"), 0, "level", 1), PanelReadStatus::WrongType);
+        EXPECT_EQ(writer.WriteRowNumber(sources, BindNumbers("numbers"), 0, "", 9.0), PanelReadStatus::WrongType);
+        EXPECT_EQ(Scalars(values), before);
+    }
+
+    TEST_F(PanelBindingNumbersTest, ASteadyWriteOfEveryKindAllocatesNothing) {
+        const PanelBinding flag = BindNumbers("flag");
+        const PanelBinding count = BindNumbers("i32");
+        const PanelBinding level = BindNumbers("level");
+        const PanelBinding rows = BindNumbers("rows");
+
+        const auto writeAll = [&] {
+            EXPECT_EQ(writer.WriteBool(sources, flag, true), PanelReadStatus::Ok);
+            EXPECT_EQ(writer.WriteNumber(sources, count, 5.0), PanelReadStatus::Ok);
+            EXPECT_EQ(writer.WriteEnumIndex(sources, level, 2), PanelReadStatus::Ok);
+            EXPECT_EQ(writer.WriteRowBool(sources, rows, 1, "flag", true), PanelReadStatus::Ok);
+            EXPECT_EQ(writer.WriteRowNumber(sources, rows, 1, "ratio", 0.5), PanelReadStatus::Ok);
+            EXPECT_EQ(writer.WriteRowEnumIndex(sources, rows, 1, "level", 3), PanelReadStatus::Ok);
+        };
+        writeAll();
+        const size_t compiled = reader.CompiledCount();
 
         ExpectNoAllocations(writeAll);
         EXPECT_EQ(reader.CompiledCount(), compiled);

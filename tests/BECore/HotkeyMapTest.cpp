@@ -214,4 +214,27 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(HotkeyMapTest, TheRevisionMovesWithEveryChangeOfAChordAndNotWithARefusal) {
+        HotkeyMap map;
+        uint64_t revision = map.Revision();
+
+        ASSERT_EQ(map.Assign(kViewCommandPalette, kCtrlK).status, AssignStatus::Assigned);
+        EXPECT_NE(map.Revision(), revision);
+        revision = map.Revision();
+
+        EXPECT_EQ(map.Assign(kViewCommandPalette, kCtrlShiftE).status, AssignStatus::NotAllowed);
+        EXPECT_EQ(map.Revision(), revision);
+
+        EXPECT_TRUE(map.Unbind(kViewCommandPalette));
+        EXPECT_NE(map.Revision(), revision);
+        revision = map.Revision();
+
+        map.ResetAll();
+        EXPECT_NE(map.Revision(), revision);
+        revision = map.Revision();
+
+        // A map that replaces another one (a load) never repeats a revision the old one went through
+        EXPECT_NE(HotkeyMap().Revision(), revision);
+    }
+
 }  // namespace BECore::Tests

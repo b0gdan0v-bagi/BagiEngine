@@ -7,6 +7,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Widgets/PanelAssets/PanelAssetLimits.h>
 #include <BECore/Widgets/PanelAssets/PanelBinding.h>
+#include <BECore/Widgets/PanelAssets/PanelCondition.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <cmath>
 
@@ -86,8 +87,9 @@ namespace BECore {
             Validator(const PanelValidationContext& context, Vector<PanelIssue>& issues) : _context(context), _issues(issues) {}
 
             void Run(const PanelAsset& asset) {
+                _window = asset.window;
                 CheckAsset(asset);
-                WalkElements(asset.elements, "elements", 1);
+                WalkElements(asset.elements, "elements", 1, nullptr);
             }
 
         private:
@@ -99,6 +101,10 @@ namespace BECore {
                 }
                 if (asset.width < 0.0f || asset.height < 0.0f) {
                     _issues.Add(where, "width and height must not be negative");
+                }
+                Binding(where, "titleBind", asset.titleBind, false);
+                if ((asset.window == PanelWindowKind::Dialogs || asset.window == PanelWindowKind::Bar) && !asset.open) {
+                    _issues.Add(where, Format("a {} window is always open: it needs open=\"true\"", EnumUtils<PanelWindowKind>::ToString(asset.window)));
                 }
                 if (asset.sources.size() > PanelAssetLimits::kMaxSources) {
                     _issues.Add(where, Format("more than {} sources", PanelAssetLimits::kMaxSources));
@@ -118,7 +124,7 @@ namespace BECore {
                 }
             }
 
-            void WalkElements(const Vector<IntrusivePtr<PanelElement>>& list, StringView parentPath, size_t depth) {
+            void WalkElements(const Vector<IntrusivePtr<PanelElement>>& list, StringView parentPath, size_t depth, const PanelElement* parent) {
                 if (list.empty()) {
                     return;
                 }
@@ -138,15 +144,21 @@ namespace BECore {
                     }
                     const String path = Format("{}[{}]", parentPath, i);
                     const String where = IsValidId(element->id) ? element->id : path;
-                    CheckElement(*element, where);
+                    CheckElement(*element, where, parent);
                     const bool isPopup = element->Is<PanelPopup>();
+                    const bool isMenu = element->Is<PanelMenu>();
+                    const bool isDropdown = element->Is<PanelDropdown>();
                     _popupDepth += isPopup ? 1 : 0;
-                    WalkElements(element->elements, Format("{}.elements", path), depth + 1);
+                    _menuDepth += isMenu ? 1 : 0;
+                    _dropdownDepth += isDropdown ? 1 : 0;
+                    WalkElements(element->elements, Format("{}.elements", path), depth + 1, element);
                     _popupDepth -= isPopup ? 1 : 0;
+                    _menuDepth -= isMenu ? 1 : 0;
+                    _dropdownDepth -= isDropdown ? 1 : 0;
                 }
             }
 
-            void CheckElement(const PanelElement& element, StringView where) {
+            void CheckElement(const PanelElement& element, StringView where, const PanelElement* parent) {
                 CheckTexts(element, where);
                 if (!IsValidId(element.id)) {
                     _issues.Add(where, Format("id must be {} to {} characters of A-Z a-z 0-9 _ . -", PanelAssetLimits::kMinIdBytes, PanelAssetLimits::kMaxIdBytes));
@@ -154,18 +166,22 @@ namespace BECore {
                     _issues.Add(where, Format("id '{}' is used twice", element.id));
                 }
                 Condition(where, "visible", element.visible);
+                Binding(where, "tooltipBind", element.tooltipBind, false);
 
                 // An element with no `type` loads as the base class without a reader finding, and writes `type="PanelElement"`, which is no kind
                 if (element.GetTypeMeta().typeName == kBaseElementType) {
                     _issues.Add(where, "type is required");
                 }
 
-                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>();
+                const bool isContainer = element.Is<PanelSection>() || element.Is<PanelRow>() || element.Is<PanelChild>() || element.Is<PanelPopup>() || element.Is<PanelDropdown>() ||
+                                         element.Is<PanelTabs>() || element.Is<PanelTab>() || element.Is<PanelMenu>();
                 if (!isContainer && !element.elements.empty()) {
-                    _issues.Add(where, "only a section, a row, a child or a popup holds elements");
+                    _issues.Add(where, "only a section, a row, a child, a popup, a dropdown, a tab bar, a tab or a menu holds elements");
                 }
 
-                if (const auto* text = element.Cast<PanelText>()) {
+                if (const auto* section = element.Cast<PanelSection>()) {
+                    Binding(where, "openBind", section->openBind, false);
+                } else if (const auto* text = element.Cast<PanelText>()) {
                     if (text->text.empty() && text->bind.empty()) {
                         _issues.Add(where, "a text needs 'text' or 'bind'");
                     }
@@ -180,10 +196,53 @@ namespace BECore {
                     if (input->width < 0.0f) {
                         _issues.Add(where, "width must not be negative");
                     }
+                    OptionalCommand(where, "submitCommand", input->submitCommand);
+                    OptionalCommand(where, "commitCommand", input->commitCommand);
+                    Condition(where, "enableWhen", input->enableWhen);
+                    if (input->focus && _popupDepth == 0) {
+                        _issues.Add(where, "focus is for an input inside a popup");
+                    }
+                    ScrollLimit(where, "lines", input->lines, PanelAssetLimits::kMaxInputLines);
+                    if (input->lines > 0 && !input->submitCommand.empty()) {
+                        _issues.Add(where, "a multiline input has no submitCommand: Enter is a new line there");
+                    }
+                } else if (const auto* checkbox = element.Cast<PanelCheckbox>()) {
+                    Binding(where, "bind", checkbox->bind, true);
+                    Binding(where, "labelBind", checkbox->labelBind, false);
+                    if (checkbox->text.empty() && checkbox->labelBind.empty()) {
+                        _issues.Add(where, "a checkbox needs 'text' or 'labelBind'");
+                    }
+                    Condition(where, "enableWhen", checkbox->enableWhen);
+                } else if (const auto* combo = element.Cast<PanelCombo>()) {
+                    CheckCombo(*combo, where);
+                } else if (const auto* number = element.Cast<PanelNumber>()) {
+                    CheckNumber(*number, where);
+                } else if (const auto* radio = element.Cast<PanelRadio>()) {
+                    CheckRadio(*radio, where);
                 } else if (const auto* button = element.Cast<PanelButton>()) {
                     Command(where, "command", button->command);
                     Condition(where, "enableWhen", button->enableWhen);
-                    RelativePath(where, "argument", button->argument);
+                    Condition(where, "fillWhen", button->fillWhen);
+                    if (!button->fillWhen.empty() && button->fill == PanelButtonFill::None) {
+                        _issues.Add(where, "fillWhen needs a fill");
+                    }
+                    Literal(where, "argument", button->argument);
+                    if (button->width != kPanelFillLineWidth && !IsExtent(button->width)) {
+                        _issues.Add(where, Format("width must be {} (the rest of the line) or from 0 to {}", kPanelFillLineWidth, PanelAssetLimits::kMaxChildExtent));
+                    }
+                    if (button->closePopup && _dropdownDepth == 0) {
+                        _issues.Add(where, "closePopup is for a button inside a dropdown");
+                    }
+                } else if (const auto* progress = element.Cast<PanelProgress>()) {
+                    Binding(where, "bind", progress->bind, true);
+                    Binding(where, "textBind", progress->textBind, false);
+                    Extent(where, "width", progress->width);
+                } else if (const auto* menu = element.Cast<PanelMenu>()) {
+                    CheckMenu(*menu, where);
+                } else if (const auto* item = element.Cast<PanelMenuItem>()) {
+                    CheckMenuItem(*item, where, parent);
+                } else if (const auto* items = element.Cast<PanelMenuItems>()) {
+                    CheckMenuItems(*items, where, parent);
                 } else if (const auto* table = element.Cast<PanelTable>()) {
                     Binding(where, "source", table->source, true);
                     ScrollLimit(where, "scrollRows", table->scrollRows, PanelAssetLimits::kMaxScrollRows);
@@ -197,7 +256,166 @@ namespace BECore {
                     Extent(where, "height", child->height);
                 } else if (const auto* popup = element.Cast<PanelPopup>()) {
                     CheckPopup(*popup, where);
+                } else if (const auto* dropdown = element.Cast<PanelDropdown>()) {
+                    CheckDropdown(*dropdown, where);
+                } else if (const auto* tabs = element.Cast<PanelTabs>()) {
+                    CheckTabs(*tabs, where);
+                } else if (const auto* tab = element.Cast<PanelTab>()) {
+                    CheckTab(*tab, where, parent);
                 }
+            }
+
+            void CheckTabs(const PanelTabs& tabs, StringView where) {
+                if (tabs.elements.empty()) {
+                    _issues.Add(where, "a tab bar needs tabs");
+                }
+                if (tabs.elements.size() > PanelAssetLimits::kMaxTabsPerBar) {
+                    _issues.Add(where, Format("more than {} tabs in a bar", PanelAssetLimits::kMaxTabsPerBar));
+                }
+                for (const IntrusivePtr<PanelElement>& child : tabs.elements) {
+                    if (child != nullptr && !child->Is<PanelTab>()) {
+                        _issues.Add(where, "a tab bar holds only tabs");
+                        return;
+                    }
+                }
+            }
+
+            void CheckTab(const PanelTab& tab, StringView where, const PanelElement* parent) {
+                if (parent == nullptr || !parent->Is<PanelTabs>()) {
+                    _issues.Add(where, "a tab belongs in a tab bar");
+                }
+                if (tab.title.empty()) {
+                    _issues.Add(where, "title is required");
+                }
+                if (++_tabCount == PanelAssetLimits::kMaxTabs + 1) {
+                    _issues.Add(where, Format("more than {} tabs in all", PanelAssetLimits::kMaxTabs));
+                }
+            }
+
+            void CheckMenu(const PanelMenu& menu, StringView where) {
+                if (_window != PanelWindowKind::Bar) {
+                    _issues.Add(where, "a menu belongs in a Bar window");
+                }
+                if (menu.title.empty()) {
+                    _issues.Add(where, "title is required");
+                }
+                Condition(where, "enableWhen", menu.enableWhen);
+                OptionalCommand(where, "openCommand", menu.openCommand);
+                // Reported once, at the first level over the limit: a deeper menu is over it too
+                if (_menuDepth == PanelAssetLimits::kMaxMenuDepth) {
+                    _issues.Add(where, Format("menus nested deeper than {} levels", PanelAssetLimits::kMaxMenuDepth));
+                }
+                if (++_menuCount == PanelAssetLimits::kMaxMenus + 1) {
+                    _issues.Add(where, Format("more than {} menus", PanelAssetLimits::kMaxMenus));
+                }
+                for (const IntrusivePtr<PanelElement>& child : menu.elements) {
+                    if (child != nullptr && !IsMenuChild(*child)) {
+                        _issues.Add(where, "a menu holds only menus, items, separators and texts");
+                        return;
+                    }
+                }
+            }
+
+            static bool IsMenuChild(const PanelElement& element) {
+                return element.Is<PanelMenu>() || element.Is<PanelMenuItem>() || element.Is<PanelMenuItems>() || element.Is<PanelSeparator>() || element.Is<PanelText>();
+            }
+
+            void CheckMenuItem(const PanelMenuItem& item, StringView where, const PanelElement* parent) {
+                if (parent == nullptr || !parent->Is<PanelMenu>()) {
+                    _issues.Add(where, "a menu item belongs in a menu");
+                }
+                if (item.text.empty()) {
+                    _issues.Add(where, "text is required");
+                }
+                Command(where, "command", item.command);
+                Condition(where, "enableWhen", item.enableWhen);
+                Literal(where, "argument", item.argument);
+            }
+
+            void CheckMenuItems(const PanelMenuItems& items, StringView where, const PanelElement* parent) {
+                if (parent == nullptr || !parent->Is<PanelMenu>()) {
+                    _issues.Add(where, "menu items belong in a menu");
+                }
+                Binding(where, "source", items.source, true);
+                RelativePath(where, "itemField", items.itemField);
+                Command(where, "command", items.command);
+            }
+
+            void CheckCombo(const PanelCombo& combo, StringView where) {
+                Binding(where, "bind", combo.bind, true);
+                Binding(where, "items", combo.items, false);
+                if (combo.items.empty() && !combo.itemField.empty()) {
+                    _issues.Add(where, "itemField needs items");
+                }
+                RelativePath(where, "itemField", combo.itemField);
+                if (combo.items.empty() && !combo.separatorField.empty()) {
+                    _issues.Add(where, "separatorField needs items");
+                }
+                RelativePath(where, "separatorField", combo.separatorField);
+                if (combo.items.empty() && !combo.enableField.empty()) {
+                    _issues.Add(where, "enableField needs items");
+                }
+                RelativePath(where, "enableField", combo.enableField);
+                if (combo.items.empty() && !combo.tooltipField.empty()) {
+                    _issues.Add(where, "tooltipField needs items");
+                }
+                RelativePath(where, "tooltipField", combo.tooltipField);
+                Binding(where, "previewBind", combo.previewBind, false);
+                Extent(where, "width", combo.width);
+                Condition(where, "enableWhen", combo.enableWhen);
+            }
+
+            void CheckNumber(const PanelNumber& number, StringView where) {
+                Binding(where, "bind", number.bind, true);
+                Extent(where, "width", number.width);
+                OptionalCommand(where, "commitCommand", number.commitCommand);
+                Condition(where, "enableWhen", number.enableWhen);
+                if (number.input && number.slider) {
+                    _issues.Add(where, "a number is a slider or an input, not both");
+                }
+                if (number.stepper && (number.slider || number.input)) {
+                    _issues.Add(where, "a stepper is neither a slider nor an input");
+                }
+                // Every limit is written as a comparison that a NaN fails
+                const auto inRange = [](float value, float lowest) { return value >= lowest && value <= PanelAssetLimits::kMaxNumberExtent; };
+                const bool minOk = inRange(number.min, -PanelAssetLimits::kMaxNumberExtent);
+                const bool maxOk = inRange(number.max, -PanelAssetLimits::kMaxNumberExtent);
+                if (!minOk || !maxOk) {
+                    _issues.Add(where, Format("min and max must be from -{} to {}", PanelAssetLimits::kMaxNumberExtent, PanelAssetLimits::kMaxNumberExtent));
+                } else if (number.min > number.max) {
+                    _issues.Add(where, "min must not be above max");
+                } else if (number.slider && !(number.min < number.max)) {
+                    _issues.Add(where, "a slider needs min below max");
+                }
+                if (!inRange(number.step, 0.0f)) {
+                    _issues.Add(where, Format("step must be from 0 to {}", PanelAssetLimits::kMaxNumberExtent));
+                }
+                if (!inRange(number.stepFast, 0.0f)) {
+                    _issues.Add(where, Format("stepFast must be from 0 to {}", PanelAssetLimits::kMaxNumberExtent));
+                } else if (number.stepFast != 0.0f && !number.stepper) {
+                    _issues.Add(where, "stepFast needs stepper");
+                }
+                if (number.decimals > PanelAssetLimits::kMaxNumberDecimals) {
+                    _issues.Add(where, Format("decimals must be at most {}", PanelAssetLimits::kMaxNumberDecimals));
+                }
+                Literal(where, "unit", number.unit);
+            }
+
+            void CheckRadio(const PanelRadio& radio, StringView where) {
+                Binding(where, "bind", radio.bind, true);
+                if (radio.value.empty()) {
+                    _issues.Add(where, "value is required");
+                } else if (radio.value.size() <= PanelAssetLimits::kMaxTextBytes) {  // past the limit it is reported by CheckTexts
+                    PanelConditionTerm term;
+                    term.compare = PanelCompare::Equal;
+                    if (const auto literal = ParsePanelConditionLiteral(radio.value, term); !literal) {
+                        _issues.Add(where, Format("value: {}", literal.error()));
+                    }
+                }
+                if (radio.text.empty() && radio.icon.empty()) {
+                    _issues.Add(where, "a radio needs 'text' or 'icon'");
+                }
+                Condition(where, "enableWhen", radio.enableWhen);
             }
 
             void CheckPopup(const PanelPopup& popup, StringView where) {
@@ -206,11 +424,32 @@ namespace BECore {
                 } else {
                     Condition(where, "open", popup.open);
                 }
+                OptionalCommand(where, "closeCommand", popup.closeCommand);
                 if (_popupDepth > 0) {
                     _issues.Add(where, "a popup is not nested in a popup");
                 }
+                if (_dropdownDepth > 0) {
+                    _issues.Add(where, "a popup is not nested in a dropdown");
+                }
                 if (++_popupCount == PanelAssetLimits::kMaxPopups + 1) {
                     _issues.Add(where, Format("more than {} popups", PanelAssetLimits::kMaxPopups));
+                }
+            }
+
+            void CheckDropdown(const PanelDropdown& dropdown, StringView where) {
+                if (dropdown.text.empty() && dropdown.icon.empty()) {
+                    _issues.Add(where, "a dropdown needs 'text' or 'icon'");
+                }
+                Condition(where, "enableWhen", dropdown.enableWhen);
+                OptionalCommand(where, "openCommand", dropdown.openCommand);
+                if (_dropdownDepth > 0) {
+                    _issues.Add(where, "a dropdown is not nested in a dropdown");
+                }
+                if (_popupDepth > 0) {
+                    _issues.Add(where, "a dropdown is not nested in a popup");
+                }
+                if (++_dropdownCount == PanelAssetLimits::kMaxDropdowns + 1) {
+                    _issues.Add(where, Format("more than {} dropdowns", PanelAssetLimits::kMaxDropdowns));
                 }
             }
 
@@ -247,7 +486,12 @@ namespace BECore {
                         _issues.Add(where, "selectedField is for a Selectable column");
                     }
                     RelativePath(where, "selectedField", column.selectedField);
+                    if (column.type != PanelColumnType::Checkbox && !column.labelField.empty()) {
+                        _issues.Add(where, "labelField is for a Checkbox column");
+                    }
+                    RelativePath(where, "labelField", column.labelField);
                     RelativePath(where, "argument", column.argument);
+                    RelativePath(where, "tooltipField", column.tooltipField);
                 }
             }
 
@@ -297,8 +541,12 @@ namespace BECore {
                 }
             }
 
+            static bool IsExtent(float value) {
+                return std::isfinite(value) && value >= 0.0f && value <= PanelAssetLimits::kMaxChildExtent;
+            }
+
             void Extent(StringView where, StringView field, float value) {
-                if (!std::isfinite(value) || value < 0.0f || value > PanelAssetLimits::kMaxChildExtent) {
+                if (!IsExtent(value)) {
                     _issues.Add(where, Format("{} must be from 0 to {}", field, PanelAssetLimits::kMaxChildExtent));
                 }
             }
@@ -307,7 +555,7 @@ namespace BECore {
                 if (text.empty()) {
                     return;
                 }
-                if (const auto parsed = ParseCondition(text); !parsed) {
+                if (const auto parsed = ParsePanelCondition(text); !parsed) {
                     _issues.Add(where, Format("{}: {}", field, parsed.error()));
                 }
             }
@@ -324,11 +572,28 @@ namespace BECore {
                 }
             }
 
+            /// A text that goes to the model as it is: `CheckTexts` checks its length, this only what would break a log line or a command
+            void Literal(StringView where, StringView field, const String& text) {
+                for (const char c : text) {
+                    const auto byte = static_cast<uint8_t>(c);
+                    if (byte < kFirstPrintable || byte == kDelete) {
+                        _issues.Add(where, Format("{} must not hold a control character", field));
+                        return;
+                    }
+                }
+            }
+
             void Command(StringView where, StringView field, const String& command) {
                 if (command.empty()) {
                     _issues.Add(where, Format("{} is required", field));
                 } else if (_context.isKnownCommand && !(*_context.isKnownCommand)(command)) {
                     _issues.Add(where, Format("{}: unknown command '{}'", field, command));
+                }
+            }
+
+            void OptionalCommand(StringView where, StringView field, const String& command) {
+                if (!command.empty()) {
+                    Command(where, field, command);
                 }
             }
 
@@ -339,6 +604,12 @@ namespace BECore {
             size_t _columnCount = 0;
             size_t _popupCount = 0;
             size_t _popupDepth = 0;
+            size_t _tabCount = 0;
+            size_t _menuCount = 0;
+            size_t _menuDepth = 0;
+            size_t _dropdownCount = 0;
+            size_t _dropdownDepth = 0;
+            PanelWindowKind _window = PanelWindowKind::Docked;
             bool _columnsReported = false;
             bool _stopped = false;
         };

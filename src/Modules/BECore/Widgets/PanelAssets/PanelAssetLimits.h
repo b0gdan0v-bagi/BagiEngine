@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace BECore::PanelAssetLimits {
 
@@ -24,14 +25,37 @@ namespace BECore::PanelAssetLimits {
     inline constexpr size_t kMaxScrollLines = 64;
     inline constexpr size_t kMaxScrollRows = 64;
 
+    /// Lines of a multiline input (`PanelInput::lines`): the height a file may ask for
+    inline constexpr size_t kMaxInputLines = 32;
+
     /// em of a child region's `width` and `height`: what a file may ask for
     inline constexpr float kMaxChildExtent = 256.0f;
+
+    /// What a number control may be asked for: `min`, `max` and `step` of a `PanelNumber` lie within plus and minus this
+    inline constexpr float kMaxNumberExtent = 1.0e9f;
+
+    /// Digits after the point a `PanelNumber` may ask for (`decimals`)
+    inline constexpr uint32_t kMaxNumberDecimals = 6;
 
     /// Popups of one asset; a popup is modal and none holds another
     inline constexpr size_t kMaxPopups = 8;
 
+    /// Dropdowns of one asset; none holds another or sits in a popup
+    inline constexpr size_t kMaxDropdowns = 16;
+
+    /// Menus of one asset, submenus included, and the levels of menus inside one another (a menu of the bar is level 1)
+    inline constexpr size_t kMaxMenus = 32;
+    inline constexpr size_t kMaxMenuDepth = 4;
+
+    /// Tabs of one tab bar and of the whole asset
+    inline constexpr size_t kMaxTabsPerBar = 16;
+    inline constexpr size_t kMaxTabs = 32;
+
     /// Bytes of one text field (a title, a text, a binding, a command)
     inline constexpr size_t kMaxTextBytes = 512;
+
+    /// Terms of one condition (`visible`, `enableWhen`, `open`): a few options joined by `and` / `or`
+    inline constexpr size_t kMaxConditionTerms = 8;
 
     /// Bytes of an `id`: 1 to this many of `[A-Za-z0-9_.-]`
     inline constexpr size_t kMinIdBytes = 1;

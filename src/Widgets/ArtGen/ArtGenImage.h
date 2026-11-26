@@ -31,6 +31,8 @@ namespace BECore {
         static constexpr int32_t kMaxMaxSize = 4096;
         static constexpr int32_t kDefaultPadding = 2;
         static constexpr int32_t kDefaultMaxSize = 256;
+        /// The Max size choices of the panel, smallest first after 0 (no downscale); a file may say another value in the limits
+        static constexpr Array<int32_t, 7> kMaxSizeOptions{0, 64, 128, 256, 512, 1024, 2048};
 
         bool trim = true;                   // cut to the drawn box
         int32_t padding = kDefaultPadding;  // percent of the box's longer side, on every side

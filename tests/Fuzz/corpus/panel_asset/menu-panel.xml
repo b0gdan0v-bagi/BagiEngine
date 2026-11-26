@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<PanelAsset id="Menus" title="Menus" window="Bar" open="true">
+  <sources>
+    <item name="menu" model="MainMenuModel"/>
+  </sources>
+  <elements>
+    <element type="PanelMenu" id="file" title="File">
+      <elements>
+        <element type="PanelMenuItem" id="quit" text="Quit" icon="log-out" command="file.quit"/>
+      </elements>
+    </element>
+    <element type="PanelMenu" id="layouts" title="Layouts" enableWhen="menu.hasStore" openCommand="layouts.menuOpened">
+      <elements>
+        <element type="PanelText" id="none" text="No saved layouts" style="Disabled" visible="!menu.hasLayouts"/>
+        <element type="PanelMenuItems" id="saved" source="menu.layouts" command="layouts.load"/>
+        <element type="PanelSeparator" id="line"/>
+        <element type="PanelMenu" id="delete" title="Delete Layout" enableWhen="menu.hasLayouts">
+          <elements>
+            <element type="PanelMenuItems" id="doomed" source="menu.layouts" command="layouts.delete" icon="trash-2"/>
+          </elements>
+        </element>
+        <element type="PanelMenuItem" id="reset" text="Reset to Defaults" command="view.resetLayout" argument="all" enableWhen="menu.hasStore and menu.hasLayouts"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

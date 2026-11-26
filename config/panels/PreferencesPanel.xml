@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<PanelAsset id="Preferences" title="Preferences" command="view.preferences" open="false" window="Floating" width="560" height="460">
+  <sources>
+    <item name="prefs" model="PreferencesPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelTabs" id="tabs">
+      <elements>
+        <element type="PanelTab" id="general" title="General">
+          <elements>
+            <element type="PanelNumber" id="fontScale" bind="prefs.fontScale" text="Font scale" min="0.75" max="2" slider="true" width="16" commitCommand="preferences.commit" tooltip="The size of the editor's text and controls; applied while you drag"/>
+            <element type="PanelSeparator" id="viewportTitle" title="Viewport"/>
+            <element type="PanelCheckbox" id="viewportGrid" bind="prefs.viewportGrid" text="Show a grid over the image"/>
+            <element type="PanelNumber" id="viewportGridStep" bind="prefs.viewportGridStep" text="Grid step (image pixels)" min="4" max="256" slider="true" width="16" commitCommand="preferences.commit" visible="prefs.viewportGrid"/>
+            <element type="PanelSeparator" id="consoleTitle" title="Console"/>
+            <element type="PanelText" id="externalEditorLabel" text="Open files with"/>
+            <element type="PanelInput" id="externalEditor" bind="prefs.externalEditor" hint="code -g {file}:{line}" width="24" commitCommand="preferences.commit" tooltip="The program that opens a file of the log. {file} and {line} are replaced inside an argument; quotes keep an&#10;argument together. Empty: the system's program for the file, without the line.&#10;On Windows a .cmd tool needs cmd /c code -g {file}:{line}"/>
+            <element type="PanelText" id="notSaved" bind="prefs.message" style="Warning" visible="prefs.hasError"/>
+          </elements>
+        </element>
+        <element type="PanelTab" id="hotkeys" title="Hotkeys">
+          <elements>
+            <element type="PanelTable" id="rows" source="prefs.hotkeyRows" scrollRows="10">
+              <columns>
+                <item type="Text" id="title" title="Command" field="title"/>
+                <item type="Text" id="chord" title="Shortcut" field="chordText" styleField="chordStyle"/>
+                <item type="Button" id="rebind" icon="pencil" tooltip="Rebind: press a new shortcut for this command" command="preferences.rebind" argument="id" enableField="canRebind"/>
+                <item type="Button" id="clear" icon="x" tooltip="Clear: remove the shortcut" command="preferences.clear" argument="id" enableField="canClear"/>
+                <item type="Button" id="reset" icon="rotate-ccw" tooltip="Reset: back to the default shortcut" command="preferences.reset" argument="id" enableField="canReset"/>
+              </columns>
+            </element>
+            <element type="PanelButton" id="resetAll" text="Reset all" command="preferences.resetAll" tooltip="Back to the default shortcuts for every command"/>
+            <element type="PanelText" id="hotkeysMessage" bind="prefs.hotkeysMessage" style="Warning" visible="prefs.hasHotkeysMessage"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="rebind" title="Rebind Shortcut" open="prefs.rebindOpen" closeCommand="preferences.cancelRebind">
+      <elements>
+        <element type="PanelChild" id="capturing" width="28" height="3.5" visible="!prefs.inConflict">
+          <elements>
+            <element type="PanelText" id="prompt" bind="prefs.rebindText" wrap="true"/>
+            <element type="PanelText" id="refusal" bind="prefs.refusal" style="Warning" wrap="true" visible="prefs.hasRefusal"/>
+          </elements>
+        </element>
+        <element type="PanelChild" id="conflict" width="28" height="3.5" visible="prefs.inConflict">
+          <elements>
+            <element type="PanelText" id="conflictText" bind="prefs.conflictText" wrap="true"/>
+          </elements>
+        </element>
+        <element type="PanelRow" id="buttons">
+          <elements>
+            <element type="PanelButton" id="swap" text="Swap" command="preferences.swap" visible="prefs.inConflict"/>
+            <element type="PanelButton" id="cancel" text="Cancel" command="preferences.cancelRebind" navigable="false"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

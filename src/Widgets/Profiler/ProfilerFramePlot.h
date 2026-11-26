@@ -3,8 +3,17 @@
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Ring/RingSnapshot.h>
 #include <BECore/Profiler/Ring/ZoneStats.h>
+#include <BECore/Utils/EnumUtils.h>
 
 namespace BECore {
+
+    struct ProfilerPanelView;
+
+    /// The preset budgets of the plot; `Custom` is a field of its own
+    CORE_ENUM(ProfilerBudget, uint8_t, Fps60, Fps30, Custom)
+
+    /// What a bar shows: the frame time, or its split into the stages of `ExclusiveStageMs`
+    CORE_ENUM(ProfilerBarMode, uint8_t, FrameTime, StageSplit)
 
     /**
      * @brief The frame time bars of the Profiler panel: one bar per frame of the collector's history, colored by the budget, with the
@@ -14,21 +23,26 @@ namespace BECore {
      * display) out of the bar and of its scale, and a line under the plot gives the mean work and the mean wait. The counters a frame
      * carries (FrameStats::counters) can be picked and drawn as line graphs over the same frames.
      *
-     * Editor only. The budget (16.6 ms, 33.3 ms or a custom value) is a field of the plot for the run, not saved.
+     * Editor only. The budget, the bar mode and "Work only" are the panel asset's controls (`ProfilerPanelView`); the plot is handed them as `Settings`.
      */
     class ProfilerFramePlot {
     public:
         static constexpr double kBudget60Ms = 1000.0 / 60.0;
         static constexpr double kBudget30Ms = 1000.0 / 30.0;
 
+        /// How the bars are read; the panel asset's controls write them into the model's view (`PlotSettingsOf`)
+        struct Settings {
+            double budgetMs = kBudget60Ms;
+            ProfilerBarMode barMode = ProfilerBarMode::FrameTime;
+            bool workOnly = false;
+        };
+
         /**
-         * @brief Draws the budget controls and the bars. @p history is the collector's history (oldest first) and @p snapshot the ring
-         * taken together with it; @p selectedFrame (a RingFrame::index) is outlined.
+         * @brief Draws the bars with the stage legend, the work / wait summary and the counters. @p history is the collector's history (oldest first)
+         * and @p snapshot the ring taken together with it; @p selectedFrame (a RingFrame::index) is outlined.
          * @return The RingFrame::index of the frame that was clicked, none when the click missed or the bar has no frame in the ring
          */
-        [[nodiscard]] Optional<uint64_t> Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
-
-        [[nodiscard]] double GetBudgetMs() const;
+        [[nodiscard]] Optional<uint64_t> DrawBars(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame, const Settings& settings);
 
         /**
          * @brief The position in RingSnapshot::frames of the frame that bar @p barIndex of @p barCount stands for, none when the ring is
@@ -41,17 +55,9 @@ namespace BECore {
         [[nodiscard]] static Optional<size_t> RingFramePosition(size_t barIndex, size_t barCount, size_t ringFrameCount);
 
     private:
-        enum class Budget : int { Fps60, Fps30, Custom };
-        enum class BarMode : int { FrameTime, StageSplit };
-
-        void DrawStageLegend() const;
+        void DrawStageLegend(bool workOnly) const;
         void DrawWorkWaitSummary(const Vector<FrameStats>& history);
         void DrawCounters(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame);
-
-        Budget _budget = Budget::Fps60;
-        float _customBudgetMs = 20.0f;
-        BarMode _barMode = BarMode::FrameTime;
-        bool _workOnly = false;
 
         // Kept as members so a steady panel allocates nothing: the names are rebuilt when the newest frame number moves
         Vector<PoolString> _counterNames;
@@ -66,5 +72,10 @@ namespace BECore {
         size_t _summaryFrameCount = 0;
         bool _summaryBuilt = false;
     };
+
+    /// The budget the view's combo (and its custom field) says, in ms
+    [[nodiscard]] double BudgetMs(const ProfilerPanelView& view);
+
+    [[nodiscard]] ProfilerFramePlot::Settings PlotSettingsOf(const ProfilerPanelView& view);
 
 }  // namespace BECore

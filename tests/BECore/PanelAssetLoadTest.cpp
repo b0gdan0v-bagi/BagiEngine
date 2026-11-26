@@ -172,7 +172,51 @@ namespace BECore::Tests {
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files.x["/>)", "t", "visible: bad path");
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="1a.x"/>)", "t", "source name");
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files."/>)", "t", "path after the source is empty");
-        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" argument="a["/>)", "b", "argument: bad path");
+    }
+
+    TEST(PanelAssetLoadTest, AButtonArgumentIsALiteralAndItsWidthAnExtent) {
+        // `a[` is no path, and a button has no row to read one from: it is only text
+        const PanelLoadResult literal = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelButton" id="b" command="c.d" argument="a[" width="9"/>)")));
+        EXPECT_TRUE(literal.issues.empty()) << Joined(literal.issues);
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" argument="a&#10;b"/>)", "b", "argument must not hold a control character");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" width="-2"/>)", "b", "width must be -1 (the rest of the line) or from 0 to");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" width="-0.5"/>)", "b", "width must be -1 (the rest of the line) or from 0 to");
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelButton" id="b" command="c.d" argument="{}"/>)", String(PanelAssetLimits::kMaxTextBytes + 1, 'a'))), "b", "argument is longer than");
+        ExpectSingleIssue(R"(<element type="PanelTable" id="t" source="a.b"><columns><column id="c" type="Button" command="c.d" argument="a["/></columns></element>)", "t.c", "argument: bad path");
+    }
+
+    TEST(PanelAssetLoadTest, AButtonFillAndItsConditionAreChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelRow" id="r" align="Center"><elements>
+                 <element type="PanelButton" id="a" icon="pause" command="c.d" fill="Muted" fillWhen="files.paused and files.n &gt; 1" repeat="true"/>
+                 <element type="PanelButton" id="b" icon="play" command="c.d" fill="Accent"/>
+               </elements></element>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" fill="Accent" fillWhen="files.a and"/>)", "b", "fillWhen: a term is missing after 'and'");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" fillWhen="files.a"/>)", "b", "fillWhen needs a fill");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" fill="Primary"/>)", "elements[0].fill", "Invalid enum value: 'Primary'");
+        ExpectSingleIssue(R"(<element type="PanelRow" id="r" align="Middle"/>)", "elements[0].align", "Invalid enum value: 'Middle'");
+    }
+
+    TEST(PanelAssetLoadTest, ConditionExpressionsAreChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelText" id="a" text="x" visible="files.running and files.count &gt;= 2 or files.mode == Busy"/>
+               <element type="PanelButton" id="b" command="c.d" enableWhen="!files.a or files.b != 3"/>
+               <element type="PanelPopup" id="p" open="files.n == 1 or files.n == 2"/>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files.a and"/>)", "t", "visible: a term is missing after 'and'");
+        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files.a==1"/>)", "t", "visible: bad path");
+        ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x" visible="files.mode &lt; Busy"/>)", "t", "visible: an order compare takes a number");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="b" command="c.d" enableWhen="!files.a == 1"/>)", "b", "enableWhen: '!' cannot be combined with a compare");
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="files.a or"/>)", "p", "open: a term is missing after 'or'");
+
+        String terms = "files.a";
+        for (size_t i = 0; i < PanelAssetLimits::kMaxConditionTerms; ++i) {
+            terms += " and files.a";
+        }
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelText" id="t" text="x" visible="{}"/>)", terms)), "t", "more than 8 terms");
     }
 
     TEST(PanelAssetLoadTest, UnknownCommandAndModelNeedTheContext) {
@@ -232,7 +276,7 @@ namespace BECore::Tests {
 
     TEST(PanelAssetLoadTest, OnlyContainersHoldElements) {
         ExpectSingleIssue(R"(<element type="PanelText" id="t" text="x"><elements><element type="PanelRow" id="r"/></elements></element>)", "t",
-                          "only a section, a row, a child or a popup holds elements");
+                          "only a section, a row, a child, a popup, a dropdown, a tab bar, a tab or a menu holds elements");
     }
 
     TEST(PanelAssetLoadTest, ChildAndPopupHoldElements) {
@@ -266,6 +310,70 @@ namespace BECore::Tests {
         EXPECT_TRUE(HasIssue(issues, "c", "height must be from 0")) << Joined(issues);
     }
 
+    TEST(PanelAssetLoadTest, ControlsAreChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelCheckbox" id="a" bind="s.on" text="On"/>
+               <element type="PanelCheckbox" id="b" bind="s.on" labelBind="s.label" look="Toggle" style="Warning"/>
+               <element type="PanelCombo" id="c" bind="s.mode" width="11"/>
+               <element type="PanelCombo" id="d" bind="s.index" items="s.rows" itemField="name.text"/>
+               <element type="PanelNumber" id="e" bind="s.n"/>
+               <element type="PanelNumber" id="f" bind="s.n" text="ms" min="-5" max="5" step="0.5" slider="true" width="8"/>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelCheckbox" id="k" text="x"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelCheckbox" id="k" bind="s.on"/>)", "k", "needs 'text' or 'labelBind'");
+        ExpectSingleIssue(R"(<element type="PanelCheckbox" id="k" bind="s.on" labelBind="!s.l"/>)", "k", "'!' is allowed in a condition only");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" items="s.rows"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="rows"/>)", "k", "items: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" itemField="x"/>)", "k", "itemField needs items");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="s.rows" itemField="x["/>)", "k", "itemField: bad path");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" width="-1"/>)", "k", "width must be from 0");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" width="257"/>)", "k", "width must be from 0");
+    }
+
+    TEST(PanelAssetLoadTest, ANumberRangeIsOrderedFiniteAndBounded) {
+        const String limit = Format("{}", PanelAssetLimits::kMaxNumberExtent);
+        const auto number = [](StringView attributes) { return Format(R"(<element type="PanelNumber" id="k" bind="s.n" {}/>)", attributes); };
+
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(number(Format(R"(min="-{0}" max="{0}" step="{0}")", limit)))));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+        const PanelLoadResult unbounded = LoadPanelAsset(StringView(Wrap(number(R"(min="3" max="3")"))));
+        EXPECT_TRUE(unbounded.issues.empty()) << "min equal to max leaves a drag unbounded: " << Joined(unbounded.issues).c_str();
+
+        ExpectSingleIssue(number(R"(min="5" max="1")"), "k", "min must not be above max");
+        ExpectSingleIssue(number(R"(slider="true")"), "k", "a slider needs min below max");
+        ExpectSingleIssue(number(R"(slider="true" min="2" max="2")"), "k", "a slider needs min below max");
+        ExpectSingleIssue(number(R"(min="-2000000000" max="0")"), "k", "min and max must be from");
+        ExpectSingleIssue(number(R"(max="2000000000")"), "k", "min and max must be from");
+        ExpectSingleIssue(number(R"(step="-1")"), "k", "step must be from 0");
+        ExpectSingleIssue(number(R"(step="2000000000")"), "k", "step must be from 0");
+
+        // The reader refuses a text such as "nan", but an asset made in code goes through the validator alone
+        auto asset = New<PanelAsset>();
+        asset->id = "Test";
+        const auto made = New<PanelNumber>();
+        made->id = "k";
+        made->bind = "s.n";
+        made->min = std::numeric_limits<float>::quiet_NaN();
+        made->step = std::numeric_limits<float>::infinity();
+        asset->elements.push_back(made);
+        Vector<PanelIssue> issues;
+        ValidatePanelAsset(*asset, {}, issues);
+        EXPECT_TRUE(HasIssue(issues, "k", "min and max must be from")) << Joined(issues);
+        EXPECT_TRUE(HasIssue(issues, "k", "step must be from 0")) << Joined(issues);
+    }
+
+    TEST(PanelAssetLoadTest, TheTitleBindingIsChecked) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(R"(<PanelAsset id="T" titleBind="console.title"><elements/></PanelAsset>)"));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        const PanelLoadResult bad = LoadPanelAsset(StringView(R"(<PanelAsset id="T" titleBind="console"><elements/></PanelAsset>)"));
+        EXPECT_TRUE(HasIssue(bad.issues, "T", "titleBind: expected 'source.path'")) << Joined(bad.issues);
+        const PanelLoadResult negated = LoadPanelAsset(StringView(R"(<PanelAsset id="T" titleBind="!console.title"><elements/></PanelAsset>)"));
+        EXPECT_TRUE(HasIssue(negated.issues, "T", "'!' is allowed in a condition only")) << Joined(negated.issues);
+    }
+
     TEST(PanelAssetLoadTest, APopupNeedsAConditionAndNeverNests) {
         ExpectSingleIssue(R"(<element type="PanelPopup" id="p"/>)", "p", "open is required");
         ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="a"/>)", "p", "open: expected 'source.path'");
@@ -292,6 +400,230 @@ namespace BECore::Tests {
         EXPECT_TRUE(HasIssue(over.issues, "extra", "more than 8 popups")) << Joined(over.issues);
     }
 
+    TEST(PanelAssetLoadTest, ATabBarHoldsTabsAndATabLivesInABar) {
+        const PanelLoadResult good = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelTabs" id="bar"><elements>
+                 <element type="PanelTab" id="one" title="One"><elements><element type="PanelText" id="a" text="x"/></elements></element>
+                 <element type="PanelTab" id="two" title="Two"><elements><element type="PanelPopup" id="p" open="a.b"/></elements></element>
+               </elements></element>)")));
+        EXPECT_TRUE(good.issues.empty()) << Joined(good.issues);
+
+        ExpectSingleIssue(R"(<element type="PanelTabs" id="bar"><elements><element type="PanelTab" id="one" title="One"/><element type="PanelText" id="t" text="x"/></elements></element>)", "bar",
+                          "a tab bar holds only tabs");
+        ExpectSingleIssue(R"(<element type="PanelTab" id="lost" title="Lost"/>)", "lost", "a tab belongs in a tab bar");
+        ExpectSingleIssue(R"(<element type="PanelRow" id="r"><elements><element type="PanelTab" id="lost" title="Lost"/></elements></element>)", "lost", "a tab belongs in a tab bar");
+        ExpectSingleIssue(R"(<element type="PanelTabs" id="bar"/>)", "bar", "a tab bar needs tabs");
+        ExpectSingleIssue(R"(<element type="PanelTabs" id="bar"><elements><element type="PanelTab" id="one"/></elements></element>)", "one", "title is required");
+    }
+
+    TEST(PanelAssetLoadTest, TabsAreCounted) {
+        const auto bar = [](size_t first, size_t count) {
+            String tabs;
+            for (size_t i = 0; i < count; ++i) {
+                tabs += Format(R"(<element type="PanelTab" id="t{}" title="T"/>)", first + i);
+            }
+            return Format(R"(<element type="PanelTabs" id="bar{}"><elements>{}</elements></element>)", first, tabs);
+        };
+
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(bar(0, PanelAssetLimits::kMaxTabsPerBar))));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        const PanelLoadResult overBar = LoadPanelAsset(StringView(Wrap(bar(0, PanelAssetLimits::kMaxTabsPerBar + 1))));
+        EXPECT_EQ(overBar.issues.size(), 1u) << Joined(overBar.issues);
+        EXPECT_TRUE(HasIssue(overBar.issues, "bar0", "more than 16 tabs in a bar")) << Joined(overBar.issues);
+
+        // Two full bars are the limit of the asset, a third bar's first tab is over it
+        const size_t perBar = PanelAssetLimits::kMaxTabsPerBar;
+        const PanelLoadResult twoBars = LoadPanelAsset(StringView(Wrap(bar(0, perBar) + bar(perBar, perBar))));
+        EXPECT_TRUE(twoBars.issues.empty()) << Joined(twoBars.issues);
+        const PanelLoadResult overAll = LoadPanelAsset(StringView(Wrap(bar(0, perBar) + bar(perBar, perBar) + bar(2 * perBar, 2))));
+        EXPECT_EQ(overAll.issues.size(), 1u) << Joined(overAll.issues);
+        EXPECT_TRUE(HasIssue(overAll.issues, Format("t{}", 2 * perBar), "more than 32 tabs in all")) << Joined(overAll.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ADialogsWindowIsOpenAndNeedsNoCommand) {
+        const auto load = [](StringView attributes) {
+            return LoadPanelAsset(StringView(Format(R"(<PanelAsset id="Host" title="Host" {}><elements><element type="PanelPopup" id="p" open="a.b"/></elements></PanelAsset>)", attributes)));
+        };
+
+        const PanelLoadResult open = load(R"(window="Dialogs" open="true")");
+        EXPECT_TRUE(open.issues.empty()) << Joined(open.issues);
+        ASSERT_NE(open.asset, nullptr);
+        EXPECT_EQ(open.asset->window, PanelWindowKind::Dialogs);
+        EXPECT_TRUE(open.asset->command.empty());
+
+        const PanelLoadResult closed = load(R"(window="Dialogs" open="false")");
+        EXPECT_EQ(closed.issues.size(), 1u) << Joined(closed.issues);
+        EXPECT_TRUE(HasIssue(closed.issues, "Host", "always open")) << Joined(closed.issues);
+
+        const PanelLoadResult floating = load(R"(window="Floating")");
+        EXPECT_TRUE(floating.issues.empty()) << Joined(floating.issues);
+        const PanelLoadResult unknown = load(R"(window="Tabbed")");
+        EXPECT_FALSE(unknown.issues.empty());
+    }
+
+    namespace {
+
+        /// A `Bar` asset around @p elements, the way the menu bar of the editor is one
+        PanelLoadResult LoadBar(StringView elements, StringView attributes = R"(window="Bar" open="true")", const PanelValidationContext& context = {}) {
+            return LoadPanelAsset(StringView(Format(R"(<PanelAsset id="Test" {}><elements>{}</elements></PanelAsset>)", attributes, elements)), context);
+        }
+
+        void ExpectSingleBarIssue(StringView elements, StringView where, StringView part) {
+            const PanelLoadResult result = LoadBar(elements);
+            EXPECT_EQ(result.issues.size(), 1u) << Joined(result.issues);
+            EXPECT_TRUE(HasIssue(result.issues, where, part)) << "wanted [" << String(where).c_str() << "] ..." << String(part).c_str() << "...\n" << Joined(result.issues);
+        }
+
+    }  // namespace
+
+    TEST(PanelAssetLoadTest, ABarWindowIsOpenAndNeedsNoCommand) {
+        const PanelLoadResult open = LoadBar(R"(<element type="PanelMenu" id="m" title="File"/>)");
+        EXPECT_TRUE(open.issues.empty()) << Joined(open.issues);
+        ASSERT_NE(open.asset, nullptr);
+        EXPECT_EQ(open.asset->window, PanelWindowKind::Bar);
+        EXPECT_TRUE(open.asset->command.empty());
+
+        const PanelLoadResult closed = LoadBar(R"(<element type="PanelMenu" id="m" title="File"/>)", R"(window="Bar" open="false")");
+        EXPECT_EQ(closed.issues.size(), 1u) << Joined(closed.issues);
+        EXPECT_TRUE(HasIssue(closed.issues, "Test", "always open")) << Joined(closed.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AGoodMenuBarLoadsWithNoIssue) {
+        const auto known = [](StringView command) { return command.starts_with("x."); };
+        PanelValidationContext context;
+        context.isKnownCommand = FunctionRef<bool(StringView)>(known);
+        const PanelLoadResult result = LoadBar(
+            R"(<element type="PanelMenu" id="view" title="View" enableWhen="a.b" openCommand="x.open"><elements>
+                 <element type="PanelMenuItem" id="one" text="One" icon="eye" command="x.one" argument="arg" enableWhen="a.b == 1"/>
+                 <element type="PanelSeparator" id="line"/>
+                 <element type="PanelText" id="empty" text="Nothing" style="Disabled" visible="!a.b"/>
+                 <element type="PanelMenuItems" id="rows" source="a.rows" itemField="name" command="x.row"/>
+                 <element type="PanelMenu" id="sub" title="Sub"><elements><element type="PanelMenuItem" id="two" text="Two" command="x.two"/></elements></element>
+               </elements></element>)",
+            R"(window="Bar" open="true")", context);
+        EXPECT_TRUE(result.issues.empty()) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AMenuBelongsInABarWindow) {
+        for (const char* window : {"Docked", "Floating", "Dialogs"}) {
+            const PanelLoadResult result = LoadBar(R"(<element type="PanelMenu" id="m" title="File"/>)", Format(R"(window="{}" open="true")", window));
+            EXPECT_EQ(result.issues.size(), 1u) << window << "\n" << Joined(result.issues);
+            EXPECT_TRUE(HasIssue(result.issues, "m", "a menu belongs in a Bar window")) << window << "\n" << Joined(result.issues);
+        }
+    }
+
+    TEST(PanelAssetLoadTest, AMenuItemLivesInAMenuAndNeedsATextAndACommand) {
+        ExpectSingleBarIssue(R"(<element type="PanelMenuItem" id="i" text="One" command="x.one"/>)", "i", "a menu item belongs in a menu");
+        ExpectSingleBarIssue(R"(<element type="PanelRow" id="r"><elements><element type="PanelMenuItem" id="i" text="One" command="x.one"/></elements></element>)", "i",
+                             "a menu item belongs in a menu");
+        ExpectSingleBarIssue(R"(<element type="PanelMenuItems" id="i" source="a.rows" command="x.one"/>)", "i", "menu items belong in a menu");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItem" id="i" command="x.one"/></elements></element>)", "i", "text is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItem" id="i" text="One"/></elements></element>)", "i", "command is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItems" id="i" command="x.one"/></elements></element>)", "i", "source is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItems" id="i" source="a.rows"/></elements></element>)", "i", "command is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItems" id="i" source="rows" command="x.one"/></elements></element>)", "i",
+                             "source: expected 'source.path'");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItems" id="i" source="a.rows" itemField="a..b" command="x.one"/></elements></element>)",
+                             "i", "itemField: bad path");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItem" id="i" text="One" command="x.one" enableWhen="a.b and"/></elements></element>)", "i",
+                             "enableWhen: ");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelMenuItem" id="i" text="One" command="x.one" argument="a&#10;b"/></elements></element>)", "i",
+                             "argument must not hold a control character");
+    }
+
+    TEST(PanelAssetLoadTest, AMenuHoldsMenusItemsSeparatorsAndTexts) {
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M"><elements><element type="PanelButton" id="b" text="B" command="x.b"/></elements></element>)", "m",
+                             "a menu holds only menus, items, separators and texts");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m"/>)", "m", "title is required");
+        ExpectSingleBarIssue(R"(<element type="PanelMenu" id="m" title="M" enableWhen="a"/>)", "m", "enableWhen: expected 'source.path'");
+    }
+
+    TEST(PanelAssetLoadTest, MenuCommandsAreCheckedLikeAButtonsCommand) {
+        PanelValidationContext context;
+        const auto known = [](StringView command) { return command == "x.known"; };
+        context.isKnownCommand = FunctionRef<bool(StringView)>(known);
+        const PanelLoadResult result = LoadBar(
+            R"(<element type="PanelMenu" id="m" title="M" openCommand="x.nope"><elements>
+                 <element type="PanelMenuItem" id="i" text="One" command="x.bad"/>
+                 <element type="PanelMenuItems" id="rows" source="a.rows" command="x.worse"/>
+                 <element type="PanelMenuItem" id="ok" text="Ok" command="x.known"/>
+               </elements></element>)",
+            R"(window="Bar" open="true")", context);
+        EXPECT_EQ(result.issues.size(), 3u) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "m", "openCommand: unknown command 'x.nope'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "i", "command: unknown command 'x.bad'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "rows", "command: unknown command 'x.worse'")) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, MenusAreCountedAndTheirNestingIsLimited) {
+        String menus;
+        for (size_t i = 0; i < PanelAssetLimits::kMaxMenus; ++i) {
+            menus += Format(R"(<element type="PanelMenu" id="m{}" title="M"/>)", i);
+        }
+        const PanelLoadResult atLimit = LoadBar(menus);
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        menus += R"(<element type="PanelMenu" id="extra" title="M"/><element type="PanelMenu" id="extra2" title="M"/>)";
+        const PanelLoadResult over = LoadBar(menus);
+        EXPECT_EQ(over.issues.size(), 1u) << Joined(over.issues);
+        EXPECT_TRUE(HasIssue(over.issues, "extra", "more than 32 menus")) << Joined(over.issues);
+
+        const auto nested = [](size_t levels) {
+            String open;
+            String close;
+            for (size_t i = 0; i < levels; ++i) {
+                open += Format(R"(<element type="PanelMenu" id="n{}" title="M"><elements>)", i);
+                close += "</elements></element>";
+            }
+            return open + close;
+        };
+        const PanelLoadResult deepest = LoadBar(nested(PanelAssetLimits::kMaxMenuDepth));
+        EXPECT_TRUE(deepest.issues.empty()) << Joined(deepest.issues);
+        const PanelLoadResult tooDeep = LoadBar(nested(PanelAssetLimits::kMaxMenuDepth + 3));
+        EXPECT_EQ(tooDeep.issues.size(), 1u) << Joined(tooDeep.issues);
+        EXPECT_TRUE(HasIssue(tooDeep.issues, Format("n{}", PanelAssetLimits::kMaxMenuDepth), "menus nested deeper than 4 levels")) << Joined(tooDeep.issues);
+    }
+
+    TEST(PanelAssetLoadTest, TheDialogCommandsAreCheckedLikeAButtonsCommand) {
+        const String xml = R"(<PanelAsset id="T"><elements>
+            <element type="PanelPopup" id="p" open="a.b" closeCommand="no.close"><elements>
+              <element type="PanelInput" id="name" bind="a.name" focus="true" submitCommand="no.submit" commitCommand="no.commit"/>
+            </elements></element>
+            <element type="PanelNumber" id="n" bind="a.n" commitCommand="no.number"/>
+          </elements></PanelAsset>)";
+        EXPECT_TRUE(LoadPanelAsset(StringView(xml)).issues.empty());
+
+        const auto knownCommand = [](StringView) { return false; };
+        PanelValidationContext context;
+        context.isKnownCommand = FunctionRef<bool(StringView)>(knownCommand);
+        const PanelLoadResult result = LoadPanelAsset(StringView(xml), context);
+
+        EXPECT_EQ(result.issues.size(), 4u) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "p", "closeCommand: unknown command 'no.close'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "name", "submitCommand: unknown command 'no.submit'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "name", "commitCommand: unknown command 'no.commit'")) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "n", "commitCommand: unknown command 'no.number'")) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, FocusBelongsToAnInputInAPopup) {
+        ExpectSingleIssue(R"(<element type="PanelInput" id="name" bind="a.name" focus="true"/>)", "name", "focus is for an input inside a popup");
+        ExpectSingleIssue(R"(<element type="PanelRow" id="r"><elements><element type="PanelInput" id="name" bind="a.name" focus="true"/></elements></element>)", "name",
+                          "focus is for an input inside a popup");
+
+        // A row between the popup and the input does not matter: any enclosing popup counts
+        const PanelLoadResult inside = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelPopup" id="p" open="a.b"><elements><element type="PanelRow" id="r"><elements>
+                 <element type="PanelInput" id="name" bind="a.name" focus="true"/></elements></element></elements></element>)")));
+        EXPECT_TRUE(inside.issues.empty()) << Joined(inside.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ALongDialogCommandIsAnIssue) {
+        const String longText(PanelAssetLimits::kMaxTextBytes + 1, 'x');
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelNumber" id="n" bind="a.n" commitCommand="{}"/>)", longText)), "n", "commitCommand is longer than 512 bytes");
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelPopup" id="p" open="a.b" closeCommand="{}"/>)", longText)), "p", "closeCommand is longer than 512 bytes");
+    }
+
     TEST(PanelAssetLoadTest, SelectedFieldIsARelativePathOfASelectableColumn) {
         const auto load = [](StringView column) { return LoadPanelAsset(StringView(Wrap(Format(R"(<element type="PanelTable" id="t" source="a.b"><columns>{}</columns></element>)", column)))); };
 
@@ -305,6 +637,187 @@ namespace BECore::Tests {
         const PanelLoadResult wrongType = load(R"(<column id="x" type="Text" field="name" selectedField="chosen"/>)");
         EXPECT_EQ(wrongType.issues.size(), 1u) << Joined(wrongType.issues);
         EXPECT_TRUE(HasIssue(wrongType.issues, "t.x", "selectedField is for a Selectable column")) << Joined(wrongType.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AGoodToolbarWithDropdownsSeparatorsTypedNumbersAndCheckboxColumnsLoadsWithNoIssue) {
+        const PanelLoadResult result = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelRow" id="row"><elements>
+                 <element type="PanelCombo" id="size" bind="v.size" items="v.sizes" itemField="name" separatorField="flags.isLine" enableWhen="v.ready"/>
+                 <element type="PanelNumber" id="w" bind="v.w" min="64" max="4096" input="true" enableWhen="v.custom and v.ready"/>
+                 <element type="PanelCheckbox" id="rotate" bind="v.rotated" text="Rotate" icon="rotate-cw" enableWhen="v.shape != Free"/>
+                 <element type="PanelDropdown" id="overlays" text="Overlays" icon="layers" enableWhen="v.ready"><elements>
+                   <element type="PanelCheckbox" id="grid" bind="v.grid" text="Grid"/>
+                   <element type="PanelTable" id="canvases" source="v.canvases"><columns>
+                     <column id="on" type="Checkbox" field="shown" labelField="name" enableField="available"/>
+                     <column id="bare" type="Checkbox" field="shown"/>
+                   </columns></element>
+                 </elements></element>
+                 <element type="PanelDropdown" id="snap" icon="magnet"/>
+               </elements></element>)")));
+        EXPECT_TRUE(result.issues.empty()) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, TheConditionsSeparatorsAndTypedNumbersOfControlsAreChecked) {
+        ExpectSingleIssue(R"(<element type="PanelCheckbox" id="k" bind="s.on" text="x" enableWhen="s.a and"/>)", "k", "enableWhen: ");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" enableWhen="a"/>)", "k", "enableWhen: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" enableWhen="s.a &lt; word"/>)", "k", "enableWhen: ");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" separatorField="line"/>)", "k", "separatorField needs items");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="s.rows" separatorField="line["/>)", "k", "separatorField: bad path");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" min="0" max="1" slider="true" input="true"/>)", "k", "a slider or an input, not both");
+    }
+
+    TEST(PanelAssetLoadTest, AGoodFormWithRadiosStepperAMultilineInputAndAFillingButtonLoadsWithNoIssue) {
+        const PanelLoadResult result = LoadPanelAsset(StringView(Wrap(
+            R"(<element type="PanelSection" id="slice" title="Slice sheet" icon="grid-3x3" openBind="s.sliceOpen" defaultOpen="false"><elements>
+                 <element type="PanelRow" id="modes"><elements>
+                   <element type="PanelRadio" id="grid" bind="s.mode" value="Grid" text="Grid" icon="grid-3x3"/>
+                   <element type="PanelRadio" id="islands" bind="s.mode" value="Islands" icon="shapes" enableWhen="s.loaded and s.mode != Grid"/>
+                   <element type="PanelRadio" id="half" bind="s.scale" value="-0.5" text="Half"/>
+                 </elements></element>
+                 <element type="PanelNumber" id="columns" bind="s.columns" min="1" max="256" step="1" stepFast="10" stepper="true" text="Columns"/>
+                 <element type="PanelNumber" id="margin" bind="s.margin" stepper="true"/>
+                 <element type="PanelInput" id="names" bind="s.names" lines="32" commitCommand="s.names"/>
+                 <element type="PanelButton" id="add" text="Add" command="s.add" width="-1"/>
+               </elements></element>)")));
+        EXPECT_TRUE(result.issues.empty()) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ARadioNeedsABindingALiteralValueAndALabel) {
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" value="Grid" text="Grid"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s" value="Grid" text="Grid"/>)", "k", "bind: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" text="Grid"/>)", "k", "value is required");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="Grid"/>)", "k", "a radio needs 'text' or 'icon'");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="Two words" text="x"/>)", "k", "value: the literal is a number or a word");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="s.other" text="x"/>)", "k", "value: the literal is a number or a word");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="1e999" text="x"/>)", "k", "value: the literal is not a finite number");
+        ExpectSingleIssue(R"(<element type="PanelRadio" id="k" bind="s.mode" value="Grid" text="x" enableWhen="s.a and"/>)", "k", "enableWhen: ");
+        ExpectSingleIssue(StringView(Format(R"(<element type="PanelRadio" id="k" bind="s.mode" value="{}" text="x"/>)", String(PanelAssetLimits::kMaxTextBytes + 1, 'a'))), "k",
+                          "value is longer than");
+    }
+
+    TEST(PanelAssetLoadTest, AMultilineInputIsBoundedAndHasNoSubmitCommand) {
+        ExpectSingleIssue(Format(R"(<element type="PanelInput" id="k" bind="s.names" lines="{}"/>)", PanelAssetLimits::kMaxInputLines + 1), "k", "lines must be at most");
+        ExpectSingleIssue(R"(<element type="PanelInput" id="k" bind="s.names" lines="3" submitCommand="s.go"/>)", "k", "a multiline input has no submitCommand");
+        const PanelLoadResult singleLine = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelInput" id="k" bind="s.name" lines="0" submitCommand="s.go"/>)")));
+        EXPECT_TRUE(singleLine.issues.empty()) << Joined(singleLine.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AStepperIsNeitherASliderNorAnInputAndOnlyItHasAFastStep) {
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" min="0" max="1" slider="true" stepper="true"/>)", "k", "a stepper is neither a slider nor an input");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" input="true" stepper="true"/>)", "k", "a stepper is neither a slider nor an input");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" stepFast="10"/>)", "k", "stepFast needs stepper");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" stepper="true" stepFast="-1"/>)", "k", "stepFast must be from 0");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" stepper="true" stepFast="2000000000"/>)", "k", "stepFast must be from 0");
+    }
+
+    TEST(PanelAssetLoadTest, ASectionOpenBindingIsChecked) {
+        ExpectSingleIssue(R"(<element type="PanelSection" id="k" title="S" openBind="open"/>)", "k", "openBind: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelSection" id="k" title="S" openBind="!s.open"/>)", "k", "'!' is allowed in a condition only");
+    }
+
+    TEST(PanelAssetLoadTest, ADropdownNeedsALabelAndNeitherNestsNorHoldsAPopup) {
+        ExpectSingleIssue(R"(<element type="PanelDropdown" id="d"/>)", "d", "a dropdown needs 'text' or 'icon'");
+        ExpectSingleIssue(R"(<element type="PanelDropdown" id="d" text="D" enableWhen="d"/>)", "d", "enableWhen: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelDropdown" id="d" text="D"><elements><element type="PanelRow" id="r"><elements>
+                                <element type="PanelDropdown" id="inner" text="I"/></elements></element></elements></element>)",
+                          "inner", "a dropdown is not nested in a dropdown");
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="a.b"><elements><element type="PanelDropdown" id="d" text="D"/></elements></element>)", "d", "a dropdown is not nested in a popup");
+        ExpectSingleIssue(R"(<element type="PanelDropdown" id="d" text="D"><elements><element type="PanelPopup" id="p" open="a.b"/></elements></element>)", "p", "a popup is not nested in a dropdown");
+
+        const PanelLoadResult siblings =
+            LoadPanelAsset(StringView(Wrap(R"(<element type="PanelDropdown" id="a" text="A"/><element type="PanelPopup" id="p" open="a.b"/><element type="PanelDropdown" id="b" icon="layers"/>)")));
+        EXPECT_TRUE(siblings.issues.empty()) << Joined(siblings.issues);
+    }
+
+    TEST(PanelAssetLoadTest, DropdownsAreCounted) {
+        String dropdowns;
+        for (size_t i = 0; i < PanelAssetLimits::kMaxDropdowns; ++i) {
+            dropdowns += Format(R"(<element type="PanelDropdown" id="d{}" text="D"/>)", i);
+        }
+        const PanelLoadResult atLimit = LoadPanelAsset(StringView(Wrap(dropdowns)));
+        EXPECT_TRUE(atLimit.issues.empty()) << Joined(atLimit.issues);
+
+        dropdowns += R"(<element type="PanelDropdown" id="extra" text="D"/><element type="PanelDropdown" id="extra2" text="D"/>)";
+        const PanelLoadResult over = LoadPanelAsset(StringView(Wrap(dropdowns)));
+        EXPECT_EQ(over.issues.size(), 1u) << Joined(over.issues);
+        EXPECT_TRUE(HasIssue(over.issues, "extra", Format("more than {} dropdowns", PanelAssetLimits::kMaxDropdowns))) << Joined(over.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ACheckboxColumnNeedsAFieldAndOnlyItNamesALabelField) {
+        const auto load = [](StringView column) { return LoadPanelAsset(StringView(Wrap(Format(R"(<element type="PanelTable" id="t" source="a.b"><columns>{}</columns></element>)", column)))); };
+
+        const PanelLoadResult noField = load(R"(<column id="x" type="Checkbox" labelField="name"/>)");
+        EXPECT_EQ(noField.issues.size(), 1u) << Joined(noField.issues);
+        EXPECT_TRUE(HasIssue(noField.issues, "t.x", "field is required")) << Joined(noField.issues);
+
+        const PanelLoadResult badPath = load(R"(<column id="x" type="Checkbox" field="on" labelField="name["/>)");
+        EXPECT_EQ(badPath.issues.size(), 1u) << Joined(badPath.issues);
+        EXPECT_TRUE(HasIssue(badPath.issues, "t.x", "labelField: bad path")) << Joined(badPath.issues);
+
+        const PanelLoadResult wrongType = load(R"(<column id="x" type="Text" field="name" labelField="name"/>)");
+        EXPECT_EQ(wrongType.issues.size(), 1u) << Joined(wrongType.issues);
+        EXPECT_TRUE(HasIssue(wrongType.issues, "t.x", "labelField is for a Checkbox column")) << Joined(wrongType.issues);
+
+        const PanelLoadResult selected = load(R"(<column id="x" type="Checkbox" field="on" selectedField="chosen"/>)");
+        EXPECT_EQ(selected.issues.size(), 1u) << Joined(selected.issues);
+        EXPECT_TRUE(HasIssue(selected.issues, "t.x", "selectedField is for a Selectable column")) << Joined(selected.issues);
+    }
+
+    TEST(PanelAssetLoadTest, AGoodGenerateFormWithEveryNewAttributeLoadsWithNoIssue) {
+        const PanelLoadResult result = LoadPanelAsset(StringView(Wrap(Format(
+            R"(<element type="PanelSection" id="settings" title="Settings" look="Tree" tooltipBind="a.tip"><elements>
+                 <element type="PanelText" id="service" bind="a.status" icon="plug"/>
+                 <element type="PanelInput" id="name" bind="a.name" text="Name" fill="false"/>
+                 <element type="PanelInput" id="prompt" bind="a.prompt" text="Prompt" lines="4"/>
+                 <element type="PanelCombo" id="preset" bind="a.preset" items="a.presets" itemField="label" enableField="usable" tooltipField="error" previewBind="a.preview" text="Preset"/>
+                 <element type="PanelNumber" id="padding" bind="a.padding" min="0" max="50" slider="true" unit="%" decimals="{}"/>
+                 <element type="PanelProgress" id="download" bind="a.fraction" textBind="a.overlay" width="12"/>
+                 <element type="PanelProgress" id="images" bind="a.done"/>
+                 <element type="PanelDropdown" id="saveAs" icon="save-all" openCommand="a.saveAsOpened"><elements>
+                   <element type="PanelRow" id="saveRow"><elements>
+                     <element type="PanelButton" id="save" text="Save" command="a.save" closePopup="true"/>
+                   </elements></element>
+                 </elements></element>
+                 <element type="PanelTable" id="plan" source="a.plan"><columns>
+                   <column id="what" type="Text" field="what" tooltipField="licence"/>
+                 </columns></element>
+                 <element type="PanelTabs" id="tabs"><elements>
+                   <element type="PanelTab" id="run" title="Generate" icon="image"/>
+                 </elements></element>
+               </elements></element>)",
+            PanelAssetLimits::kMaxNumberDecimals))));
+        EXPECT_TRUE(result.issues.empty()) << Joined(result.issues);
+    }
+
+    TEST(PanelAssetLoadTest, TheGenerateAttributesAreChecked) {
+        ExpectSingleIssue(R"(<element type="PanelText" id="k" text="x" tooltipBind="tip"/>)", "k", "tooltipBind: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" enableField="usable"/>)", "k", "enableField needs items");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" tooltipField="error"/>)", "k", "tooltipField needs items");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" items="s.rows" enableField="on["/>)", "k", "enableField: bad path");
+        ExpectSingleIssue(R"(<element type="PanelCombo" id="k" bind="s.mode" previewBind="!s.text"/>)", "k", "previewBind: ");
+        ExpectSingleIssue(R"(<element type="PanelProgress" id="k" textBind="s.text"/>)", "k", "bind is required");
+        ExpectSingleIssue(R"(<element type="PanelProgress" id="k" bind="s.f" textBind="text"/>)", "k", "textBind: expected 'source.path'");
+        ExpectSingleIssue(R"(<element type="PanelProgress" id="k" bind="s.f" width="-2"/>)", "k", "width must be from 0");
+        ExpectSingleIssue(Format(R"(<element type="PanelNumber" id="k" bind="s.n" decimals="{}"/>)", PanelAssetLimits::kMaxNumberDecimals + 1), "k", "decimals must be at most");
+        ExpectSingleIssue(R"(<element type="PanelNumber" id="k" bind="s.n" unit="&#10;dB"/>)", "k", "unit must not hold a control character");
+        ExpectSingleIssue(R"(<element type="PanelButton" id="k" command="s.go" closePopup="true"/>)", "k", "closePopup is for a button inside a dropdown");
+        ExpectSingleIssue(R"(<element type="PanelPopup" id="p" open="s.open"><elements><element type="PanelButton" id="k" command="s.go" closePopup="true"/></elements></element>)", "k",
+                          "closePopup is for a button inside a dropdown");
+        ExpectSingleIssue(R"(<element type="PanelTable" id="t" source="s.rows"><columns><column id="c" type="Text" field="name" tooltipField="tip["/></columns></element>)", "t.c",
+                          "tooltipField: bad path");
+
+        const PanelLoadResult badLook = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelSection" id="k" title="S" look="Leaf"/>)")));
+        EXPECT_FALSE(badLook.issues.empty());
+        EXPECT_NE(Joined(badLook.issues).find("Leaf"), String::npos) << Joined(badLook.issues);
+    }
+
+    TEST(PanelAssetLoadTest, ADropdownOpenCommandIsCheckedLikeAButtonsCommand) {
+        PanelValidationContext context;
+        const auto known = [](StringView command) { return command == "x.known"; };
+        context.isKnownCommand = FunctionRef<bool(StringView)>(known);
+        const PanelLoadResult result = LoadPanelAsset(StringView(Wrap(R"(<element type="PanelDropdown" id="d" text="D" openCommand="x.unknown"/>)")), context);
+        EXPECT_EQ(result.issues.size(), 1u) << Joined(result.issues);
+        EXPECT_TRUE(HasIssue(result.issues, "d", "openCommand: unknown command 'x.unknown'")) << Joined(result.issues);
     }
 
     TEST(PanelAssetLoadTest, ATextOverTheLimitIsAnIssue) {

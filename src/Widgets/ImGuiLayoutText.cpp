@@ -11,6 +11,7 @@ namespace BECore {
 
         constexpr LegacyWindowName kLegacyWindowNames[] = {
             {"Config Editor", "ConfigEditor"},
+            {"Sprite Library", "SpriteLibrary"},
         };
 
         constexpr StringView kWindowHeaderPrefix = "[Window][";

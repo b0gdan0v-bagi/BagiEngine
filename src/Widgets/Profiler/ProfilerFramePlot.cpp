@@ -4,6 +4,7 @@
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <Widgets/ImGuiTheme.h>
+#include <Widgets/Profiler/ProfilerPanelModel.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -13,10 +14,6 @@ namespace BECore {
         constexpr float kPlotHeight = 90.0f;
         constexpr float kMaxBarWidth = 12.0f;
         constexpr float kBarGap = 1.0f;
-        constexpr float kBudgetComboWidth = 170.0f;
-        constexpr float kCustomFieldWidth = 80.0f;
-        constexpr float kCustomMinMs = 1.0f;
-        constexpr float kCustomMaxMs = 1000.0f;
         constexpr double kScaleInBudgets = 2.5;  // the top of the plot, so the budget line and its double always fit
         constexpr double kScaleHeadroom = 1.1;
         constexpr double kOverBudgetFactor = 2.0;  // a frame over this many budgets is the red one
@@ -30,7 +27,6 @@ namespace BECore {
         constexpr ImU32 kSelectedColor = IM_COL32(255, 255, 255, 255);
         constexpr ImU32 kHoverColor = IM_COL32(255, 255, 255, 60);
 
-        constexpr float kBarModeComboWidth = 140.0f;
         constexpr float kCounterGraphHeight = 40.0f;
         constexpr float kStageSwatchSize = 10.0f;
         constexpr float kStageSwatchOffsetY = 2.0f;  // centres the swatch on the text line
@@ -40,13 +36,6 @@ namespace BECore {
         constexpr Array<ImU32, kExclusiveStageCount> kStageColors{IM_COL32(90, 140, 220, 255),  IM_COL32(60, 200, 210, 255),  IM_COL32(220, 130, 60, 255), IM_COL32(230, 200, 70, 255),
                                                                   IM_COL32(170, 100, 210, 255), IM_COL32(130, 130, 130, 255), IM_COL32(190, 205, 225, 255)};
         constexpr Array<const char*, kExclusiveStageCount> kStageNames{"Update", "Scene update", "Render", "Scene draw", "Present", "Other", "Wait"};
-
-        const char* const kBarModeLabels = "Frame time\0"
-                                           "Stage split\0";
-
-        const char* const kBudgetLabels = "16.6 ms (60 fps)\0"
-                                          "33.3 ms (30 fps)\0"
-                                          "Custom\0";
 
         /// A held frame (the game stood still) is drawn in the theme's muted fill, so it is not read as a cheap game frame
         ImU32 PausedBarColor() {
@@ -60,18 +49,30 @@ namespace BECore {
             return frameMs <= budgetMs * kOverBudgetFactor ? kOverColor : kWayOverColor;
         }
 
+        double BudgetOf(ProfilerBudget budget, float customMs) {
+            switch (budget) {
+                case ProfilerBudget::Fps60:
+                    return ProfilerFramePlot::kBudget60Ms;
+                case ProfilerBudget::Fps30:
+                    return ProfilerFramePlot::kBudget30Ms;
+                case ProfilerBudget::Custom:
+                    break;
+            }
+            return static_cast<double>(customMs);
+        }
+
     }  // namespace
 
-    double ProfilerFramePlot::GetBudgetMs() const {
-        switch (_budget) {
-            case Budget::Fps60:
-                return kBudget60Ms;
-            case Budget::Fps30:
-                return kBudget30Ms;
-            case Budget::Custom:
-                break;
-        }
-        return static_cast<double>(_customBudgetMs);
+    double BudgetMs(const ProfilerPanelView& view) {
+        return BudgetOf(static_cast<ProfilerBudget>(view.budget), view.customBudgetMs);
+    }
+
+    ProfilerFramePlot::Settings PlotSettingsOf(const ProfilerPanelView& view) {
+        ProfilerFramePlot::Settings settings;
+        settings.budgetMs = BudgetMs(view);
+        settings.barMode = static_cast<ProfilerBarMode>(view.barMode);
+        settings.workOnly = view.workOnly;
+        return settings;
     }
 
     Optional<size_t> ProfilerFramePlot::RingFramePosition(size_t barIndex, size_t barCount, size_t ringFrameCount) {
@@ -85,32 +86,11 @@ namespace BECore {
         return ringFrameCount - 1 - fromNewest;
     }
 
-    Optional<uint64_t> ProfilerFramePlot::Draw(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame) {
-        int budgetChoice = static_cast<int>(_budget);
-        ImGui::SetNextItemWidth(kBudgetComboWidth);
-        if (ImGui::Combo("Budget", &budgetChoice, kBudgetLabels)) {
-            _budget = static_cast<Budget>(budgetChoice);
-        }
-        if (_budget == Budget::Custom) {
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(kCustomFieldWidth);
-            ImGui::DragFloat("ms##budget", &_customBudgetMs, 0.1f, kCustomMinMs, kCustomMaxMs, "%.1f");
-        }
-
-        ImGui::SameLine();
-        int modeChoice = static_cast<int>(_barMode);
-        ImGui::SetNextItemWidth(kBarModeComboWidth);
-        if (ImGui::Combo("Bars", &modeChoice, kBarModeLabels)) {
-            _barMode = static_cast<BarMode>(modeChoice);
-        }
-        ImGui::SameLine();
-        ImGui::Checkbox("Work only", &_workOnly);
-        ImGui::SetItemTooltip("Leave out the time the backend waited for the display (the Wait stage), so a bar is what the CPU did");
-
+    Optional<uint64_t> ProfilerFramePlot::DrawBars(const Vector<FrameStats>& history, const RingSnapshot& snapshot, Optional<uint64_t> selectedFrame, const Settings& settings) {
         // The bar height of a frame: its time, or without the wait
-        const auto shownMs = [this](const FrameStats& frame) { return _workOnly ? FrameWorkMs(frame) : frame.frameMs; };
+        const auto shownMs = [&settings](const FrameStats& frame) { return settings.workOnly ? FrameWorkMs(frame) : frame.frameMs; };
 
-        const double budgetMs = GetBudgetMs();
+        const double budgetMs = settings.budgetMs;
         const size_t barCount = history.size();
         const ImVec2 size(ImGui::GetContentRegionAvail().x, kPlotHeight);
         const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -132,18 +112,18 @@ namespace BECore {
         for (size_t bar = 0; bar < barCount; ++bar) {
             const float x = origin.x + static_cast<float>(bar) * barWidth;
             Array<double, kExclusiveStageCount> stages{};
-            if (_barMode == BarMode::StageSplit) {
+            if (settings.barMode == ProfilerBarMode::StageSplit) {
                 stages = ExclusiveStageMs(history[bar]);
             }
             ImVec2 min(x, yOf(shownMs(history[bar])));
             const ImVec2 max(x + eastl::max(barWidth - kBarGap, 1.0f), bottom);
             if (history[bar].paused) {
                 drawList->AddRectFilled(min, max, PausedBarColor());
-            } else if (_barMode == BarMode::StageSplit) {
+            } else if (settings.barMode == ProfilerBarMode::StageSplit) {
                 // The stack is as high as the frame's cpu time, the segments from the bottom up
                 float segmentBottom = bottom;
                 // Wait is the last segment, so work only is every segment but the last
-                const size_t segmentCount = _workOnly ? kExclusiveStageCount - 1 : kExclusiveStageCount;
+                const size_t segmentCount = settings.workOnly ? kExclusiveStageCount - 1 : kExclusiveStageCount;
                 for (size_t segment = 0; segment < segmentCount; ++segment) {
                     const float top = eastl::max(segmentBottom - static_cast<float>(eastl::min(stages[segment] / scaleMs, 1.0)) * size.y, origin.y);
                     drawList->AddRectFilled(ImVec2(min.x, top), ImVec2(max.x, segmentBottom), kStageColors[segment]);
@@ -174,8 +154,8 @@ namespace BECore {
                 result = snapshot.frames[*position].index;
             }
         }
-        if (_barMode == BarMode::StageSplit) {
-            DrawStageLegend();
+        if (settings.barMode == ProfilerBarMode::StageSplit) {
+            DrawStageLegend(settings.workOnly);
         }
         DrawWorkWaitSummary(history);
         DrawCounters(history, snapshot, selectedFrame);
@@ -194,9 +174,9 @@ namespace BECore {
         ImGui::TextUnformatted(_summaryText.data());
     }
 
-    void ProfilerFramePlot::DrawStageLegend() const {
+    void ProfilerFramePlot::DrawStageLegend(bool workOnly) const {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        const size_t segmentCount = _workOnly ? kExclusiveStageCount - 1 : kExclusiveStageCount;
+        const size_t segmentCount = workOnly ? kExclusiveStageCount - 1 : kExclusiveStageCount;
         for (size_t segment = 0; segment < segmentCount; ++segment) {
             if (segment > 0) {
                 ImGui::SameLine();

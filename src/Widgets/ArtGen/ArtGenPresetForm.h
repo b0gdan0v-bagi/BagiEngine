@@ -69,6 +69,8 @@ namespace BECore {
      */
     class ArtGenPresetForm {
     public:
+        /// The largest width or height a preset may set
+        static constexpr int32_t kMaxImageSide = 8192;
         static constexpr size_t kNameSize = 65;
         static constexpr size_t kTitleSize = 128;
         static constexpr size_t kPromptSize = 2048;
@@ -152,6 +154,11 @@ namespace BECore {
         /// Call after an edit of a field: the dirty check is made again only then
         void Touch() {
             ++_revision;
+        }
+
+        /// Moves at every edit, load and save: a view of the form is made again only when it moved
+        [[nodiscard]] uint64_t GetRevision() const {
+            return _revision;
         }
 
         char name[kNameSize] = {};

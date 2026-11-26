@@ -16,14 +16,18 @@ namespace BECore {
     /**
      * @brief The selected canvas element in the shapes of other devices, outlined over the viewport: the ImGui layer of UIElementShapes. Session state, never stored.
      *
-     * The "Overlays" popup holds a Landscape box and one box per device of UIPreview::GetDevices(). For each checked shape the live canvas is laid out for that device and given back
-     * (UIElementShapesCache: it probes again only when the canvas, the element, the shapes or the layout moved, so a steady frame probes and allocates nothing), and the element's rect
-     * is drawn as the same fractions of the image, dashed when it is only approximate (it, or an ancestor, names a region the game published for the live shape). Needs an ImGui frame.
+     * The checked devices of UIPreview::GetDevices() and the landscape flag are the toolbar's (IViewportToolbar), handed over every frame with SetShapes(). For each checked shape the live canvas is
+     * laid out for that device and given back (UIElementShapesCache: it probes again only when the canvas, the element, the shapes or the layout moved, so a steady frame probes and allocates
+     * nothing), and the element's rect is drawn as the same fractions of the image, dashed when it is only approximate (it, or an ancestor, names a region the game published for the live shape).
+     * Needs an ImGui frame.
      */
     class ViewportUIShapes {
     public:
-        /// The Landscape box and a box per device, in the "Overlays" popup
-        void DrawPopupItems();
+        /// The checked devices (bit i: the device i of UIPreview::GetDevices()) and the landscape flag of this frame
+        void SetShapes(uint64_t mask, bool landscape) {
+            _mask = mask;
+            _landscape = landscape;
+        }
 
         /// True when a shape is checked: only then a selected element is probed
         [[nodiscard]] bool AnyChecked() const {
@@ -50,7 +54,7 @@ namespace BECore {
             bool approximate = false;
         };
 
-        uint64_t _mask = 0;  // bit i: the device i is checked
+        uint64_t _mask = 0;  // the last SetShapes(); bit i: the device i is checked
         bool _landscape = false;
         UIElementShapesCache _cache;
         Vector<UILayoutContext> _contexts;  // one per checked device, kept for the capacity

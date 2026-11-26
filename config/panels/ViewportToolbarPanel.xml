@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<PanelAsset id="ViewportToolbar" title="Viewport toolbar" open="true" window="Bar">
+  <sources>
+    <item name="tb" model="ViewportToolbarModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="preview">
+      <elements>
+        <element type="PanelCombo" id="size" bind="tb.sizeRow" items="tb.sizeItems" itemField="text" separatorField="separator" width="12" tooltip="The shape of the image: free (fills the panel), an aspect ratio, a device or a custom size"/>
+        <element type="PanelNumber" id="customWidth" bind="tb.customWidth" text="W" min="64" max="4096" input="true" width="4.3" visible="tb.isCustom" tooltip="The width of the image in pixels"/>
+        <element type="PanelNumber" id="customHeight" bind="tb.customHeight" text="H" min="64" max="4096" input="true" width="4.3" visible="tb.isCustom" tooltip="The height of the image in pixels"/>
+        <element type="PanelCheckbox" id="rotate" bind="tb.rotated" text="Rotate" icon="rotate-cw" enableWhen="!tb.sizeFree" tooltip="Swap the width and the height of a device or custom size, turn the ratio of an aspect (not for Free)"/>
+        <element type="PanelCombo" id="safeArea" bind="tb.safeAreaRow" items="tb.safeAreaItems" width="9.3" tooltip="Simulate a safe area for the canvases: a notch, side insets or the cut-out of the chosen device"/>
+        <element type="PanelDropdown" id="overlays" text="Overlays" icon="layers" tooltip="What is drawn over the image: the safe area, the bounds of the view and the canvases, the touch targets, the regions, the rects, anchors and findings of the UI elements">
+          <elements>
+            <element type="PanelCheckbox" id="safeAreaOutline" bind="tb.overlaySafeArea" text="Safe area"/>
+            <element type="PanelCheckbox" id="viewBounds" bind="tb.overlayViewBounds" text="View bounds"/>
+            <element type="PanelCheckbox" id="canvasBounds" bind="tb.overlayCanvasBounds" text="Canvas bounds"/>
+            <element type="PanelCheckbox" id="touchTargets" bind="tb.overlayTouchTargets" text="Touch targets"/>
+            <element type="PanelCheckbox" id="regions" bind="tb.overlayRegions" text="Regions"/>
+            <element type="PanelSeparator" id="elementsLine"/>
+            <element type="PanelCheckbox" id="elementRects" bind="tb.overlayElementRects" text="Element rects"/>
+            <element type="PanelCheckbox" id="anchors" bind="tb.overlayAnchors" text="Anchors and pivots"/>
+            <element type="PanelCheckbox" id="designRect" bind="tb.overlayDesignRect" text="Design rectangle"/>
+            <element type="PanelCheckbox" id="findings" bind="tb.overlayFindings" text="Findings"/>
+            <element type="PanelSeparator" id="canvasesLine" visible="tb.hasCanvases"/>
+            <element type="PanelText" id="canvasesTitle" text="Canvases" style="Disabled" visible="tb.hasCanvases"/>
+            <element type="PanelTable" id="canvases" source="tb.canvases" header="false" visible="tb.hasCanvases">
+              <columns>
+                <item type="Checkbox" id="enabled" field="enabled" labelField="name"/>
+              </columns>
+            </element>
+            <element type="PanelSeparator" id="shapesLine"/>
+            <element type="PanelText" id="shapesTitle" text="Selected element in other shapes (not stored)" style="Disabled"/>
+            <element type="PanelCheckbox" id="landscape" bind="tb.landscape" text="Landscape" tooltip="Lay the shapes out in landscape"/>
+            <element type="PanelTable" id="devices" source="tb.devices" header="false">
+              <columns>
+                <item type="Checkbox" id="checked" field="checked" labelField="name"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+        <element type="PanelButton" id="play" text="Play" icon="gamepad-2" visible="tb.inputMode == Play" command="viewport.inputMode" tooltip="Where a click on the image goes: Play sends it to the game as the window would, Edit keeps it for the editor (the game gets nothing). Hold Alt (Option) for the other one for one click. Hotkey: F8 by default"/>
+        <element type="PanelButton" id="edit" text="Edit" icon="mouse-pointer-2" visible="tb.inputMode == Edit" command="viewport.inputMode" tooltip="Where a click on the image goes: Play sends it to the game as the window would, Edit keeps it for the editor (the game gets nothing). Hold Alt (Option) for the other one for one click. Hotkey: F8 by default"/>
+        <element type="PanelText" id="zoom" bind="tb.zoomText" style="Disabled" mono="true" tooltip="The size of the image on the screen. Wheel: zoom about the pointer, middle button or Space + left button: pan, F: frame the selection (Edit input mode)"/>
+        <element type="PanelButton" id="cameraReset" text="Reset" icon="focus" enableWhen="tb.cameraMoved" command="viewport.cameraReset" tooltip="Show the whole image again (zoom 100% of the fit, no pan)"/>
+        <element type="PanelCombo" id="view" bind="tb.viewRow" items="tb.viewItems" width="9.3" visible="tb.hasViews" tooltip="Force a view variant of the scene; Auto picks it by the size of the image"/>
+        <element type="PanelText" id="viewText" bind="tb.viewText" style="Disabled" visible="tb.hasScene"/>
+      </elements>
+    </element>
+    <element type="PanelRow" id="gizmo">
+      <elements>
+        <element type="PanelButton" id="toolMove" icon="move-3d" fill="Accent" fillWhen="tb.tool == Translate" enableWhen="tb.inputMode == Edit" command="viewport.tool.translate" tooltip="Move the selected nodes: drag an arrow or the square (W)"/>
+        <element type="PanelButton" id="toolRotate" icon="rotate-3d" fill="Accent" fillWhen="tb.tool == Rotate" enableWhen="tb.inputMode == Edit" command="viewport.tool.rotate" tooltip="Rotate the selected nodes about the pivot: drag the ring (E)"/>
+        <element type="PanelButton" id="toolScale" icon="scale-3d" fill="Accent" fillWhen="tb.tool == Scale" enableWhen="tb.inputMode == Edit" command="viewport.tool.scale" tooltip="Scale the selected nodes: drag a corner or a side; Shift keeps the aspect (R)"/>
+        <element type="PanelButton" id="spaceWorld" text="World" icon="globe" visible="tb.space == World" enableWhen="tb.inputMode == Edit" command="viewport.gizmoSpace" tooltip="The axes of the Move gizmo: World (the screen's) or Local (the turned axes of the node); a group always uses World (X)"/>
+        <element type="PanelButton" id="spaceLocal" text="Local" icon="box" visible="tb.space == Local" enableWhen="tb.inputMode == Edit" command="viewport.gizmoSpace" tooltip="The axes of the Move gizmo: World (the screen's) or Local (the turned axes of the node); a group always uses World (X)"/>
+        <element type="PanelDropdown" id="snap" text="Snap" icon="magnet" enableWhen="tb.inputMode == Edit" tooltip="Snap a drag to a step; hold Ctrl (Cmd) to flip the switches for one drag">
+          <elements>
+            <element type="PanelRow" id="snapPositionRow">
+              <elements>
+                <element type="PanelCheckbox" id="snapPosition" bind="tb.snapPosition" text="Position"/>
+                <element type="PanelNumber" id="positionStep" bind="tb.positionStep" text="units" min="0.01" max="1024" step="0.5" width="5" enableWhen="tb.snapPosition"/>
+              </elements>
+            </element>
+            <element type="PanelRow" id="snapAngleRow">
+              <elements>
+                <element type="PanelCheckbox" id="snapAngle" bind="tb.snapAngle" text="Angle"/>
+                <element type="PanelNumber" id="angleStep" bind="tb.angleStep" text="deg" min="0.01" max="180" step="0.5" width="5" enableWhen="tb.snapAngle"/>
+              </elements>
+            </element>
+            <element type="PanelRow" id="snapScaleRow">
+              <elements>
+                <element type="PanelCheckbox" id="snapScale" bind="tb.snapScale" text="Scale"/>
+                <element type="PanelNumber" id="scaleStep" bind="tb.scaleStep" text="x" min="0.01" max="1" step="0.01" width="5" enableWhen="tb.snapScale"/>
+              </elements>
+            </element>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

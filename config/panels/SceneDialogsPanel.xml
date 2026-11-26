@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<PanelAsset id="SceneDialogs" title="Scene dialogs" open="true" window="Dialogs">
+  <sources>
+    <item name="dialogs" model="SceneDialogsModel"/>
+  </sources>
+  <elements>
+    <element type="PanelPopup" id="addNode" title="Add Node" open="dialogs.addNodeOpen" closeCommand="sceneDialogs.cancel">
+      <elements>
+        <element type="PanelText" id="nameLabel" text="Node name:"/>
+        <element type="PanelInput" id="name" bind="dialogs.nodeName" width="20" focus="true" submitCommand="sceneDialogs.addNode"/>
+        <element type="PanelRow" id="buttons">
+          <elements>
+            <element type="PanelButton" id="ok" icon="check" text="OK" width="8" command="sceneDialogs.addNode" enableWhen="dialogs.canAdd"/>
+            <element type="PanelButton" id="cancel" icon="x" text="Cancel" width="8" command="sceneDialogs.cancel"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="addComponent" title="Add Component" open="dialogs.addComponentOpen" closeCommand="sceneDialogs.cancel">
+      <elements>
+        <element type="PanelText" id="typeLabel" text="Select component type:"/>
+        <element type="PanelSeparator" id="typeLine"/>
+        <element type="PanelTable" id="types" source="dialogs.components" header="false" scrollRows="12">
+          <columns>
+            <item type="Selectable" id="type" field="label" command="sceneDialogs.addComponent" argument="typeName"/>
+          </columns>
+        </element>
+        <element type="PanelSeparator" id="buttonsLine"/>
+        <element type="PanelButton" id="cancelComponent" icon="x" text="Cancel" width="8" command="sceneDialogs.cancel"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

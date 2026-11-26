@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<PanelAsset id="EditorDialogs" title="Editor dialogs" open="true" window="Dialogs">
+  <sources>
+    <item name="dialogs" model="EditorDialogsModel"/>
+  </sources>
+  <elements>
+    <element type="PanelPopup" id="saveLayout" title="Save Layout As" open="dialogs.saveLayoutOpen" closeCommand="layouts.saveDialog.cancel">
+      <elements>
+        <element type="PanelText" id="nameLabel" text="Name of the layout:"/>
+        <element type="PanelInput" id="name" bind="dialogs.layoutName" width="20" focus="true" submitCommand="layouts.saveDialog.enter"/>
+        <element type="PanelText" id="warning" bind="dialogs.warning" style="Warning" visible="dialogs.hasWarning"/>
+        <element type="PanelText" id="error" bind="dialogs.error" style="Warning" visible="dialogs.hasError"/>
+        <element type="PanelRow" id="buttons">
+          <elements>
+            <element type="PanelButton" id="save" text="Save" command="layouts.saveDialog.save" enableWhen="dialogs.canSave" visible="!dialogs.exists"/>
+            <element type="PanelButton" id="overwrite" text="Overwrite" command="layouts.saveDialog.save" visible="dialogs.exists"/>
+            <element type="PanelButton" id="cancel" text="Cancel" command="layouts.saveDialog.cancel"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

@@ -32,6 +32,14 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD bool hidden = false;
         /// The condition of the popups of the tests
         BE_REFLECT_FIELD bool dialog = false;
+        BE_REFLECT_FIELD int level = 0;
+        BE_REFLECT_FIELD float gain = 0.5f;
+        /// The index a combo over `options` sets
+        BE_REFLECT_FIELD int pick = 0;
+        /// The text a combo over `rows` sets
+        BE_REFLECT_FIELD String choice;
+        BE_REFLECT_FIELD Vector<String> options;
+        BE_REFLECT_FIELD PanelTextStyle mode = PanelTextStyle::Normal;
         BE_REFLECT_FIELD String title;
         BE_REFLECT_FIELD String filter;
         BE_REFLECT_FIELD InterpreterInner inner;

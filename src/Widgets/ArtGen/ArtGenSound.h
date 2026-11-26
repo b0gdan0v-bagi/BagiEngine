@@ -18,6 +18,15 @@ namespace BECore {
         static constexpr float kDefaultFadeInMs = 5.0f;
         static constexpr float kDefaultFadeOutMs = 30.0f;
         static constexpr float kDefaultPeakDb = -1.0f;
+        /// The ranges the panel's sliders offer
+        static constexpr float kMinTrimDb = -90.0f;
+        static constexpr float kMaxTrimDb = -1.0f;
+        static constexpr float kMinPeakDb = -24.0f;
+        static constexpr float kMaxPeakDb = 0.0f;
+        static constexpr float kMaxFadeMs = 1000.0f;
+        static constexpr float kMaxSeconds = 60.0f;
+        /// The sample rates the panel offers; 0: the file's own
+        static constexpr Array<uint32_t, 5> kRates{0, 22050, 32000, 44100, 48000};
 
         bool mono = true;                         // the channels averaged into one
         Optional<float> trimDb = kDefaultTrimDb;  // silence quieter than this (dBFS) cut from both ends; none: no trim

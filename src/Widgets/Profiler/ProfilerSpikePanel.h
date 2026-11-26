@@ -5,19 +5,14 @@
 namespace BECore {
 
     /**
-     * @brief The spike section of the Profiler panel: the settings of SpikeCapture, the list of frozen frames and the buttons to open
-     * one in the timeline, go back to the live ring and clear the list. Editor only.
+     * @brief The list of frozen frames of the Profiler panel, newest first, one row per spike. The settings of `SpikeCapture` and the buttons
+     * that go back to the live ring and clear the list are the panel asset's. Editor only.
      */
     class ProfilerSpikePanel {
     public:
-        /// What the user asked for this frame; at most one of the fields is set
-        struct Result {
-            Optional<size_t> open;  // the position in SpikeCapture::GetSpikes() of the spike to show in the timeline
-            bool live = false;      // back to the live ring
-        };
-
         /// @p openedFrame is the RingFrame::index of the spike the timeline shows now, none when it shows the live ring
-        [[nodiscard]] Result Draw(SpikeCapture& capture, Optional<uint64_t> openedFrame);
+        /// @return The position in SpikeCapture::GetSpikes() of the row clicked this frame
+        [[nodiscard]] Optional<size_t> DrawList(const SpikeCapture& capture, Optional<uint64_t> openedFrame);
     };
 
 }  // namespace BECore

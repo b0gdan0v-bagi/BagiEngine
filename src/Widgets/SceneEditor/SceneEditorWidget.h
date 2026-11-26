@@ -8,7 +8,10 @@
 #include <BECore/Widgets/EditorDocuments.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/PanelAssets/PanelSlots.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
+#include <Widgets/SceneEditor/ISceneEditorHost.h>
+#include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/SceneEditor/UINodeFileSession.h>
@@ -24,9 +27,9 @@ namespace BECore {
 
     /**
      * @brief ImGui panel for live scene editing: the hierarchy tree on the left, the inspector of the selected node
-     * and its components on the right. Edits apply at once, without staging.
+     * and its components on the right. Edits apply at once, without staging. It is the `ISceneEditorHost` of the models of its panel assets.
      */
-    class SceneEditorWidget : public IWidget {
+    class SceneEditorWidget : public IWidget, public ISceneEditorHost {
         BE_CLASS(SceneEditorWidget)
     public:
         SceneEditorWidget() = default;
@@ -39,6 +42,10 @@ namespace BECore {
         void AppendDocuments(Vector<EditorDocumentState>& out);
         void Update() override;
         void Draw() override;
+
+        [[nodiscard]] SceneInspectedNode GetInspected() const override;
+        void RenameInspected(StringView name) override;
+        void SetInspectedLayer(int32_t layer) override;
 
     private:
         bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
@@ -59,7 +66,8 @@ namespace BECore {
         void ResetUISelection();
 
         /**
-         * @brief Runs `scene.save` like the Save button (only with unsaved changes)
+         * @brief Runs `scene.save` (only with unsaved changes, so the Save button's command does nothing while it is disabled) and `sceneEditor.addComponent`
+         * (asks for the Add Component dialog of the selected node, when it is alive and not locked)
          */
         void OnCommand(const EditorCommandEvent& event);
 
@@ -84,6 +92,9 @@ namespace BECore {
         void OnTransformEdit(const NodeTransformEditEvent& event);
         void OnSceneEdited(const SceneEditedEvent& event);
 
+        /// Answers the Add Node dialog: the scene is unsaved and the parent of the new node is revealed, when the scene is the active one
+        void OnNodeAdded(const SceneNodeAddedEvent& event);
+
         /// Answers a drag of a canvas element in the viewport: a Change is a UIRectEditEvent like the inspector's (an undo stack merges the frames) and tells whether the layout kept the spec exact, a
         /// Commit notes the element for the Save and marks the scene as changed, a Cancel forgets the inexact mark
         void OnUIRectDrag(const UIRectDragEvent& event);
@@ -99,23 +110,13 @@ namespace BECore {
         /// Sends UIElementSelectedEvent when the (node, element) pair of the "UI elements" selection, or its scene, differs from the last one announced
         void AnnounceUIElement(const Scene* scene);
 
-        /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" popup
-        void ApplyHierarchyAnswers();
+        /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" dialog (asked of
+        /// `SceneDialogsModel` by SceneAddNodeRequestEvent)
+        void ApplyHierarchyAnswers(Scene& scene);
 
-        /**
-         * @brief Render the inspector panel for the selected node
-         */
-        void RenderInspector();
-
-        /**
-         * @brief Render the "Add Node" modal popup
-         */
-        void RenderAddNodePopup();
-
-        /**
-         * @brief Render the "Add Component" modal popup
-         */
-        void RenderAddComponentPopup();
+        /// The slot `sceneComponents` of the inspector bar: the components of the selected node with their remove buttons, the "UI elements" section and the
+        /// inspectors, disabled for a locked node. Drawn directly when no inspector bar is registered, so a game without its asset line keeps the component list
+        void DrawComponents();
 
         /**
          * @brief Replace the `<scene>` of the active scene in SceneConfig.xml (WriteSceneToConfig) and save the file
@@ -123,6 +124,10 @@ namespace BECore {
          *        an instance that cannot be written as a reference is written inline and logged as a warning.
          */
         void SaveScene();
+
+        /// The primary node when the active scene is the one the selection belongs to and the node is alive in its tree, else null. The models of the
+        /// panel assets are updated before this widget, so its own Update has not yet dropped a node that died or a scene that was replaced
+        [[nodiscard]] SceneNode* FindInspected() const;
 
         HierarchyState _hierarchy;           // the primary node, the rename and the pending tree edit of the hierarchy panel
         SceneSelection _selection;           // every selected node; its primary is `_hierarchy.selected`
@@ -135,10 +140,6 @@ namespace BECore {
         IntrusivePtr<UIElement> _selectedUIElement;            // held, so that a tree edit cannot leave it dangling
         UINodeFileSession _uiFileSession;                      // the elements changed since the last save, whose rects go into their node files
         IntrusivePtr<UIElement> _inexactUIElement;             // the element whose last edit the layout limits kept from being exact (the inspector warns)
-        SceneNode* _contextMenuTargetNode = nullptr;           // node to add a child to (null = root)
-        char _nodeNameBuffer[256] = {};
-        bool _showAddNodePopup = false;
-        bool _showAddComponentPopup = false;
         bool _isDirty = false;
         bool _focusRequested = false;  // a reveal was asked for: the window comes to the front on the next Update (never inside the event), so a background dock tab shows the hierarchy
 
@@ -147,7 +148,9 @@ namespace BECore {
         const SceneNode* _announcedUINode = nullptr;
         const UIElement* _announcedUIElement = nullptr;
 
-        EditorDocumentsHandle _documents;  // the source of `editor_state`, ends with the widget
+        EditorDocumentsHandle _documents;   // the source of `editor_state`, ends with the widget
+        SceneEditorHostHandle _hostHandle;  // ends with the widget, so a model never reaches a dead one
+        PanelSlotHandle _componentsSlot;    // the same for the inspector bar's slot
     };
 
 }  // namespace BECore

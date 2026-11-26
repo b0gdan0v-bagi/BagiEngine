@@ -16,6 +16,12 @@ namespace BECore {
             {ImGuiKey_Tab, kChordModCtrl},
         };
 
+        /// One counter for every map, so a map that is replaced by a fresh one never repeats a revision the cache of a chord text has seen
+        uint64_t NextRevision() {
+            static uint64_t counter = 0;
+            return ++counter;
+        }
+
         AssignResult Refused(AssignRefusal refusal) {
             AssignResult result;
             result.status = AssignStatus::NotAllowed;
@@ -29,7 +35,7 @@ namespace BECore {
         return std::ranges::find(kReservedChords, chord) != std::end(kReservedChords);
     }
 
-    HotkeyMap::HotkeyMap() {
+    HotkeyMap::HotkeyMap() : _revision(NextRevision()) {
         for (const EditorCommand& command : GetEditorCommands()) {
             _bindings.push_back({command.id, command.defaultChord});
         }
@@ -102,6 +108,7 @@ namespace BECore {
             }
         }
         binding->chord = chord;
+        _revision = NextRevision();
         return {};
     }
 
@@ -120,6 +127,7 @@ namespace BECore {
             return false;
         }
         binding->chord.reset();
+        _revision = NextRevision();
         return true;
     }
 
@@ -134,6 +142,7 @@ namespace BECore {
         }
         if (!command->defaultChord) {
             binding->chord.reset();
+            _revision = NextRevision();
             return {};
         }
         return Place(commandId, *command->defaultChord, false);
@@ -144,6 +153,7 @@ namespace BECore {
             const EditorCommand* command = FindEditorCommand(binding.id);
             binding.chord = command != nullptr ? command->defaultChord : std::nullopt;
         }
+        _revision = NextRevision();
     }
 
 }  // namespace BECore

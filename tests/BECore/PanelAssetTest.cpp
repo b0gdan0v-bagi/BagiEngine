@@ -12,7 +12,7 @@ namespace BECore::Tests {
 
         /// Every kind of element once, a table with each column type, and a nested container of each kind
         constexpr const char* kSampleXml = R"(
-<PanelAsset id="Sample" title="Sample" command="view.sample" open="true" width="640" height="320">
+<PanelAsset id="Sample" title="Sample" titleBind="files.title" command="view.sample" open="true" window="Floating" width="640" height="320">
   <sources>
     <source name="files" model="FileChangesPanelModel"/>
   </sources>
@@ -20,10 +20,13 @@ namespace BECore::Tests {
     <element type="PanelEmptyState" id="idle" icon="file-diff" text="Nothing to show" visible="!files.running"/>
     <element type="PanelSection" id="section" title="Details" defaultOpen="false" tooltip="A section">
       <elements>
-        <element type="PanelRow" id="toolbar">
+        <element type="PanelRow" id="toolbar" align="Center">
           <elements>
-            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" enableWhen="files.hasPending"/>
-            <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5"/>
+            <element type="PanelButton" id="rescan" text="Rescan" icon="refresh-cw" command="fileChanges.rescan" argument="all files" width="9" enableWhen="files.hasPending" navigable="false" fill="Muted" fillWhen="files.running" repeat="true"/>
+            <element type="PanelInput" id="filter" bind="files.filter" hint="Filter" icon="search" width="12.5" focus="true" submitCommand="files.apply" commitCommand="files.save"/>
+            <element type="PanelCheckbox" id="errors" bind="files.showErrors" text="Errors" labelBind="files.errorsText" look="Toggle" style="Error"/>
+            <element type="PanelCombo" id="category" bind="files.category" items="files.categories" itemField="name" width="11"/>
+            <element type="PanelNumber" id="budget" bind="files.budget" text="ms" min="-1.5" max="100" step="0.25" slider="true" width="8" commitCommand="files.save"/>
           </elements>
         </element>
         <element type="PanelText" id="status" bind="files.status" style="Warning" wrap="true" mono="true" maxLines="12"/>
@@ -39,7 +42,17 @@ namespace BECore::Tests {
         </element>
       </elements>
     </element>
-    <element type="PanelPopup" id="confirm" title="Confirm" open="!files.running">
+    <element type="PanelTabs" id="tabs">
+      <elements>
+        <element type="PanelTab" id="first" title="First">
+          <elements>
+            <element type="PanelText" id="inTab" text="In a tab"/>
+          </elements>
+        </element>
+        <element type="PanelTab" id="second" title="Second"/>
+      </elements>
+    </element>
+    <element type="PanelPopup" id="confirm" title="Confirm" open="!files.running" closeCommand="files.closeConfirm">
       <elements>
         <element type="PanelText" id="inPopup" text="Sure?"/>
       </elements>
@@ -90,21 +103,56 @@ namespace BECore::Tests {
         EXPECT_EQ(Write(*again), written);
         EXPECT_EQ(again->id, "Sample");
         EXPECT_TRUE(again->open);
+        EXPECT_EQ(again->window, PanelWindowKind::Floating);
+        EXPECT_EQ(again->titleBind, "files.title");
         EXPECT_FLOAT_EQ(again->width, 640.0f);
         ASSERT_EQ(again->sources.size(), 1u);
         EXPECT_EQ(again->sources[0].model, "FileChangesPanelModel");
 
-        ASSERT_EQ(again->elements.size(), 4u);
+        ASSERT_EQ(again->elements.size(), 5u);
         const auto* section = ElementAs<PanelSection>(again->elements[1]);
         ASSERT_NE(section, nullptr);
         EXPECT_FALSE(section->defaultOpen);
         ASSERT_EQ(section->elements.size(), 8u);
         const auto* row = ElementAs<PanelRow>(section->elements[0]);
         ASSERT_NE(row, nullptr);
-        ASSERT_EQ(row->elements.size(), 2u);
+        ASSERT_EQ(row->elements.size(), 5u);
+        const auto* rescan = ElementAs<PanelButton>(row->elements[0]);
+        ASSERT_NE(rescan, nullptr);
+        EXPECT_EQ(rescan->argument, "all files");
+        EXPECT_FLOAT_EQ(rescan->width, 9.0f);
+        EXPECT_FALSE(rescan->navigable);
+        EXPECT_EQ(rescan->fill, PanelButtonFill::Muted);
+        EXPECT_EQ(rescan->fillWhen, "files.running");
+        EXPECT_TRUE(rescan->repeat);
+        EXPECT_EQ(row->align, PanelRowAlign::Center);
         const auto* input = ElementAs<PanelInput>(row->elements[1]);
         ASSERT_NE(input, nullptr);
         EXPECT_FLOAT_EQ(input->width, 12.5f);
+        EXPECT_TRUE(input->focus);
+        EXPECT_EQ(input->submitCommand, "files.apply");
+        EXPECT_EQ(input->commitCommand, "files.save");
+        const auto* checkbox = ElementAs<PanelCheckbox>(row->elements[2]);
+        ASSERT_NE(checkbox, nullptr);
+        EXPECT_EQ(checkbox->bind, "files.showErrors");
+        EXPECT_EQ(checkbox->text, "Errors");
+        EXPECT_EQ(checkbox->labelBind, "files.errorsText");
+        EXPECT_EQ(checkbox->look, PanelCheckLook::Toggle);
+        EXPECT_EQ(checkbox->style, PanelTextStyle::Error);
+        const auto* combo = ElementAs<PanelCombo>(row->elements[3]);
+        ASSERT_NE(combo, nullptr);
+        EXPECT_EQ(combo->items, "files.categories");
+        EXPECT_EQ(combo->itemField, "name");
+        EXPECT_FLOAT_EQ(combo->width, 11.0f);
+        const auto* number = ElementAs<PanelNumber>(row->elements[4]);
+        ASSERT_NE(number, nullptr);
+        EXPECT_EQ(number->text, "ms");
+        EXPECT_FLOAT_EQ(number->min, -1.5f);
+        EXPECT_FLOAT_EQ(number->max, 100.0f);
+        EXPECT_FLOAT_EQ(number->step, 0.25f);
+        EXPECT_TRUE(number->slider);
+        EXPECT_FLOAT_EQ(number->width, 8.0f);
+        EXPECT_EQ(number->commitCommand, "files.save");
         const auto* status = ElementAs<PanelText>(section->elements[1]);
         ASSERT_NE(status, nullptr);
         EXPECT_EQ(status->style, PanelTextStyle::Warning);
@@ -120,13 +168,21 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(pane->height, 8.0f);
         EXPECT_TRUE(pane->border);
         ASSERT_EQ(pane->elements.size(), 1u);
-        const auto* popup = ElementAs<PanelPopup>(again->elements[2]);
+        const auto* tabs = ElementAs<PanelTabs>(again->elements[2]);
+        ASSERT_NE(tabs, nullptr);
+        ASSERT_EQ(tabs->elements.size(), 2u);
+        const auto* firstTab = ElementAs<PanelTab>(tabs->elements[0]);
+        ASSERT_NE(firstTab, nullptr);
+        EXPECT_EQ(firstTab->title, "First");
+        EXPECT_EQ(firstTab->elements.size(), 1u);
+        const auto* popup = ElementAs<PanelPopup>(again->elements[3]);
         ASSERT_NE(popup, nullptr);
         EXPECT_EQ(popup->title, "Confirm");
         EXPECT_EQ(popup->open, "!files.running");
+        EXPECT_EQ(popup->closeCommand, "files.closeConfirm");
         ASSERT_EQ(popup->elements.size(), 1u);
 
-        const auto* table = ElementAs<PanelTable>(again->elements[3]);
+        const auto* table = ElementAs<PanelTable>(again->elements[4]);
         ASSERT_NE(table, nullptr);
         EXPECT_FALSE(table->header);
         EXPECT_EQ(table->maxRows, 20u);
@@ -142,12 +198,312 @@ namespace BECore::Tests {
         EXPECT_EQ(table->columns[4].enableField, "hasParams");
     }
 
+    TEST(PanelAssetTest, MenusRoundTrip) {
+        constexpr const char* xml = R"(
+<PanelAsset id="Bar" title="Bar" window="Bar" open="true">
+  <sources>
+    <source name="menu" model="MainMenuModel"/>
+  </sources>
+  <elements>
+    <element type="PanelMenu" id="layouts" title="Layouts" enableWhen="menu.hasStore" openCommand="layouts.menuOpened">
+      <elements>
+        <element type="PanelMenuItem" id="save" text="Save" icon="save" command="file.save" argument="now" enableWhen="menu.hasStore"/>
+        <element type="PanelSeparator" id="line"/>
+        <element type="PanelMenuItems" id="saved" source="menu.layouts" itemField="name" command="layouts.load" icon="layout"/>
+        <element type="PanelMenu" id="sub" title="More"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        XmlDeserializer first;
+        const auto asset = Read(xml, first);
+        ASSERT_FALSE(first.HasErrors());
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+        EXPECT_EQ(again->window, PanelWindowKind::Bar);
+
+        ASSERT_EQ(again->elements.size(), 1u);
+        const auto* menu = ElementAs<PanelMenu>(again->elements[0]);
+        ASSERT_NE(menu, nullptr);
+        EXPECT_EQ(menu->title, "Layouts");
+        EXPECT_EQ(menu->enableWhen, "menu.hasStore");
+        EXPECT_EQ(menu->openCommand, "layouts.menuOpened");
+        ASSERT_EQ(menu->elements.size(), 4u);
+        const auto* item = ElementAs<PanelMenuItem>(menu->elements[0]);
+        ASSERT_NE(item, nullptr);
+        EXPECT_EQ(item->text, "Save");
+        EXPECT_EQ(item->icon, "save");
+        EXPECT_EQ(item->command, "file.save");
+        EXPECT_EQ(item->argument, "now");
+        EXPECT_EQ(item->enableWhen, "menu.hasStore");
+        const auto* items = ElementAs<PanelMenuItems>(menu->elements[2]);
+        ASSERT_NE(items, nullptr);
+        EXPECT_EQ(items->source, "menu.layouts");
+        EXPECT_EQ(items->itemField, "name");
+        EXPECT_EQ(items->command, "layouts.load");
+        EXPECT_EQ(items->icon, "layout");
+        EXPECT_NE(ElementAs<PanelMenu>(menu->elements[3]), nullptr);
+    }
+
+    TEST(PanelAssetTest, ToolbarKindsRoundTrip) {
+        constexpr const char* xml = R"(
+<PanelAsset id="Toolbar" title="Toolbar" window="Bar" open="true">
+  <elements>
+    <element type="PanelRow" id="row">
+      <elements>
+        <element type="PanelCheckbox" id="rotate" bind="view.rotated" text="Rotate" icon="rotate-cw" enableWhen="view.shape != Free"/>
+        <element type="PanelCombo" id="size" bind="view.size" items="view.sizes" itemField="name" separatorField="isLine" enableWhen="view.canResize"/>
+        <element type="PanelNumber" id="width" bind="view.width" min="64" max="4096" input="true" enableWhen="view.custom" commitCommand="view.commit"/>
+        <element type="PanelDropdown" id="overlays" text="Overlays" icon="layers" enableWhen="view.ready">
+          <elements>
+            <element type="PanelTable" id="devices" source="view.devices" header="false">
+              <columns>
+                <column id="on" type="Checkbox" field="shown" labelField="name" enableField="available"/>
+              </columns>
+            </element>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        XmlDeserializer first;
+        const auto asset = Read(xml, first);
+        ASSERT_FALSE(first.HasErrors());
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+
+        ASSERT_EQ(again->elements.size(), 1u);
+        const auto* row = ElementAs<PanelRow>(again->elements[0]);
+        ASSERT_NE(row, nullptr);
+        ASSERT_EQ(row->elements.size(), 4u);
+        const auto* checkbox = ElementAs<PanelCheckbox>(row->elements[0]);
+        ASSERT_NE(checkbox, nullptr);
+        EXPECT_EQ(checkbox->icon, "rotate-cw");
+        EXPECT_EQ(checkbox->enableWhen, "view.shape != Free");
+        const auto* combo = ElementAs<PanelCombo>(row->elements[1]);
+        ASSERT_NE(combo, nullptr);
+        EXPECT_EQ(combo->separatorField, "isLine");
+        EXPECT_EQ(combo->enableWhen, "view.canResize");
+        const auto* number = ElementAs<PanelNumber>(row->elements[2]);
+        ASSERT_NE(number, nullptr);
+        EXPECT_TRUE(number->input);
+        EXPECT_EQ(number->enableWhen, "view.custom");
+        const auto* dropdown = ElementAs<PanelDropdown>(row->elements[3]);
+        ASSERT_NE(dropdown, nullptr);
+        EXPECT_EQ(dropdown->text, "Overlays");
+        EXPECT_EQ(dropdown->icon, "layers");
+        EXPECT_EQ(dropdown->enableWhen, "view.ready");
+        ASSERT_EQ(dropdown->elements.size(), 1u);
+        const auto* table = ElementAs<PanelTable>(dropdown->elements[0]);
+        ASSERT_NE(table, nullptr);
+        ASSERT_EQ(table->columns.size(), 1u);
+        EXPECT_EQ(table->columns[0].type, PanelColumnType::Checkbox);
+        EXPECT_EQ(table->columns[0].field, "shown");
+        EXPECT_EQ(table->columns[0].labelField, "name");
+        EXPECT_EQ(table->columns[0].enableField, "available");
+    }
+
+    TEST(PanelAssetTest, FormKindsRoundTrip) {
+        constexpr const char* xml = R"(
+<PanelAsset id="Form" title="Form">
+  <elements>
+    <element type="PanelSection" id="slice" title="Slice sheet" icon="grid-3x3" openBind="sprites.sliceOpen">
+      <elements>
+        <element type="PanelRadio" id="grid" bind="sprites.mode" value="Grid" text="Grid" icon="grid-3x3" enableWhen="sprites.canSlice"/>
+        <element type="PanelRadio" id="half" bind="sprites.scale" value="0.5" icon="minus"/>
+        <element type="PanelNumber" id="columns" bind="sprites.columns" min="1" max="256" step="1" stepFast="10" stepper="true"/>
+        <element type="PanelInput" id="names" bind="sprites.names" lines="3" commitCommand="sprites.names"/>
+        <element type="PanelButton" id="add" text="Add" command="sprites.add" width="-1"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        XmlDeserializer first;
+        const auto asset = Read(xml, first);
+        ASSERT_FALSE(first.HasErrors());
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+
+        ASSERT_EQ(again->elements.size(), 1u);
+        const auto* section = ElementAs<PanelSection>(again->elements[0]);
+        ASSERT_NE(section, nullptr);
+        EXPECT_EQ(section->icon, "grid-3x3");
+        EXPECT_EQ(section->openBind, "sprites.sliceOpen");
+        ASSERT_EQ(section->elements.size(), 5u);
+        const auto* grid = ElementAs<PanelRadio>(section->elements[0]);
+        ASSERT_NE(grid, nullptr);
+        EXPECT_EQ(grid->bind, "sprites.mode");
+        EXPECT_EQ(grid->value, "Grid");
+        EXPECT_EQ(grid->text, "Grid");
+        EXPECT_EQ(grid->icon, "grid-3x3");
+        EXPECT_EQ(grid->enableWhen, "sprites.canSlice");
+        const auto* half = ElementAs<PanelRadio>(section->elements[1]);
+        ASSERT_NE(half, nullptr);
+        EXPECT_EQ(half->value, "0.5");
+        EXPECT_TRUE(half->text.empty());
+        const auto* columns = ElementAs<PanelNumber>(section->elements[2]);
+        ASSERT_NE(columns, nullptr);
+        EXPECT_TRUE(columns->stepper);
+        EXPECT_FLOAT_EQ(columns->step, 1.0f);
+        EXPECT_FLOAT_EQ(columns->stepFast, 10.0f);
+        const auto* names = ElementAs<PanelInput>(section->elements[3]);
+        ASSERT_NE(names, nullptr);
+        EXPECT_EQ(names->lines, 3u);
+        const auto* add = ElementAs<PanelButton>(section->elements[4]);
+        ASSERT_NE(add, nullptr);
+        EXPECT_FLOAT_EQ(add->width, kPanelFillLineWidth);
+    }
+
+    TEST(PanelAssetTest, GenerateKindsRoundTrip) {
+        constexpr const char* xml = R"(
+<PanelAsset id="Generate" title="Generate">
+  <elements>
+    <element type="PanelSection" id="settings" title="Settings" look="Tree" tooltip="Settings" tooltipBind="art.settingsTip">
+      <elements>
+        <element type="PanelText" id="service" bind="art.status" icon="plug"/>
+        <element type="PanelInput" id="name" bind="art.name" text="Name" fill="false"/>
+        <element type="PanelCombo" id="workflow" bind="art.workflow" items="art.workflows" itemField="name" enableField="usable" tooltipField="error" previewBind="art.workflowName" text="Workflow"/>
+        <element type="PanelNumber" id="padding" bind="art.padding" min="0" max="50" slider="true" unit=" %" decimals="2"/>
+        <element type="PanelProgress" id="download" bind="art.fraction" textBind="art.overlay" width="12"/>
+        <element type="PanelDropdown" id="saveAs" icon="save-all" openCommand="art.saveAsOpened">
+          <elements>
+            <element type="PanelButton" id="save" text="Save" command="art.save" closePopup="true"/>
+          </elements>
+        </element>
+        <element type="PanelTable" id="plan" source="art.plan">
+          <columns>
+            <column id="what" type="Text" field="what" tooltipField="licence"/>
+          </columns>
+        </element>
+        <element type="PanelTabs" id="tabs">
+          <elements>
+            <element type="PanelTab" id="run" title="Generate" icon="image"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+        XmlDeserializer first;
+        const auto asset = Read(xml, first);
+        ASSERT_FALSE(first.HasErrors());
+        const String written = Write(*asset);
+        XmlDeserializer second;
+        const auto again = Read(written, second);
+        EXPECT_FALSE(second.HasErrors());
+        EXPECT_EQ(Write(*again), written);
+
+        ASSERT_EQ(again->elements.size(), 1u);
+        const auto* section = ElementAs<PanelSection>(again->elements[0]);
+        ASSERT_NE(section, nullptr);
+        EXPECT_EQ(section->look, PanelSectionLook::Tree);
+        EXPECT_EQ(section->tooltipBind, "art.settingsTip");
+        ASSERT_EQ(section->elements.size(), 8u);
+        const auto* service = ElementAs<PanelText>(section->elements[0]);
+        ASSERT_NE(service, nullptr);
+        EXPECT_EQ(service->icon, "plug");
+        const auto* name = ElementAs<PanelInput>(section->elements[1]);
+        ASSERT_NE(name, nullptr);
+        EXPECT_EQ(name->text, "Name");
+        EXPECT_FALSE(name->fill);
+        const auto* workflow = ElementAs<PanelCombo>(section->elements[2]);
+        ASSERT_NE(workflow, nullptr);
+        EXPECT_EQ(workflow->enableField, "usable");
+        EXPECT_EQ(workflow->tooltipField, "error");
+        EXPECT_EQ(workflow->previewBind, "art.workflowName");
+        EXPECT_EQ(workflow->text, "Workflow");
+        const auto* padding = ElementAs<PanelNumber>(section->elements[3]);
+        ASSERT_NE(padding, nullptr);
+        EXPECT_EQ(padding->unit, " %");
+        EXPECT_EQ(padding->decimals, 2u);
+        const auto* download = ElementAs<PanelProgress>(section->elements[4]);
+        ASSERT_NE(download, nullptr);
+        EXPECT_EQ(download->bind, "art.fraction");
+        EXPECT_EQ(download->textBind, "art.overlay");
+        EXPECT_FLOAT_EQ(download->width, 12.0f);
+        const auto* saveAs = ElementAs<PanelDropdown>(section->elements[5]);
+        ASSERT_NE(saveAs, nullptr);
+        EXPECT_EQ(saveAs->openCommand, "art.saveAsOpened");
+        ASSERT_EQ(saveAs->elements.size(), 1u);
+        const auto* save = ElementAs<PanelButton>(saveAs->elements[0]);
+        ASSERT_NE(save, nullptr);
+        EXPECT_TRUE(save->closePopup);
+        const auto* plan = ElementAs<PanelTable>(section->elements[6]);
+        ASSERT_NE(plan, nullptr);
+        ASSERT_EQ(plan->columns.size(), 1u);
+        EXPECT_EQ(plan->columns[0].tooltipField, "licence");
+        const auto* tabs = ElementAs<PanelTabs>(section->elements[7]);
+        ASSERT_NE(tabs, nullptr);
+        ASSERT_EQ(tabs->elements.size(), 1u);
+        const auto* run = ElementAs<PanelTab>(tabs->elements[0]);
+        ASSERT_NE(run, nullptr);
+        EXPECT_EQ(run->icon, "image");
+    }
+
+    TEST(PanelAssetTest, ASectionLooksAndAnInputFillsAsBeforeWhenTheFileSaysNothing) {
+        XmlDeserializer deserializer;
+        const auto asset = Read(R"(<PanelAsset id="A"><elements>
+                                     <element type="PanelSection" id="s"/>
+                                     <element type="PanelInput" id="i" bind="a.b"/>
+                                   </elements></PanelAsset>)",
+                                deserializer);
+        ASSERT_FALSE(deserializer.HasErrors());
+        const auto* section = ElementAs<PanelSection>(asset->elements[0]);
+        const auto* input = ElementAs<PanelInput>(asset->elements[1]);
+        ASSERT_NE(section, nullptr);
+        ASSERT_NE(input, nullptr);
+        EXPECT_EQ(section->look, PanelSectionLook::Header);
+        EXPECT_TRUE(input->fill);
+    }
+
+    TEST(PanelAssetTest, RowAlignAndButtonFillDefaultToTheOldLook) {
+        XmlDeserializer deserializer;
+        const auto asset = Read(R"(<PanelAsset id="A"><elements>
+                                     <element type="PanelRow" id="r"/>
+                                     <element type="PanelButton" id="b" command="c.d"/>
+                                   </elements></PanelAsset>)",
+                                deserializer);
+        ASSERT_FALSE(deserializer.HasErrors());
+        const auto* row = ElementAs<PanelRow>(asset->elements[0]);
+        const auto* button = ElementAs<PanelButton>(asset->elements[1]);
+        ASSERT_NE(row, nullptr);
+        ASSERT_NE(button, nullptr);
+        EXPECT_EQ(row->align, PanelRowAlign::Start);
+        EXPECT_EQ(button->fill, PanelButtonFill::None);
+        EXPECT_TRUE(button->fillWhen.empty());
+        EXPECT_FALSE(button->repeat);
+    }
+
     TEST(PanelAssetTest, EveryKindIsMadeByItsClassName) {
-        for (const char* name : {"PanelSection", "PanelRow", "PanelText", "PanelField", "PanelFields", "PanelInput", "PanelButton", "PanelTable", "PanelSeparator", "PanelEmptyState", "PanelSlot",
-                                 "PanelChild", "PanelPopup"}) {
+        for (const char* name : {"PanelSection", "PanelRow",    "PanelText",  "PanelField",     "PanelFields",     "PanelInput",    "PanelCheckbox", "PanelCombo",
+                                 "PanelNumber",  "PanelButton", "PanelTable", "PanelSeparator", "PanelEmptyState", "PanelSlot",     "PanelChild",    "PanelPopup",
+                                 "PanelTabs",    "PanelTab",    "PanelMenu",  "PanelMenuItem",  "PanelMenuItems",  "PanelDropdown", "PanelRadio",    "PanelProgress"}) {
             const IntrusivePtr<PanelElement> element = AbstractFactory<PanelElement>::GetInstance().Create(StringView{name});
             ASSERT_NE(element, nullptr) << name;
             EXPECT_EQ(element->GetTypeMeta().typeName, StringView{name});
+        }
+    }
+
+    TEST(PanelAssetTest, TheWindowKindDefaultsToDockedAndNamesItsValues) {
+        XmlDeserializer deserializer;
+        const auto asset = Read(R"(<PanelAsset id="A"/>)", deserializer);
+        EXPECT_EQ(asset->window, PanelWindowKind::Docked);
+
+        for (const char* name : {"Docked", "Floating", "Dialogs", "Bar"}) {
+            XmlDeserializer reader;
+            const auto named = Read(Format(R"(<PanelAsset id="A" window="{}"/>)", name), reader);
+            EXPECT_FALSE(reader.HasErrors()) << name;
+            EXPECT_EQ(EnumUtils<PanelWindowKind>::ToString(named->window), StringView(name));
         }
     }
 

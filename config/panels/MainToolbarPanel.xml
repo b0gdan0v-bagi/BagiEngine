@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<PanelAsset id="MainToolbar" title="Main toolbar" open="true" window="Bar">
+  <sources>
+    <item name="play" model="MainToolbarModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="buttons" align="Center">
+      <elements>
+        <element type="PanelButton" id="play" icon="play" visible="play.stopped" fill="Accent" command="game.play" tooltip="Play: the editor does not run the game from here yet"/>
+        <element type="PanelButton" id="stop" icon="square" visible="!play.stopped" command="game.play" tooltip="Stop: the editor does not run the game from here yet"/>
+        <element type="PanelButton" id="pause" icon="pause" enableWhen="play.canPause" fill="Muted" fillWhen="play.paused" command="game.pause" tooltip="Pause or resume the game"/>
+        <element type="PanelButton" id="step" icon="step-forward" enableWhen="play.canStep" repeat="true" command="game.step" tooltip="Step one frame while paused; hold to repeat"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

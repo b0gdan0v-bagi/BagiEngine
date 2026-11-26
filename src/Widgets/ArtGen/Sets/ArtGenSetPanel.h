@@ -74,7 +74,7 @@ namespace BECore {
      * @brief The Set tab of the Generate panel: the subject rows, Queue, the list of sets and the rows of the selected one.
      *
      * ImGui only: every decision (the lines, the queue, the cancel, the retry, the pick and switch, Accept all, Keep) is the session's and is the same call the
-     * control API makes (src/Widgets/ArtGen/Sets/CLAUDE.md). Owned by `ArtGenWidget`, which draws the tab bar.
+     * control API makes (src/Widgets/ArtGen/Sets/CLAUDE.md). Owned by `ArtGenPanelModel`, whose slot `artgenSetTab` draws it inside the asset's Set tab.
      */
     class ArtGenSetPanel {
     public:

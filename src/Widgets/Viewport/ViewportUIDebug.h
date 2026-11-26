@@ -7,7 +7,9 @@
 #include <BECore/UI/UIPreview.h>
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/UI/UIVariant.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
+#include <Widgets/Viewport/ViewportToolbarState.h>
 #include <cstdint>
 #include <imgui.h>
 
@@ -23,8 +25,8 @@ namespace BECore {
      * @brief The UI debug overlays of the viewport: the rect of every element, the anchors and pivots, the design rectangle of the canvas scaler and the findings of the layout validator, drawn over
      *        the image from the marks of UIPreviewOverlay (output pixels), and the tooltips that go with them.
      *
-     * Needs an ImGui frame in progress. Each canvas has a runtime switch (not stored) for all four overlays. The marks of a canvas are made again only when its layout ran again (and the findings when
-     * the minimum touch size moved), so a steady frame validates, collects and allocates nothing. The canvases are held by pointer between calls; Release() lets them go.
+     * Needs an ImGui frame in progress. Each canvas has a runtime switch (not stored, kept by the caller) for all four overlays. The marks of a canvas are made again only when its layout ran again
+     * (and the findings when the minimum touch size moved), so a steady frame validates, collects and allocates nothing. The canvases are held by pointer between calls; Release() lets them go.
      */
     class ViewportUIDebug {
     public:
@@ -34,14 +36,17 @@ namespace BECore {
         /// True when one of the four overlays is on; with none, nothing is collected or validated
         [[nodiscard]] static bool AnyOn(const PreviewOverlays& overlays);
 
-        /// Finds the canvases of @p scene (visible or not: a hidden canvas is listed for its switch and draws nothing). A scene that is not the one of the last call forgets the switches.
-        void Collect(Scene* scene);
+        /// Finds the canvases of @p scene (visible or not: a hidden canvas is listed for its switch and draws nothing). The switches are the caller's: @p isEnabled
+        /// says whether the overlays of a canvas's node are on
+        void Collect(Scene* scene, FunctionRef<bool(const SceneNode*)> isEnabled);
 
-        /// Lets the canvases go (the overlays are all off, or the scene is gone); the per-canvas switches stay, to be dropped by the next Collect() of another scene
+        /// The canvases of the last Collect(), in the order of the scene, for their switches
+        [[nodiscard]] Span<const CanvasSwitchRow> GetCanvasRows() const {
+            return {_canvasRows.data(), _canvasRows.size()};
+        }
+
+        /// Lets the canvases go (the overlays are all off, or the scene is gone)
         void Release();
-
-        /// A checkbox per canvas of the last Collect(), named by its node: the four new overlays for that canvas. Nothing before the first Collect() after an overlay was switched on.
-        void DrawCanvasSwitches();
 
         /**
          * @brief Draws the overlays that are on over the image, inside the clip rect the caller pushed. Finds what is under the pointer for the tooltips (only when @p hovered).
@@ -105,8 +110,8 @@ namespace BECore {
 
         Vector<IntrusivePtr<UICanvasComponent>> _collected;  // the scratch of Collect(), kept for its capacity
         Vector<CanvasState> _states;                         // in the order of the scene; the last is drawn on top
-        Vector<const SceneNode*> _disabledNodes;             // the nodes whose canvas is switched off: compared with the live canvases, never dereferenced
-        const Scene* _scene = nullptr;                       // compared only: another scene forgets the switches
+        Vector<CanvasSwitchRow> _canvasRows;                 // the canvases of the last Collect(), kept for its capacity
+        const Scene* _scene = nullptr;                       // of the last Collect(), for the request a click in the findings window sends
         float _minTouchSize = 0.0f;                          // of the last Draw(), the key of the findings the tooltip asks for
         Optional<HoverElement> _hoverElement;
         Optional<HoverFinding> _hoverFinding;

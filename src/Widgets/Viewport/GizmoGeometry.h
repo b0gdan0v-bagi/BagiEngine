@@ -22,6 +22,16 @@ namespace BECore::Gizmo {
     inline constexpr float kDefaultAngleStep = 15.0f;    ///< degrees
     inline constexpr float kDefaultScaleStep = 0.1f;     ///< a factor on the start size
 
+    /// The range and the drag speed of each step in the Snap popup of the Viewport's toolbar; `ViewportToolbarPanel.xml` repeats them as numbers, which its test
+    /// holds against these
+    inline constexpr float kMinSnapStep = 0.01f;
+    inline constexpr float kMaxPositionStep = 1024.0f;
+    inline constexpr float kMaxAngleStep = 180.0f;
+    inline constexpr float kMaxScaleStep = 1.0f;
+    inline constexpr float kPositionStepSpeed = 0.5f;
+    inline constexpr float kAngleStepSpeed = 0.5f;
+    inline constexpr float kScaleStepSpeed = 0.01f;
+
     /// Which kinds of snapping are on, and the step of each; a step of 0 or less switches that kind off
     struct SnapSettings {
         bool position = false;

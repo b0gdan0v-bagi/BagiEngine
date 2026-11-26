@@ -2,7 +2,7 @@
 
 ## Overview
 
-The editor's **Generate** panel (`ArtGenWidget`, command `view.generate`, View → Generate Art): a style preset of the game and a subject become image variants, and a chosen one becomes a sprite of the game. The images come from the art generation service (`tools/artgen/`, its `CLAUDE.md`), a separate Python **client of the control API**; the editor knows neither ComfyUI nor any model. Editor only (`ArtGen` is an editor folder in `src/CMakeLists.txt`).
+The editor's **Generate** panel (`config/panels/GeneratePanel.xml` over `ArtGenPanelModel`, command `view.generate`, View → Generate Art): a style preset of the game and a subject become image variants, and a chosen one becomes a sprite of the game. The images come from the art generation service (`tools/artgen/`, its `CLAUDE.md`), a separate Python **client of the control API**; the editor knows neither ComfyUI nor any model. Editor only (`ArtGen` is an editor folder in `src/CMakeLists.txt`).
 
 | File | Purpose |
 |------|---------|
@@ -18,13 +18,14 @@ The editor's **Generate** panel (`ArtGenWidget`, command `view.generate`, View �
 | `ArtGenSound.{h,cpp}` | A sound's processing at Accept, pure: `ArtGenSoundSettings`, `ProcessArtGenSound`, their `Write...` / `Read...` JSON, `MeasureArtGenSound`, `BuildArtGenWaveform` |
 | `ArtGenLaunch.{h,cpp}` | Start the service: finds the bridge of the engine checkout among the content roots and starts it |
 | `ArtGenDrag.{h,cpp}` | The payload, rules and event of dragging a variant out: the contract of every panel that takes one |
-| `ArtGenWidget.{h,cpp}` | The ImGui panel over the session: service line, setup, the preset form; under it the tabs Generate (the run, the grid of variants, Accept) and Set |
+| `ArtGenPanelModel.{h,cpp}`, `ArtGenPanel{Preset,Run,Sound}.cpp` | The panel's model, no ImGui: the view the asset binds (`art.<section>.<field>`), the `artgen.*` commands, the form, thumbnails, sounds |
+| `ArtGenPanelSlots.{h,cpp}` | The slots of the asset: `artgenWorkflowInputs`, `artgenReferencePicture`, `artgenVariants`, `artgenSounds`, `artgenSetTab` |
 
 ## The contract
 
 The answers are the reflected structs of `ArtGenAnswers.h`, written by the generated `WriteJson`: an empty `Optional` writes no member, so "none" is an absent key, never `null`. By hand stay `artgen_poll` and `artgen_set` (`HandlePoll` / `HandleSet` answer the compact text of the reply, `Register` writes it with `Raw`: `request.preset` and the manifest's `presetData` are a draft's text in the middle of a document), the manifest and the provenance records and the preset and settings files (file formats).
 
-**No DOM.** A handler takes a `JsonView`. A document the session or a set keeps (`presetData`, `ArtGenPreset::data`) is compact text with sorted keys (`SortedTextOf`; empty is none), taped where it is read; a workflow input's value is a typed `ArtGenInputValue` (the panel reads it every frame); a provenance record is a `JsonMemberMap`, so every key of the service's record is written back. Against the old DOM: of two equal keys the first wins, `inputs` are listed in key order, file readers skip a UTF-8 BOM first (`ArtGenFileText.h`), `1e999` is not a number.
+**No DOM.** A handler takes a `JsonView`. A document the session or a set keeps (`presetData`, `ArtGenPreset::data`) is compact text with sorted keys (`SortedTextOf`; empty is none), taped where it is read; a workflow input's value is a typed `ArtGenInputValue` (the panel reads it every frame); a provenance record is a `JsonMemberMap`, so every key of the service's record is written back. Of two equal keys the first wins, `inputs` are listed in key order, file readers skip a UTF-8 BOM first (`ArtGenFileText.h`), `1e999` is not a number.
 
 The service **pulls**: a request made before the service connects is not lost, and the polls are how the editor knows the service is alive (`kServiceTimeoutSeconds` silent: gone). No push events (`Publish` is lost when nobody listens). Every method answers at once; a run is never a deferred call.
 
@@ -57,20 +58,21 @@ The service **pulls**: a request made before the service connects is not lost, a
 
 ## Lifetime and threads
 
-The control API cannot drop a handler and the panel is re-created at every switch of the run mode, so the session registers the methods (`RegisterControl`, once per `ControlService`, from the panel's `Initialize`) and they capture it, never the widget. Before the panel exists the service gets `unknown_method`. Main thread only. No method or poll needs a frame: the whole flow (generate, set, accept) runs in `--editor --headless --manual-clock` with no `step` (`tools/artgen/headless_check.py`); only the panel's drawing waits for frames.
+The control API cannot drop a handler and the panel is re-created at every switch of the run mode, so the session registers the methods (`RegisterControl`, once per `ControlService`, from the model's `Initialize`) and they capture it, never the widget. Before the panel exists the service gets `unknown_method`. Main thread only. No method or poll needs a frame: the whole flow (generate, set, accept) runs in `--editor --headless --manual-clock` with no `step` (`tools/artgen/headless_check.py`); only the panel's drawing waits for frames.
 
 ## The panel
 
-- **Tabs.** Above them, shared: the service line, setup and the preset form. Each tab owns its controls: **Generate** the subject, count, seed, keep-the-variants, Generate / Cancel and the run view; **Set** (`ArtGenSetPanel`) the queue and the sets (`Sets/CLAUDE.md`, "The panel"). Generate is off while a set runs.
-- **The preset form** (`ArtGenPresetForm`): the combo lists the game's presets, then the engine's starters, a broken one with its error; picking one drops unsaved edits (marked `*`). Save makes a starter the game's copy. Fields: Name, Title, Workflow, Prompt, Negative, the workflow's inputs from the service's description, and, for an image workflow, "Accept (image)" and "Reference" (`Reference/CLAUDE.md`). Generate sends a saved, unchanged preset by name and anything else as a draft.
-- **Start the service** first turns the control API on when it is off (`ApplicationEvents::StartControlServerRequestEvent`), then, once it listens, runs the bridge of the engine checkout in the background (`ArtGenLaunch`); its log is `artgen-bridge.log` in the editor's user folder.
-- **Set up** (`not_installed`) shows the service's plan; **Download and install** runs it with a progress bar and Cancel; Not now forgets it; beside it a line says a generator on another machine is not there yet (entry `comfyui-remote-via-todo`, `tools/artgen/comfyui/CLAUDE.md`). **Start** (`not_running`) starts the local generator; **Stop ComfyUI** is there only for a generator started from the panel (`startedHere`). **Disconnect** stops the service itself (`RequestServiceStop`).
-- Thumbnails are loaded from the reported paths and **evicted** when the run is replaced or the panel dies.
-- **Sounds.** A run of sound variants (`kind` audio) is a list instead of the grid: Play / Stop of each (a FLAC as an `AudioClip` on the `Ui` bus, evicted with the run), its waveform, seed, length and peak. Under the pick: the processing settings, **Listen as accepted**, the target (a name, or **Replace a clip of the game**) and Accept.
-- **The verdict mark** (thumbnails sit on a checkerboard): every image thumbnail of the grid and of the Set tab's rows has a mark in its top-right corner from `checks` of its provenance file, read once when the thumbnail loads (`ArtGenVerdict`): passed, failed (the tooltip names the checks), unreadable (`passed: null`); a sound or a file without `checks` has none.
-- **Reference** (`Reference/`, Generate tab, not for a sound preset): the slot's picture, mode, weight and Clear; **Use as reference** on a variant or a sprite, **Use file** and **Use as shape** fill it. The workflow combo leaves out the variants a map reaches.
-- **Drag out.** An image variant of the grid and of a Set row is a drag source (a click still selects). The payload names the variant, never its file. A target plans with `PlanArtGenDrop` and emits `ArtGenVariantDropEvent`; this panel answers with the form's accept settings (a set's variant: `AcceptSetVariant`, the manifest untouched) and the Accept message (`TextureEditor/CLAUDE.md`, "Drop of a generated variant").
-- A click selects a variant; the dice button under it puts its seed into the form for the next Generate.
+- **The model** is made with its `AssetPanelWidget`, open or not: `Initialize` installs the acceptors, registers the control methods and the slots, and subscribes to the selection and `ArtGenVariantDropEvent`; `Update` runs while open. A slot notes a click, the model applies it in `EndUpdate`; a frame that did not draw `artgenSetTab`, and a close, give the Set tab's pictures and sound back.
+- **Tabs.** Above them, shared: the service line, setup and the preset form. Each tab owns its controls: **Generate** the run form and the run view; **Set** (`ArtGenSetPanel`) the queue and the sets (`Sets/CLAUDE.md`, "The panel"). Generate is off while a set runs.
+- **The preset form** (`ArtGenPresetForm`): the combo lists the game's presets, then the engine's starters, a broken one with its error; picking one drops unsaved edits (marked `*`). Save makes a starter the game's copy. Its Settings: the size, the workflow's inputs from the service's description and, for an image workflow, "Accept (image)" and "Reference" (`Reference/CLAUDE.md`).
+- **Start the service** first turns the control API on when it is off (`ApplicationEvents::StartControlServerRequestEvent`), then, once it listens, runs the bridge of the engine checkout (`ArtGenLaunch`); its log is `artgen-bridge.log` in the editor's user folder.
+- **Set up** (`not_installed`) shows the service's plan; **Download and install** runs it with a progress bar and Cancel; Not now forgets it. **Start** (`not_running`) starts the local generator; **Stop ComfyUI** is there only for a generator started from the panel (`startedHere`). **Disconnect** stops the service itself (`RequestServiceStop`).
+- Thumbnails are loaded from the reported paths and **evicted** when the run is replaced or the model dies.
+- **Sounds.** A run of sound variants (`kind` audio) is a list instead of the grid: Play / Stop of each (a FLAC as an `AudioClip` on the `Ui` bus, evicted with the run). One sound plays at a time.
+- **The verdict mark** (thumbnails sit on a checkerboard): an image thumbnail of the grid and of a Set row has a mark in its top-right corner from `checks` of its provenance file, read once when the thumbnail loads (`ArtGenVerdict`): passed, failed (the tooltip names the checks), unreadable (`passed: null`); a sound or a file without `checks` has none.
+- **Reference** (`Reference/CLAUDE.md`; Generate tab, image presets only). The workflow combo leaves out the variants a map reaches.
+- **Drag out.** An image variant of the grid and of a Set row is a drag source (a click still selects). The payload names the variant, never its file. A target plans with `PlanArtGenDrop` and emits `ArtGenVariantDropEvent`; the model answers, also while the window is closed, with the form's accept settings (a set's variant: `AcceptSetVariant`, the manifest untouched) and the Accept message (`TextureEditor/CLAUDE.md`, "Drop of a generated variant").
+- A click picks a variant; its dice puts its seed into the run form.
 
 ## Accept
 

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<PanelAsset id="Console" title="Console" titleBind="console.title" command="view.console" open="false" width="720" height="280">
+  <sources>
+    <item name="console" model="ConsolePanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelEmptyState" id="noHistory" icon="scroll-text" text="No log history: the LoggerConfig.xml in use has no LogHistorySink entry" visible="!console.hasHistory"/>
+    <element type="PanelRow" id="toolbar" visible="console.hasHistory">
+      <elements>
+        <element type="PanelCheckbox" id="levelDebug" look="Toggle" bind="console.showDebug" labelBind="console.debugLabel" style="Disabled" tooltip="Show or hide the Debug lines"/>
+        <element type="PanelCheckbox" id="levelInfo" look="Toggle" bind="console.showInfo" labelBind="console.infoLabel" style="Normal" tooltip="Show or hide the Info lines"/>
+        <element type="PanelCheckbox" id="levelWarning" look="Toggle" bind="console.showWarning" labelBind="console.warningLabel" style="Warning" tooltip="Show or hide the Warning lines"/>
+        <element type="PanelCheckbox" id="levelError" look="Toggle" bind="console.showError" labelBind="console.errorLabel" style="Error" tooltip="Show or hide the Error and Fatal lines"/>
+        <element type="PanelCombo" id="category" bind="console.category" items="console.categories" width="11" tooltip="The module the line comes from"/>
+        <element type="PanelInput" id="filter" bind="console.filterText" hint="Filter text" icon="filter" width="14" tooltip="Lines whose text holds this (upper and lower case alike)"/>
+        <element type="PanelButton" id="pause" icon="pause" text="Pause" command="console.pause" visible="!console.paused" tooltip="Freeze the list; the lines keep coming behind it"/>
+        <element type="PanelButton" id="resume" icon="play" text="Resume" command="console.pause" visible="console.paused" tooltip="Show the lines that came while paused"/>
+        <element type="PanelButton" id="clear" icon="trash-2" text="Clear" command="console.clear" tooltip="Remove every line of the log history"/>
+        <element type="PanelText" id="lost" bind="console.lostText" style="Disabled" visible="console.lost > 0" tooltip="Lines that did not fit the log queue before they reached the history"/>
+      </elements>
+    </element>
+    <element type="PanelSlot" id="rows" name="consoleRows" visible="console.hasHistory"/>
+    <element type="PanelSlot" id="output" name="consoleOutput"/>
+    <element type="PanelSlot" id="commandLine" name="consoleCommandLine"/>
+  </elements>
+</PanelAsset>

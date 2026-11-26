@@ -14,6 +14,7 @@
 #include <Widgets/EditorLayout/GitBranch.h>
 #include <Widgets/ImGuiLayoutText.h>
 #include <Widgets/ImGuiTheme.h>
+#include <Widgets/PanelAssets/PanelBars.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -21,8 +22,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr const char* kSaveLayoutPopupId = "Save Layout As";
-        constexpr float kSaveLayoutFieldWidth = 280.0f;
+        constexpr StringView kMainMenuAsset = "MainMenuPanel";
 
         /// Where the search for the engine's repository starts: the folder above the lowest layer of the `config` mount (the engine's own
         /// content), else the working directory
@@ -62,6 +62,8 @@ namespace BECore {
         _statusBar.SetBranch(ReadGitBranch(BranchSearchStart()));
         _statusBar.StartHardwareMonitor();
 
+        _hostHandle = EditorLayoutHostRegistry::GetInstance().Register(*this);
+
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
         Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);
         Subscribe<ViewportInputModeChangedEvent, &EditorLayoutWidget::OnViewportInputModeChanged>(this);
@@ -82,12 +84,11 @@ namespace BECore {
             CoreManager::GetWidgetManager().RequestToggle();
         } else if (event.commandId == kViewResetLayout) {
             _forceResetLayout = true;
-        } else if (event.commandId == kViewSaveLayout) {
-            _openSaveLayoutPopup = _layouts.has_value();
         } else if (event.commandId == kViewCommandPalette) {
             _palette.Open();
-        } else if (event.commandId == kViewPreferences) {
-            _preferencesWindow.Open();
+        } else if (event.commandId == kGamePlay) {
+            _playModel.PressPlay();
+            WritePauseToEngine();
         } else if (event.commandId == kGamePause) {
             TogglePause();
         } else if (event.commandId == kGameStep) {
@@ -170,16 +171,9 @@ namespace BECore {
         ImGui::PopStyleVar(3);
 
         DrawMenuBar();
-        const MainToolbar::Presses presses = _toolbar.Draw(_playModel);
-        if (presses.play || presses.pause) {
-            WritePauseToEngine();
-        }
-        if (presses.step) {
-            CoreManager::GetPause().RequestSteps(1, kDefaultStepSeconds);
-        }
+        MainToolbar::Draw();
         CloseItemGap();
         DispatchHotkeys();
-        DrawSaveLayoutPopup();
         if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys()); !chosen.Empty()) {
             EditorCommandEvent::Emit(chosen);
         }
@@ -209,7 +203,8 @@ namespace BECore {
         // The panels' Initialize ran before the first Update, so they hear the stored preferences now
         bool preferencesChanged = !_preferencesAnnounced;
         _preferencesAnnounced = true;
-        if (_preferencesWindow.Draw(*_settings)) {
+        if (_preferencesNotified) {
+            _preferencesNotified = false;
             ApplyPreferences(_settings->GetPreferences());
             preferencesChanged = true;
         }
@@ -220,85 +215,28 @@ namespace BECore {
 
     void EditorLayoutWidget::Draw() {}
 
+    EditorSettings* EditorLayoutWidget::GetSettings() {
+        return _settings ? &*_settings : nullptr;
+    }
+
+    LayoutStore* EditorLayoutWidget::GetLayouts() {
+        return _layouts ? &*_layouts : nullptr;
+    }
+
+    const EditorPlayModel* EditorLayoutWidget::GetPlayModel() const {
+        return &_playModel;
+    }
+
+    void EditorLayoutWidget::NotifyPreferencesChanged() {
+        _preferencesNotified = true;
+    }
+
     void EditorLayoutWidget::DrawMenuBar() {
-        using namespace EditorCommandIds;
         if (!ImGui::BeginMenuBar()) {
             return;
         }
-        if (ImGui::BeginMenu("File")) {
-            CommandMenuItem(kFileQuit, "Quit");
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Game")) {
-            CommandMenuItem(kGamePause, "Pause / Resume");
-            CommandMenuItem(kGameStep, "Step One Frame", _playModel.CanStep());
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("View")) {
-            CommandMenuItem(kViewCommandPalette, "Command Palette...");
-            CommandMenuItem(kViewPreferences, "Preferences...");
-            ImGui::Separator();
-            CommandMenuItem(kViewViewport, "Viewport");
-            CommandMenuItem(kViewSceneEditor, "Scene Editor");
-            CommandMenuItem(kViewConfigEditor, "Config Editor");
-            CommandMenuItem(kViewFileChanges, "File Changes");
-            CommandMenuItem(kViewSpriteLibrary, "Sprite Library");
-            CommandMenuItem(kViewGame, "Game Panel");
-            CommandMenuItem(kViewConsole, "Console");
-            CommandMenuItem(kViewGenerate, "Generate Art");
-            CommandMenuItem(kViewProfiler, "Profiler");
-            ImGui::Separator();
-            DrawLayoutsMenu();
-            ImGui::EndMenu();
-        }
+        PanelBarsRegistry::Draw(kMainMenuAsset);
         ImGui::EndMenuBar();
-    }
-
-    void EditorLayoutWidget::DrawLayoutsMenu() {
-        using namespace EditorCommandIds;
-        const bool hasStore = _layouts.has_value();
-
-        if (ImGui::BeginMenu("Layouts", hasStore)) {
-            // BeginMenu is true on every frame the menu is open, and the submenu is not drawn at all while View is closed:
-            // rescan the folder only on the first frame of an opening
-            if (_layoutsMenuOpen.Opened(ImGui::GetFrameCount())) {
-                _layoutNames.Invalidate();
-            }
-            const Vector<String>& names = _layoutNames.Names(*_layouts);
-            if (names.empty()) {
-                ImGui::TextDisabled("No saved layouts");
-            }
-            for (const String& name : names) {
-                if (ImGui::MenuItem(name.c_str())) {
-                    QueueLayout(name);
-                }
-            }
-            ImGui::EndMenu();
-        }
-
-        CommandMenuItem(kViewSaveLayout, "Save Layout As...", hasStore);
-
-        if (ImGui::BeginMenu("Delete Layout", hasStore)) {
-            if (_deleteLayoutMenuOpen.Opened(ImGui::GetFrameCount())) {
-                _layoutNames.Invalidate();
-            }
-            const Vector<String>& names = _layoutNames.Names(*_layouts);
-            if (names.empty()) {
-                ImGui::TextDisabled("No saved layouts");
-            }
-            for (const String& name : names) {
-                if (ImGui::MenuItem(name.c_str())) {
-                    if (const auto result = _layouts->Delete(name); !result) {
-                        LOG_WARNING("Editor: cannot delete layout '{}': {}", name, result.error().detail);
-                    }
-                    // The list is read again on the next draw: the loop above goes on over the old one
-                    _layoutNames.Invalidate();
-                }
-            }
-            ImGui::EndMenu();
-        }
-
-        CommandMenuItem(kViewResetLayout, "Reset to Defaults");
     }
 
     void EditorLayoutWidget::AnnouncePreferences() const {
@@ -326,73 +264,10 @@ namespace BECore {
         }
     }
 
-    void EditorLayoutWidget::DrawSaveLayoutPopup() {
-        if (_openSaveLayoutPopup) {
-            _openSaveLayoutPopup = false;
-            _layoutNameBuffer[0] = '\0';
-            _saveLayoutError.clear();
-            ImGui::OpenPopup(kSaveLayoutPopupId);
-        }
-
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (!ImGui::BeginPopupModal(kSaveLayoutPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    void EditorLayoutWidget::LoadLayout(StringView name) {
+        if (!_layouts) {
             return;
         }
-
-        ImGui::TextUnformatted("Name of the layout:");
-        if (ImGui::IsWindowAppearing()) {
-            ImGui::SetKeyboardFocusHere();
-        }
-        ImGui::SetNextItemWidth(kSaveLayoutFieldWidth);
-        const bool enterPressed = ImGui::InputText("##LayoutName", _layoutNameBuffer, sizeof(_layoutNameBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
-
-        const StringView name = _layoutNameBuffer;
-        const bool isEmpty = name.empty();
-        const bool isValid = IsValidLayoutName(name);
-        const bool exists = isValid && _layouts->Exists(name);
-
-        // The button names what it will do, so replacing a layout is never a surprise
-        if (!isEmpty && !isValid) {
-            ImGui::TextColored(GetImGuiPalette().warning, "Use letters, digits, space, - and _ (no space at the ends)");
-        } else if (exists) {
-            ImGui::TextColored(GetImGuiPalette().warning, "A layout with this name exists; saving replaces it");
-        }
-        if (!_saveLayoutError.empty()) {
-            ImGui::TextColored(GetImGuiPalette().warning, "%s", _saveLayoutError.c_str());
-        }
-
-        ImGui::BeginDisabled(!isValid);
-        const bool savePressed = ImGui::Button(exists ? "Overwrite" : "Save");
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        const bool cancelPressed = ImGui::Button("Cancel");
-
-        // Enter saves a new name; replacing a layout needs a click on "Overwrite"
-        if (savePressed || (enterPressed && isValid && !exists)) {
-            if (const auto result = SaveCurrentLayout(name); result) {
-                ImGui::CloseCurrentPopup();
-            } else {
-                _saveLayoutError = result.error();
-            }
-        } else if (cancelPressed) {
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
-
-    void EditorLayoutWidget::CommandMenuItem(PoolString id, const char* label, bool enabled) {
-        String chordText;
-        if (_settings) {
-            if (const Optional<KeyChord> chord = _settings->GetHotkeys().GetChord(id)) {
-                chordText = ToString(*chord);
-            }
-        }
-        if (ImGui::MenuItem(label, chordText.c_str(), false, enabled)) {
-            EditorCommandEvent::Emit(id);
-        }
-    }
-
-    void EditorLayoutWidget::QueueLayout(const String& name) {
         const auto text = _layouts->Load(name);
         if (!text) {
             LOG_WARNING("Editor: cannot load layout '{}': {}", name, text.error().detail);
@@ -407,7 +282,7 @@ namespace BECore {
         _pendingLayoutText = MigrateLegacyWindowNames(*text);
     }
 
-    std::expected<void, String> EditorLayoutWidget::SaveCurrentLayout(StringView name) {
+    std::expected<void, String> EditorLayoutWidget::SaveCurrentLayoutAs(StringView name) {
         size_t size = 0;
         const char* text = ImGui::SaveIniSettingsToMemory(&size);
         // SaveIniSettingsToMemory cancels the pending write of imgui.ini
@@ -417,7 +292,6 @@ namespace BECore {
             LOG_ERROR("Editor: cannot save layout '{}': {}", name, result.error().detail);
             return std::unexpected(result.error().detail);
         }
-        _layoutNames.Invalidate();
         LOG_INFO("Editor: layout '{}' saved", name);
         return {};
     }
@@ -442,7 +316,7 @@ namespace BECore {
         ImGui::DockBuilderDockWindow("Scene Editor", leftTop);
         ImGui::DockBuilderDockWindow("Config Editor###ConfigEditor", leftBottom);
         ImGui::DockBuilderDockWindow("Viewport", viewport);
-        ImGui::DockBuilderDockWindow("Sprite Library", right);
+        ImGui::DockBuilderDockWindow("Sprite Library###SpriteLibrary", right);
 
         ImGui::DockBuilderFinish(id);
     }

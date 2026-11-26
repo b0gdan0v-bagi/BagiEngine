@@ -43,15 +43,19 @@ namespace BECore {
         inline constexpr auto kViewResetLayout = "view.resetLayout"_intern;
         inline constexpr auto kViewSaveLayout = "view.saveLayout"_intern;
         inline constexpr auto kSceneSave = "scene.save"_intern;
+        /// The inspector's Add Component button: `SceneEditorWidget` asks for the Add Component dialog of the selected node (a locked one gets none)
+        inline constexpr auto kSceneEditorAddComponent = "sceneEditor.addComponent"_intern;
         inline constexpr auto kConfigSave = "config.save"_intern;
         inline constexpr auto kTextureSave = "texture.save"_intern;
+        /// Play / Stop of the main toolbar: `EditorPlayModel::PressPlay`, then the pause of the model is written to the engine (state only until `editor-play-in-editor`)
+        inline constexpr auto kGamePlay = "game.play"_intern;
         /// Pauses or resumes the game through the engine's GamePause (the same state as the toolbar's Pause button and the control API)
         inline constexpr auto kGamePause = "game.pause"_intern;
         /// One stepped frame while the game is paused; repeats while its hotkey is held
         inline constexpr auto kGameStep = "game.step"_intern;
-        /// Flips what a press in the viewport is for, Play (the game gets it) or Edit (the editor does). ViewportWidget owns the action.
+        /// Flips what a press in the viewport is for, Play (the game gets it) or Edit (the editor does). ViewportToolbarModel owns the action.
         inline constexpr auto kViewportInputMode = "viewport.inputMode"_intern;
-        /// The gizmo tool, the World / Local space of the gizmo, the snap switches and the camera frame of the viewport. ViewportWidget owns them. No default chord:
+        /// The gizmo tool, the World / Local space of the gizmo and the snap switches (ViewportToolbarModel owns them), and the camera frame of the viewport (ViewportWidget). No default chord:
         /// a bare letter is refused as a hotkey, the keys W / E / R / X / F are read by the viewport itself while it has the keys
         inline constexpr auto kViewportToolTranslate = "viewport.tool.translate"_intern;
         inline constexpr auto kViewportToolRotate = "viewport.tool.rotate"_intern;
@@ -59,18 +63,41 @@ namespace BECore {
         inline constexpr auto kViewportGizmoSpace = "viewport.gizmoSpace"_intern;
         inline constexpr auto kViewportSnap = "viewport.snap"_intern;
         inline constexpr auto kViewportFrameSelected = "viewport.frameSelected"_intern;
+        /// The Reset button of the viewport's toolbar: the editor camera back to the whole image. ViewportWidget owns the camera, so it runs the command
+        inline constexpr auto kViewportCameraReset = "viewport.cameraReset"_intern;
         /// Switches Game and Editor. Application reads Ctrl+Shift+E from the raw SDL event (RunMode.h), before ImGui, so
         /// this command is fixed: the map lists it, the palette runs it through WidgetManager::RequestToggle().
         inline constexpr auto kModeToggle = "mode.toggle"_intern;
-        /// Shows and hides the Profiler panel. Fixed like mode.toggle: ProfilerWidget reads Ctrl+Shift+P from the raw SDL event
-        /// (Profiler/ProfilerToggle.h), the palette runs it through this command
+        /// Shows and hides the Profiler panel. Fixed like mode.toggle: ProfilerPanelModel reads Ctrl+Shift+P from the raw SDL event
+        /// (Profiler/ProfilerToggle.h) and sends this command, which the asset's `command` turns into the open flag
         inline constexpr auto kViewProfiler = "view.profiler"_intern;
-        /// Shows and hides the Console panel (the log). ConsoleWidget owns the action
+        /// The Profiler panel's buttons (config/panels/ProfilerPanel.xml names them). ProfilerPanelModel owns them and runs them only while its panel is open;
+        /// trace takes the literal argument record, restart, write or writeFrames and does nothing for any other text, the rest take none
+        inline constexpr auto kProfilerTrace = "profiler.trace"_intern;
+        inline constexpr auto kProfilerSpikeLive = "profiler.spikeLive"_intern;
+        inline constexpr auto kProfilerSpikeClear = "profiler.spikeClear"_intern;
+        inline constexpr auto kProfilerResetZoneAllocs = "profiler.resetZoneAllocs"_intern;
+        /// Shows and hides the Console panel (the log). The asset's `command` (config/panels/ConsolePanel.xml) owns the action
         inline constexpr auto kViewConsole = "view.console"_intern;
+        /// The Console panel's buttons (config/panels/ConsolePanel.xml names them). ConsolePanelModel owns them and runs them only while its panel is open; none takes an argument
+        inline constexpr auto kConsolePause = "console.pause"_intern;
+        inline constexpr auto kConsoleClear = "console.clear"_intern;
+        inline constexpr auto kConsoleClearOutput = "console.clearOutput"_intern;
         /// Shows and hides the Game panel (the active game's state, actions, fields and methods): the `command` of config/panels/GamePanel.xml
         inline constexpr auto kViewGame = "view.game"_intern;
-        /// Shows and hides the Generate panel (art generation). ArtGenWidget owns the action
+        /// Shows and hides the Generate panel (art generation): the `command` of config/panels/GeneratePanel.xml
         inline constexpr auto kViewGenerate = "view.generate"_intern;
+        /// The Generate panel's buttons (config/panels/GeneratePanel.xml names them). ArtGenPanelModel owns them and runs them only while its panel is open.
+        /// Each takes a literal argument that names the action (ArtGenPanelArgs in ArtGenPanelModel.h) and does nothing for any other text, except listen
+        /// (play or stop the processed preview) and saveAsOpened (the open command of the Save-as dropdown, which carries none)
+        inline constexpr auto kArtGenService = "artgen.service"_intern;
+        inline constexpr auto kArtGenSetup = "artgen.setup"_intern;
+        inline constexpr auto kArtGenPreset = "artgen.preset"_intern;
+        inline constexpr auto kArtGenSaveAsOpened = "artgen.saveAsOpened"_intern;
+        inline constexpr auto kArtGenReference = "artgen.reference"_intern;
+        inline constexpr auto kArtGenRun = "artgen.run"_intern;
+        inline constexpr auto kArtGenAccept = "artgen.accept"_intern;
+        inline constexpr auto kArtGenListen = "artgen.listen"_intern;
         /// Show and hide the always-present panels; each panel owns its command. No default chord
         inline constexpr auto kViewSceneEditor = "view.sceneEditor"_intern;
         inline constexpr auto kViewConfigEditor = "view.configEditor"_intern;
@@ -96,6 +123,49 @@ namespace BECore {
         inline constexpr auto kConfigEditorReloadCancel = "configEditor.reloadCancel"_intern;
         inline constexpr auto kConfigEditorSwitchDiscard = "configEditor.switchDiscard"_intern;
         inline constexpr auto kConfigEditorSwitchCancel = "configEditor.switchCancel"_intern;
+        /// The Sprite Library's buttons and fields (config/panels/SpriteLibraryPanel.xml names them). SpriteLibraryPanelModel owns them and runs them only while its
+        /// panel is open; none takes an argument. rename is the name field's `commitCommand`, dropAccept and dropCancel the buttons of the "Add sprite" dialog,
+        /// sliceFindIslands and sliceAdd the buttons of the Slice sheet section, atlasName the group field's `commitCommand`, pack and unpack the buttons of the
+        /// Atlas section; `texture.save` is not one of them (the model takes it while closed too)
+        inline constexpr auto kSpriteLibraryRename = "spriteLibrary.rename"_intern;
+        inline constexpr auto kSpriteLibraryRescan = "spriteLibrary.rescan"_intern;
+        inline constexpr auto kSpriteLibraryAdd = "spriteLibrary.add"_intern;
+        inline constexpr auto kSpriteLibraryDelete = "spriteLibrary.delete"_intern;
+        inline constexpr auto kSpriteLibraryDropAccept = "spriteLibrary.dropAccept"_intern;
+        inline constexpr auto kSpriteLibraryDropCancel = "spriteLibrary.dropCancel"_intern;
+        inline constexpr auto kSpriteLibrarySliceFindIslands = "spriteLibrary.sliceFindIslands"_intern;
+        inline constexpr auto kSpriteLibrarySliceAdd = "spriteLibrary.sliceAdd"_intern;
+        inline constexpr auto kSpriteLibraryAtlasName = "spriteLibrary.atlasName"_intern;
+        inline constexpr auto kSpriteLibraryPack = "spriteLibrary.pack"_intern;
+        inline constexpr auto kSpriteLibraryUnpack = "spriteLibrary.unpack"_intern;
+        /// The Preferences window's "save now": the `commitCommand` of its controls (config/panels/PreferencesPanel.xml). PreferencesPanelModel owns it and runs it
+        /// only while its panel is open; it takes no argument
+        inline constexpr auto kPreferencesCommit = "preferences.commit"_intern;
+        /// The Preferences window's Hotkeys tab (config/panels/PreferencesPanel.xml names them). PreferencesPanelModel owns them and runs them only while its panel
+        /// is open; rebind, clear and reset take the id of a command of the table as the argument and ignore an unknown or fixed one, the rest take none.
+        /// cancelRebind is also the `closeCommand` of the Rebind Shortcut popup
+        inline constexpr auto kPreferencesRebind = "preferences.rebind"_intern;
+        inline constexpr auto kPreferencesClear = "preferences.clear"_intern;
+        inline constexpr auto kPreferencesReset = "preferences.reset"_intern;
+        inline constexpr auto kPreferencesResetAll = "preferences.resetAll"_intern;
+        inline constexpr auto kPreferencesSwap = "preferences.swap"_intern;
+        inline constexpr auto kPreferencesCancelRebind = "preferences.cancelRebind"_intern;
+        /// The Save Layout dialog (config/panels/EditorDialogsPanel.xml names them). EditorDialogsModel owns them and `view.saveLayout` opens it; none takes an argument.
+        /// save is both the Save and the Overwrite button, enter the name field's `submitCommand` (saves a new name only), cancel also the popup's `closeCommand`
+        inline constexpr auto kLayoutsSaveDialogSave = "layouts.saveDialog.save"_intern;
+        inline constexpr auto kLayoutsSaveDialogEnter = "layouts.saveDialog.enter"_intern;
+        inline constexpr auto kLayoutsSaveDialogCancel = "layouts.saveDialog.cancel"_intern;
+        /// The Scene Editor's Add Node and Add Component dialogs (config/panels/SceneDialogsPanel.xml names them). SceneDialogsModel owns them. addNode is the OK button
+        /// and the name field's `submitCommand`, addComponent takes the class name of a row as the argument and does nothing for an unknown one, cancel is both buttons
+        /// and both popups' `closeCommand`
+        inline constexpr auto kSceneDialogsAddNode = "sceneDialogs.addNode"_intern;
+        inline constexpr auto kSceneDialogsAddComponent = "sceneDialogs.addComponent"_intern;
+        inline constexpr auto kSceneDialogsCancel = "sceneDialogs.cancel"_intern;
+        /// The Layouts and Delete Layout menus of the menu bar (config/panels/MainMenuPanel.xml names them). MainMenuModel owns them. menuOpened is the menus' `openCommand`
+        /// (the folder is read again); load and delete take the name of a saved layout as the argument and do nothing for an empty or unknown one
+        inline constexpr auto kLayoutsMenuOpened = "layouts.menuOpened"_intern;
+        inline constexpr auto kLayoutsLoad = "layouts.load"_intern;
+        inline constexpr auto kLayoutsDelete = "layouts.delete"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.
@@ -156,7 +226,7 @@ namespace BECore {
         }
     };
 
-    /// The viewport's preview choice (size, rotation, safe area, overlays) changed: sent by ViewportWidget only on a real change (never every
+    /// The viewport's preview choice (size, rotation, safe area, overlays) changed: sent by ViewportToolbarModel only on a real change (never every
     /// frame, and not for what it just applied from EditorPreferencesChangedEvent). EditorLayoutWidget stores and saves it and does not
     /// answer with another EditorPreferencesChangedEvent.
     struct ViewportPreviewChangedEvent : public EventBase<ViewportPreviewChangedEvent> {
@@ -193,7 +263,7 @@ namespace BECore {
         }
     };
 
-    /// The viewport's input mode changed (the toolbar toggle or the command): sent by ViewportWidget only on a real change, not for what it
+    /// The viewport's input mode changed (the toolbar toggle or the command): sent by ViewportToolbarModel only on a real change, not for what it
     /// just applied from EditorPreferencesChangedEvent. EditorLayoutWidget stores and saves it and does not answer with another
     /// EditorPreferencesChangedEvent.
     struct ViewportInputModeChangedEvent : public EventBase<ViewportInputModeChangedEvent> {
@@ -204,7 +274,7 @@ namespace BECore {
         explicit ViewportInputModeChangedEvent(ViewportInputMode inputMode) : mode(inputMode) {}
     };
 
-    /// The Console ran a command line that parsed: sent by ConsoleWidget. EditorLayoutWidget keeps it in the saved history and does not
+    /// The Console ran a command line that parsed: sent by the Console's command line slot. EditorLayoutWidget keeps it in the saved history and does not
     /// answer with an EditorPreferencesChangedEvent (the Console already holds its own history).
     struct ConsoleCommandSubmittedEvent : public EventBase<ConsoleCommandSubmittedEvent> {
         BE_EVENT(ConsoleCommandSubmittedEvent)

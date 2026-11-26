@@ -60,6 +60,11 @@ namespace BECore {
         /// Puts every default back
         void ResetAll();
 
+        /// Changes with every change of a chord, and differs between maps made at different times, so a cache of chord texts is valid while it holds
+        [[nodiscard]] uint64_t Revision() const {
+            return _revision;
+        }
+
     private:
         struct Binding {
             PoolString id;
@@ -71,6 +76,7 @@ namespace BECore {
         AssignResult Place(PoolString commandId, const KeyChord& chord, bool takeFromOther);
 
         Vector<Binding> _bindings;
+        uint64_t _revision = 0;
     };
 
 }  // namespace BECore

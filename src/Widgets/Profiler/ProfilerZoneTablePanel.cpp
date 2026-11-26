@@ -10,17 +10,11 @@ namespace BECore {
     namespace {
 
         constexpr float kTableHeight = 240.0f;
-        constexpr float kWindowComboWidth = 190.0f;
-        constexpr float kFilterWidth = 160.0f;
         constexpr float kNameColumnWidth = 190.0f;
         constexpr float kNumberColumnWidth = 66.0f;
         constexpr float kAllocColumnWidth = 110.0f;
         constexpr float kButtonColumnWidth = 74.0f;
         constexpr int kColumnCount = 10;
-
-        const char* const kWindowLabels = "Selected frame\0"
-                                          "Last 60 frames\0"
-                                          "All frames in the ring\0";
 
         void SetupNumberColumn(const char* label, ZoneStatColumn column) {
             ImGui::TableSetupColumn(label, ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_WidthFixed, kNumberColumnWidth, static_cast<ImGuiID>(+column));
@@ -33,15 +27,15 @@ namespace BECore {
 
     }  // namespace
 
-    void ProfilerZoneTablePanel::RefreshRows(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame) {
+    void ProfilerZoneTablePanel::RefreshRows(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame, Window window, StringView filterText) {
         StatsKey key;
         key.version = version;
-        key.window = _window;
+        key.window = window;
         key.valid = true;
         if (!snapshot.frames.empty()) {
             const uint64_t front = snapshot.frames.front().index;
             const uint64_t newest = snapshot.frames.back().index;
-            switch (_window) {
+            switch (window) {
                 case Window::SelectedFrame:
                     key.firstFrame = key.lastFrame = selectedFrame && *selectedFrame >= front && *selectedFrame <= newest ? *selectedFrame : newest;
                     break;
@@ -65,25 +59,17 @@ namespace BECore {
         rowsKey.statsVersion = _statsVersion;
         rowsKey.column = _sortColumn;
         rowsKey.ascending = _sortAscending;
-        rowsKey.filter = _filter;
+        rowsKey.filter = String(filterText);
         rowsKey.valid = true;
         if (!(rowsKey == _rowsKey)) {
             _rowsKey = rowsKey;
-            _rows = FilterZoneStats(_stats, _filter);
+            _rows = FilterZoneStats(_stats, filterText);
             SortZoneStats(_rows, _sortColumn, _sortAscending);
         }
     }
 
-    const ProfileSite* ProfilerZoneTablePanel::Draw(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame) {
-        int window = static_cast<int>(_window);
-        ImGui::SetNextItemWidth(kWindowComboWidth);
-        if (ImGui::Combo("Window", &window, kWindowLabels)) {
-            _window = static_cast<Window>(window);
-        }
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(kFilterWidth);
-        ImGui::InputTextWithHint("##zoneFilter", "filter by name or file", _filter, sizeof(_filter));
-
+    const ProfileSite* ProfilerZoneTablePanel::DrawTable(const RingSnapshot& snapshot, uint64_t version, Optional<uint64_t> selectedFrame, int windowIndex, StringView filterText) {
+        const Window window = windowIndex >= 0 && windowIndex <= static_cast<int>(Window::AllFrames) ? static_cast<Window>(windowIndex) : Window::SelectedFrame;
         const ProfileSite* shown = nullptr;
         if (!ImGui::BeginTable("##zoneStats", kColumnCount,
                                ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX | ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable,
@@ -108,7 +94,7 @@ namespace BECore {
             _sortColumn = static_cast<ZoneStatColumn>(specs->Specs[0].ColumnUserID);
             _sortAscending = specs->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
         }
-        RefreshRows(snapshot, version, selectedFrame);  // after the specs, so a click on a header sorts this frame
+        RefreshRows(snapshot, version, selectedFrame, window, filterText);  // after the specs, so a click on a header sorts this frame
 
         ImGuiListClipper clipper;
         clipper.Begin(static_cast<int>(_rows.size()));

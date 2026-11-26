@@ -4,9 +4,6 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
 #include <EASTL/algorithm.h>
-#include <Widgets/EditorLayout/EditorControls.h>
-#include <Widgets/Icons/IconsLucide.h>
-#include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/ScenePick.h>
@@ -36,23 +33,6 @@ namespace BECore {
         constexpr ImU32 kHighlightColor = IM_COL32(255, 220, 70, 255);
         constexpr float kRubberBandFillAlpha = 0.18f;
         constexpr float kRubberBandThickness = 1.0f;
-
-        // The range of the steps in the Snap popup
-        constexpr float kMinSnapStep = 0.01f;
-        constexpr float kMaxPositionStep = 1024.0f;
-        constexpr float kMaxAngleStep = 180.0f;
-        constexpr float kMaxScaleStep = 1.0f;
-        constexpr float kPositionStepSpeed = 0.5f;
-        constexpr float kAngleStepSpeed = 0.5f;
-        constexpr float kScaleStepSpeed = 0.01f;
-        constexpr float kSnapStepWidth = 70.0f;
-
-        constexpr const char* kSnapPopup = "##ViewportSnap";
-        constexpr const char* kMoveTooltip = "Move the selected nodes: drag an arrow or the square (W)";
-        constexpr const char* kRotateTooltip = "Rotate the selected nodes about the pivot: drag the ring (E)";
-        constexpr const char* kScaleTooltip = "Scale the selected nodes: drag a corner or a side; Shift keeps the aspect (R)";
-        constexpr const char* kSpaceTooltip = "The axes of the Move gizmo: World (the screen's) or Local (the turned axes of the node); a group always uses World (X)";
-        constexpr const char* kSnapTooltip = "Snap a drag to a step; hold Ctrl (Cmd) to flip the switches for one drag";
 
         ImVec2 ToImVec(Vec2 point) {
             return {point.x, point.y};
@@ -299,68 +279,18 @@ namespace BECore {
         NodeTransformEditEvent::Emit(phase, _scene, Span<const NodeTransformEdit>(_edits.data(), _edits.size()));
     }
 
-    void ViewportGizmos::DrawToolButton(const char* icon, const char* tooltip, const char* id, Gizmo::Tool tool) {
-        const bool active = _tool == tool;
-        if (active) {
-            ImGui::PushStyleColor(ImGuiCol_Button, GetImGuiPalette().accent);
-        }
-        if (IconButton(icon, tooltip, id)) {
-            _tool = tool;
-        }
-        if (active) {
-            ImGui::PopStyleColor();
-        }
-    }
-
-    void ViewportGizmos::DrawSnapPopup() {
-        if (IconTextButton(ICON_LC_MAGNET, "Snap##ViewportSnapButton", kSnapTooltip)) {
-            ImGui::OpenPopup(kSnapPopup);
-        }
-        if (!ImGui::BeginPopup(kSnapPopup)) {
-            return;
-        }
-        const auto row = [](const char* label, bool& enabled, const char* stepId, float& step, float speed, float maxStep, const char* format) {
-            ImGui::Checkbox(label, &enabled);
-            ImGui::SameLine();
-            const ScopedMonoFont mono;
-            ImGui::SetNextItemWidth(kSnapStepWidth);
-            ImGui::DragFloat(stepId, &step, speed, kMinSnapStep, maxStep, format);
-        };
-        row("Position##ViewportSnapPosition", _snap.position, "##ViewportSnapPositionStep", _snap.positionStep, kPositionStepSpeed, kMaxPositionStep, "%.2f units");
-        row("Angle##ViewportSnapAngle", _snap.angle, "##ViewportSnapAngleStep", _snap.angleStep, kAngleStepSpeed, kMaxAngleStep, "%.1f deg");
-        row("Scale##ViewportSnapScale", _snap.scale, "##ViewportSnapScaleStep", _snap.scaleStep, kScaleStepSpeed, kMaxScaleStep, "%.2f x");
-        ImGui::EndPopup();
-    }
-
-    void ViewportGizmos::DrawToolbar() {
-        DrawToolButton(ICON_LC_MOVE_3D, kMoveTooltip, "ViewportToolMove", Gizmo::Tool::Translate);
-        ImGui::SameLine();
-        DrawToolButton(ICON_LC_ROTATE_3D, kRotateTooltip, "ViewportToolRotate", Gizmo::Tool::Rotate);
-        ImGui::SameLine();
-        DrawToolButton(ICON_LC_SCALE_3D, kScaleTooltip, "ViewportToolScale", Gizmo::Tool::Scale);
-
-        ImGui::SameLine();
-        const bool world = _space == Gizmo::Space::World;
-        if (IconTextButton(world ? ICON_LC_GLOBE : ICON_LC_BOX, world ? "World##ViewportGizmoSpace" : "Local##ViewportGizmoSpace", kSpaceTooltip)) {
-            ToggleSpace();
-        }
-
-        ImGui::SameLine();
-        DrawSnapPopup();
-    }
-
-    void ViewportGizmos::ReadKeys() {
+    void ViewportGizmos::ReadKeys(IViewportToolbar& toolbar) const {
         if (_session.IsActive()) {
             return;  // the tool and the space of a drag in progress do not change under it
         }
         if (ViewportKeyPressed(ImGuiKey_W)) {
-            _tool = Gizmo::Tool::Translate;
+            toolbar.SetTool(Gizmo::Tool::Translate);
         } else if (ViewportKeyPressed(ImGuiKey_E)) {
-            _tool = Gizmo::Tool::Rotate;
+            toolbar.SetTool(Gizmo::Tool::Rotate);
         } else if (ViewportKeyPressed(ImGuiKey_R)) {
-            _tool = Gizmo::Tool::Scale;
+            toolbar.SetTool(Gizmo::Tool::Scale);
         } else if (ViewportKeyPressed(ImGuiKey_X)) {
-            ToggleSpace();
+            toolbar.ToggleSpace();
         }
     }
 
@@ -383,7 +313,7 @@ namespace BECore {
                 _session.Finish(*context.scene);
             }
             if (_session.IsActive()) {
-                Draw(context, Gizmo::MakeFrame(_session.Current(), _space), UnitsPerScreenPixel(context));
+                Draw(context, Gizmo::MakeFrame(_session.Current(), context.settings.space), UnitsPerScreenPixel(context));
             }
             return false;
         }
@@ -397,14 +327,14 @@ namespace BECore {
         }
 
         const float unitsPerScreenPixel = UnitsPerScreenPixel(context);
-        const Gizmo::Frame gizmoFrame = Gizmo::MakeFrame({_items.data(), _items.size()}, _space);
+        const Gizmo::Frame gizmoFrame = Gizmo::MakeFrame({_items.data(), _items.size()}, context.settings.space);
         if (context.hovered) {
-            _hover = Gizmo::HitTest(gizmoFrame, _tool, point, unitsPerScreenPixel);
+            _hover = Gizmo::HitTest(gizmoFrame, context.settings.tool, point, unitsPerScreenPixel);
         }
         Draw(context, gizmoFrame, unitsPerScreenPixel);
 
         if (_hover != Gizmo::Handle::None && ImGui::IsMouseClicked(kLeftButton)) {
-            return _session.Begin(*context.scene, {_nodes.data(), _nodes.size()}, {_items.data(), _items.size()}, _tool, _space, _hover, point, _snap);
+            return _session.Begin(*context.scene, {_nodes.data(), _nodes.size()}, {_items.data(), _items.size()}, context.settings.tool, context.settings.space, _hover, point, context.settings.snap);
         }
         return false;
     }
@@ -423,7 +353,7 @@ namespace BECore {
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
         drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
         const ImVec2 origin = toScreen(gizmoFrame.origin);
-        switch (_tool) {
+        switch (context.settings.tool) {
             case Gizmo::Tool::Translate: {
                 const Vec2 axisX = Gizmo::AxisX(gizmoFrame);
                 const Vec2 axisY = Gizmo::AxisY(gizmoFrame);

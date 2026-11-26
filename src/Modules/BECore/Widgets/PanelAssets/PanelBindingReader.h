@@ -22,10 +22,11 @@ namespace BECore {
               NoValue,        // the path is right but leads nowhere now: an empty optional, a position past the end of a list inside the path
               WrongType,      // the field is not of the kind the call reads
               NotAList,       // ListCount and the row reads need a list at a fixed path
-              NoRow)          // the row is past the end of the list
+              NoRow,          // the row is past the end of the list
+              BadValue)       // a write of a value the field cannot hold: NaN or infinity, an enum index past the names; a read of an enum that holds none of its names
 
     /**
-     * @brief Reads what a panel shows from a bound field: a bool, a number, a text, the rows of a list and a cell of a row
+     * @brief Reads what a panel shows from a bound field: a bool, a number, a text, an enum's index and names, the rows of a list and a cell of a row
      *
      * Every call takes the registry and the binding, asks the source for its object **now** and never keeps what it got. A wrong path, type
      * or source is a status, never an assert or a crash. A path is compiled against the object's type once and kept (`CompilePath`, keyed by the
@@ -45,11 +46,18 @@ namespace BECore {
         /// The condition of a binding: the value of a bool field, inverted for `!source.path`
         [[nodiscard]] PanelReadStatus ReadBool(const PanelDataSources& sources, const PanelBinding& binding, bool& out);
 
-        /// Any number field (an integer or a float); a bool, an enum and a text are `WrongType`
-        [[nodiscard]] PanelReadStatus ReadNumber(const PanelDataSources& sources, const PanelBinding& binding, double& out);
+        /// Any number field (an integer or a float); a bool, an enum and a text are `WrongType`. @p isInteger, when given, tells an integer field from a float one
+        [[nodiscard]] PanelReadStatus ReadNumber(const PanelDataSources& sources, const PanelBinding& binding, double& out, bool* isInteger = nullptr);
 
         /// A text, a number, a bool or an enum name as text. @p out views the field itself or @p scratch: valid until either changes
         [[nodiscard]] PanelReadStatus ReadText(const PanelDataSources& sources, const PanelBinding& binding, String& scratch, StringView& out);
+
+        /// The index of the name an enum field holds (in `EnumNames` order); `BadValue` when the stored value is none of them, `WrongType` for a field that is not an enum. The path must be fixed: no
+        /// list position, optional or pointer in it (`NoValue`)
+        [[nodiscard]] PanelReadStatus ReadEnumIndex(const PanelDataSources& sources, const PanelBinding& binding, size_t& out);
+
+        /// The names of the enum the field has, in declaration order. @p out views static type data: valid for the run, nothing is allocated
+        [[nodiscard]] PanelReadStatus EnumNames(const PanelDataSources& sources, const PanelBinding& binding, Span<const StringView>& out);
 
         /// The number of rows of the list the binding names
         [[nodiscard]] PanelReadStatus ListCount(const PanelDataSources& sources, const PanelBinding& list, size_t& count);
@@ -105,8 +113,9 @@ namespace BECore {
         Located LocateCell(const PanelDataSources& sources, const PanelBinding& list, size_t row, StringView relativePath, PanelReadStatus& status);
 
         static PanelReadStatus AsBool(const Located& at, bool& out);
-        static PanelReadStatus AsNumber(const Located& at, double& out);
+        static PanelReadStatus AsNumber(const Located& at, double& out, bool* isInteger = nullptr);
         static PanelReadStatus AsText(const Located& at, String& scratch, StringView& out);
+        static PanelReadStatus AsEnumIndex(const Located& at, size_t& out);
 
         HashMap<const TypeInfo*, HashMap<String, Compiled>> _compiled;
         size_t _compiledCount = 0;

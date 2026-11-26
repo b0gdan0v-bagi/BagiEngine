@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<PanelAsset id="MainMenu" title="Main menu" open="true" window="Bar">
+  <sources>
+    <item name="menu" model="MainMenuModel"/>
+    <item name="play" model="MainToolbarModel"/>
+  </sources>
+  <elements>
+    <element type="PanelMenu" id="file" title="File">
+      <elements>
+        <element type="PanelMenuItem" id="quit" text="Quit" command="file.quit"/>
+      </elements>
+    </element>
+    <element type="PanelMenu" id="game" title="Game">
+      <elements>
+        <element type="PanelMenuItem" id="pause" text="Pause / Resume" command="game.pause"/>
+        <element type="PanelMenuItem" id="step" text="Step One Frame" command="game.step" enableWhen="play.canStep"/>
+      </elements>
+    </element>
+    <element type="PanelMenu" id="view" title="View">
+      <elements>
+        <element type="PanelMenuItem" id="commandPalette" text="Command Palette..." command="view.commandPalette"/>
+        <element type="PanelMenuItem" id="preferences" text="Preferences..." command="view.preferences"/>
+        <element type="PanelSeparator" id="panelsLine"/>
+        <element type="PanelMenuItem" id="viewport" text="Viewport" command="view.viewport"/>
+        <element type="PanelMenuItem" id="sceneEditor" text="Scene Editor" command="view.sceneEditor"/>
+        <element type="PanelMenuItem" id="configEditor" text="Config Editor" command="view.configEditor"/>
+        <element type="PanelMenuItem" id="fileChanges" text="File Changes" command="view.fileChanges"/>
+        <element type="PanelMenuItem" id="spriteLibrary" text="Sprite Library" command="view.spriteLibrary"/>
+        <element type="PanelMenuItem" id="gamePanel" text="Game Panel" command="view.game"/>
+        <element type="PanelMenuItem" id="console" text="Console" command="view.console"/>
+        <element type="PanelMenuItem" id="generate" text="Generate Art" command="view.generate"/>
+        <element type="PanelMenuItem" id="profiler" text="Profiler" command="view.profiler"/>
+        <element type="PanelSeparator" id="layoutsLine"/>
+        <element type="PanelMenu" id="layouts" title="Layouts" enableWhen="menu.hasStore" openCommand="layouts.menuOpened">
+          <elements>
+            <element type="PanelText" id="noLayouts" text="No saved layouts" style="Disabled" visible="!menu.hasLayouts"/>
+            <element type="PanelMenuItems" id="names" source="menu.layouts" command="layouts.load"/>
+          </elements>
+        </element>
+        <element type="PanelMenuItem" id="saveLayout" text="Save Layout As..." command="view.saveLayout" enableWhen="menu.hasStore"/>
+        <element type="PanelMenu" id="deleteLayout" title="Delete Layout" enableWhen="menu.hasStore" openCommand="layouts.menuOpened">
+          <elements>
+            <element type="PanelText" id="noDeletable" text="No saved layouts" style="Disabled" visible="!menu.hasLayouts"/>
+            <element type="PanelMenuItems" id="deletable" source="menu.layouts" command="layouts.delete"/>
+          </elements>
+        </element>
+        <element type="PanelMenuItem" id="resetLayout" text="Reset to Defaults" command="view.resetLayout"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

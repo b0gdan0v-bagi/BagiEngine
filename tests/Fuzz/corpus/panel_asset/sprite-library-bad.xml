@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<PanelAsset id="SpriteLibraryBad" title="Bad">
+  <elements>
+    <element type="PanelSection" id="badOpen" title="S" icon="grid-3x3" openBind="open"/>
+    <element type="PanelRadio" id="noBind" value="Grid" text="Grid"/>
+    <element type="PanelRadio" id="noValue" bind="s.mode" text="Grid"/>
+    <element type="PanelRadio" id="noLabel" bind="s.mode" value="Grid"/>
+    <element type="PanelRadio" id="badValue" bind="s.mode" value="s.other" text="x" enableWhen="s.a and"/>
+    <element type="PanelRadio" id="infiniteValue" bind="s.mode" value="1e999" icon="x"/>
+    <element type="PanelInput" id="tooManyLines" bind="s.names" lines="33"/>
+    <element type="PanelInput" id="multilineSubmit" bind="s.names" lines="3" submitCommand="s.go"/>
+    <element type="PanelNumber" id="stepperSlider" bind="s.n" min="0" max="1" slider="true" stepper="true"/>
+    <element type="PanelNumber" id="stepperInput" bind="s.n" input="true" stepper="true"/>
+    <element type="PanelNumber" id="fastWithoutStepper" bind="s.n" stepFast="10"/>
+    <element type="PanelNumber" id="negativeFast" bind="s.n" stepper="true" stepFast="-1"/>
+    <element type="PanelButton" id="badFill" text="Add" command="s.add" width="-2"/>
+  </elements>
+</PanelAsset>
