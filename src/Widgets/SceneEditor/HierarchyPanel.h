@@ -23,8 +23,8 @@ namespace BECore {
 
         // The filter: matches stay with their ancestors, the rest is hidden
         char searchBuffer[HierarchyModel::kMaxNodeNameLength + 1] = {};
-        StringView componentType;           ///< empty = any; a name from ClassMeta, which lives as long as the program
-        Vector<StringView> componentTypes;  ///< what the type combo offers, made again each time it opens
+        String componentType;           ///< empty = any
+        Vector<String> componentTypes;  ///< what the type combo offers, made again each time it opens
         bool typeComboOpen = false;
         bool focusSearch = false;       ///< Ctrl+F: the search box takes the keyboard focus
         SceneNode* dragNode = nullptr;  ///< the node being dragged, once found alive in the tree (the payload holds only a pointer)
@@ -43,7 +43,15 @@ namespace BECore {
 
     namespace HierarchyPanel {
 
-        /// Draws the "Hierarchy" section into the current ImGui window: the tree, its context menu, F2 / Delete / Ctrl+D while the window is focused, and the Add Node button. Needs a frame in
+        /**
+         * @brief Draws the "Hierarchy" section of any source into the current ImGui window: the search, the component filter and the tree. Needs a frame in progress
+         *
+         * A row the source can edit (IHierarchySource::EditableNode) also takes a drag, the context menu, the rename field and the eye and lock toggles; any other row only
+         * takes a click. What the rows ask for waits in @p state, and nothing is applied here
+         */
+        void Draw(IHierarchySource& source, HierarchyState& state);
+
+        /// The section for a scene of this process: the same, with F2 / Delete / Ctrl+D while the window is focused, the Add Node button and the change the panel asked for applied. Needs a frame in
         /// progress. Every row of @p selection is highlighted; a click on a row only sets state.selected, clickedNode and clickModifiers (Ctrl or Cmd toggles), the widget changes the selection.
         /// F2, Delete, Ctrl+D, the context menu and a drag act on state.selected, the primary node, alone
         void Draw(Scene& scene, HierarchyState& state, const SceneSelection& selection);

@@ -13,6 +13,7 @@ Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the co
 | `RemoteSessionRegistry` | how a panel finds the editor's one session |
 | `RemoteSessionWidget` | owns that session ("The widget and the panel") |
 | `AttachPanelModel` | the Attach panel (`config/panels/AttachPanel.xml`) |
+| `RemoteHierarchySource` | the session's tree and selection as the hierarchy panel reads them: read-only, rows named to ImGui by path (`.claude/rules/widgets-module.md`, "Scene Editor Conventions") |
 
 `Load` of the three data classes rebuilds only for another text, so polling an unchanged scene costs a compare; a rebuild invalidates every pointer into the object. A walk allocates nothing in a steady state.
 
