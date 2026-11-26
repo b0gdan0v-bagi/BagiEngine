@@ -6,6 +6,35 @@ namespace BECore {
     // do on hover. They are ImGui calls: a frame in progress is required. Nothing here allocates; a label is built in a
     // buffer on the stack.
 
+    /// While it lives, what is begun is drawn at @p share of the style's alpha; a share of 1 changes nothing.
+    class ScopedAlpha {
+    public:
+        explicit ScopedAlpha(float share);
+        ~ScopedAlpha();
+        ScopedAlpha(const ScopedAlpha&) = delete;
+        ScopedAlpha& operator=(const ScopedAlpha&) = delete;
+
+    private:
+        bool _pushed = false;
+    };
+
+    /// `ImGui::Button` whose hover colour blends in and out instead of snapping: from the style's `Button` colour to its `ButtonHovered`, whatever the
+    /// caller has pushed as them. A disabled button, one under a ScopedHoverSnap and the colour of a pressed one are ImGui's own. A size of 0 fits the
+    /// label, as ImGui's.
+    bool BlendedButton(const char* label, float width = 0.0f, float height = 0.0f);
+
+    /// While it lives with @p snap true, a BlendedButton keeps ImGui's own colours: for a filled button, which shows its state by them at once.
+    class ScopedHoverSnap {
+    public:
+        explicit ScopedHoverSnap(bool snap);
+        ~ScopedHoverSnap();
+        ScopedHoverSnap(const ScopedHoverSnap&) = delete;
+        ScopedHoverSnap& operator=(const ScopedHoverSnap&) = delete;
+
+    private:
+        bool _snap = false;
+    };
+
     /// Shows @p tooltip while the last item is hovered, also when it is disabled (nothing for a null text).
     void ItemTooltip(const char* tooltip);
 

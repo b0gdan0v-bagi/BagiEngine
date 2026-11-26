@@ -140,6 +140,22 @@ namespace BECore {
         _registered = true;
     }
 
+    void UICanvasComponent::OnPropertyWritten(StringView field) {
+        // The layout shares the authored elements, so only it has to be told; the settings of the canvas it notices by itself
+        if (field == "elements") {
+            _layout.Invalidate();
+        }
+    }
+
+    void UICanvasComponent::OnEnabledChanged() {
+        if (IsEnabled()) {
+            return;
+        }
+        _consumedButtons = 0;
+        CloseAllPopups();  // also a popup that code opened since the last draw
+        ClearPointerState();
+    }
+
     void UICanvasComponent::RefreshInputOrder() {
         // The draw order can change after attaching (a node added, a layer edited): the input order follows it
         const int order = GetScene().GetInputOrder(*this);
@@ -173,10 +189,13 @@ namespace BECore {
 
     UILayoutContext UICanvasComponent::MakeContext(float outputWidth, float outputHeight) const {
         UILayoutContext context = CoreManager::GetUIEnvironment().MakeContext(CoreManager::GetMainWindow().Get(), outputWidth, outputHeight);
-        context.sceneViewWidth = GetScene().GetViewWidth();
-        context.sceneViewHeight = GetScene().GetViewHeight();
-        if (_space == CanvasSpace::World) {
-            if (auto transform = GetNode().GetComponent<TransformComponent>()) {
+        // A removed canvas that somebody still holds can be laid out: it has no view size, and no world box without a node
+        if (const Scene* scene = TryGetScene()) {
+            context.sceneViewWidth = scene->GetViewWidth();
+            context.sceneViewHeight = scene->GetViewHeight();
+        }
+        if (const SceneNode* node = TryGetNode(); node != nullptr && _space == CanvasSpace::World) {
+            if (auto transform = node->GetComponent<TransformComponent>()) {
                 context.worldBox = {transform->_x, transform->_y, transform->_width, transform->_height};
             }
         }
@@ -408,7 +427,7 @@ namespace BECore {
     }
 
     bool UICanvasComponent::TakesInput() const {
-        return (_visible || IsLeavingWithInput()) && _inputEnabled && IsSceneActive();
+        return IsEnabled() && (_visible || IsLeavingWithInput()) && _inputEnabled && IsSceneActive();
     }
 
     UIElement* UICanvasComponent::HitTestOutput(float outputX, float outputY) const {

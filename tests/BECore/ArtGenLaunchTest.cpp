@@ -3,6 +3,7 @@
 #include <Common/TestFiles.h>
 #include <Common/Wait.h>
 #include <Widgets/ArtGen/ArtGenLaunch.h>
+#include <Widgets/EditorLayout/EngineTools.h>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <thread>
@@ -55,7 +56,7 @@ namespace BECore::Tests {
         EXPECT_EQ(arguments[4], "--exit-with-editor");
         EXPECT_EQ(arguments[5], "--log");
         EXPECT_EQ(arguments[6], "/u/artgen-bridge.log");
-        EXPECT_FALSE(ArtGenPython().empty());
+        EXPECT_FALSE(EnginePython().empty());
     }
 
     // The real start: in the background, without the standard streams of the editor (one started from the desktop has none), and the script
@@ -69,7 +70,7 @@ namespace BECore::Tests {
 
         String error;
         if (!LaunchArtGenBridge(script, 8765, log, error)) {
-            GTEST_SKIP() << "no " << ArtGenPython().c_str() << " to run: " << error.c_str();
+            GTEST_SKIP() << "no " << EnginePython().c_str() << " to run: " << error.c_str();
         }
         ASSERT_TRUE(WaitUntil([&] { return PathExists(log); })) << "the stand-in bridge did not run in " << kWaitLimit.count() << " s";
         String written;

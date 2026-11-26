@@ -1,6 +1,8 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Resource/AssetKind.h>
 #include <BECore/Types/Types.h>
 #include <BECore/UI/UIRectSpec.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -41,6 +43,19 @@ namespace BECore {
 
         ViewportBoxSelectEvent() = default;
         ViewportBoxSelectEvent(float boxX0, float boxY0, float boxX1, float boxY1, uint32_t boxModifiers = 0) : x0(boxX0), y0(boxY0), x1(boxX1), y1(boxY1), modifiers(boxModifiers) {}
+    };
+
+    /// A content file dragged from the editor (`AssetBrowser/AssetDrag.h`) was released over the viewport image, in either input mode: the game got nothing. Only the
+    /// kinds a scene makes a node of (`MakesSceneNode`) are taken. @p x and @p y are in target pixels (as ViewportEditClickEvent), @p path is the file's virtual path.
+    struct ViewportAssetDropEvent : public EventBase<ViewportAssetDropEvent> {
+        BE_EVENT(ViewportAssetDropEvent)
+        BE_REFLECT_FIELD AssetKind kind = AssetKind::None;
+        BE_REFLECT_FIELD PoolString path;
+        BE_REFLECT_FIELD float x = 0.0f;
+        BE_REFLECT_FIELD float y = 0.0f;
+
+        ViewportAssetDropEvent() = default;
+        ViewportAssetDropEvent(AssetKind assetKind, PoolString assetPath, float dropX, float dropY) : kind(assetKind), path(assetPath), x(dropX), y(dropY) {}
     };
 
     /// The part of a gizmo drag that an event tells

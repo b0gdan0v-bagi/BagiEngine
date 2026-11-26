@@ -116,7 +116,7 @@ namespace BECore {
         /// A null entry is a type the factory cannot create
         using DefaultFieldsCache = HashMap<String, UniquePtr<SerializedFields>>;
 
-        /// One per AppendNodeElement call, not global, so a tree makes each default once
+        /// One per call of the writers, not global, so a tree makes each default once
         struct WriteDefaults {
             DefaultFieldsCache nodes;
             DefaultFieldsCache components;
@@ -169,6 +169,16 @@ namespace BECore {
 
     namespace {
 
+        void AppendComponentElementWith(pugi::xml_node parent, const IComponent& component, const NodeWriteOptions& options, DefaultFieldsCache& defaults) {
+            pugi::xml_node componentEl = parent.append_child(kComponentElementName.data());
+            componentEl.append_attribute(kComponentTypeAttribute.data()).set_value(component.GetTypeMeta().typeName.data());
+
+            XmlSerializer serializer;
+            component.Serialize(serializer);
+            const pugi::xml_node base = options.skipDefaults ? DefaultFieldsOf(component, defaults) : pugi::xml_node{};
+            XmlFieldDiff::AppendChangedFields(serializer.GetRootNode(), base, componentEl);
+        }
+
         void AppendNodeElementWith(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options, WriteDefaults& defaults) {
             pugi::xml_node nodeEl = parent.append_child(kNodeElementName.data());
             if (node.GetTypeMeta() != SceneNode::GetStaticTypeMeta()) {
@@ -184,13 +194,7 @@ namespace BECore {
             if (!node.GetComponents().empty()) {
                 pugi::xml_node componentsEl = nodeEl.append_child(kComponentsElementName.data());
                 for (const auto& component : node.GetComponents()) {
-                    pugi::xml_node componentEl = componentsEl.append_child(kComponentElementName.data());
-                    componentEl.append_attribute(kComponentTypeAttribute.data()).set_value(component->GetTypeMeta().typeName.data());
-
-                    XmlSerializer serializer;
-                    component->Serialize(serializer);
-                    const pugi::xml_node base = options.skipDefaults ? DefaultFieldsOf(*component, defaults.components) : pugi::xml_node{};
-                    XmlFieldDiff::AppendChangedFields(serializer.GetRootNode(), base, componentEl);
+                    AppendComponentElementWith(componentsEl, *component, options, defaults.components);
                 }
             }
 
@@ -207,6 +211,11 @@ namespace BECore {
         }
 
     }  // namespace
+
+    void AppendComponentElement(pugi::xml_node parent, const IComponent& component, const NodeWriteOptions& options) {
+        DefaultFieldsCache defaults;
+        AppendComponentElementWith(parent, component, options, defaults);
+    }
 
     void AppendNodeElement(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options) {
         WriteDefaults defaults;

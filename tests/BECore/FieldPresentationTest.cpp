@@ -114,6 +114,51 @@ namespace BECore::Tests {
         EXPECT_DOUBLE_EQ(Constrain(ranged, -9.0), 1.0);
     }
 
+    TEST(FieldPresentationTest, ADragCountsFromThePressByTheSpeed) {
+        const Presentation presentation = Describe(FieldAttributes{}, NumberKind::Float);
+        EXPECT_DOUBLE_EQ(Dragged(presentation, 2.0, 30.0), 2.0 + 30.0 * presentation.speed);
+        EXPECT_DOUBLE_EQ(Dragged(presentation, 2.0, -30.0), 2.0 - 30.0 * presentation.speed);
+        EXPECT_DOUBLE_EQ(Dragged(presentation, 2.0, 0.0), 2.0);
+    }
+
+    TEST(FieldPresentationTest, ADragOfARangeMovesByAShareOfItAndStopsAtItsEnds) {
+        const double pixelsOfTheRange = 1.0 / kRangeDragShare;
+        const Presentation narrow = Describe(WithRange(0.0, 1.0), NumberKind::Float);
+        const Presentation wide = Describe(WithRange(-500.0, 500.0), NumberKind::Float);
+        EXPECT_DOUBLE_EQ(Dragged(narrow, 0.0, pixelsOfTheRange * 0.5), 0.5);
+        EXPECT_DOUBLE_EQ(Dragged(wide, -500.0, pixelsOfTheRange * 0.5), 0.0);
+        EXPECT_DOUBLE_EQ(Dragged(wide, 0.0, pixelsOfTheRange * 2.0), 500.0);
+        EXPECT_DOUBLE_EQ(Dragged(narrow, 0.5, -pixelsOfTheRange), 0.0);
+    }
+
+    TEST(FieldPresentationTest, ADragSlowerThanOneUnitAPixelMovesAnIntegerByWholeNumbers) {
+        const Presentation presentation = Describe(WithRange(0.0, 10.0), NumberKind::Integer);
+        const double pixelsOfAUnit = 1.0 / presentation.speed;
+        EXPECT_DOUBLE_EQ(Dragged(presentation, 3.0, pixelsOfAUnit * 0.4), 3.0);
+        EXPECT_DOUBLE_EQ(Dragged(presentation, 3.0, pixelsOfAUnit * 0.6), 4.0);
+        EXPECT_DOUBLE_EQ(Dragged(presentation, 3.0, pixelsOfAUnit * 2.0), 5.0);
+    }
+
+    TEST(FieldPresentationTest, ADragSnapsToTheStepWithAndWithoutARange) {
+        const Presentation drag = Describe(WithStep(0.5), NumberKind::Float);
+        EXPECT_DOUBLE_EQ(Dragged(drag, 1.2, 3.0), 2.5);
+
+        FieldAttributes attributes = WithRange(0.0, 100.0);
+        attributes.step = 10.0;
+        const Presentation slider = Describe(attributes, NumberKind::Float);
+        // The step is the grid of a slider, not its speed
+        EXPECT_DOUBLE_EQ(Dragged(slider, 0.0, 0.14 / kRangeDragShare), 10.0);
+    }
+
+    TEST(FieldPresentationTest, OnlyTheExactNamesAreAxes) {
+        EXPECT_EQ(AxisOf("x"), Axis::X);
+        EXPECT_EQ(AxisOf("y"), Axis::Y);
+        EXPECT_EQ(AxisOf("z"), Axis::Z);
+        for (const StringView name : {"X", "Z", "w", "xy", "posX", "x ", ""}) {
+            EXPECT_EQ(AxisOf(name), Axis::None) << name.size();
+        }
+    }
+
     TEST(FieldPresentationTest, FromDoubleRoundsAnIntegerAndStaysInsideItsType) {
         EXPECT_EQ(FromDouble<int32_t>(2.5), 3);
         EXPECT_EQ(FromDouble<int32_t>(-2.4), -2);

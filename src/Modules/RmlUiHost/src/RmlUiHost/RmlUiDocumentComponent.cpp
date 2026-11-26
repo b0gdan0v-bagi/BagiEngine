@@ -202,6 +202,22 @@ namespace BECore {
         _registered = true;
     }
 
+    void RmlUiDocumentComponent::OnEnabledChanged() {
+        if (IsEnabled()) {
+            return;
+        }
+        if (_context) {
+            _context->ProcessMouseLeave();
+            if ((_consumedButtons & ButtonBit(SDL_BUTTON_LEFT)) != 0) {
+                // The context keeps the pressed element active, which takes later motions. With the pointer gone its release clicks nothing,
+                // and the second leave undoes the move that ends a drag
+                _context->ProcessMouseButtonUp(RmlButtonIndex(SDL_BUTTON_LEFT), 0);
+                _context->ProcessMouseLeave();
+            }
+        }
+        _consumedButtons = 0;
+    }
+
     void RmlUiDocumentComponent::RefreshInputOrder() {
         const int order = GetScene().GetInputOrder(*this);
         if (order == _inputOrder) {
@@ -235,10 +251,13 @@ namespace BECore {
 
     UILayoutContext RmlUiDocumentComponent::MakeContext(float outputWidth, float outputHeight) const {
         UILayoutContext context = CoreManager::GetUIEnvironment().MakeContext(CoreManager::GetMainWindow().Get(), outputWidth, outputHeight);
-        context.sceneViewWidth = GetScene().GetViewWidth();
-        context.sceneViewHeight = GetScene().GetViewHeight();
-        if (_space == CanvasSpace::World) {
-            if (auto transform = GetNode().GetComponent<TransformComponent>()) {
+        // A removed document that somebody still holds can be laid out: it has no view size, and no world box without a node
+        if (const Scene* scene = TryGetScene()) {
+            context.sceneViewWidth = scene->GetViewWidth();
+            context.sceneViewHeight = scene->GetViewHeight();
+        }
+        if (const SceneNode* node = TryGetNode(); node != nullptr && _space == CanvasSpace::World) {
+            if (auto transform = node->GetComponent<TransformComponent>()) {
                 context.worldBox = {transform->_x, transform->_y, transform->_width, transform->_height};
             }
         }
@@ -306,7 +325,7 @@ namespace BECore {
     }
 
     bool RmlUiDocumentComponent::TakesInput() const {
-        return _visible && _inputEnabled && _context != nullptr && _document != nullptr && IsSceneActive();
+        return IsEnabled() && _visible && _inputEnabled && _context != nullptr && _document != nullptr && IsSceneActive();
     }
 
     bool RmlUiDocumentComponent::MovePointer(float outputX, float outputY) {

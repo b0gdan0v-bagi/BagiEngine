@@ -1,10 +1,12 @@
 #pragma once
 
+#include <BECore/Control/ControlClient.h>
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Control/RequestBuffers.h>
 #include <BECore/Memory/Pooled.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
@@ -53,11 +55,12 @@ namespace BECore {
         using DoneFn = MoveOnlyFunction<void(ControlCall&)>;
 
         /// @p id is the id's JSON text, a view into @p buffers, which the call owns together with the view @p params of their tape
-        ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply);
+        ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply,
+                    IntrusivePtr<ControlClient> client);
 
         /// A call that runs inside another one: its answer is kept as a value (ControlService::RunNested) instead of being sent. @p params is a view that
-        /// the caller keeps alive while the call runs
-        ControlCall(PassKey<ControlService>, String method, JsonView params);
+        /// the caller keeps alive while the call runs. @p client is the one of the call it runs inside
+        ControlCall(PassKey<ControlService>, ControlService& service, String method, JsonView params, IntrusivePtr<ControlClient> client);
 
         ControlCall(const ControlCall&) = delete;
         ControlCall& operator=(const ControlCall&) = delete;
@@ -70,6 +73,11 @@ namespace BECore {
         /// The request parameters; an empty object when the request had none. Valid while the call lives
         [[nodiscard]] JsonView Params() const {
             return _params;
+        }
+
+        /// Who asked, or null for the engine's own call; a nested call has the client of the call it runs inside. The call holds it
+        [[nodiscard]] ControlClient* GetClient() const {
+            return _client.Get();
         }
 
         /// Answers with an empty object, `{}`
@@ -134,18 +142,20 @@ namespace BECore {
     private:
         friend class ControlService;
 
-        ControlService* _service = nullptr;  // null for a nested call, which sends nothing
-        RequestBuffersPtr _buffers;          // the text that _id and _params point into
+        ControlService* _service = nullptr;
+        RequestBuffersPtr _buffers;  // the text that _id and _params point into
         String _method;
         StringView _id = kNullId;
         JsonView _params;
         ControlReplyFn _reply;
+        IntrusivePtr<ControlClient> _client;
         DoneFn _done;
         uint32_t _deferFrames = 0;
         double _deferSeconds = kDefaultStepSeconds;
         bool _answered = false;
         bool _capturing = false;  // the answer goes to _captured, not to _reply
         Optional<ControlAnswer> _captured;
+        uint64_t _touchedNode = 0;  // the first node the call reported (ControlService::ReportTouch), for its journal entry
     };
 
 }  // namespace BECore

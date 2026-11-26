@@ -2,17 +2,21 @@
 
 #include <BECore/Values/Explain/ValueContextRegistry.h>
 #include <BECore/Values/Explain/ValueExplain.h>
+#include <Widgets/AssetBrowser/AssetDrag.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Feedback/TouchFlashDraw.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
-#include <Widgets/ImGuiFonts.h>
-#include <Widgets/SceneEditor/FieldPresentation.h>
+#include <Widgets/SceneEditor/ComponentDefaults.h>
+#include <Widgets/SceneEditor/DefaultMarkDraw.h>
+#include <Widgets/SceneEditor/FieldTooltips.h>
+#include <Widgets/SceneEditor/NumberField.h>
 #include <imgui.h>
 
 namespace BECore {
 
     namespace {
 
-        constexpr size_t kHiddenLabelSize = 24;
         /// Room for a list's label, `name (size)###id`
         constexpr size_t kListLabelSize = 160;
         /// Room for a button id, a hidden label or an alternative's index
@@ -60,52 +64,6 @@ namespace BECore {
             bool _disabled;
         };
 
-        /// The tooltip of the field for the last item (the text is a string literal of the generated code)
-        void FieldTooltip(const FieldAttributes& attributes) {
-            if (!attributes.tooltip.empty()) {
-                ItemTooltip(attributes.tooltip.data());
-            }
-        }
-
-        /// A number field in the mono font, its name after it in the UI font (ImGui draws the label of a drag field with the
-        /// font of the field, so the label is hidden and drawn here). The item width is the same as with the label inside.
-        /// The tooltip shows over the field and over its name.
-        template <typename Draw>
-        bool DrawNumber(StringView name, int id, const FieldAttributes& attributes, Draw&& draw) {
-            const DisabledScope disabled(attributes);
-            char hiddenLabel[kHiddenLabelSize];
-            snprintf(hiddenLabel, sizeof(hiddenLabel), "##%d", id);
-            bool changed = false;
-            {
-                const ScopedMonoFont mono;
-                changed = draw(hiddenLabel);
-            }
-            FieldTooltip(attributes);
-            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-            ImGui::TextUnformatted(name.data(), name.data() + name.size());
-            FieldTooltip(attributes);
-            return changed;
-        }
-
-        /// A number of type @p T: a slider with a `range`, a drag otherwise; an edit is clamped and snapped (`FieldPresentation::Constrain`)
-        template <typename T>
-        bool DrawTyped(StringView name, int id, const FieldAttributes& attributes, T& value, ImGuiDataType dataType) {
-            constexpr FieldPresentation::NumberKind kind = std::is_floating_point_v<T> ? FieldPresentation::NumberKind::Float : FieldPresentation::NumberKind::Integer;
-            const FieldPresentation::Presentation presentation = FieldPresentation::Describe(attributes, kind);
-            const bool changed = DrawNumber(name, id, attributes, [&](const char* label) {
-                if (presentation.widget == FieldPresentation::NumberWidget::Slider) {
-                    const T low = FieldPresentation::FromDouble<T>(presentation.rangeMin);
-                    const T high = FieldPresentation::FromDouble<T>(presentation.rangeMax);
-                    return ImGui::SliderScalar(label, dataType, &value, &low, &high);
-                }
-                return ImGui::DragScalar(label, dataType, &value, static_cast<float>(presentation.speed));
-            });
-            if (changed) {
-                value = FieldPresentation::FromDouble<T>(FieldPresentation::Constrain(presentation, static_cast<double>(value)));
-            }
-            return changed;
-        }
-
         /// The trace as a tree of `label = value`, a node's children under it; stops at `kMaxFormattedLines` because a node several parents read is drawn under each
         void DrawTraceNode(const ProgramTrace& trace, uint32_t index, uint32_t& drawn) {
             if (index >= trace.nodes.size() || drawn >= kMaxFormattedLines) {
@@ -148,12 +106,92 @@ namespace BECore {
     }
 
     void ImGuiPropertyVisitor::BeginField(const FieldAttributes& attributes) {
+        if (_fields.empty()) {
+            const ImVec2 position = ImGui::GetCursorScreenPos();
+            _fieldLeft = position.x;
+            _fieldTop = position.y;
+            _fieldWidth = ImGui::GetContentRegionAvail().x;
+            _fieldName = {};
+            _fieldEdited = false;
+        }
         _fields.push_back(attributes);
     }
 
     void ImGuiPropertyVisitor::EndField() {
-        if (!_fields.empty()) {
-            _fields.pop_back();
+        if (_fields.empty()) {
+            return;
+        }
+        _fields.pop_back();
+        if (!_fields.empty() || _fieldName.empty()) {
+            return;
+        }
+        // Before the touch mark adds its line: the default mark spans the field alone
+        ShowDifference(ImGui::GetCursorScreenPos().y - ImGui::GetStyle().ItemSpacing.y);
+        if (!_touches) {
+            return;
+        }
+        if (_fieldEdited) {
+            _touches->highlights.Dismiss(_touches->nodeId, _touches->component, _fieldName);
+        }
+        ShowTouch();
+    }
+
+    void ImGuiPropertyVisitor::ShowDifference(float bottom) {
+        for (const ComponentFieldDifference& difference : _differences) {
+            if (difference.field == _fieldName && DrawDefaultMark(difference, _fieldLeft, _fieldTop, bottom)) {
+                _resetRequest = difference.field;
+            }
+        }
+    }
+
+    int ImGuiPropertyVisitor::NextId(StringView name) {
+        if (_fields.size() == 1 && _fieldName.empty()) {
+            _fieldName = name;
+        }
+        return _idCounter++;
+    }
+
+    bool ImGuiPropertyVisitor::Edited(bool changed) {
+        _fieldEdited |= changed;
+        return changed;
+    }
+
+    const char* ImGuiPropertyVisitor::HelpText() const {
+        if (_help == nullptr || _fields.size() != 1 || _fieldName.empty()) {
+            return nullptr;
+        }
+        const char* const text = _help->Of(_fieldName);
+        return *text != '\0' ? text : nullptr;
+    }
+
+    void ImGuiPropertyVisitor::FieldTooltip(const FieldAttributes& attributes) const {
+        if (const char* const help = HelpText()) {
+            WrappedItemTooltip(help);
+        } else if (!attributes.tooltip.empty()) {
+            // A string literal of the generated code, so the view ends with a null
+            ItemTooltip(attributes.tooltip.data());
+        }
+    }
+
+    template <typename T>
+    bool ImGuiPropertyVisitor::VisitNumber(StringView name, T& value, int dataType) {
+        constexpr FieldPresentation::NumberKind kind = std::is_floating_point_v<T> ? FieldPresentation::NumberKind::Float : FieldPresentation::NumberKind::Integer;
+        // The id first: the first widget of a top-level field is what names it for its help
+        char id[kIdSize];
+        snprintf(id, sizeof(id), "%d", NextId(name));
+        FieldPresentation::Presentation presentation = FieldPresentation::Describe(CurrentField(), kind);
+        if (const char* const help = HelpText()) {
+            presentation.tooltip = help;
+        }
+        return Edited(DrawNumber(name, id, presentation, value, dataType));
+    }
+
+    void ImGuiPropertyVisitor::ShowTouch() const {
+        const float bottom = ImGui::GetCursorScreenPos().y - ImGui::GetStyle().ItemSpacing.y;
+        const float alpha = _touches->highlights.FieldAlpha(_touches->nodeId, _touches->component, _fieldName);
+        FillRectWithTouchFlash({_fieldLeft, _fieldTop}, {_fieldLeft + _fieldWidth, bottom}, alpha);
+        if (const ControlClient* client = _touches->highlights.FindMark(_touches->nodeId, _touches->component, _fieldName)) {
+            DrawTouchMark(*client, _fieldName);
         }
     }
 
@@ -161,57 +199,57 @@ namespace BECore {
         const FieldAttributes& attributes = CurrentField();
         const DisabledScope disabled(attributes);
         char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
+        MakeLabel(label, sizeof(label), name, NextId(name));
         const bool changed = ImGui::Checkbox(label, &value);
         FieldTooltip(attributes);
-        return changed;
+        return Edited(changed);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, int8_t& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_S8);
+        return VisitNumber(name, value, ImGuiDataType_S8);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, uint8_t& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_U8);
+        return VisitNumber(name, value, ImGuiDataType_U8);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, int16_t& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_S16);
+        return VisitNumber(name, value, ImGuiDataType_S16);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, uint16_t& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_U16);
+        return VisitNumber(name, value, ImGuiDataType_U16);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, int32_t& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_S32);
+        return VisitNumber(name, value, ImGuiDataType_S32);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, uint32_t& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_U32);
+        return VisitNumber(name, value, ImGuiDataType_U32);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, int64_t& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_S64);
+        return VisitNumber(name, value, ImGuiDataType_S64);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, uint64_t& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_U64);
+        return VisitNumber(name, value, ImGuiDataType_U64);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, float& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_Float);
+        return VisitNumber(name, value, ImGuiDataType_Float);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, double& value) {
-        return DrawTyped(name, _idCounter++, CurrentField(), value, ImGuiDataType_Double);
+        return VisitNumber(name, value, ImGuiDataType_Double);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, PoolString& value) {
         const FieldAttributes& attributes = CurrentField();
         const DisabledScope disabled(attributes);
         char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
+        MakeLabel(label, sizeof(label), name, NextId(name));
 
         char buf[256] = {};
         const StringView sv = value.ToStringView();
@@ -220,18 +258,23 @@ namespace BECore {
         buf[copyLen] = '\0';
 
         const bool changed = ImGui::InputText(label, buf, sizeof(buf));
+        const Optional<AssetDragPayload> dropped = AcceptAssetDrop(attributes.asset);
         FieldTooltip(attributes);
+        if (dropped) {
+            value = PoolString::Intern(StringView(dropped->path));
+            return Edited(true);
+        }
         if (changed) {
             value = PoolString::Intern(StringView(buf));
         }
-        return changed;
+        return Edited(changed);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, String& value) {
         const FieldAttributes& attributes = CurrentField();
         const DisabledScope disabled(attributes);
         char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
+        MakeLabel(label, sizeof(label), name, NextId(name));
 
         char buf[256] = {};
         size_t copyLen = value.size() < sizeof(buf) - 1 ? value.size() : sizeof(buf) - 1;
@@ -239,16 +282,21 @@ namespace BECore {
         buf[copyLen] = '\0';
 
         const bool changed = ImGui::InputText(label, buf, sizeof(buf));
+        const Optional<AssetDragPayload> dropped = AcceptAssetDrop(attributes.asset);
         FieldTooltip(attributes);
+        if (dropped) {
+            value.assign(dropped->path);
+            return Edited(true);
+        }
         if (changed) {
             value.assign(buf);
         }
-        return changed;
+        return Edited(changed);
     }
 
     bool ImGuiPropertyVisitor::BeginCompound(StringView name) {
         char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
+        MakeLabel(label, sizeof(label), name, NextId(name));
         const FieldAttributes& attributes = CurrentField();
         const bool open = ImGui::TreeNode(label);
         FieldTooltip(attributes);
@@ -288,7 +336,7 @@ namespace BECore {
         const FieldAttributes& attributes = CurrentField();
         const DisabledScope disabled(attributes);
         char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
+        MakeLabel(label, sizeof(label), name, NextId(name));
         const char* preview = selectedIndex < enumCount ? enumNames[selectedIndex].data() : "";
         bool changed = false;
         if (ImGui::BeginCombo(label, preview)) {
@@ -305,7 +353,7 @@ namespace BECore {
             ImGui::EndCombo();
         }
         FieldTooltip(attributes);
-        return changed;
+        return Edited(changed);
     }
 
     void ImGuiPropertyVisitor::EndCompound() {
@@ -318,7 +366,7 @@ namespace BECore {
     bool ImGuiPropertyVisitor::BeginList(StringView name, const ListInfo& info) {
         // `###id`: the id leaves out the size, so the node stays open when an element is added or removed
         char label[kListLabelSize];
-        snprintf(label, sizeof(label), "%.*s (%zu)###%d", static_cast<int>(name.size()), name.data(), info.size, _idCounter++);
+        snprintf(label, sizeof(label), "%.*s (%zu)###%d", static_cast<int>(name.size()), name.data(), info.size, NextId(name));
         const FieldAttributes& attributes = CurrentField();
         const bool open = ImGui::TreeNode(label);
         FieldTooltip(attributes);
@@ -388,6 +436,8 @@ namespace BECore {
                 request.action = ListAction::Add;
             }
         }
+        // The `x` of an element too: the request holds it until the dispatch applies it
+        Edited(request.action != ListAction::None);
         EndCompound();
     }
 
@@ -395,8 +445,8 @@ namespace BECore {
         const FieldAttributes& attributes = CurrentField();
         const DisabledScope disabled(attributes);
         char id[kIdSize];
-        snprintf(id, sizeof(id), "##present%d", _idCounter++);
-        const bool changed = ImGui::Checkbox(id, &present);
+        snprintf(id, sizeof(id), "##present%d", NextId(name));
+        const bool changed = Edited(ImGui::Checkbox(id, &present));
         ItemTooltip(present ? "Holds a value: clear to remove it" : "Holds no value: check to add one");
         // The value, when there is one, is drawn on this row after the checkbox; without one the name stands there
         ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
@@ -431,7 +481,7 @@ namespace BECore {
             ImGui::EndCombo();
         }
         FieldTooltip(attributes);
-        return changed;
+        return Edited(changed);
     }
 
 }  // namespace BECore

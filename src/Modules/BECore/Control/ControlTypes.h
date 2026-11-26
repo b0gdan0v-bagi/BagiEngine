@@ -50,6 +50,7 @@ namespace BECore {
     struct ControlMethodInfo {
         String summary;  // one line
         Vector<ControlParamInfo> params;
+        bool quiet = false;  // a call that only reads or waits: ControlActivity does not list it; not shown by list_methods
     };
 
     /// A registered method and its description, if its module gave one (ControlService::GetMethods)
@@ -58,7 +59,7 @@ namespace BECore {
         const ControlMethodInfo* info = nullptr;  // null without a description
     };
 
-    /// ControlMethodListing without the copy of the name (ControlService::GetMethodViews): valid until the next RegisterHandler or DescribeMethod
+    /// ControlMethodListing without the copy of the name (ControlService::GetMethodViews): valid until the next RegisterHandler, DescribeMethod or UnregisterHandler
     struct ControlMethodView {
         StringView name;
         const ControlMethodInfo* info = nullptr;  // null without a description
@@ -74,6 +75,7 @@ namespace BECore {
         inline constexpr StringView kInternalError = "internal_error";
         inline constexpr StringView kShuttingDown = "shutting_down";
         inline constexpr StringView kManualClock = "manual_clock";
+        inline constexpr StringView kNoClient = "no_client";
     }  // namespace ControlErrors
 
     [[nodiscard]] inline ControlError MakeControlError(StringView code, String message) {

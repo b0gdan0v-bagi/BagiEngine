@@ -4,7 +4,7 @@
 
 The WebSocket transport, both halves; it knows nothing about what a message means.
 
-- **Server half:** `WebSocketListener` (accept thread, connections, limits, handshake policy). The control API's server (`WebSocketServer`) is a listener on `127.0.0.1` whose `onMessage` is `ControlService::Post()` (the text passes as it is; checking the request is the control service's, `BECore/Control/CLAUDE.md`) and whose event sink is a broadcast. The control API is a development tool on loopback, not player networking; it is off by default and `Application` starts it with `--control` (flags: `Control/CLAUDE.md`, "Starting the API").
+- **Server half:** `WebSocketListener` (accept thread, connections, limits, handshake policy). The control API's server (`WebSocketServer`) is a listener on `127.0.0.1` whose `onMessage` is `ControlService::Post()` (the text passes as it is; checking the request is the control service's, `BECore/Control/CLAUDE.md`), posted as the connection's `ControlClient`, opened in `onOpen` and closed in `onClosed` (`.claude/rules/control-activity.md`) and whose event sink is a broadcast. The control API is a development tool on loopback, not player networking; it is off by default and `Application` starts it with `--control` (flags: `Control/CLAUDE.md`, "Starting the API").
 - **Client half:** `WebSocketClient` (`ws://`, `wss://` through `Tls/`, `Tls/CLAUDE.md`).
 - Players use the same transport: `RoomServer` takes the server half, a game's `RoomClient` the client half.
 

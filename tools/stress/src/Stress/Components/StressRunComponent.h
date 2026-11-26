@@ -37,7 +37,7 @@ namespace BECore::Stress {
      * (`FormatRampLine`) goes out and the application is asked to quit, once. Both modes: `CLAUDE.md`, "Fixed mode" and "Ramp mode".
      */
     class StressRunComponent : public IComponent {
-        BE_CLASS(StressRunComponent)
+        BE_CLASS(StressRunComponent, CATEGORY = logic)
     public:
         /// Where the JSON line goes: a line without its newline
         using LineSink = MoveOnlyFunction<void(const String&)>;

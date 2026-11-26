@@ -4,9 +4,11 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/AssetPanelWidget.gen.hpp>
+#include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelDrawSupport.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace BECore {
 
@@ -27,9 +29,15 @@ namespace BECore {
             return FindEditorCommand(name) != nullptr;
         }
 
+        /// The flags of the window of an asset that is no `Dialogs` host and no `Bar`; null (nothing read yet) is a docked one
+        ImGuiWindowFlags PanelWindowFlags(const PanelAsset* asset) {
+            return asset != nullptr && asset->window == PanelWindowKind::Floating ? ImGuiWindowFlags_NoDocking : ImGuiWindowFlags_None;
+        }
+
     }  // namespace
 
     AssetPanelWidget::~AssetPanelWidget() {
+        _panelHandle.Reset();
         _barHandle.Reset();
         EndBarFrame();
         // The members are destroyed after this body, so the models can still be told
@@ -75,6 +83,7 @@ namespace BECore {
             if (!_openDecided) {
                 _open = true;
                 _openDecided = true;
+                _fade.Snap(_open);
             }
             _windowTitle = Format("{}###{}", _asset, _asset);
             _hasTitleBinding = false;
@@ -83,6 +92,8 @@ namespace BECore {
         if (!_openDecided) {
             _open = asset->open;
             _openDecided = true;
+            // Open from the start is no opening, also after a mode switch
+            _fade.Snap(_open);
         }
         if (_holder.Version() == _preparedVersion) {
             return;
@@ -100,6 +111,21 @@ namespace BECore {
         }
         _interpreter.Prepare(_holder.Current());
         SyncModels();
+        SyncPanelRegistration(*asset);
+    }
+
+    void AssetPanelWidget::SyncPanelRegistration(const PanelAsset& asset) {
+        if (asset.window != PanelWindowKind::Docked) {
+            _panelHandle.Reset();
+        } else if (!_panelHandle || _panelId != asset.id) {
+            _panelId = asset.id;
+            _panelHandle = EditorPanelRegistry::GetInstance().Register(PoolString::Intern(StringView(_panelId)), *this);
+        }
+    }
+
+    void AssetPanelWidget::SetOpen(bool open) {
+        _open = open;
+        _fade.Snap(open);
     }
 
     void AssetPanelWidget::SyncModels() {
@@ -223,6 +249,7 @@ namespace BECore {
         }
         NotifyOpenChanged();
         if (!_open) {
+            DrawFadingOut();
             return;
         }
         for (const ModelEntry& entry : _models) {
@@ -240,29 +267,53 @@ namespace BECore {
             ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
             ImGui::SetNextWindowSize(kDialogsHostSize);
         } else {
-            if (asset != nullptr && asset->window == PanelWindowKind::Floating) {
-                flags = ImGuiWindowFlags_NoDocking;
-            }
+            flags = PanelWindowFlags(asset);
             if (asset != nullptr && (asset->width > 0.0f || asset->height > 0.0f)) {
                 ImGui::SetNextWindowSize(ImVec2(asset->width, asset->height), ImGuiCond_FirstUseEver);
             }
+            _fade.Advance(true, ImGui::GetIO().DeltaTime, kPanelFadeSeconds);
         }
         _result.Clear();
-        // No close button on a host that is always open
-        if (ImGui::Begin(_windowTitle.c_str(), dialogs ? nullptr : &_open, flags)) {
-            DrawBanner();
-            if (_interpreter.IsPrepared()) {
-                _interpreter.SetChordText(PanelChordTextRegistry::GetInstance().Get());
-                _interpreter.Draw(_sources, _result);
+        {
+            // A dialog is not faded: its host draws nothing, and the alpha would reach its modals
+            const ScopedAlpha alpha(dialogs ? 1.0f : _fade.Alpha());
+            // No close button on a host that is always open
+            if (ImGui::Begin(_windowTitle.c_str(), dialogs ? nullptr : &_open, flags)) {
+                DrawBanner();
+                if (_interpreter.IsPrepared()) {
+                    _interpreter.SetChordText(PanelChordTextRegistry::GetInstance().Get());
+                    _interpreter.Draw(_sources, _result);
+                }
+                const ImVec2 content = ImGui::GetCurrentWindow()->ContentSize;
+                _contentWidth = content.x;
+                _contentHeight = content.y;
             }
+            ImGui::End();
         }
-        ImGui::End();
         // The close button wrote `_open` inside `Begin`
         NotifyOpenChanged();
         for (const ModelEntry& entry : _models) {
             entry.model->EndUpdate();
         }
         EmitClick();
+    }
+
+    void AssetPanelWidget::DrawFadingOut() {
+        if (_fade.IsHidden()) {
+            return;
+        }
+        _fade.Advance(false, ImGui::GetIO().DeltaTime, kPanelFadeSeconds);
+        if (_fade.IsHidden()) {
+            return;
+        }
+        const ScopedAlpha alpha(_fade.Alpha());
+        // Only keeps the close button drawn: the window takes no input, so nothing clears it
+        bool shown = true;
+        if (ImGui::Begin(_windowTitle.c_str(), &shown, PanelWindowFlags(_holder.Current().Get()) | ImGuiWindowFlags_NoInputs)) {
+            // The models are not updated any more, so nothing of theirs is read. The room stays, or the scroll of the window would be lost
+            ImGui::Dummy(ImVec2(_contentWidth, _contentHeight));
+        }
+        ImGui::End();
     }
 
     void AssetPanelWidget::EmitClick() {

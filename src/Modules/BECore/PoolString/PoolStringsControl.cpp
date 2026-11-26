@@ -141,7 +141,8 @@ namespace BECore {
                                                  {"query", "string", false, "A part of the text, ASCII case ignored (default: every string)"},
                                                  {"source", "string", false, "Search only \"static\", \"runtime\" or \"adopted\" strings"},
                                                  {"record", "boolean", false, "Switch the recording of new runtime strings before answering (a build with the editor)"},
-                                                 {"reset", "boolean", false, "Clear the records after answering"}}});
+                                                 {"reset", "boolean", false, "Clear the records after answering"}},
+                                                /*quiet=*/true});
     }
 
 }  // namespace BECore

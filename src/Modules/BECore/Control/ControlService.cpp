@@ -1,10 +1,12 @@
 #include "ControlService.h"
 
+#include <BECore/Control/ControlActivity.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlEnvelope.h>
 #include <BECore/Control/ControlLog.h>
 #include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlRoots.h>
+#include <BECore/Control/ControlTouches.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Memory/Pooled.h>
 #include <BECore/Memory/ScratchArena.h>
@@ -72,9 +74,10 @@ namespace BECore {
         JsonView params = EmptyParamsView();
         Optional<ControlError> error;  // found while parsing; answered when the request's turn comes
         ControlReplyFn reply;
+        IntrusivePtr<ControlClient> client;  // null for the engine's own request
     };
 
-    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()) {
+    ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()), _activity(MakeUnique<ControlActivity>()), _touches(MakeUnique<ControlTouches>()) {
         _freeBuffers.reserve(kMaxFreeBuffers);
     }
     ControlService::~ControlService() = default;
@@ -162,9 +165,46 @@ namespace BECore {
         request.params = *params;
     }
 
-    void ControlService::Post(StringView requestText, ControlReplyFn reply) {
+    IntrusivePtr<ControlClient> ControlService::OpenConnectionClient() {
+        LockGuard lock(_mutex);
+        auto client = New<ControlClient>(PassKey<ControlService>{}, ++_lastClientId, false, StringView());
+        if (!_stopped) {
+            _queuedNotices.push_back(ClientNotice{client, true});
+            _posted.notify_one();
+        }
+        return client;
+    }
+
+    void ControlService::CloseConnectionClient(IntrusivePtr<ControlClient> client) {
+        LockGuard lock(_mutex);
+        if (client && !_stopped) {
+            _queuedNotices.push_back(ClientNotice{std::move(client), false});
+            _posted.notify_one();
+        }
+    }
+
+    IntrusivePtr<ControlClient> ControlService::OpenLocalClient(StringView name) {
+        LockGuard lock(_mutex);
+        return New<ControlClient>(PassKey<ControlService>{}, ++_lastClientId, true, name);
+    }
+
+    void ControlService::RenameClient(ControlClient& client, StringView name) {
+        client._name.assign(name.data(), name.size());
+        _activity->RecordName(PassKey<ControlService>{}, client);
+    }
+
+    void ControlService::DeliverClientNotices() {
+        for (const ClientNotice& notice : _notices) {
+            notice.client->_connected = notice.connected;
+            _activity->RecordConnection(PassKey<ControlService>{}, *notice.client, notice.connected);
+        }
+        _notices.clear();
+    }
+
+    void ControlService::Post(StringView requestText, ControlReplyFn reply, IntrusivePtr<ControlClient> client) {
         auto request = MakeUnique<Request>();
         request->reply = std::move(reply);
+        request->client = std::move(client);
         ParseRequest(requestText, *request);
 
         {
@@ -180,13 +220,14 @@ namespace BECore {
         request->reply(MakeErrorResponse(request->id, MakeControlError(ControlErrors::kShuttingDown, "the application is shutting down")));
     }
 
-    void ControlService::SendOk(ControlReplyFn& reply, StringView id, WriteResultFn writeResult) {
+    void ControlService::SendOk(ControlCall& call, WriteResultFn writeResult) {
         ScratchLease lease(_replyScratch, _replyScratchBusy);
-        const std::expected<void, ControlError> written = TryAppendOkResponse(lease.Text(), id, writeResult);
+        const std::expected<void, ControlError> written = TryAppendOkResponse(lease.Text(), call._id, writeResult);
         if (!written) {
-            AppendErrorResponse(lease.Text(), id, written.error());
+            AppendErrorResponse(lease.Text(), call._id, written.error());
         }
-        reply(lease.Text());
+        RecordCall(call, written ? StringView() : StringView(written.error().code));  // before the reply: whoever gets the answer finds the entry
+        call._reply(lease.Text());
     }
 
     void ControlService::SendError(ControlReplyFn& reply, StringView id, const ControlError& error) {
@@ -195,11 +236,62 @@ namespace BECore {
         reply(lease.Text());
     }
 
+    void ControlService::RecordCall(const ControlCall& call, StringView error) {
+        if (error == ControlErrors::kShuttingDown) {
+            return;
+        }
+        const auto description = _descriptions.find(call.GetMethod());
+        if (description != _descriptions.end() && description->second.quiet) {
+            return;
+        }
+        _activity->RecordCall(PassKey<ControlService>{}, call.GetClient(), call.GetMethod(), call.Params().Raw(), error, call._touchedNode);
+    }
+
+    ControlClient* ControlService::GetCurrentClient() const {
+        return _currentCall != nullptr ? _currentCall->GetClient() : nullptr;
+    }
+
+    void ControlService::ReportTouch(uint64_t nodeId, StringView component, StringView field) {
+        ControlClient* client = GetCurrentClient();
+        if (client == nullptr || nodeId == 0) {
+            return;
+        }
+        if (_currentCall->_touchedNode == 0) {
+            _currentCall->_touchedNode = nodeId;
+        }
+        ReportTouch(client, nodeId, component, field);
+    }
+
+    void ControlService::ReportTouch(ControlClient* client, uint64_t nodeId, StringView component, StringView field) {
+        if (client != nullptr && nodeId != 0) {
+            _touches->Record(PassKey<ControlService>{}, *client, nodeId, component, field);
+        }
+    }
+
     void ControlService::RegisterHandler(StringView method, Handler handler, bool bypassBarrier) {
         if (!_handlers.contains(method)) {
             ++_methodsVersion;
         }
         _handlers[String(method)] = HandlerEntry{std::move(handler), bypassBarrier, ++_registrations};
+    }
+
+    void ControlService::UnregisterHandler(StringView method) {
+        // Both are found before either goes: @p method may be a view of one of the keys (GetMethodViews)
+        const auto handler = _handlers.find(method);
+        const auto description = _descriptions.find(method);
+        if (handler == _handlers.end() && description == _descriptions.end()) {
+            return;
+        }
+        ++_methodsVersion;
+        // Dies after both tables are done with the name: its capture may own that text, or call the service from its destructor
+        Handler removed;
+        if (description != _descriptions.end()) {
+            _descriptions.erase(description);
+        }
+        if (handler != _handlers.end()) {
+            removed = std::move(handler->second.handler);
+            _handlers.erase(handler);
+        }
     }
 
     void ControlService::DescribeMethod(StringView method, ControlMethodInfo info) {
@@ -341,11 +433,13 @@ namespace BECore {
     void ControlService::Drain() {
         {
             LockGuard lock(_mutex);
+            _notices.swap(_queuedNotices);  // under the same lock as the requests: a request is never seen before the connect of its client
             while (!_queue.empty()) {
                 _inbox.push_back(std::move(_queue.front()));
                 _queue.pop_front();
             }
         }
+        DeliverClientNotices();
 
         // One pass over what was waiting when it began: a held request goes to the back, so after the pass the held ones are in their old order. A request
         // that Process() makes wait (a deferred call sets _pending) is checked against the barrier like the others behind it
@@ -374,20 +468,23 @@ namespace BECore {
             return;
         }
 
-        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, std::move(request.method), std::move(request.buffers), request.id, request.params, std::move(request.reply));
+        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, std::move(request.method), std::move(request.buffers), request.id, request.params, std::move(request.reply),
+                                            std::move(request.client));
         InvokeHandler(entry->second, *call);
         Settle(std::move(call));
     }
 
     void ControlService::InvokeHandler(HandlerEntry& entry, ControlCall& call) {
-        // The running handler is moved out of the table: it may register handlers, which replaces entries (its own too, and its capture dies with the replaced handler)
+        // The running handler is moved out of the table: it may register and remove handlers, its own too, and its capture must outlive the call
         const uint64_t generation = entry.generation;
         Handler handler = std::move(entry.handler);
+        ControlCall* const outer = std::exchange(_currentCall, &call);
         {
             // The answer struct a handler builds on the scratch arena is written into the reply inside the call and dies here, on this thread
             ScratchScope scratch;
             handler(call);
         }
+        _currentCall = outer;
 
         const auto current = _handlers.find(call.GetMethod());
         if (current != _handlers.end() && current->second.generation == generation) {
@@ -408,7 +505,7 @@ namespace BECore {
             return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("'{}' cannot run inside itself", entry->first)));
         }
 
-        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), params);
+        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, String(method), params, outer._client);
         InvokeHandler(entry->second, *nested);
         return AwaitNested(outer, nested, onAnswer);
     }
@@ -419,6 +516,7 @@ namespace BECore {
         }
         if (nested->_deferFrames == 0) {
             LOG_ERROR("[ControlService] the handler of '{}' gave no answer", nested->GetMethod());
+            RecordCall(*nested, ControlErrors::kInternalError);
             return std::unexpected(MakeControlError(ControlErrors::kInternalError, "the handler gave no answer"));
         }
 
@@ -428,7 +526,9 @@ namespace BECore {
         nested->_deferFrames = 0;
         ControlCall::DoneFn nestedDone = std::move(nested->_done);
         outer.DeferFrames(frames, seconds, [this, nested = std::move(nested), nestedDone = std::move(nestedDone), onAnswer = std::move(onAnswer)](ControlCall& outerCall) mutable {
+            ControlCall* const running = std::exchange(_currentCall, nested.get());
             nestedDone(*nested);
+            _currentCall = running;
             if (auto answer = AwaitNested(outerCall, nested, onAnswer)) {
                 onAnswer(outerCall, std::move(*answer));
             }
@@ -475,7 +575,7 @@ namespace BECore {
 
     void ControlService::WaitForRequests(std::chrono::milliseconds timeout) {
         UniqueLock lock(_mutex);
-        _posted.wait_for(lock, timeout, [this] { return !_queue.empty(); });
+        _posted.wait_for(lock, timeout, [this] { return !_queue.empty() || !_queuedNotices.empty(); });
     }
 
     void ControlService::EndFrame() {
@@ -503,10 +603,12 @@ namespace BECore {
         const ControlCall::DoneFn done = std::move(call->_done);
         if (done) {
             _inFrameEnd = true;
+            ControlCall* const outer = std::exchange(_currentCall, call.get());
             {
                 ScratchScope scratch;  // as in InvokeHandler: the answer struct of `done` dies with the reply; the continuation of a nested call runs here too
                 done(*call);
             }
+            _currentCall = outer;
             _inFrameEnd = false;
         }
         Settle(std::move(call));  // answered by done, deferred again, or an internal_error
@@ -516,6 +618,7 @@ namespace BECore {
         {
             LockGuard lock(_mutex);
             _stopped = true;
+            _queuedNotices.clear();
             while (!_queue.empty()) {
                 _inbox.push_back(std::move(_queue.front()));
                 _queue.pop_front();

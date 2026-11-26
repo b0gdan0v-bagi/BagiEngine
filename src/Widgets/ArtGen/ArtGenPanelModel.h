@@ -17,6 +17,7 @@
 #include <Widgets/ArtGen/ArtGenVerdict.h>
 #include <Widgets/ArtGen/Reference/ArtGenReferencePanel.h>
 #include <Widgets/ArtGen/Sets/ArtGenSetPanel.h>
+#include <Widgets/Feedback/EditorProgress.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <cstdint>
 #include <expected>
@@ -451,6 +452,9 @@ namespace BECore {
 
         [[nodiscard]] ArtGenSession& GetSession() const;
 
+        /// The setup action or the run the service works on now, if any: the progress source `Initialize` registers, which holds while the panel is closed
+        [[nodiscard]] Optional<EditorProgress> ReadProgress();
+
         /// The preset being edited. A slot may edit it in place: the view follows in the next `Update`
         [[nodiscard]] ArtGenPresetForm& GetForm() {
             return _form;
@@ -578,6 +582,7 @@ namespace BECore {
         String _formMessage;
         bool _formMessageIsError = false;
         ArtGenPanelSlots _slots{*this};
+        EditorProgressHandle _progressSource;
         // What the preset view showed of a value the form does not hold as shown: an edit is a view value that differs from these
         int32_t _shownIndex = -1;
         int32_t _shownWorkflowIndex = -1;

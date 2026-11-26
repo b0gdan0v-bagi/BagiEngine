@@ -80,6 +80,9 @@ namespace BECore {
             _arguments.emplace_back(argv[i]);
         }
         CoreManager::GetCommandLine().Set(_arguments);
+        if (argc > 0 && argv != nullptr && argv[0] != nullptr) {
+            CoreManager::GetCommandLine().SetProgramPath(argv[0]);
+        }
     }
 
     int Application::RunCook(const CookRequest& request) {
@@ -213,7 +216,8 @@ namespace BECore {
 
     void Application::PostReplay(const String& path, bool quitWhenDone) {
         // Answered on the main thread, from a frame or from Shutdown(); the application outlives the control service
-        CoreManager::GetControlService().Post(MakeReplayRequestText(path), [this, quitWhenDone](const String& text) {
+        ControlService& control = CoreManager::GetControlService();
+        const auto onAnswer = [this, quitWhenDone](const String& text) {
             const ReplayOutcome outcome = ReadReplayAnswer(text);
             switch (outcome.kind) {
                 case ReplayOutcomeKind::Played:
@@ -229,7 +233,8 @@ namespace BECore {
             if (quitWhenDone) {
                 ApplicationEvents::QuitEvent::Emit();
             }
-        });
+        };
+        control.Post(MakeReplayRequestText(path), onAnswer, control.OpenLocalClient(kReplayClientName));
     }
 
     void Application::Run() {

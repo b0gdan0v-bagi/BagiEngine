@@ -34,7 +34,7 @@ namespace BECore::Stress {
      * allocation. The nodes a churn makes come from pools, so it allocates nothing either once the lists have their size. Does nothing while the game is not the active `StressGame`.
      */
     class StressSpritesComponent : public IComponent {
-        BE_CLASS(StressSpritesComponent)
+        BE_CLASS(StressSpritesComponent, CATEGORY = logic)
     public:
         StressSpritesComponent() = default;
         ~StressSpritesComponent() override = default;

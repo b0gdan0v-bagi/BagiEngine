@@ -98,6 +98,7 @@ class FieldAttrs:
     readonly: bool = False
     hidden: bool = False
     required: bool = False
+    asset: str = ""  # the AssetKind name of asset(<Kind>); empty: no asset field
     # The generator's own flag: a pointer field of a factory base that is not a factory field (the scene tree). It is not a
     # FieldAttributes member, so it writes nothing into ReflectionTraits and does not make a field "have attributes".
     no_factory: bool = False
@@ -115,6 +116,7 @@ class FieldAttrs:
             "readonly": self.readonly,
             "hidden": self.hidden,
             "required": self.required,
+            "asset": self.asset,
             "no_factory": self.no_factory,
         }
 
@@ -129,6 +131,7 @@ class FieldAttrs:
             readonly=data.get("readonly", False),
             hidden=data.get("hidden", False),
             required=data.get("required", False),
+            asset=data.get("asset", ""),
             no_factory=data.get("no_factory", False),
         )
 
@@ -291,6 +294,8 @@ class ClassData:
     icon: str = ""
     # Asset part from PURPOSE=<sim|visual|editor> in BE_CLASS, lower case; "common" when the class names none.
     purpose: str = "common"
+    # Name from CATEGORY=<name> in BE_CLASS (kebab case); empty when the class names none.
+    category: str = ""
     # Resolved at generation time (not stored in cache): FQN of the factory base this
     # class derives from, e.g. "BECore::ILogSink". Empty string when not a factory child.
     factory_base_fqn: str = ""
@@ -315,6 +320,7 @@ class ClassData:
             "register_self": self.register_self,
             "icon": self.icon,
             "purpose": self.purpose,
+            "category": self.category,
         }
     
     @classmethod
@@ -340,6 +346,7 @@ class ClassData:
             register_self=data.get("register_self", False),
             icon=data.get("icon", ""),
             purpose=data.get("purpose", "common"),
+            category=data.get("category", ""),
         )
 
 

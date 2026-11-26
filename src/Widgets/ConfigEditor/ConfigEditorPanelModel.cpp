@@ -5,6 +5,7 @@
 #include <Generated/ConfigEditorPanelModel.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorDocumentRows.h>
+#include <Widgets/Feedback/ToastEvents.h>
 
 namespace BECore {
 
@@ -88,6 +89,7 @@ namespace BECore {
         } else {
             // Applying left the document clean, but the file does not hold its edits
             _unwritten = _document.has_value();
+            EditorToastEvent::Emit(ToastLevel::Error, "Save failed: {}"_format(_selectedConfig.ToStringView()));
         }
         _viewDirty = true;
     }

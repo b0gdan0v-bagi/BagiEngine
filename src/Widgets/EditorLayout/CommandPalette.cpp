@@ -1,6 +1,7 @@
 #include "CommandPalette.h"
 
 #include <Widgets/EditorLayout/CommandFilter.h>
+#include <Widgets/EditorLayout/EditorControls.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -37,14 +38,20 @@ namespace BECore {
 
     }  // namespace
 
-    PoolString CommandPalette::Draw(const HotkeyMap& hotkeys) {
+    PoolString CommandPalette::Draw(const HotkeyMap& hotkeys, Span<const EditorCommand> commands, uint64_t version) {
         if (_openRequested) {
             _openRequested = false;
             _query[0] = '\0';
             _selected = 0;
             _focusQuery = true;
+            _fade.Snap(false);
             ImGui::OpenPopup(kPopupId);
         }
+        if (!ImGui::IsPopupOpen(kPopupId)) {
+            return {};
+        }
+        _fade.Advance(true, ImGui::GetIO().DeltaTime, kPaletteFadeSeconds);
+        const ScopedAlpha alpha(_fade.Alpha());
 
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         const ImVec2 anchor(viewport->GetCenter().x, viewport->WorkPos.y + viewport->WorkSize.y * kPaletteTopFraction);
@@ -64,8 +71,12 @@ namespace BECore {
             _selected = 0;
         }
 
-        const Span<const EditorCommand> table = GetEditorCommands();
-        if (_matches.Update(_query, table)) {
+        // The matcher compares only the list's memory and size
+        if (version != _commandsVersion) {
+            _commandsVersion = version;
+            _matches.Invalidate();
+        }
+        if (_matches.Update(_query, commands)) {
             _chordTexts.clear();
             for (const EditorCommand* match : _matches.GetMatches()) {
                 _chordTexts.push_back(ChordText(*match, hotkeys));

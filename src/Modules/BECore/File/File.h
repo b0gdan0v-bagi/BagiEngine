@@ -57,7 +57,8 @@ namespace BECore {
         /// The size of the stream, not of the path: it also works for an Android asset, which GetFileInfo does not know
         [[nodiscard]] std::expected<uint64_t, String> Size() const;
 
-        /// The number of bytes read: less than @p size only at the end of the file; an error for a read that failed
+        /// The number of bytes read: less than @p size only at the end of the file; an error for a read that failed. A later call reads what
+        /// was appended to the file since
         [[nodiscard]] std::expected<size_t, String> Read(void* data, size_t size);
 
         /// All @p size bytes or an error

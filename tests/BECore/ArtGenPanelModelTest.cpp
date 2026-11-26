@@ -968,4 +968,49 @@ namespace BECore::Tests {
         });
     }
 
+    TEST_F(ArtGenPanelModelTest, TheProgressSourceFollowsARunTheServiceWorksOn) {
+        EditorProgressRegistry& progress = EditorProgressRegistry::GetInstance();
+        Catalog();
+        EXPECT_FALSE(progress.Collect().first);
+
+        const uint32_t id = Require(session.Request("wood", "queen", 2, Optional<int64_t>(1)));
+        const EditorProgressSummary queued = progress.Collect();
+        ASSERT_TRUE(queued.first);
+        EXPECT_FALSE(queued.first->fraction) << "nothing is made yet";
+
+        Call("artgen_poll", kCatalogPoll);
+        Call("artgen_progress", Report(id, R"("image":0,"step":5,"steps":25)"));
+        const EditorProgressSummary running = progress.Collect();
+        ASSERT_TRUE(running.first);
+        ASSERT_TRUE(running.first->fraction);
+        EXPECT_FLOAT_EQ(*running.first->fraction, 0.1f);
+
+        now += ArtGenSession::kServiceTimeoutSeconds + 1.0;
+        EXPECT_FALSE(progress.Collect().first) << "a silent service works on nothing";
+
+        Call("artgen_poll", kCatalogPoll);
+        EXPECT_TRUE(progress.Collect().first);
+        Call("artgen_done", Report(id, R"("status":"ok")"));
+        EXPECT_FALSE(progress.Collect().first);
+    }
+
+    TEST_F(ArtGenPanelModelTest, TheProgressSourceFollowsASetupAction) {
+        EditorProgressRegistry& progress = EditorProgressRegistry::GetInstance();
+        Call("artgen_poll", R"({"state":"not_installed"})");
+        const uint32_t id = Require(session.RequestSetup(ArtGenSetupAction::Install));
+        Call("artgen_poll", R"({"state":"not_installed"})");
+        const EditorProgressSummary starting = progress.Collect();
+        ASSERT_TRUE(starting.first);
+        EXPECT_FALSE(starting.first->fraction) << "no total reported yet";
+
+        Call("artgen_setup_report", Report(id, R"("done":2000000,"event":"progress","total":8000000)"));
+        const EditorProgressSummary downloading = progress.Collect();
+        ASSERT_TRUE(downloading.first);
+        ASSERT_TRUE(downloading.first->fraction);
+        EXPECT_FLOAT_EQ(*downloading.first->fraction, 0.25f);
+
+        Call("artgen_setup_report", Report(id, R"("event":"done","ok":true)"));
+        EXPECT_FALSE(progress.Collect().first);
+    }
+
 }  // namespace BECore::Tests

@@ -2,7 +2,7 @@
 
 Starts the app in a fresh process per scene (sprites 500, entities 500, ui 200), `--headless --control --manual-clock`, and drives
 it over the control API: the state, `set_count` shown in the next frame (`frame_stats` draw calls and the `Stress objects` counter),
-the bad values, screenshots that are not flat, `set_language` rewording the `ui` scene, `set_scene`, `ui_tree`, the `set_window` step of smoke.py
+the bad values, screenshots that are not flat, `set_language` rewording the `ui` scene, `set_scene`, `ui_tree`, the scene methods on the `sprites` scene and the `set_window` step of smoke.py
 on the `ui` scene (its Screen canvas must follow the simulated window), and a log with no Warning or Error. The `rmlui` scenario probes `get_state.scenes`
 and prints a skip line when the build has no `rmlui` (only `ENGINE_UI_RMLUI` builds list it), so the same script passes in every preset; with it the scene's documents, textures,
 `wheel_at` on both axes, `ReloadRmlUiDocuments` and the scene switch are checked. The `reflection` scene drives the by-name methods over `StressGame` (`list_types`, `describe_type`, `schema`,
@@ -34,7 +34,7 @@ import bagi_qa_editor as editor  # noqa: E402
 from bagi_session import GameSession, SessionError  # noqa: E402
 from game_process import BACKEND_UNAVAILABLE_MARKER, PORT_TAKEN_MARKER, GameLaunchError, GameProcess, build_game_command, free_port, preset_executable  # noqa: E402
 from schema_to_xsd import Binding, check_files, convert_config_dir, find_xmllint  # noqa: E402
-from smoke import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, SmokeFailure, check, check_window_control, expect_error, take_screenshot  # noqa: E402
+from smoke import EXIT_FAILED, EXIT_PASSED, EXIT_SKIPPED, SmokeFailure, check, check_scene_methods, check_window_control, expect_error, take_screenshot  # noqa: E402
 
 STATUS_STARTUP_TIMEOUT = 30.0
 SHUTDOWN_TIMEOUT = 15.0
@@ -147,6 +147,7 @@ def scenario_sprites(client: BagiControlClient) -> None:
     check(set_count(client, SPRITES_COUNT // 2)["drawCalls"] < after, "the draw calls did not fall with the count")
     check_bad_counts(client)
     check_not_flat(client, "sprites")
+    check_scene_methods(client)
     expect_error("invalid_params", lambda: client.call("perform_action", {"type": "set_scene", "scene": "nowhere"}), "a scene that does not exist")
 
 
@@ -495,6 +496,7 @@ def drive_editor_panels(client: BagiControlClient) -> None:
 
     chord = [{"type": "key", "key": "G", "mods": ["ctrl", "shift"]}]
     client.call("imgui_input", {"events": chord})
+    client.call("step", {"frames": editor.PANEL_CLOSE_FRAMES})
     check_game_panel_window(client, False, "after the chord Ctrl+Shift+G")
     client.call("imgui_input", {"events": chord})
     check_game_panel_window(client, True, "after the chord Ctrl+Shift+G again")

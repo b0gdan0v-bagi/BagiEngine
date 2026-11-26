@@ -24,7 +24,8 @@ namespace BECore {
     /// A node that clips its subtree: it has a ClipRectComponent and a TransformComponent
     struct SceneClipOwner {
         const TransformComponent* transform = nullptr;
-        int32_t outer = -1;  ///< index of the enclosing owner, -1 for none
+        const IComponent* clipRect = nullptr;  ///< the ClipRectComponent: while it is disabled this owner clips nothing
+        int32_t outer = -1;                    ///< index of the enclosing owner, -1 for none
     };
 
     /// The place of one node in the draw order, written when the draw list is rebuilt. Its index in SceneDrawList::items is the node's rank (Scene::GetDrawRank()).

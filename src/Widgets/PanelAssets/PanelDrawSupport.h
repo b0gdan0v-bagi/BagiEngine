@@ -3,6 +3,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/Singleton.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
+#include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/ImGuiTheme.h>
 #include <cfloat>
 #include <imgui.h>
@@ -78,7 +79,7 @@ namespace BECore::PanelDraw {
     /// Fills the next buttons with the palette's accent (`Accent`) or muted accent (`Muted`) while @p active; the destructor pops the colours. `None` pushes nothing
     class ScopedButtonFill {
     public:
-        ScopedButtonFill(PanelButtonFill fill, bool active) {
+        ScopedButtonFill(PanelButtonFill fill, bool active) : _snap(fill != PanelButtonFill::None && active) {
             if (fill == PanelButtonFill::None || !active) {
                 return;
             }
@@ -98,6 +99,7 @@ namespace BECore::PanelDraw {
 
     private:
         static constexpr int kPushedColors = 3;
+        const ScopedHoverSnap _snap;
         bool _pushed = false;
     };
 

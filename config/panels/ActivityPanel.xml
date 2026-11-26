@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<PanelAsset id="Activity" title="Activity" command="view.activity" open="false" width="720" height="360">
+  <sources>
+    <item name="activity" model="ActivityPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelButton" id="clear" icon="trash-2" text="Clear" command="activity.clear" enableWhen="activity.hasRows" tooltip="Empty the list; the next call is listed again"/>
+    <element type="PanelEmptyState" id="nothing" icon="activity" text="No control API client has connected or changed anything yet" visible="!activity.hasRows"/>
+    <element type="PanelTable" id="entries" source="activity.rows" scrollRows="16" visible="activity.hasRows">
+      <columns>
+        <item type="Button" id="select" icon="mouse-pointer-click" tooltip="Select the node this call touched in the Scene Editor" command="activity.selectNode" argument="node" enableField="hasNode"/>
+        <item type="Text" id="time" title="Time" field="time"/>
+        <item type="Text" id="client" title="Client" field="client"/>
+        <item type="Text" id="method" title="Method" field="method"/>
+        <item type="Text" id="params" title="Params" field="params" tooltipField="params"/>
+        <item type="Text" id="error" title="Error" field="error" styleField="errorStyle"/>
+      </columns>
+    </element>
+  </elements>
+</PanelAsset>

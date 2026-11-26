@@ -10,8 +10,10 @@
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
+#include <Games/GameManager.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
 #include <Widgets/EditorLayout/GitBranch.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/ImGuiLayoutText.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelBars.h>
@@ -35,6 +37,29 @@ namespace BECore {
             return current ? Path(*current) : Path();
         }
 
+        /// The registry of the active game's editor tools; null when there is no game manager
+        GameEditorTools* ActiveGameTools() {
+            return GameManager::IsInstanceCreated() ? &GameManager::GetInstance().GetEditorTools() : nullptr;
+        }
+
+        /// The workspace a `workspace.*` command shows; nothing for another command
+        Optional<EditorWorkspace> WorkspaceOfCommand(PoolString id) {
+            using namespace EditorCommandIds;
+            if (id == kWorkspaceScene) {
+                return EditorWorkspace::Scene;
+            }
+            if (id == kWorkspaceUI) {
+                return EditorWorkspace::UI;
+            }
+            if (id == kWorkspaceAnimation) {
+                return EditorWorkspace::Animation;
+            }
+            if (id == kWorkspaceProfiling) {
+                return EditorWorkspace::Profiling;
+            }
+            return std::nullopt;
+        }
+
         /// Moves the cursor back over the gap ImGui leaves after an item, so the bars and the dock space touch
         void CloseItemGap() {
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
@@ -43,6 +68,11 @@ namespace BECore {
     }  // namespace
 
     EditorLayoutWidget::~EditorLayoutWidget() {
+        // ImGuiWidget is created first, so it dies after this widget and the context is alive
+        if (_workspaces && ImGui::GetCurrentContext() != nullptr) {
+            _workspaces->Shutdown();
+        }
+        TouchHighlights::GetInstance().Reset();
         GamePause& pause = CoreManager::GetPause();
         if (pause.IsPaused() && !CoreManager::GetControlService().IsManualClock()) {
             pause.SetPaused(false);
@@ -52,10 +82,11 @@ namespace BECore {
     bool EditorLayoutWidget::Initialize(IDeserializer& /*deserializer*/) {
         const Path userDirectory = EditorUserDirectory();
         if (userDirectory.Empty()) {
-            LOG_WARNING("Editor: there is no per-user folder, so preferences, hotkeys and layouts are not stored");
+            LOG_WARNING("Editor: there is no per-user folder, so preferences, hotkeys, layouts and workspaces are not stored");
         } else {
             _layouts.emplace(userDirectory);
         }
+        _workspaces.emplace(userDirectory);
         _settings.emplace(userDirectory);
         _settings->Load();
         ApplyPreferences(_settings->GetPreferences());
@@ -63,12 +94,15 @@ namespace BECore {
         _statusBar.StartHardwareMonitor();
 
         _hostHandle = EditorLayoutHostRegistry::GetInstance().Register(*this);
+        _toasts.Connect(CoreManager::GetControlService().Activity());
+        TouchHighlights::GetInstance().Connect(CoreManager::GetControlService().Touches());
 
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
         Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);
         Subscribe<ViewportInputModeChangedEvent, &EditorLayoutWidget::OnViewportInputModeChanged>(this);
         Subscribe<ConsoleCommandSubmittedEvent, &EditorLayoutWidget::OnConsoleCommandSubmitted>(this);
         Subscribe<RenderEvents::ImGuiNewFrameEvent, &EditorLayoutWidget::OnImGuiNewFrame>(this);
+        _gameRunner.Connect();
         return true;
     }
 
@@ -83,7 +117,9 @@ namespace BECore {
         } else if (event.commandId == kModeToggle) {
             CoreManager::GetWidgetManager().RequestToggle();
         } else if (event.commandId == kViewResetLayout) {
-            _forceResetLayout = true;
+            _workspaces->Reset();
+        } else if (const Optional<EditorWorkspace> workspace = WorkspaceOfCommand(event.commandId)) {
+            _workspaces->SwitchTo(*workspace);
         } else if (event.commandId == kViewCommandPalette) {
             _palette.Open();
         } else if (event.commandId == kGamePlay) {
@@ -141,19 +177,14 @@ namespace BECore {
     }
 
     void EditorLayoutWidget::OnImGuiNewFrame() {
-        if (_pendingLayoutText.empty()) {
-            return;
-        }
-        ImGui::LoadIniSettingsFromMemory(_pendingLayoutText.c_str(), _pendingLayoutText.size());
-        _pendingLayoutText.clear();
-        // imgui.ini follows the loaded layout; and if the text had no tree for our dockspace, Update builds the default one
-        ImGui::MarkIniSettingsDirty();
-        _layoutInitialized = false;
+        _workspaces->ApplyPending();
     }
 
     void EditorLayoutWidget::Update() {
         // The control API and the manual clock can pause too
         _playModel.SetPaused(CoreManager::GetPause().IsPaused());
+        // Before the panels that draw them, which come after this widget
+        TouchHighlights::GetInstance().Update(ImGui::GetIO().DeltaTime);
 
         // Cover the entire OS window work-area with a borderless, decoration-less host.
         ImGuiViewport* mainViewport = ImGui::GetMainViewport();
@@ -174,31 +205,28 @@ namespace BECore {
         MainToolbar::Draw();
         CloseItemGap();
         DispatchHotkeys();
-        if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys()); !chosen.Empty()) {
+        GameEditorTools* const gameTools = ActiveGameTools();
+        _gameCommands.Sync(gameTools);
+        _gameRunner.SetTools(gameTools);
+        if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys(), _gameCommands.GetCommands(), _gameCommands.GetVersion()); !chosen.Empty()) {
             EditorCommandEvent::Emit(chosen);
         }
+        _gameRunner.Draw();
 
         // It takes what the status bar leaves; the bars are children of the host, so no dock node can overlap them
         const float dockHeight = eastl::max(0.0f, ImGui::GetContentRegionAvail().y - StatusBar::GetHeight());
         const ImGuiID dockspaceId = ImGui::GetID("MainDockSpace");
 
-        bool doReset = _forceResetLayout;
-        _forceResetLayout = false;
-
-        if (!_layoutInitialized) {
-            _layoutInitialized = true;
-            doReset = (ImGui::DockBuilderGetNode(dockspaceId) == nullptr);
-        }
-
-        if (doReset) {
-            BuildDefaultLayout(dockspaceId, ImVec2(mainViewport->WorkSize.x, dockHeight));
-        }
+        _workspaces->Update(dockspaceId, ImVec2(mainViewport->WorkSize.x, dockHeight));
 
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, dockHeight), ImGuiDockNodeFlags_None);
         CloseItemGap();
         _statusBar.Draw();
 
         ImGui::End();
+        // After the host, so their windows dock into its space
+        _gamePanels.Draw(gameTools);
+        _toasts.Draw(StatusBar::GetHeight());
 
         // The panels' Initialize ran before the first Update, so they hear the stored preferences now
         bool preferencesChanged = !_preferencesAnnounced;
@@ -225,6 +253,10 @@ namespace BECore {
 
     const EditorPlayModel* EditorLayoutWidget::GetPlayModel() const {
         return &_playModel;
+    }
+
+    Optional<EditorWorkspace> EditorLayoutWidget::GetActiveWorkspace() const {
+        return _workspaces ? Optional<EditorWorkspace>(_workspaces->GetActive()) : std::nullopt;
     }
 
     void EditorLayoutWidget::NotifyPreferencesChanged() {
@@ -279,7 +311,7 @@ namespace BECore {
             return;
         }
         // a layout saved before a window was renamed would float the window
-        _pendingLayoutText = MigrateLegacyWindowNames(*text);
+        _workspaces->LoadLayout(MigrateLegacyWindowNames(*text));
     }
 
     std::expected<void, String> EditorLayoutWidget::SaveCurrentLayoutAs(StringView name) {
@@ -294,31 +326,6 @@ namespace BECore {
         }
         LOG_INFO("Editor: layout '{}' saved", name);
         return {};
-    }
-
-    void EditorLayoutWidget::BuildDefaultLayout(ImGuiID id, ImVec2 size) {
-        ImGui::DockBuilderRemoveNode(id);
-        ImGui::DockBuilderAddNode(id, ImGuiDockNodeFlags_DockSpace);
-        ImGui::DockBuilderSetNodeSize(id, size);
-
-        // Right: Sprite Library
-        ImGuiID right, center;
-        ImGui::DockBuilderSplitNode(id, ImGuiDir_Right, 0.25f, &right, &center);
-
-        // Left: Scene Editor and Config Editor
-        ImGuiID left, viewport;
-        ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.22f, &left, &viewport);
-
-        // Left panel: Scene Editor above Config Editor
-        ImGuiID leftTop, leftBottom;
-        ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.3f, &leftBottom, &leftTop);
-
-        ImGui::DockBuilderDockWindow("Scene Editor", leftTop);
-        ImGui::DockBuilderDockWindow("Config Editor###ConfigEditor", leftBottom);
-        ImGui::DockBuilderDockWindow("Viewport", viewport);
-        ImGui::DockBuilderDockWindow("Sprite Library###SpriteLibrary", right);
-
-        ImGui::DockBuilderFinish(id);
     }
 
 }  // namespace BECore

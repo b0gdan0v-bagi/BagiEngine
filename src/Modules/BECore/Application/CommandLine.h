@@ -22,6 +22,16 @@ namespace BECore {
     public:
         void Set(Span<const String> arguments);
 
+        /// The path the program was started by (`argv[0]`) as it was given, so it may be relative to the working folder or a bare name; it is not
+        /// one of GetArguments(). Empty when nobody set it
+        void SetProgramPath(StringView path) {
+            _programPath.assign(path.data(), path.size());
+        }
+
+        [[nodiscard]] StringView GetProgramPath() const {
+            return _programPath;
+        }
+
         Span<const String> GetArguments() const {
             return _arguments;
         }
@@ -39,6 +49,7 @@ namespace BECore {
 
     private:
         Vector<String> _arguments;
+        String _programPath;
     };
 
 }  // namespace BECore

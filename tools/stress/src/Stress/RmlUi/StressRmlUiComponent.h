@@ -47,7 +47,7 @@ namespace BECore::Stress {
      * build without the host compiles it unchanged. Does nothing while the game is not the active `StressGame`.
      */
     class StressRmlUiComponent : public IComponent {
-        BE_CLASS(StressRmlUiComponent)
+        BE_CLASS(StressRmlUiComponent, CATEGORY = logic)
     public:
         StressRmlUiComponent();
         ~StressRmlUiComponent() override;

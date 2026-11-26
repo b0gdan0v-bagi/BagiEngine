@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BECore/Control/ControlClient.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Threading/LockSite.h>
+#include <BECore/Threading/Mutex.h>
 #include <RemoteControl/WebSocketListener.h>
 #include <atomic>
 #include <chrono>
@@ -14,9 +18,9 @@ namespace BECore {
     /**
      * @brief The WebSocket transport of the control API: a server on 127.0.0.1 that feeds ControlService::Post().
      *
-     * A WebSocketListener (which owns the threads, the connections and the limits) plus the glue: every text message of a client is
-     * a request; the response goes back to the connection that sent it, and the events of ControlService::Publish() go to every open
-     * connection. See RemoteControl/CLAUDE.md for the protocol details and the limits.
+     * A WebSocketListener (which owns the threads, the connections and the limits) plus the glue: every connection is a client of the
+     * service (ControlClient), every text message of it is a request posted as that client; the response goes back to the connection that sent it, and the events of ControlService::Publish() go to
+     * every open connection. See RemoteControl/CLAUDE.md for the protocol details and the limits.
      *
      * A client that does not read cannot stall the game: when its queue passes kMaxOutboxBytes the connection is dropped. The main
      * thread calls Start() and Stop(); responses are queued from the main thread, never sent from it.
@@ -61,8 +65,21 @@ namespace BECore {
         }
 
     private:
+        struct ConnectionClient {
+            WebSocketConnectionId connection = 0;
+            IntrusivePtr<ControlClient> client;
+        };
+
+        /// The handler of the listener; its functions run on the reader threads
+        [[nodiscard]] WebSocketHandler MakeHandler();
+        [[nodiscard]] IntrusivePtr<ControlClient> FindClient(WebSocketConnectionId connection);
+        [[nodiscard]] IntrusivePtr<ControlClient> TakeClient(WebSocketConnectionId connection);
+
+        // The members the handler uses are before _listener, which is built with it and calls it until it is destroyed
         ControlService& _service;
-        std::atomic<uint32_t> _clientCount{0};  // before _listener: its handler, built with the listener, counts into it
+        std::atomic<uint32_t> _clientCount{0};
+        Mutex _clientsMutex{BE_LOCK_SITE("Control connection clients")};
+        Vector<ConnectionClient> _clients;  // one per open connection; guarded by _clientsMutex
         WebSocketListener _listener;
     };
 

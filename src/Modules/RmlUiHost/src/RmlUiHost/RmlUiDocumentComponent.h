@@ -41,7 +41,7 @@ namespace BECore {
      * Not reloaded: images and fonts, and a document from SetMarkup().
      */
     class RmlUiDocumentComponent : public IComponent, public IUIInputHandler {
-        BE_CLASS(RmlUiDocumentComponent, ICON = file - code)
+        BE_CLASS(RmlUiDocumentComponent, ICON = file - code, CATEGORY = ui)
     public:
         RmlUiDocumentComponent() = default;
         ~RmlUiDocumentComponent() override;
@@ -110,6 +110,10 @@ namespace BECore {
         [[nodiscard]] int GetInputOrder() const {
             return _inputOrder;
         }
+
+    protected:
+        /// A document that goes to sleep takes its pointer back and forgets the buttons it took
+        void OnEnabledChanged() override;
 
     private:
         /// Queues the `data-action` of the clicked element

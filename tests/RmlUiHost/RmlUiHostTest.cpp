@@ -323,6 +323,15 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_NE(menu->GetContext(), nullptr);
     }
 
+    TEST_F(RmlUiHostTest, ARemovedDocumentStillLaysOut) {
+        const auto doc = Doc("Fit");
+        ASSERT_TRUE(doc);
+        doc->GetNode().RemoveComponent("RmlUiDocumentComponent"_intern);
+        ASSERT_EQ(doc->TryGetNode(), nullptr);
+
+        doc->UpdateLayout(_renderer->GetOutputWidth(), _renderer->GetOutputHeight());
+    }
+
     TEST_F(RmlUiHostTest, ABoxIsDrawnAsGeometryInOutputPixels) {
         auto doc = Doc("Main");
         ASSERT_TRUE(doc->SetMarkup(Document(R"(<div id="box"></div>)", "#box { position: absolute; left: 20dp; top: 30dp; width: 40dp; height: 50dp; background-color: #ff0000; }")));
@@ -825,6 +834,28 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
         EXPECT_TRUE(input.DispatchMouseButtonUp(Button(700.0f, 550.0f, false))) << "the release of a press the document took is still its own";
         EXPECT_EQ(recorder.gameDowns, 0);
+    }
+
+    TEST_F(RmlUiHostTest, ADisabledDocumentTakesNoInputAndKeepsNoHoverAndNoPress) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(kStackedMarkup, kStackedStyle)));
+        Draw("Main");
+        Recorder recorder;
+        UIInput& input = CoreManager::GetUIInput();
+        input.DispatchMouseMotion(Motion(150.0f, 120.0f));
+        ASSERT_TRUE(input.DispatchMouseButtonDown(Button(150.0f, 120.0f, true)));
+
+        doc->SetEnabled(false);
+        EXPECT_TRUE(input.DispatchMouseButtonUp(Button(150.0f, 120.0f, false))) << "the release of the press the document took is not the game's";
+        EXPECT_TRUE(recorder.actions.empty());
+        EXPECT_FALSE(input.DispatchMouseButtonDown(Button(150.0f, 120.0f, true)));
+        EXPECT_EQ(recorder.gameDowns, 1);
+
+        doc->SetEnabled(true);
+        Draw("Main");
+        const auto isHovered = [](const DrawCall& call) { return call.kind == DrawKind::Geometry && call.texture == nullptr && call.color.r == 0xAA; };
+        EXPECT_TRUE(std::none_of(_renderer->calls.begin(), _renderer->calls.end(), isHovered)) << "the context was told the pointer left";
+        EXPECT_FALSE(doc->OnMouseButtonUp(Button(700.0f, 550.0f, false))) << "the button it had taken is forgotten";
     }
 
     // ---- UIVars --------------------------------------------------------------------------------------------------------------

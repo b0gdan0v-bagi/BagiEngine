@@ -58,6 +58,8 @@ def format_field_attributes(attrs: FieldAttrs) -> str:
     for flag, member in (('readonly', 'readOnly'), ('hidden', 'hidden'), ('required', 'required')):
         if getattr(attrs, flag):
             parts.append(f'.{member} = true')
+    if attrs.asset:
+        parts.append(f'.asset = ::BECore::AssetKind::{attrs.asset}')
     return '::BECore::FieldAttributes{ ' + ', '.join(parts) + ' }'
 
 
@@ -338,6 +340,7 @@ class CodeGenerator:
                 'is_event': cls.is_event,
                 'icon': cls.icon,
                 'purpose': cls.purpose.capitalize(),
+                'category': cls.category,
                 'parent_class': cls.parent_class,
                 'parent_has_be_class': parent_has_be_class,
                 'parent_full_qualified_name': parent_full_qualified_name,

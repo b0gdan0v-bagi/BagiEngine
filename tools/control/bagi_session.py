@@ -92,9 +92,13 @@ class SessionError(Exception):
 
 
 class GameSession:
-    """At most one game at a time, either started by launch() or reached by connect()."""
+    """At most one game at a time, either started by launch() or reached by connect().
 
-    def __init__(self) -> None:
+    `client_name` is what the game's activity journal calls the connections of this session; none by default. It is no call of the session, so a recording never holds it.
+    """
+
+    def __init__(self, client_name: str | None = None) -> None:
+        self._client_name = client_name
         self._client: BagiControlClient | None = None
         self._game: GameProcess | None = None
         self._finished: GameProcess | None = None  # the game this session stopped last: its log is still there to read
@@ -153,8 +157,8 @@ class GameSession:
         process = GameProcess(build_game_command(exe_path, port, headless, manual_clock, (*window_flags, *overlay_flags, *extra)), cwd=exe_path.parent)
         try:
             process.start()
-            client = process.connect(port, startup_timeout)
-        except GameLaunchError as error:
+            client = process.connect(port, startup_timeout, self._client_name)
+        except (GameLaunchError, ConnectionClosed, ControlError, OSError) as error:  # the last three: the hello of a named session
             process.stop(0)
             raise SessionError(str(error)) from error
         client.timeout = CALL_TIMEOUT_SECONDS
@@ -175,10 +179,10 @@ class GameSession:
         self.close()
         if record is not None:
             self._check_record_target(Path(record), record_expect)
-        client = BagiControlClient(host=host, port=port, timeout=CALL_TIMEOUT_SECONDS)
+        client = BagiControlClient(host=host, port=port, timeout=CALL_TIMEOUT_SECONDS, name=self._client_name)
         try:
             client.connect()
-        except OSError as error:
+        except (ConnectionClosed, OSError) as error:
             raise SessionError(f"nothing accepts a control connection at {host}:{port} ({error}); start the game with --control or use launch_game") from error
         self._client = client
         self._begin_session(None)

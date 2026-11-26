@@ -5,16 +5,28 @@
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Renderer/ITexture.h>
+#include <BECore/Resource/ResourceManager.h>
+#include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <Events/ConfigEvents.h>
+#include <Events/SceneEvents.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Feedback/ToastEvents.h>
+#include <Widgets/Feedback/TouchFlashDraw.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/PanelAssets/PanelBars.h>
+#include <Widgets/SceneEditor/Breadcrumbs.h>
+#include <Widgets/SceneEditor/ComponentCard.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
+#include <Widgets/SceneEditor/FieldHelpEvents.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
+#include <Widgets/SceneEditor/SceneAssetDrop.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneEditorDocuments.h>
@@ -27,9 +39,30 @@ namespace BECore {
 
     namespace {
         constexpr float kUITreeHeight = 160.0f;
+        constexpr StringView kSaveFailedText = "Scene save failed";
         constexpr StringView kToolbarAsset = "SceneEditorToolbarPanel";
         constexpr StringView kInspectorAsset = "SceneInspectorPanel";
         constexpr StringView kComponentsSlot = "sceneComponents";
+        /// The serialized field of a canvas that an edit of an element's rect writes
+        constexpr StringView kCanvasElementsField = "elements";
+
+        /// A drag of the gizmo is the user's edit of the fields it moved, so their marks go
+        void DismissMovedFieldMarks(const NodeTransformEdit& edit) {
+            const IntrusivePtr<TransformComponent> transform = edit.node->GetComponent<TransformComponent>();
+            if (!transform) {
+                return;
+            }
+            struct MovedField {
+                StringView name;
+                float Gizmo::Item::* value;
+            };
+            constexpr MovedField kFields[] = {{"x", &Gizmo::Item::x}, {"y", &Gizmo::Item::y}, {"width", &Gizmo::Item::width}, {"height", &Gizmo::Item::height}, {"rotation", &Gizmo::Item::rotation}};
+            for (const MovedField& field : kFields) {
+                if (edit.before.*field.value != edit.after.*field.value) {
+                    TouchHighlights::GetInstance().Dismiss(edit.node->GetRuntimeId(), transform->GetTypeMeta().typeName, field.name);
+                }
+            }
+        }
     }  // namespace
 
     SceneEditorWidget::~SceneEditorWidget() {
@@ -44,14 +77,30 @@ namespace BECore {
         Subscribe<SelectUIElementRequestEvent, &SceneEditorWidget::OnSelectUIElementRequest>(this);
         Subscribe<ViewportEditClickEvent, &SceneEditorWidget::OnViewportClick>(this);
         Subscribe<ViewportBoxSelectEvent, &SceneEditorWidget::OnViewportBoxSelect>(this);
+        Subscribe<ViewportAssetDropEvent, &SceneEditorWidget::OnViewportAssetDrop>(this);
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
         Subscribe<SceneEditedEvent, &SceneEditorWidget::OnSceneEdited>(this);
+        Subscribe<SceneEvents::SceneNodeEditedEvent, &SceneEditorWidget::OnNodeEdited>(this);
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
+        Subscribe<ConfigEvents::ConfigChangedEvent, &SceneEditorWidget::OnConfigChanged>(this);
+        Subscribe<FieldHelpSavedEvent, &SceneEditorWidget::OnFieldHelpSaved>(this);
+        _fieldHelp.Reload();
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         _hostHandle = SceneEditorHostRegistry::GetInstance().Register(*this);
         _componentsSlot = PanelSlots::GetInstance().Register(kComponentsSlot, [this] { DrawComponents(); });
+        _panelHandle = EditorPanelRegistry::GetInstance().Register(EditorPanelIds::kSceneEditor, *this);
         return true;
+    }
+
+    void SceneEditorWidget::OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event) {
+        if (FieldHelp::IsHelpConfig(event.name)) {
+            _fieldHelp.Reload();
+        }
+    }
+
+    void SceneEditorWidget::OnFieldHelpSaved(const FieldHelpSavedEvent& /*event*/) {
+        _fieldHelp.Reload();
     }
 
     SceneNode* SceneEditorWidget::FindInspected() const {
@@ -118,6 +167,36 @@ namespace BECore {
             if (node != nullptr && !node->HasEditorFlag(EditorFlags::Locked)) {
                 SceneAddComponentRequestEvent::Emit(_lastScene, node);
             }
+        }
+        if (event.commandId == EditorCommandIds::kSceneEditorSelectionBack) {
+            StepSelectionHistory(false);
+        }
+        if (event.commandId == EditorCommandIds::kSceneEditorSelectionForward) {
+            StepSelectionHistory(true);
+        }
+    }
+
+    void SceneEditorWidget::StepSelectionHistory(bool forward) {
+        SceneManager* const sceneManager = CoreManager::FindSceneManager();
+        Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
+        // The history of a replaced scene is cleared only by the next Update
+        if (scene == nullptr || scene != _lastScene) {
+            return;
+        }
+        SceneNode& root = scene->GetRootNode();
+        const SceneNode* const current = FindInspected();
+        const uint64_t selected = current != nullptr ? current->GetRuntimeId() : 0;
+        const auto isAlive = [&root](uint64_t id) { return FindNodeByRuntimeId(root, id) != nullptr; };
+        const uint64_t target = forward ? _selectionHistory.Forward(selected, isAlive) : _selectionHistory.Back(selected, isAlive);
+        if (const SceneNode* const node = FindNodeByRuntimeId(root, target)) {
+            _focusRequested = true;
+            SelectRevealed(*scene, node);
+        }
+    }
+
+    void SceneEditorWidget::SelectRevealed(Scene& scene, const SceneNode* node) {
+        if (HierarchyPanel::Reveal(scene, _hierarchy, &scene, node)) {
+            _selection.Set(_hierarchy.selected);
         }
     }
 
@@ -195,9 +274,37 @@ namespace BECore {
         }
     }
 
+    void SceneEditorWidget::OnViewportAssetDrop(const ViewportAssetDropEvent& event) {
+        Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
+        if (!scene) {
+            return;
+        }
+        SceneAssetDrop drop{event.kind, event.path, Vec2{scene->ScreenToSceneX(event.x), scene->ScreenToSceneY(event.y)}, Vec2{}};
+        if (event.kind == AssetKind::Texture) {
+            const ResourceHandle<ITexture> texture = CoreManager::GetResourceManager().Load<ITexture>(event.path.ToStringView());
+            if (texture && texture->GetState() == ResourceState::Loaded) {
+                drop.textureSize = Vec2{static_cast<float>(texture->GetWidth()), static_cast<float>(texture->GetHeight())};
+            }
+        }
+        const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
+        const std::expected<SceneNode*, String> added = AddSceneNodeOfAsset(*scene, drop, loader);
+        if (!added) {
+            LOG_ERROR("SceneEditor: nothing dropped into scene '{}': {}", scene->GetName().CStr(), added.error());
+            return;
+        }
+        _isDirty = true;
+        if (HierarchyPanel::Reveal(*scene, _hierarchy, scene, *added)) {
+            _focusRequested = true;
+            SyncSelection(*scene);
+        }
+    }
+
     void SceneEditorWidget::OnTransformEdit(const NodeTransformEditEvent& event) {
         if (event.phase == NodeTransformEditPhase::Commit && !event.edits.empty()) {
             _isDirty = true;
+            for (const NodeTransformEdit& edit : event.edits) {
+                DismissMovedFieldMarks(edit);
+            }
         }
     }
 
@@ -205,6 +312,18 @@ namespace BECore {
         if (event.scene != nullptr && event.scene == CoreManager::GetSceneManager().GetActiveScene()) {
             _isDirty = true;
         }
+    }
+
+    void SceneEditorWidget::OnNodeEdited(const SceneEvents::SceneNodeEditedEvent& event) {
+        if (event.scene == nullptr || event.scene != CoreManager::GetSceneManager().GetActiveScene()) {
+            return;
+        }
+        for (const SceneNode* node = event.node; node != nullptr; node = node->GetParent()) {
+            if (node->IsGenerated()) {
+                return;
+            }
+        }
+        _isDirty = true;
     }
 
     void SceneEditorWidget::OnNodeAdded(const SceneNodeAddedEvent& event) {
@@ -233,6 +352,7 @@ namespace BECore {
                 const IntrusivePtr<UICanvasComponent> canvas = node ? node->GetComponent<UICanvasComponent>() : IntrusivePtr<UICanvasComponent>();
                 if (UIElement* const element = canvas ? ScenePick::FindElement(*canvas, event.element) : nullptr) {
                     _uiFileSession.Note(IntrusivePtr<UIElement>(element));
+                    TouchHighlights::GetInstance().Dismiss(node->GetRuntimeId(), canvas->GetTypeMeta().typeName, kCanvasElementsField);
                 }
                 break;
             }
@@ -310,6 +430,7 @@ namespace BECore {
             // A replaced scene frees its nodes: the selection would dangle
             _hierarchy.Reset();
             _selection.Clear();
+            _selectionHistory.Clear();
             ResetUISelection();
             _uiFileSession.Clear();
             _lastScene = scene;
@@ -333,12 +454,14 @@ namespace BECore {
         ImGui::EndChild();
         SyncSelection(*scene);
         ApplyHierarchyAnswers(*scene);
+        _selectionHistory.Record(_hierarchy.selected != nullptr ? _hierarchy.selected->GetRuntimeId() : 0);
         AnnounceSelection(scene);
         AnnounceUIElement(scene);
 
         ImGui::SameLine();
         ImGui::BeginChild("##inspector", ImVec2(0.0f, 0.0f), true);
 
+        DrawSelectionPath(*scene);
         if (_hierarchy.selected != nullptr && _uiSelectionNode != _hierarchy.selected) {
             ResetUISelection();
             _uiSelectionNode = _hierarchy.selected;
@@ -350,6 +473,18 @@ namespace BECore {
         ImGui::EndChild();
 
         ImGui::End();
+    }
+
+    void SceneEditorWidget::DrawSelectionPath(Scene& scene) {
+        if (_hierarchy.selected == nullptr) {
+            return;
+        }
+        if (const SceneNode* const ancestor = DrawBreadcrumbs(*_hierarchy.selected, _pathAncestors)) {
+            SelectRevealed(scene, ancestor);
+            // Told in the frame of the click, like a click in the hierarchy, so a model drops the edit of the node that was left
+            AnnounceSelection(&scene);
+            AnnounceUIElement(&scene);
+        }
     }
 
     void SceneEditorWidget::Draw() {
@@ -435,31 +570,30 @@ namespace BECore {
         // A locked node is read-only: the whole list is disabled
         ImGui::BeginDisabled(_hierarchy.selected->HasEditorFlag(EditorFlags::Locked));
 
+        TouchHighlights& highlights = TouchHighlights::GetInstance();
+        const uint64_t nodeId = _hierarchy.selected->GetRuntimeId();
+        const ComponentCardContext card{_componentDefaults, highlights, nodeId};
         const auto& components = _hierarchy.selected->GetComponents();
         PoolString componentToRemove;
         for (size_t i = 0; i < components.size(); ++i) {
             const auto& component = components[i];
             const auto& typeMeta = component->GetTypeMeta();
 
-            ImGui::PushID(static_cast<int>(i));
-
-            bool visible = true;
-            const bool isOpen = ImGui::CollapsingHeader(typeMeta.typeName.data(), &visible);
-
-            if (isOpen) {
-                ImGui::Indent();
+            const ComponentCardAnswer answer = DrawComponentCard(static_cast<int>(i), *component, card, [&]() -> bool {
+                bool changed = false;
                 if (typeMeta.typeHash == UICanvasComponent::GetStaticTypeMeta().typeHash && RenderUIElements(static_cast<UICanvasComponent&>(*component.Get()))) {
-                    _isDirty = true;
+                    changed = true;
+                    highlights.Dismiss(nodeId, typeMeta.typeName, kCanvasElementsField);
                 }
-                if (RenderComponentInspector(component.Get())) {
-                    _isDirty = true;
-                }
-                ImGui::Unindent();
+                const ComponentTouches touches{highlights, nodeId, typeMeta.typeName};
+                changed |= RenderComponentInspector(component.Get(), &touches, &_componentDefaults, &_fieldTooltips);
+                return changed;
+            });
+            if (answer.changed) {
+                _isDirty = true;
             }
 
-            ImGui::PopID();
-
-            if (!visible) {
+            if (answer.remove) {
                 componentToRemove = PoolString::Intern(typeMeta.typeName);
                 break;
             }
@@ -484,14 +618,12 @@ namespace BECore {
 
         auto& configManager = CoreManager::GetConfigManager();
         auto xmlRoot = configManager.GetConfig(ConfigNames::scene);
-        if (!xmlRoot) {
-            return;
-        }
 
         // An instance of a node file is saved as its <node ref> with the overrides; one that cannot be goes inline and is told here
         const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
         Vector<String> notes;
-        if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
+        if (!xmlRoot || !WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
+            EditorToastEvent::Emit(ToastLevel::Error, kSaveFailedText);
             return;
         }
         for (const String& note : notes) {
@@ -500,6 +632,8 @@ namespace BECore {
 
         if (configManager.SaveConfig(ConfigNames::scene)) {
             _isDirty = false;
+        } else {
+            EditorToastEvent::Emit(ToastLevel::Error, kSaveFailedText);
         }
     }
 

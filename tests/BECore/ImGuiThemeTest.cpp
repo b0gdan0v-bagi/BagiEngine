@@ -50,8 +50,8 @@ namespace BECore::Tests {
 
     TEST(ImGuiThemeTest, TheRolesAndTheSurfacesAreOpaque) {
         const ImGuiPalette& p = GetImGuiPalette();
-        for (const ImVec4* role :
-             {&p.windowBg, &p.panelBg, &p.frameBg, &p.border, &p.text, &p.textDisabled, &p.accent, &p.accentHover, &p.accentActive, &p.accentMuted, &p.success, &p.warning, &p.error}) {
+        for (const ImVec4* role : {&p.windowBg, &p.panelBg, &p.frameBg, &p.border, &p.text, &p.textDisabled, &p.accent, &p.accentHover, &p.accentActive, &p.accentMuted, &p.axisX, &p.axisY, &p.axisZ,
+                                   &p.success, &p.warning, &p.error}) {
             EXPECT_FLOAT_EQ(role->w, 1.0f);
         }
 

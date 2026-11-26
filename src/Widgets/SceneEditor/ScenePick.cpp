@@ -66,7 +66,7 @@ namespace BECore::ScenePick {
         /// The canvas of a node that is drawn and has been laid out, or null
         IntrusivePtr<UICanvasComponent> LaidOutCanvas(const SceneNode& node) {
             auto canvas = node.GetComponent<UICanvasComponent>();
-            return canvas && canvas->_visible && canvas->GetLayout().HasLayout() ? canvas : IntrusivePtr<UICanvasComponent>{};
+            return canvas && canvas->IsEnabled() && canvas->_visible && canvas->GetLayout().HasLayout() ? canvas : IntrusivePtr<UICanvasComponent>{};
         }
 
         Quad TurnedCorners(const Rect& rect, float rotationDegrees, float pivotX, float pivotY) {
@@ -207,7 +207,7 @@ namespace BECore::ScenePick {
         if (auto transform = SizedTransform(node)) {
             outlines.quads[outlines.count++] = OutputQuad(scene, *transform);
         }
-        if (auto canvas = node.GetComponent<UICanvasComponent>(); canvas && canvas->GetLayout().HasLayout()) {
+        if (auto canvas = node.GetComponent<UICanvasComponent>(); canvas && canvas->IsEnabled() && canvas->GetLayout().HasLayout()) {
             outlines.quads[outlines.count++] = RectCorners(UIPreviewOverlay::CanvasBounds(canvas->GetLayout().GetResolved()));
         }
         return outlines;

@@ -141,7 +141,7 @@ namespace BECore {
     }
 
     bool ViewportUIDebug::IsShown(const CanvasState& state) {
-        return state.enabled && state.canvas->_visible && state.canvas->GetLayout().HasLayout();
+        return state.enabled && state.canvas->IsEnabled() && state.canvas->_visible && state.canvas->GetLayout().HasLayout();
     }
 
     bool ViewportUIDebug::AnyOn(const PreviewOverlays& overlays) {

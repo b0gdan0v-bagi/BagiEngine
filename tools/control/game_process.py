@@ -120,13 +120,13 @@ class GameProcess:
         except OSError as error:
             raise GameLaunchError(f"cannot start {self.command[0]}: {error}") from error
 
-    def connect(self, port: int, timeout: float = DEFAULT_STARTUP_TIMEOUT) -> BagiControlClient:
-        """Retries until the game listens on `port`; fails at once when the game exits instead."""
+    def connect(self, port: int, timeout: float = DEFAULT_STARTUP_TIMEOUT, name: str | None = None) -> BagiControlClient:
+        """Retries until the game listens on `port`; fails at once when the game exits instead. `name` is the client's (BagiControlClient)."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self._process is None or self._process.poll() is not None:
                 raise GameLaunchError(f"the game exited with code {self.exit_code} before the control API was up\n--- game log (tail) ---\n{self.log_tail()}")
-            client = BagiControlClient(port=port, timeout=timeout)
+            client = BagiControlClient(port=port, timeout=timeout, name=name)
             try:
                 client.connect()
                 return client

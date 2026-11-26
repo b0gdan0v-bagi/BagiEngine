@@ -42,9 +42,17 @@ namespace BECore {
         inline constexpr auto kViewPreferences = "view.preferences"_intern;
         inline constexpr auto kViewResetLayout = "view.resetLayout"_intern;
         inline constexpr auto kViewSaveLayout = "view.saveLayout"_intern;
+        /// Each shows one workspace (Workspaces.h)
+        inline constexpr auto kWorkspaceScene = "workspace.scene"_intern;
+        inline constexpr auto kWorkspaceUI = "workspace.ui"_intern;
+        inline constexpr auto kWorkspaceAnimation = "workspace.animation"_intern;
+        inline constexpr auto kWorkspaceProfiling = "workspace.profiling"_intern;
         inline constexpr auto kSceneSave = "scene.save"_intern;
         /// The inspector's Add Component button: `SceneEditorWidget` asks for the Add Component dialog of the selected node (a locked one gets none)
         inline constexpr auto kSceneEditorAddComponent = "sceneEditor.addComponent"_intern;
+        /// Steps through the primary selections of the Scene Editor: `SceneEditorWidget` selects and reveals the node (SelectionHistory)
+        inline constexpr auto kSceneEditorSelectionBack = "sceneEditor.selectionBack"_intern;
+        inline constexpr auto kSceneEditorSelectionForward = "sceneEditor.selectionForward"_intern;
         inline constexpr auto kConfigSave = "config.save"_intern;
         inline constexpr auto kTextureSave = "texture.save"_intern;
         /// Play / Stop of the main toolbar: `EditorPlayModel::PressPlay`, then the pause of the model is written to the engine (state only until `editor-play-in-editor`)
@@ -104,11 +112,44 @@ namespace BECore {
         inline constexpr auto kViewFileChanges = "view.fileChanges"_intern;
         inline constexpr auto kViewSpriteLibrary = "view.spriteLibrary"_intern;
         inline constexpr auto kViewViewport = "view.viewport"_intern;
+        /// Show and hide the Asset Browser (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewAssetBrowser = "view.assetBrowser"_intern;
         /// The File changes panel's buttons (config/panels/FileChangesPanel.xml names them). FileChangesPanelModel owns them and runs them only while its panel is open;
         /// fileChanges.apply takes the virtual path of a pending row as the argument and does nothing without one
         inline constexpr auto kFileChangesRescan = "fileChanges.rescan"_intern;
         inline constexpr auto kFileChangesApplyAll = "fileChanges.applyAll"_intern;
         inline constexpr auto kFileChangesApply = "fileChanges.apply"_intern;
+        /// The Asset Browser's Rescan button: AssetBrowserPanelModel lists the content files again, only while its panel is open
+        inline constexpr auto kAssetBrowserRescan = "assetBrowser.rescan"_intern;
+        /// Delete and rename of the selected asset: the first two open the dialog that names its users, confirm does it, cancel closes (AssetBrowserPanelModel, only
+        /// while its panel is open)
+        inline constexpr auto kAssetBrowserDelete = "assetBrowser.delete"_intern;
+        inline constexpr auto kAssetBrowserRename = "assetBrowser.rename"_intern;
+        inline constexpr auto kAssetBrowserConfirm = "assetBrowser.confirm"_intern;
+        inline constexpr auto kAssetBrowserCancel = "assetBrowser.cancel"_intern;
+        /// Show and hide the Export window (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewExport = "view.export"_intern;
+        /// The Export window's buttons. ExportPanelModel owns them and runs them only while its panel is open; none takes an argument. openFolder and run do
+        /// nothing before an export succeeded; run of a web package serves it until stop; check lists the missing and unused assets
+        inline constexpr auto kExportStart = "export.start"_intern;
+        inline constexpr auto kExportCancel = "export.cancel"_intern;
+        inline constexpr auto kExportOpenFolder = "export.openFolder"_intern;
+        inline constexpr auto kExportRun = "export.run"_intern;
+        inline constexpr auto kExportStop = "export.stop"_intern;
+        inline constexpr auto kExportCheck = "export.check"_intern;
+        /// Show and hide the Activity panel (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewActivity = "view.activity"_intern;
+        /// The Activity panel's Clear button: ActivityPanelModel empties the control journal, only while its panel is open
+        inline constexpr auto kActivityClear = "activity.clear"_intern;
+        /// The button of a row of the Activity panel: ActivityPanelModel selects the node the argument names (its runtime id), only while its panel is open
+        inline constexpr auto kActivitySelectNode = "activity.selectNode"_intern;
+        /// Show and hide the Field Help panel (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewFieldHelp = "view.fieldHelp"_intern;
+        /// The Field Help panel's rows and buttons. FieldHelpPanelModel owns them and runs them only while its panel is open; select takes the name of a
+        /// field of the chosen class as the argument
+        inline constexpr auto kFieldHelpSelect = "fieldHelp.select"_intern;
+        inline constexpr auto kFieldHelpSave = "fieldHelp.save"_intern;
+        inline constexpr auto kFieldHelpRevert = "fieldHelp.revert"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

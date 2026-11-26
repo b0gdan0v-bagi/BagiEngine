@@ -26,6 +26,7 @@ namespace BECore {
      * without a size culls nothing. OnDraw() is never culled: the system does not know what it draws.
      *
      * A hidden node (SceneNode::GetEditorFlags()) and everything below it keep their item and their rank but have no entry; they still update.
+     * A disabled component (IComponent::IsEnabled()) keeps its entry, which the loop passes over.
      *
      * A node with a rotation or a sprite flip is drawn with DrawTransformedRect() / DrawTransformedTexture() about the pivot of
      * the node's rect. The quad's or sprite's blend mode is set on the renderer
@@ -33,8 +34,8 @@ namespace BECore {
      *
      * A ClipRectComponent clips its node and the subtree, whatever the layers of the nodes in it: each entry names its clip owner by index
      * into SceneDrawList::clips, which chain to the enclosing owners. While the loop goes from entry to entry the system pushes the owner's chain on the
-     * renderer (outermost first, the transform rects through the scene's view transform) and pops what no longer applies. Nothing stays
-     * pushed when Run() returns.
+     * renderer (outermost first, the transform rects through the scene's view transform) and pops what no longer applies; the owner of a
+     * disabled ClipRectComponent is left out of the chain. Nothing stays pushed when Run() returns.
      */
     class SceneDrawSystem {
     public:

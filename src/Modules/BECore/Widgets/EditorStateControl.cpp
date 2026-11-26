@@ -39,8 +39,9 @@ namespace BECore {
 
     void RegisterEditorStateControl(ControlService& service, EditorDocuments& documents) {
         service.RegisterHandler("editor_state", [&documents](ControlCall& call) { HandleEditorState(call, documents); });
-        service.DescribeMethod("editor_state",
-                               {"The documents of the editor panels (scene, node files, selected config, sprite library) with their unsaved flags; fails with not_editor in the Game mode", {}});
+        service.DescribeMethod(
+            "editor_state",
+            {"The documents of the editor panels (scene, node files, selected config, sprite library) with their unsaved flags; fails with not_editor in the Game mode", {}, /*quiet=*/true});
     }
 
 }  // namespace BECore

@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlBuiltinAnswers.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlParams.h>
+#include <BECore/Control/ControlProperty.h>
 #include <BECore/Control/ControlRoots.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/JsonDeserializer.h>
@@ -11,34 +12,13 @@
 #include <BECore/Control/SchemaExport.h>
 #include <BECore/Reflection/MethodCall.h>
 #include <BECore/Reflection/PropertyAccess.h>
-#include <cmath>
 
 namespace BECore {
 
     namespace {
 
-        /// Bytes of a client's name that an error message quotes
-        constexpr size_t kMaxShownBytes = 64;
-
-        String Shown(StringView text) {
-            if (text.size() <= kMaxShownBytes) {
-                return String(text);
-            }
-            String shown(text.substr(0, kMaxShownBytes));
-            shown += "...";
-            return shown;
-        }
-
         std::unexpected<ControlError> InvalidParams(String message) {
             return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, std::move(message)));
-        }
-
-        std::expected<String, ControlError> ReadText(JsonView params, StringView key) {
-            Optional<String> text = GetParamString(params, key);
-            if (!text.has_value()) {
-                return InvalidParams(Format("'{}' has to be a string", key));
-            }
-            return std::move(*text);
         }
 
         /// The `root` and the `path` every property method takes
@@ -48,11 +28,11 @@ namespace BECore {
         };
 
         std::expected<PropertyNames, ControlError> ReadNames(JsonView params) {
-            auto root = ReadText(params, "root");
+            auto root = RequireParamString(params, "root");
             if (!root) {
                 return std::unexpected(std::move(root.error()));
             }
-            auto path = ReadText(params, "path");
+            auto path = RequireParamString(params, "path");
             if (!path) {
                 return std::unexpected(std::move(path.error()));
             }
@@ -68,72 +48,13 @@ namespace BECore {
         std::expected<Target, ControlError> ResolveRoot(const ControlService& service, StringView name) {
             const ControlRoot* root = service.Roots().Find(name);
             if (root == nullptr) {
-                return std::unexpected(MakeControlError(ReflectionControlErrors::kUnknownRoot, Format("There is no root '{}'", Shown(name))));
+                return std::unexpected(MakeControlError(ReflectionControlErrors::kUnknownRoot, Format("There is no root '{}'", ShownClientText(name))));
             }
             const TypedRef object = root->resolve ? root->resolve() : TypedRef{};
             if (!object) {
-                return std::unexpected(MakeControlError(ReflectionControlErrors::kNoObject, Format("The root '{}' has no object now", Shown(name))));
+                return std::unexpected(MakeControlError(ReflectionControlErrors::kNoObject, Format("The root '{}' has no object now", ShownClientText(name))));
             }
             return Target{root, object};
-        }
-
-        /// A JSON value as the value of a field: a bool, an integer (`int64_t`, or `uint64_t` above its range), a finite number or a string.
-        /// An integer past 64 bits is a number
-        std::expected<PropertyValue, ControlError> ReadValue(JsonView params) {
-            const Optional<JsonView> value = FindParam(params, "value");
-            if (!value) {
-                return InvalidParams("'value' is missing");
-            }
-            switch (value->Kind()) {
-                case JsonKind::Bool:
-                    return PropertyValue(std::in_place_type<bool>, *value->AsBool());
-                case JsonKind::Integer: {
-                    if (const Optional<int64_t> number = value->AsInt64()) {
-                        return PropertyValue(std::in_place_type<int64_t>, *number);
-                    }
-                    if (const Optional<uint64_t> number = value->AsUint64()) {
-                        return PropertyValue(std::in_place_type<uint64_t>, *number);
-                    }
-                    [[fallthrough]];
-                }
-                case JsonKind::Number: {
-                    const Optional<double> number = value->AsDouble();
-                    if (!number || !std::isfinite(*number)) {
-                        return InvalidParams("'value' has to be a finite number");
-                    }
-                    return PropertyValue(std::in_place_type<double>, *number);
-                }
-                case JsonKind::String: {
-                    String text;
-                    value->ReadText(text);
-                    return PropertyValue(std::in_place_type<String>, std::move(text));
-                }
-                case JsonKind::Null:
-                case JsonKind::Array:
-                case JsonKind::Object:
-                    break;
-            }
-            return InvalidParams("'value' has to be a boolean, a number or a string");
-        }
-
-        /// The value as the writer writes it: a number as its own text, a string escaped
-        void WriteValue(JsonWriter& writer, const PropertyValue& value) {
-            std::visit(
-                [&writer](const auto& held) {
-                    using Held = std::decay_t<decltype(held)>;
-                    if constexpr (std::is_same_v<Held, String>) {
-                        writer.Value(StringView(held));
-                    } else {
-                        writer.Value(held);
-                    }
-                },
-                value);
-        }
-
-        /// The wire code of a refused access. A path over a limit is an invalid path to a client
-        ControlError FromPropertyError(const PropertyError& error) {
-            const PropertyErrorCode code = error.code == PropertyErrorCode::too_long ? PropertyErrorCode::invalid_path : error.code;
-            return MakeControlError(EnumUtils<PropertyErrorCode>::ToString(code), error.message);
         }
 
         /// By hand, not a reflected struct: `value` is a `PropertyValue`, written as the bare scalar a client sent, where a reflected variant is `{index, value}`
@@ -142,7 +63,7 @@ namespace BECore {
             writer.Member("path", path);
             writer.Member("root", root);
             writer.Key("value");
-            WriteValue(writer, value);
+            WritePropertyValue(writer, value);
             writer.EndObject();
         }
 
@@ -203,7 +124,7 @@ namespace BECore {
             }
             const auto value = GetProperty(target->object, names->path);
             if (!value) {
-                call.Fail(FromPropertyError(value.error()));
+                call.Fail(MakePropertyControlError(value.error()));
                 return;
             }
             call.Reply([&](JsonWriter& writer) { WriteAccess(writer, names->root, names->path, *value); });
@@ -215,7 +136,7 @@ namespace BECore {
                 call.Fail(names.error());
                 return;
             }
-            const auto value = ReadValue(call.Params());
+            const auto value = ReadPropertyValue(call.Params());
             if (!value) {
                 call.Fail(value.error());
                 return;
@@ -227,7 +148,7 @@ namespace BECore {
             }
             const auto written = SetProperty(target->object, names->path, *value, SetOptions{target->root->allowInterning});
             if (!written) {
-                call.Fail(FromPropertyError(written.error()));
+                call.Fail(MakePropertyControlError(written.error()));
                 return;
             }
             // The answer is what the field holds now, which can differ from the request (an enum written by index reads back by name)
@@ -247,12 +168,12 @@ namespace BECore {
 
         void HandleCallMethod(ControlCall& call, const ControlService& service) {
             const JsonView params = call.Params();
-            const auto rootName = ReadText(params, "root");
+            const auto rootName = RequireParamString(params, "root");
             if (!rootName) {
                 call.Fail(rootName.error());
                 return;
             }
-            const auto method = ReadText(params, "method");
+            const auto method = RequireParamString(params, "method");
             if (!method) {
                 call.Fail(method.error());
                 return;
@@ -272,7 +193,8 @@ namespace BECore {
             const TypeRegistry& registry = TypeRegistry::GetInstance();
             const MethodRef found = registry.FindMethod(*target->object.type, *method);
             if (found && found.method->callable && !target->root->allowInterning && MethodInterns(*found.method, registry)) {
-                call.Fail(ReflectionControlErrors::kInterning, Format("Method '{}' takes text that would be interned, and the root '{}' does not allow it", found.method->name, Shown(*rootName)));
+                call.Fail(ReflectionControlErrors::kInterning,
+                          Format("Method '{}' takes text that would be interned, and the root '{}' does not allow it", found.method->name, ShownClientText(*rootName)));
                 return;
             }
 
@@ -321,7 +243,7 @@ namespace BECore {
         std::expected<const TypeInfo*, ControlError> FindType(const TypeRegistry& registry, StringView name) {
             const TypeInfo* info = registry.Find(name);
             if (info == nullptr) {
-                return std::unexpected(MakeControlError(ReflectionControlErrors::kUnknownType, Format("There is no type '{}'", Shown(name))));
+                return std::unexpected(MakeControlError(ReflectionControlErrors::kUnknownType, Format("There is no type '{}'", ShownClientText(name))));
             }
             return info;
         }
@@ -331,7 +253,7 @@ namespace BECore {
             const TypeRegistry& registry = TypeRegistry::GetInstance();
             ListTypesFilter filter;
             if (FindParam(params, "base")) {
-                const auto baseName = ReadText(params, "base");
+                const auto baseName = RequireParamString(params, "base");
                 if (!baseName) {
                     call.Fail(baseName.error());
                     return;
@@ -359,7 +281,7 @@ namespace BECore {
         }
 
         void HandleDescribeType(ControlCall& call) {
-            const auto name = ReadText(call.Params(), "name");
+            const auto name = RequireParamString(call.Params(), "name");
             if (!name) {
                 call.Fail(name.error());
                 return;
@@ -399,16 +321,17 @@ namespace BECore {
 
         const ControlParamInfo root{"root", "string", true, "A named object, as schema lists the roots"};
         const ControlParamInfo path{"path", "string", true, "The property path from the root"};
-        service.DescribeMethod("get_property", {"Reads a reflected property of a root by its path", {root, path}});
+        service.DescribeMethod("get_property", {"Reads a reflected property of a root by its path", {root, path}, /*quiet=*/true});
         service.DescribeMethod("set_property", {"Writes a reflected property of a root by its path", {root, path, {"value", "any", true, "A boolean, a number or a string"}}});
         service.DescribeMethod("call_method",
                                {"Calls a reflected method of a root", {root, {"method", "string", true, "The name of the method"}, {"arguments", "object", false, "The arguments by parameter name"}}});
         service.DescribeMethod("list_types", {"Lists the reflected types",
                                               {{"base", "string", false, "Only the types derived from this one"},
                                                {"recursive", "boolean", false, "With base: the whole subtree (default true), else only the direct children"},
-                                               {"creatable", "boolean", false, "Only the types a client can make by name (default false)"}}});
-        service.DescribeMethod("describe_type", {"The fields and methods of a reflected type", {{"name", "string", true, "The name of the type"}}});
-        service.DescribeMethod("schema", {"Every reflected type, the factories and the roots (with the type each holds now), as JSON", {}});
+                                               {"creatable", "boolean", false, "Only the types a client can make by name (default false)"}},
+                                              /*quiet=*/true});
+        service.DescribeMethod("describe_type", {"The fields and methods of a reflected type", {{"name", "string", true, "The name of the type"}}, /*quiet=*/true});
+        service.DescribeMethod("schema", {"Every reflected type, the factories and the roots (with the type each holds now), as JSON", {}, /*quiet=*/true});
     }
 
 }  // namespace BECore
