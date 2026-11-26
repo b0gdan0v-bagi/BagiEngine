@@ -63,6 +63,7 @@ namespace BECore {
         _statusBar.StartHardwareMonitor();
 
         _hostHandle = EditorLayoutHostRegistry::GetInstance().Register(*this);
+        _toasts.Connect(CoreManager::GetControlService().Activity());
 
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
         Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);
@@ -199,6 +200,7 @@ namespace BECore {
         _statusBar.Draw();
 
         ImGui::End();
+        _toasts.Draw(StatusBar::GetHeight());
 
         // The panels' Initialize ran before the first Update, so they hear the stored preferences now
         bool preferencesChanged = !_preferencesAnnounced;
