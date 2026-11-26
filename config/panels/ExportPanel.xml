@@ -1,25 +1,57 @@
 <?xml version="1.0"?>
-<PanelAsset id="Export" title="Export" command="view.export" open="false" window="Floating" width="760" height="480">
+<PanelAsset id="Export" title="Export" command="view.export" open="false" window="Floating" width="760" height="760">
   <sources>
     <item name="export" model="ExportPanelModel"/>
   </sources>
   <elements>
+    <element type="PanelRow" id="target">
+      <elements>
+        <element type="PanelText" id="targetLabel" text="Target"/>
+        <element type="PanelRadio" id="desktop" bind="export.platform" value="Desktop" text="Desktop" enableWhen="export.canStart" tooltip="A folder with the program of this computer's system"/>
+        <element type="PanelRadio" id="web" bind="export.platform" value="Web" text="Web" enableWhen="export.canStart" tooltip="A web page. It needs the Emscripten SDK in the engine checkout"/>
+      </elements>
+    </element>
     <element type="PanelRow" id="configuration">
       <elements>
         <element type="PanelText" id="configurationLabel" text="Configuration"/>
         <element type="PanelRadio" id="debug" bind="export.config" value="Debug" text="Debug" enableWhen="export.canStart" tooltip="The game with its checks, shipping the XML content"/>
-        <element type="PanelRadio" id="release" bind="export.config" value="Release" text="Release" enableWhen="export.canStart" tooltip="The optimised game, shipping cooked content"/>
+        <element type="PanelRadio" id="release" bind="export.config" value="Release" text="Release" enableWhen="export.canStart" tooltip="The optimised game. A desktop package ships cooked content, a web page the XML"/>
       </elements>
     </element>
-    <element type="PanelInput" id="outputDirectory" bind="export.outputDirectory" icon="folder" hint="Output folder (empty: dist/&lt;game&gt;-&lt;configuration&gt; in the project)" enableWhen="export.canStart" tooltip="The folder of the package. A relative path starts at the editor's working folder. A folder that holds other files is refused"/>
+    <element type="PanelInput" id="outputDirectory" bind="export.outputDirectory" icon="folder" hint="Output folder (empty: a folder of dist/ in the project)" enableWhen="export.canStart" tooltip="The folder of the package. A relative path starts at the editor's working folder. A folder that holds other files is refused"/>
+    <element type="PanelSection" id="scenesSection" title="Scenes" icon="layers" defaultOpen="true">
+      <elements>
+        <element type="PanelText" id="scenesProblem" bind="export.scenesProblem" style="Warning" wrap="true" visible="export.scenesUnread"/>
+        <element type="PanelTable" id="scenes" source="export.scenes" header="false" scrollRows="4" visible="!export.scenesUnread">
+          <columns>
+            <item type="Checkbox" id="included" field="included" labelField="name" enableField="editable" tooltipField="tooltip"/>
+          </columns>
+        </element>
+      </elements>
+    </element>
+    <element type="PanelSection" id="assetsSection" title="Assets" icon="file-image" defaultOpen="true">
+      <elements>
+        <element type="PanelButton" id="check" icon="scan-search" text="Check assets" command="export.check" tooltip="List the names in the saved content that lead to no file and the files of the game that nothing uses. An export checks too and goes on whatever is found"/>
+        <element type="PanelText" id="checkSummary" bind="export.checkSummary" wrap="true" visible="export.checked"/>
+        <element type="PanelTable" id="findings" source="export.findings" borders="true" scrollRows="5" visible="export.hasFindings">
+          <columns>
+            <item type="Text" id="problem" title="Problem" field="problem" styleField="style"/>
+            <item type="Text" id="path" title="Path" field="path"/>
+            <item type="Text" id="where" title="Named in" field="where"/>
+          </columns>
+        </element>
+      </elements>
+    </element>
     <element type="PanelRow" id="actions">
       <elements>
-        <element type="PanelButton" id="start" icon="package" text="Export" command="export.start" enableWhen="export.canStart" tooltip="Build the game and put it into the output folder. The first export builds everything"/>
+        <element type="PanelButton" id="start" icon="package" text="Export" command="export.start" enableWhen="export.canStart" tooltip="Build the game and put it into the output folder. The first export of a target builds everything"/>
         <element type="PanelButton" id="cancel" icon="x" text="Cancel" command="export.cancel" enableWhen="export.canCancel" tooltip="Stop the build; an earlier package stays as it was"/>
         <element type="PanelButton" id="openFolder" icon="folder-open" text="Open folder" command="export.openFolder" visible="export.hasResult" tooltip="Show the package in the file manager"/>
-        <element type="PanelButton" id="run" icon="play" text="Run" command="export.run" visible="export.hasResult" tooltip="Start the exported game"/>
+        <element type="PanelButton" id="run" icon="play" text="Run" command="export.run" visible="export.hasResult" enableWhen="export.canRun" tooltip="Start the exported game. A web page is served on this computer and opened in the browser"/>
+        <element type="PanelButton" id="stop" icon="square" text="Stop" command="export.stop" visible="export.serving" enableWhen="export.canStop" tooltip="Stop serving the web page"/>
       </elements>
     </element>
+    <element type="PanelText" id="serveUrl" bind="export.serveUrl" mono="true" visible="export.serving"/>
     <element type="PanelText" id="unsaved" icon="triangle-alert" text="Unsaved changes are not exported" style="Warning" visible="export.hasUnsaved"/>
     <element type="PanelText" id="statusIdle" bind="export.status" style="Disabled" visible="export.statusStyle == Disabled"/>
     <element type="PanelText" id="status" bind="export.status" wrap="true" visible="export.statusStyle == Normal"/>

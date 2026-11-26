@@ -35,7 +35,8 @@ namespace BECore {
 
     void ExportSlots::DrawOutput() {
         // The list is drawn whenever the panel is, so it is the one to say where the pointer is
-        _model.NotePointerOver(ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows));
+        // A held control does not hide the panel from the pointer: a click must not read as leaving it and coming back
+        _model.NotePointerOver(ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem));
         const ExportLog& log = _model.GetLog();
         const bool errorsOnly = _model.GetView().errorsOnly;
         if (errorsOnly && _errorRevision != log.GetRevision()) {

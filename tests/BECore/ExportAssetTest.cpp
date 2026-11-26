@@ -20,6 +20,8 @@ namespace BECore::Tests {
     namespace {
 
         constexpr ImVec2 kDisplaySize{1280.0f, 900.0f};
+        constexpr StringView kLockedScene = "Menu";
+        constexpr StringView kFreeScene = "Level";
         constexpr float kFrameSeconds = 1.0f / 60.0f;
         constexpr int kSettleFrames = 3;
         constexpr int kSteadyFrames = 8;
@@ -59,6 +61,7 @@ namespace BECore::Tests {
             ASSERT_NE(at, String::npos);
             asset.replace(at, kShippedModel.size(), kTestModel.data(), kTestModel.size());
             WriteFile(_dir / "ExportPanel.xml", asset);
+            _fixture.WriteScenes({{kLockedScene, kFreeScene}});
             ASSERT_TRUE(_configFiles.Mount(MountPoints::config, _dir));
             _manager.Initialize();
             ExportTestModel::fixture = &_fixture;
@@ -121,6 +124,17 @@ namespace BECore::Tests {
                 }
             }
             return nullptr;
+        }
+
+        /// Whether @p name is among the arguments of the export that was started, after `--exclude-scene`
+        bool LeftOut(StringView name) const {
+            const Vector<String>& arguments = _fixture.launcher.started;
+            for (size_t i = 0; i + 1 < arguments.size(); ++i) {
+                if (arguments[i] == "--exclude-scene" && StringView(arguments[i + 1]) == name) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// The rows of the output list that are in view
@@ -188,6 +202,56 @@ namespace BECore::Tests {
         EXPECT_EQ(_fixture.launcher.detachedStarts, 1);
     }
 
+    TEST_F(ExportAssetTest, TheTargetAndTheScenesOfThePanelReachTheExport) {
+        ASSERT_NO_FATAL_FAILURE(Click("Web"));
+        EXPECT_EQ(View().platform, ExportPlatform::Web);
+        ASSERT_NO_FATAL_FAILURE(Click(kLockedScene));
+        ASSERT_NO_FATAL_FAILURE(Click(kFreeScene));
+        ASSERT_EQ(View().scenes.size(), 2u);
+        EXPECT_TRUE(View().scenes[0].included) << "the checkbox of a locked scene takes no click";
+        EXPECT_FALSE(View().scenes[1].included);
+
+        ASSERT_NO_FATAL_FAILURE(Click(kExportButton));
+        ASSERT_EQ(_fixture.launcher.starts, 1);
+        EXPECT_TRUE(LeftOut(kFreeScene));
+        EXPECT_FALSE(LeftOut(kLockedScene));
+
+        // While it runs the scenes are off
+        ASSERT_NO_FATAL_FAILURE(Click(kFreeScene));
+        EXPECT_FALSE(View().scenes[1].included);
+    }
+
+    TEST_F(ExportAssetTest, CheckAssetsFillsTheFindings) {
+        WriteFile(_fixture.root / "config" / "Probe.xml", "<Probe path=\"assets/gone.png\"/>\n");
+        EXPECT_FALSE(View().checked);
+
+        ASSERT_NO_FATAL_FAILURE(Click(" Check assets"));
+
+        EXPECT_TRUE(View().checked);
+        ASSERT_EQ(View().findings.size(), 1u);
+        EXPECT_EQ(View().findings[0].path, "assets/gone.png");
+        EXPECT_EQ(_fixture.launcher.starts, 0);
+    }
+
+    TEST_F(ExportAssetTest, StopIsThereOnlyWhileAWebPageIsServed) {
+        ASSERT_NO_FATAL_FAILURE(Click("Web"));
+        ASSERT_NO_FATAL_FAILURE(Click(kExportButton));
+        _fixture.launcher.End(0, "== export ok: /pkg\n");
+        Settle();
+        EXPECT_EQ(Find(" Stop"), nullptr);
+
+        ASSERT_NO_FATAL_FAILURE(Click(" Run"));
+        ASSERT_EQ(_fixture.launcher.serverStarts, 1);
+        ASSERT_NO_FATAL_FAILURE(Click(" Run"));
+        EXPECT_EQ(_fixture.launcher.serverStarts, 1);
+
+        ASSERT_NO_FATAL_FAILURE(Click(" Stop"));
+        EXPECT_TRUE(_fixture.launcher.server.cancelled);
+        _fixture.launcher.server.exitCode = kExportExitCancelled;
+        Settle();
+        EXPECT_EQ(Find(" Stop"), nullptr);
+    }
+
     TEST_F(ExportAssetTest, ErrorsOnlyHidesTheOtherLinesAndALineIsCopiedFromItsMenu) {
         ASSERT_NO_FATAL_FAILURE(Click(kExportButton));
         _fixture.launcher.Write("plain\nA.cpp:1: warning: w\nA.cpp:2: error: the broken one\nlast\n");
@@ -209,7 +273,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(ExportAssetTest, AFrameWithNoNewLineAllocatesNothing) {
+        WriteFile(_fixture.root / "config" / "Probe.xml", "<Probe path=\"assets/gone.png\"/>\n");
         ASSERT_NO_FATAL_FAILURE(Click(kExportButton));
+        ASSERT_TRUE(View().hasFindings);
         String lines;
         for (int i = 0; i < kManyLines; ++i) {
             lines += Format("{}: error: e\n", i);
