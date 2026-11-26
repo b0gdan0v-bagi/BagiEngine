@@ -14,6 +14,7 @@
 #include <Widgets/PoolStrings/PoolStringsPanelModel.h>
 #include <gtest/gtest.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace BECore::Tests {
 
@@ -24,6 +25,11 @@ namespace BECore::Tests {
         constexpr float kFrameSeconds = 1.0f / 60.0f;
         constexpr int kSettleFrames = 3;
         constexpr StringView kModelSource = "pool";
+        /// Far fewer than the strings of a large pool, far more than the table shows without scrolling
+        constexpr size_t kMostRowsOnScreen = 40;
+        constexpr size_t kManyStrings = 100000;
+        constexpr size_t kHugeBytes = 100000;
+        constexpr int kLengthColumn = 1;
 
         Path ShippedPanel(StringView file) {
             return Path(__FILE__).Parent().Parent().Parent() / "config" / "panels" / Path(file);
@@ -137,14 +143,53 @@ namespace BECore::Tests {
         void Click(StringView part) {
             const ImGuiItemRecord* item = Find(part);
             ASSERT_NE(item, nullptr) << String(part).c_str();
+            ClickAt(ImVec2(item->CenterX(), item->CenterY()));
+        }
+
+        void ClickAt(ImVec2 point) {
             ImGuiIO& io = ImGui::GetIO();
-            io.AddMousePosEvent(item->CenterX(), item->CenterY());
+            io.AddMousePosEvent(point.x, point.y);
             Frame();
             io.AddMouseButtonEvent(0, true);
             Frame();
             io.AddMouseButtonEvent(0, false);
             Frame();
             Settle();
+        }
+
+        void Refresh() {
+            ASSERT_TRUE(_model->RunCommand("poolStrings.refresh", {}));
+            Settle();
+        }
+
+        void Intern(StringView text) {
+            static_cast<void>(_pool.storage.Intern(text));
+        }
+
+        /// The scrolling child window of the list of strings
+        const ImGuiWindow* ContentsWindow() const {
+            for (const ImGuiWindow* window : ImGui::GetCurrentContext()->Windows) {
+                if (StringView(window->Name).find("##poolContents") != StringView::npos) {
+                    return window;
+                }
+            }
+            return nullptr;
+        }
+
+        /// A click on the header of a column of the list; ImGui tells no item of a header to the index
+        void ClickHeader(int column) {
+            const ImGuiWindow* window = ContentsWindow();
+            ASSERT_NE(window, nullptr);
+            ImGuiContext& context = *ImGui::GetCurrentContext();
+            for (int i = 0; i < context.Tables.GetMapSize(); ++i) {
+                const ImGuiTable* table = context.Tables.TryGetMapData(i);
+                if (table != nullptr && table->InnerWindow == window) {
+                    const ImGuiTableColumn& header = table->Columns[column];
+                    ClickAt(ImVec2((header.MinX + header.MaxX) * 0.5f, window->Pos.y + ImGui::GetStyle().CellPadding.y + context.FontSize * 0.5f));
+                    return;
+                }
+            }
+            FAIL() << "the list of strings has no table";
         }
 
         IsolatedPool _pool;
@@ -182,6 +227,69 @@ namespace BECore::Tests {
 
         ASSERT_NO_FATAL_FAILURE(Click("Refresh"));
         EXPECT_EQ(_model->GetSlots().GetDrawnBlockRows(), 2u);
+    }
+
+    TEST_F(PoolStringsPanelAssetTest, TypingInTheSearchFieldNarrowsTheRows) {
+        Intern("zeta_one");
+        Intern("zeta_two");
+        Intern("alpha");
+        Settle();
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        EXPECT_EQ(_model->GetSlots().GetDrawnContentRows(), 4u);
+
+        ASSERT_NO_FATAL_FAILURE(Click("##search"));
+        ImGui::GetIO().AddInputCharactersUTF8("ZETA");
+        Settle();
+        EXPECT_EQ(_model->GetView().search, "ZETA");
+        EXPECT_EQ(_model->GetSlots().GetDrawnContentRows(), 2u);
+        EXPECT_EQ(_model->GetView().matchText, "2 of 4 strings");
+    }
+
+    TEST_F(PoolStringsPanelAssetTest, AClickOnAHeaderSortsTheListAndASecondOneTurnsItRound) {
+        Intern("zz");
+        Settle();
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        const auto first = [this] { return _model->GetSnapshot().strings[_model->GetMatches().front()].text.ToStringView(); };
+        EXPECT_EQ(first(), "panel_asset_first");
+
+        ASSERT_NO_FATAL_FAILURE(ClickHeader(kLengthColumn));
+        EXPECT_EQ(first(), "zz");
+        ASSERT_NO_FATAL_FAILURE(ClickHeader(kLengthColumn));
+        EXPECT_EQ(first(), "panel_asset_first");
+    }
+
+    TEST_F(PoolStringsPanelAssetTest, OfAHundredThousandStringsOnlyAScreenOfRowsIsDrawn) {
+        for (size_t i = 0; i < kManyStrings; ++i) {
+            Intern(CounterName("many_", i));
+        }
+        Settle();
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+
+        EXPECT_EQ(_model->GetMatches().size(), kManyStrings + 1);
+        EXPECT_GT(_model->GetSlots().GetDrawnContentRows(), 0u);
+        EXPECT_LT(_model->GetSlots().GetDrawnContentRows(), kMostRowsOnScreen);
+    }
+
+    TEST_F(PoolStringsPanelAssetTest, AStringOfSeveralLinesOrAVeryLongOneTakesARowOfTheSameHeight) {
+        for (size_t i = 0; i < kMostRowsOnScreen; ++i) {
+            Intern(CounterName("row_", i));
+        }
+        Settle();
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        ASSERT_NE(ContentsWindow(), nullptr);
+        const float before = ContentsWindow()->ContentSize.y;
+
+        Intern("plain_one");
+        Intern("plain_two");
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        const float withPlain = ContentsWindow()->ContentSize.y;
+        ASSERT_GT(withPlain, before);
+
+        // Both sort first, so they are on the screen; the list takes the height of every row from the first one
+        Intern("a_0_several\nlines\nof\ntext");
+        Intern(String("a_huge") + String(kHugeBytes, 'x'));
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        EXPECT_FLOAT_EQ(ContentsWindow()->ContentSize.y - withPlain, withPlain - before);
     }
 
     TEST(PoolStringsPanelMenuTest, TheViewMenuHasTheItemOfThePanel) {

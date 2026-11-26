@@ -2,11 +2,11 @@
 
 #include <BECore/File/Path.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/PoolString/PoolStringAnalysis.h>
 #include <BECore/PoolString/PoolStringMonitor.h>
 #include <BECore/PoolString/PoolStringsAnswers.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
 #include <EASTL/algorithm.h>
+#include <EASTL/sort.h>
 #include <Generated/PoolStringsPanelModel.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/PoolStrings/PoolStringsText.h>
@@ -18,6 +18,20 @@ namespace BECore {
         constexpr StringView kCollision = "collision";
         constexpr StringView kDuplicate = "duplicate";
         constexpr StringView kNoFindings = "Hash collisions and texts held twice: none";
+
+        struct SourceChoice {
+            StringView label;
+            Optional<PoolStringOrigin> origin;
+        };
+
+        /// The choices of the source filter that do not name a file, in the order of the combo
+        const SourceChoice kSourceChoices[] = {
+            {"All", std::nullopt},
+            {"Static", PoolStringOrigin::Static},
+            {"Runtime", PoolStringOrigin::Runtime},
+            {"Adopted", PoolStringOrigin::Adopted},
+        };
+        constexpr size_t kFirstFileChoice = eastl::size(kSourceChoices);
 
         StringView BlockKindName(PoolBlockKind kind) {
             switch (kind) {
@@ -70,7 +84,18 @@ namespace BECore {
     void PoolStringsPanelModel::Update() {
         if (_snapshotDue) {
             TakeSnapshot();
+        } else if (_view.search != _searchedText || _view.sourceIndex != _searchedSource) {
+            Search();
         }
+    }
+
+    void PoolStringsPanelModel::SetSort(PoolStringSortKey key, bool descending) {
+        if (key == _sortBy && descending == _sortDescending) {
+            return;
+        }
+        _sortBy = key;
+        _sortDescending = descending;
+        Search();
     }
 
     bool PoolStringsPanelModel::RunCommand(StringView id, StringView /*argument*/) {
@@ -87,6 +112,8 @@ namespace BECore {
         BuildSummary();
         BuildBlocks();
         BuildChecks();  // after the blocks, whose file names it shows
+        BuildSourceItems();
+        Search();
     }
 
     void PoolStringsPanelModel::BuildSummary() {
@@ -152,6 +179,57 @@ namespace BECore {
         }
         _view.checksCut = found > listed;
         _view.checksCutText = _view.checksCut ? Format("{} more pairs are not listed", found - listed) : String();
+    }
+
+    void PoolStringsPanelModel::BuildSourceItems() {
+        String chosenFile;
+        const size_t chosen = static_cast<size_t>(_view.sourceIndex);
+        if (chosen >= kFirstFileChoice && chosen < _view.sourceItems.size()) {
+            chosenFile = _view.sourceItems[chosen];
+        }
+
+        Vector<String> files;
+        for (const PoolBlockRow& block : _snapshot.blocks) {
+            if (block.kind == PoolBlockKind::Adopted && !block.source.empty()) {
+                files.push_back(block.source);
+            }
+        }
+        eastl::sort(files.begin(), files.end());
+        files.erase(eastl::unique(files.begin(), files.end()), files.end());
+
+        _view.sourceItems.clear();
+        for (const SourceChoice& choice : kSourceChoices) {
+            _view.sourceItems.push_back(String(choice.label));
+        }
+        _view.sourceItems.insert(_view.sourceItems.end(), files.begin(), files.end());
+
+        if (!chosenFile.empty()) {
+            const auto found = eastl::find(files.begin(), files.end(), chosenFile);
+            _view.sourceIndex = found != files.end() ? static_cast<int32_t>(kFirstFileChoice + (found - files.begin())) : 0;
+        }
+    }
+
+    void PoolStringsPanelModel::Search() {
+        // A negative index becomes a huge one here
+        if (static_cast<size_t>(_view.sourceIndex) >= _view.sourceItems.size()) {
+            _view.sourceIndex = 0;
+        }
+        _searchedText = _view.search;
+        _searchedSource = _view.sourceIndex;
+
+        PoolStringQuery query;
+        query.text = StringView(_searchedText);
+        const size_t source = static_cast<size_t>(_searchedSource);
+        if (source < kFirstFileChoice) {
+            query.origin = kSourceChoices[source].origin;
+        } else {
+            query.blockSource = StringView(_view.sourceItems[source]);
+        }
+        query.sortBy = _sortBy;
+        query.descending = _sortDescending;
+        PoolStringAnalysis::Search(_snapshot, query, _matches);
+        _view.matchText = Format("{} of {} strings", _matches.size(), _snapshot.strings.size());
+        ++_searchCount;
     }
 
 }  // namespace BECore

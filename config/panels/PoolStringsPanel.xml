@@ -43,5 +43,17 @@
         <element type="PanelSlot" id="blocksSlot" name="poolStringBlocks"/>
       </elements>
     </element>
+    <element type="PanelSection" id="contents" title="Contents">
+      <elements>
+        <element type="PanelRow" id="filters">
+          <elements>
+            <element type="PanelInput" id="search" bind="pool.search" icon="search" hint="part of a string" width="16"/>
+            <element type="PanelCombo" id="sourceFilter" bind="pool.sourceIndex" items="pool.sourceItems" width="14"/>
+            <element type="PanelText" id="matches" bind="pool.matchText" style="Disabled"/>
+          </elements>
+        </element>
+        <element type="PanelSlot" id="contentsSlot" name="poolStringContents"/>
+      </elements>
+    </element>
   </elements>
 </PanelAsset>

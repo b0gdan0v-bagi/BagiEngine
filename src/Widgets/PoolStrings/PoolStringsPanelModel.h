@@ -1,11 +1,13 @@
 #pragma once
 
+#include <BECore/PoolString/PoolStringAnalysis.h>
 #include <BECore/PoolString/PoolStringSnapshot.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <Widgets/PoolStrings/PoolStringsSlots.h>
 #include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 
@@ -40,7 +42,11 @@ namespace BECore {
         BE_REFLECT_FIELD String secondSource;
     };
 
-    /// What `PoolStringsPanel.xml` binds to: the texts of one snapshot of the pool
+    /**
+     * @brief What `PoolStringsPanel.xml` binds to: the texts of one snapshot of the pool and the choices of its contents list
+     *
+     * `search` and `sourceIndex` are written by the panel's controls with no command and read by the model in its next `Update`; the model writes the rest.
+     */
     struct PoolStringsPanelView {
         BE_CLASS(PoolStringsPanelView)
 
@@ -57,6 +63,14 @@ namespace BECore {
         BE_REFLECT_FIELD Vector<PoolPanelCheckRow> checks;
         BE_REFLECT_FIELD bool checksCut = false;
         BE_REFLECT_FIELD String checksCutText;
+
+        /// A part of the strings the contents list shows, ASCII case ignored
+        BE_REFLECT_FIELD String search;
+        /// An index into `sourceItems`; one outside it means the first, every source
+        BE_REFLECT_FIELD int32_t sourceIndex = 0;
+        /// All, static, runtime, adopted, then the source names of the adopted blocks of the snapshot, sorted
+        BE_REFLECT_FIELD Vector<String> sourceItems;
+        BE_REFLECT_FIELD String matchText;
     };
 
     /// A block of the snapshot as the blocks table draws it
@@ -76,6 +90,9 @@ namespace BECore {
      * A snapshot walks the whole table under the pool's lock, so no frame takes one by itself: it is taken in the first `Update` after the panel
      * opens and by the command `poolStrings.refresh` (run only while the panel is open). Every text, row and check result is made then, so the
      * numbers agree with each other and a later frame formats nothing. The model never interns: showing the pool must not grow it.
+     *
+     * The contents list is `GetMatches`, the rows of the snapshot that the view's choices and the sort select; the search walks every string, so it
+     * runs only when the snapshot, a choice or the sort changed.
      *
      * It watches the pool of `PoolStringMonitor::GetStorage()`. The slots (`PoolStringsSlots`, registered in `Initialize`) draw from the model.
      */
@@ -102,6 +119,27 @@ namespace BECore {
             return _blocks;
         }
 
+        /// The last snapshot; empty before the first one
+        [[nodiscard]] const PoolStringSnapshot& GetSnapshot() const {
+            return _snapshot;
+        }
+
+        /// The listed strings as indices into `GetSnapshot().strings`, in the order of the sort
+        [[nodiscard]] const Vector<uint32_t>& GetMatches() const {
+            return _matches;
+        }
+
+        /// How many searches the model has run
+        [[nodiscard]] uint64_t GetSearchCount() const {
+            return _searchCount;
+        }
+
+        /// The order of the contents list; a change searches at once, so the frame of a header click draws the new order
+        void SetSort(PoolStringSortKey key, bool descending);
+
+        /// `static`, `runtime`, the file name of the adopted block of @p row (a row of `GetSnapshot`), or `adopted` for a block with none
+        [[nodiscard]] StringView SourceOf(const PoolStringRow& row) const;
+
         [[nodiscard]] const PoolStringsSlots& GetSlots() const {
             return _slots;
         }
@@ -112,8 +150,9 @@ namespace BECore {
         void BuildSummary();
         void BuildBlocks();
         void BuildChecks();
-        /// `static`, `runtime`, the file name of the string's adopted block, or `adopted` for a block with none
-        [[nodiscard]] StringView SourceOf(const PoolStringRow& row) const;
+        /// Keeps a chosen file chosen by its name, or goes back to every source when the new snapshot has no such file
+        void BuildSourceItems();
+        void Search();
 
         PoolStringsPanelView _view;
         PoolStringsSlots _slots{*this};
@@ -121,6 +160,13 @@ namespace BECore {
         bool _snapshotDue = false;
         PoolStringSnapshot _snapshot;
         Vector<PoolPanelBlock> _blocks;
+        Vector<uint32_t> _matches;
+        PoolStringSortKey _sortBy = PoolStringSortKey::Text;
+        bool _sortDescending = false;
+        // The choices of the view that `_matches` answers
+        String _searchedText;
+        int32_t _searchedSource = 0;
+        uint64_t _searchCount = 0;
     };
 
 }  // namespace BECore

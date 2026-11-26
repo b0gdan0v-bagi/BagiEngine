@@ -2,7 +2,6 @@
 #include <BECore/PoolString/PoolStringMonitor.h>
 #include <BECore/PoolStringTestSupport.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
-#include <BECore/RefCounted/New.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Widgets/PoolStrings/PoolStringsPanelModel.h>
@@ -54,6 +53,15 @@ namespace BECore::Tests {
             return nullptr;
         }
 
+        /// The listed strings of the contents, `text;` each
+        String Listed(const PoolStringsPanelModel& model) {
+            String texts;
+            for (const uint32_t row : model.GetMatches()) {
+                texts += Format("{};", model.GetSnapshot().strings[row].text.ToStringView());
+            }
+            return texts;
+        }
+
         /// `kind|text|first source|second source;` of every listed pair
         String Pairs(const PoolStringsPanelView& view) {
             String pairs;
@@ -88,6 +96,24 @@ namespace BECore::Tests {
 
         const PoolStringsPanelView& View() const {
             return _model->GetView();
+        }
+
+        /// What a control writes, read by the next frame of the model
+        void Filter(StringView search, int32_t sourceIndex) {
+            PoolStringsPanelView& view = const_cast<PoolStringsPanelView&>(_model->GetView());
+            view.search = String(search);
+            view.sourceIndex = sourceIndex;
+            _model->Update();
+        }
+
+        /// One runtime string, one static one and two adopted files
+        void FillContents() {
+            PoolString constant;
+            const PoolStaticRegistration registration{Details::ConstructPoolEntry(_readyEntry, StringUtils::GetHash("Door"), "Door"), &constant};
+            _pool.storage.RegisterStatic(Span<const PoolStaticRegistration>(&registration, 1));
+            static_cast<void>(_pool.storage.Intern("Player_Health"));
+            Adopt(_pool.storage, {Right("player_name_long_one")}, "config/B.bin", true);
+            Adopt(_pool.storage, {Right("speed")}, "config/C.bin", true);
         }
 
         /// One static string, two runtime ones and an adopted block with one new string and one dead entry
@@ -246,6 +272,127 @@ namespace BECore::Tests {
         EXPECT_TRUE(View().sources.empty());
     }
 
+    TEST_F(PoolStringsPanelModelTest, TheContentsListEveryStringAndTheSearchIgnoresTheAsciiCase) {
+        ASSERT_NO_FATAL_FAILURE(FillContents());
+        Open();
+        EXPECT_EQ(Listed(*_model), "Door;Player_Health;player_name_long_one;speed;");
+        EXPECT_EQ(View().matchText, "4 of 4 strings");
+
+        Filter("pLaYeR", 0);
+        EXPECT_EQ(Listed(*_model), "Player_Health;player_name_long_one;");
+        EXPECT_EQ(View().matchText, "2 of 4 strings");
+
+        Filter("nothing like this", 0);
+        EXPECT_TRUE(_model->GetMatches().empty());
+        EXPECT_EQ(View().matchText, "0 of 4 strings");
+    }
+
+    TEST_F(PoolStringsPanelModelTest, EachSourceChoiceListsItsStringsAndAnIndexOutsideTheListIsAll) {
+        ASSERT_NO_FATAL_FAILURE(FillContents());
+        Open();
+        EXPECT_EQ(View().sourceItems, (Vector<String>{"All", "Static", "Runtime", "Adopted", "config/B.bin", "config/C.bin"}));
+
+        Filter("", 1);
+        EXPECT_EQ(Listed(*_model), "Door;");
+        Filter("", 2);
+        EXPECT_EQ(Listed(*_model), "Player_Health;");
+        Filter("", 3);
+        EXPECT_EQ(Listed(*_model), "player_name_long_one;speed;");
+        Filter("", 5);
+        EXPECT_EQ(Listed(*_model), "speed;");
+        Filter("player", 4);
+        EXPECT_EQ(Listed(*_model), "player_name_long_one;");
+
+        for (const int32_t outside : {6, -1}) {
+            Filter("", outside);
+            EXPECT_EQ(View().sourceIndex, 0) << outside;
+            EXPECT_EQ(_model->GetMatches().size(), 4u) << outside;
+        }
+    }
+
+    TEST_F(PoolStringsPanelModelTest, TheSourceOfAStringIsItsOriginOrTheFileOfItsBlock) {
+        ASSERT_NO_FATAL_FAILURE(FillContents());
+        ASSERT_NO_FATAL_FAILURE(Adopt(_pool.storage, {Right("unnamed")}, {}, true));
+        Open();
+
+        String sources;
+        for (const uint32_t row : _model->GetMatches()) {
+            sources += Format("{};", _model->SourceOf(_model->GetSnapshot().strings[row]));
+        }
+        EXPECT_EQ(sources, "static;runtime;B.bin;C.bin;adopted;");
+    }
+
+    TEST_F(PoolStringsPanelModelTest, EachSortKeyOrdersTheListInBothDirections) {
+        ASSERT_NO_FATAL_FAILURE(FillContents());
+        Open();
+
+        _model->SetSort(PoolStringSortKey::Text, true);
+        EXPECT_EQ(Listed(*_model), "speed;player_name_long_one;Player_Health;Door;");
+        _model->SetSort(PoolStringSortKey::Length, false);
+        EXPECT_EQ(Listed(*_model), "Door;speed;Player_Health;player_name_long_one;");
+        _model->SetSort(PoolStringSortKey::Length, true);
+        EXPECT_EQ(Listed(*_model), "player_name_long_one;Player_Health;speed;Door;");
+        _model->SetSort(PoolStringSortKey::Source, false);
+        EXPECT_EQ(Listed(*_model), "Door;Player_Health;player_name_long_one;speed;");
+        _model->SetSort(PoolStringSortKey::Source, true);
+        EXPECT_EQ(Listed(*_model), "speed;player_name_long_one;Player_Health;Door;");
+
+        for (const bool descending : {false, true}) {
+            _model->SetSort(PoolStringSortKey::Hash, descending);
+            const Vector<uint32_t>& matches = _model->GetMatches();
+            ASSERT_EQ(matches.size(), 4u);
+            for (size_t i = 1; i < matches.size(); ++i) {
+                const uint64_t before = _model->GetSnapshot().strings[matches[i - 1]].text.HashValue();
+                const uint64_t after = _model->GetSnapshot().strings[matches[i]].text.HashValue();
+                EXPECT_EQ(before > after, descending) << i;
+            }
+        }
+    }
+
+    TEST_F(PoolStringsPanelModelTest, AChosenFileStaysChosenByNameOverARefresh) {
+        ASSERT_NO_FATAL_FAILURE(FillContents());
+        Open();
+        Filter("", 4);
+
+        // A file that sorts before the chosen one moves its index
+        ASSERT_NO_FATAL_FAILURE(Adopt(_pool.storage, {Right("first_file")}, "config/A.bin", true));
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        EXPECT_EQ(View().sourceIndex, 5);
+        EXPECT_EQ(Listed(*_model), "player_name_long_one;");
+
+        IsolatedPool other;
+        PoolStringMonitor monitor(other.storage);
+        static_cast<void>(other.storage.Intern("elsewhere"));
+        _model->SetMonitor(&monitor);
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        EXPECT_EQ(View().sourceIndex, 0) << "no such file here";
+        EXPECT_EQ(Listed(*_model), "elsewhere;");
+        _model = {};  // before the monitor it watches
+    }
+
+    TEST_F(PoolStringsPanelModelTest, TheListIsSearchedAgainOnlyWhenAChoiceTheSortOrTheSnapshotChanged) {
+        ASSERT_NO_FATAL_FAILURE(FillContents());
+        Open();
+        const uint64_t opened = _model->GetSearchCount();
+
+        _model->Update();
+        _model->Update();
+        _model->SetSort(PoolStringSortKey::Text, false);
+        EXPECT_EQ(_model->GetSearchCount(), opened);
+
+        Filter("a", 0);
+        _model->Update();
+        EXPECT_EQ(_model->GetSearchCount(), opened + 1);
+        Filter("a", 2);
+        EXPECT_EQ(_model->GetSearchCount(), opened + 2);
+        _model->SetSort(PoolStringSortKey::Text, true);
+        EXPECT_EQ(_model->GetSearchCount(), opened + 3);
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        EXPECT_EQ(_model->GetSearchCount(), opened + 4);
+        _model->Update();
+        EXPECT_EQ(_model->GetSearchCount(), opened + 4);
+    }
+
     TEST(PoolStringsPanelTextTest, ALineEndsAtTheFirstBreakAndIsNeverCutInsideACharacter) {
         EXPECT_EQ(PoolStringLine("short", 80), "short");
         EXPECT_EQ(PoolStringLine("first\nsecond", 80), "first");
@@ -255,6 +402,7 @@ namespace BECore::Tests {
         EXPECT_EQ(PoolStringLine("\xC3\xA9\xC3\xA9", 3), "\xC3\xA9");
         EXPECT_EQ(PoolStringLine("\xC3\xA9\xC3\xA9", 4), "\xC3\xA9\xC3\xA9");
         EXPECT_EQ(PoolStringLine("\xC3\xA9", 1), "");
+        EXPECT_EQ(PoolStringPrefix("first\nsecond", 8), "first\nse");
     }
 
 }  // namespace BECore::Tests
