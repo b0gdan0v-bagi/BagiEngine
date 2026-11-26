@@ -493,6 +493,73 @@ def test_icon_survives_the_cache_round_trip(parse):
 
 
 # ---------------------------------------------------------------------------
+# CATEGORY= option
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(("written", "value"), [
+    ("CATEGORY=render", "render"),
+    ("CATEGORY=game-logic-2", "game-logic-2"),
+    ("category = game - logic", "game-logic"),
+])
+def test_category_option(parse, written, value):
+    classes, warnings = parse(f"""
+        struct Foo {{
+            BE_CLASS(Foo, {written})
+        }};
+    """)
+    assert only(classes).category == value
+    assert warnings == []
+
+
+def test_category_with_other_options(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS(Foo, FACTORY_BASE, ICON=bug, PURPOSE=sim, CATEGORY=logic)
+        };
+    """)
+    cls = only(classes)
+    assert (cls.is_factory_base, cls.icon, cls.purpose, cls.category) == (True, "bug", "sim", "logic")
+    assert warnings == []
+
+
+def test_a_class_has_no_category_of_its_own_unless_it_names_one(parse):
+    classes, _ = parse("""
+        struct Base {
+            BE_CLASS(Base, CATEGORY=ui)
+        };
+        struct Child : Base {
+            BE_CLASS(Child)
+        };
+    """)
+    assert [cls.category for cls in classes] == ["ui", ""]
+
+
+@pytest.mark.parametrize("value", ["", "Render", "game logic", "game_logic", "lc.ui"])
+def test_an_invalid_category_warns_and_is_ignored(parse, value):
+    classes, warnings = parse(f"""
+        struct Foo {{
+            BE_CLASS(Foo, CATEGORY={value})
+        }};
+    """)
+    assert only(classes).category == ""
+    assert kinds_and_lines(warnings) == [("class", 2)]
+    assert "CATEGORY=" in warnings[0].message and "'Foo'" in warnings[0].message
+
+
+def test_category_survives_the_cache_round_trip(parse):
+    classes, _ = parse("""
+        struct Foo {
+            BE_CLASS(Foo, CATEGORY=audio)
+        };
+    """)
+    restored = ClassData.from_dict(only(classes).to_dict())
+    assert restored.category == "audio"
+    old_entry = only(classes).to_dict()
+    del old_entry["category"]
+    assert ClassData.from_dict(old_entry).category == ""
+
+
+# ---------------------------------------------------------------------------
 # PURPOSE= option
 # ---------------------------------------------------------------------------
 

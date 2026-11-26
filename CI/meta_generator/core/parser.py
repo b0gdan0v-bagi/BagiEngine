@@ -26,7 +26,8 @@ _RE_CLASS_DEF = re.compile(
     re.DOTALL,
 )
 _RE_BE_MACRO = re.compile(r'\bBE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*([^)]+?)\s*)?\)')
-_RE_ICON_NAME = re.compile(r'[a-z0-9-]+')
+# The value of ICON= and CATEGORY=.
+_RE_KEBAB_NAME = re.compile(r'[a-z0-9-]+')
 _RE_BLANKS_AROUND_HYPHEN = re.compile(r'\s*-\s*')
 # The values of PURPOSE=<part>; a class without the option has the purpose "common" (ClassData.purpose).
 PURPOSE_VALUES = ("sim", "visual", "editor")
@@ -650,6 +651,7 @@ class RegexParser:
             register_self = any(o.upper() == "REGISTER_SELF" for o in options)
             element_name = None
             icon = ""
+            category = ""
             purpose = "common"
             for opt in options:
                 if "=" in opt:
@@ -658,6 +660,8 @@ class RegexParser:
                         element_name = val.strip()
                     elif key.strip().upper() == "ICON":
                         icon = self._read_icon(val, brace_pos + 1 + be.start(), class_name)
+                    elif key.strip().upper() == "CATEGORY":
+                        category = self._read_category(val, brace_pos + 1 + be.start(), class_name)
                     elif key.strip().upper() == "PURPOSE":
                         purpose = self._read_purpose(val, brace_pos + 1 + be.start(), class_name)
 
@@ -689,6 +693,7 @@ class RegexParser:
                 element_name=element_name,
                 register_self=register_self,
                 icon=icon,
+                category=category,
                 purpose=purpose,
             )
 
@@ -698,17 +703,25 @@ class RegexParser:
             classes.append(cls)
 
     def _read_icon(self, value: str, pos: int, class_name: str) -> str:
-        """The Lucide name of ICON=<name>; a value that is not a plain name warns and is ignored.
+        """The Lucide name of ICON=<name>; see `_read_kebab_name`."""
+        return self._read_kebab_name("ICON", "a Lucide name", value, pos, class_name)
+
+    def _read_category(self, value: str, pos: int, class_name: str) -> str:
+        """The name of CATEGORY=<name>; see `_read_kebab_name`."""
+        return self._read_kebab_name("CATEGORY", "a category name", value, pos, class_name)
+
+    def _read_kebab_name(self, option: str, noun: str, value: str, pos: int, class_name: str) -> str:
+        """The value of <option>=<name>; a value that is not a plain kebab-case name warns and is ignored.
 
         clang-format reads `ICON=layout-dashboard` as an expression and writes `ICON = layout - dashboard`, so
         the blanks around a hyphen are not part of the name.
         """
         value = _RE_BLANKS_AROUND_HYPHEN.sub("-", value.strip())
-        if _RE_ICON_NAME.fullmatch(value):
+        if _RE_KEBAB_NAME.fullmatch(value):
             return value
         self._warn(
             pos, "class",
-            f"ICON={value} ignored on '{class_name}': the value must be a Lucide name "
+            f"{option}={value} ignored on '{class_name}': the value must be {noun} "
             f"in kebab case ([a-z0-9-]+)")
         return ""
 
