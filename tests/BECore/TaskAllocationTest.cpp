@@ -35,6 +35,8 @@ namespace BECore::Tests {
         // A route that runs on workers holds every job at a gate until the pass has queued all of them. Without it the number of jobs alive at once
         // (frames, handles, ring length) depends on how fast the workers drain, and a loaded machine makes a measured pass reach a higher peak than
         // the warm-up and grow the pools. With it both passes peak at the same count.
+        //
+        // A job's count is a release: once the pass has read the full count with acquire, it reuses the stack that holds the counter and the gate.
 
         /// Opened by the submitting thread after the last job of a pass is queued
         class Gate {
@@ -116,7 +118,7 @@ namespace BECore::Tests {
                 for (uint64_t i = 0; i < count; ++i) {
                     pool.Submit([&ran, &gate] {
                         gate.Wait();
-                        ran.fetch_add(1, std::memory_order_relaxed);
+                        ran.fetch_add(1, std::memory_order_release);
                     });
                 }
                 gate.Open();
@@ -172,7 +174,7 @@ namespace BECore::Tests {
 
         Task<void> CountingTask(std::atomic<uint64_t>& ran, const Gate& gate) {
             gate.Wait();
-            ran.fetch_add(1, std::memory_order_relaxed);
+            ran.fetch_add(1, std::memory_order_release);
             co_return;
         }
 
@@ -183,7 +185,7 @@ namespace BECore::Tests {
         Task<void> ParentTask(std::atomic<uint64_t>& ran, const Gate& gate) {
             gate.Wait();
             const std::expected<int, TaskError> value = co_await ChildTask();
-            ran.fetch_add(static_cast<uint64_t>(value.value_or(0)), std::memory_order_relaxed);
+            ran.fetch_add(static_cast<uint64_t>(value.value_or(0)), std::memory_order_release);
             co_return;
         }
 

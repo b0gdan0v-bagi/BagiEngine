@@ -131,6 +131,22 @@ ctest --preset windows-clang-asan
 
 No `-D` is needed: the mixin `asan-windows-crt` makes the build static (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`, `ENGINE_STATIC_SDL=ON`, the SDL_image codecs static), because the ASan runtime for `/MD` fails every DLL link with `duplicate symbol: malloc` and the static one refuses an `/MD` object; the executables need no ASan DLL. Timing with other workers running (14 cores): configure 1.6 min, build of those three targets (about 1050 steps) 3.2 min, `ctest` (4472 tests, `-j8`) 3.4 min. The test preset has no `detect_stack_use_after_return` (on Windows `TaskSystemTest.ConcurrentStartAndCancelKeepStatusConsistent`, 20000 threads, runs out of commit memory: `failed to allocate FakeStack (error code: 1455)`). A report is a finding as on macOS, and the same ignore list applies (its `miniz.h` line has `*` for the separator, as the Windows path has a backslash there). The result: no sanitizer report in engine code; one failure, `RoomClientSocketTest.AServerThatStopsIsRetriedUntilTheGiveUpTime` (2 connections in the 700 ms give-up time, not 3), which fails the same way in `windows-clang-debug` (a refused connect on Windows takes longer than the test's backoff assumes: not the sanitizers'); `BagiRoomServerSmoke` and `BagiRoomServerHostile` skip, the TLS tests skip, `BagiStressControlSmoke` skips unless `BagiStress` is built. Under a loaded `-j8` a few timing-sensitive cases fail once and pass alone and in the next full run: rerun a failed name before calling it a finding. A game that includes the presets takes the same preset from its own root (`python engine/CI/scripts/vs_env.py cmake --preset windows-clang-asan`; Chess: configure 2.0 min, `BagiChess ChessTests BagiChessUci` 1.9 min, `ctest` 2.8 min, all 1374 tests pass, no report). A CI job takes these commands with the other sanitizer commands when the entry `no-ci` is done.
 
+**Thread sanitizer** (`cmake/CLAUDE.md`, "Sanitizers and fuzzing"). `macos-tsan` builds the whole engine, vendored code and SDL included, with ThreadSanitizer (RelWithDebInfo, asserts and expects ON, no editor). A report does not stop the process: it ends with an error (an abort on macOS), so its test fails even when every case passes. By explicit name or for a QA request only:
+
+```bash
+cmake --preset macos-tsan
+cmake --build --preset macos-tsan --target BagiEngineTests StressTests BagiStress   # a full build of its own
+ctest --preset macos-tsan-fast                                                      # macos-tsan adds the smoke and scenario tests
+```
+
+The test preset sets `TSAN_OPTIONS`. To run one executable by hand, from the build folder (a wrong path stops the process at its start):
+
+```bash
+cd build/macos-tsan && TSAN_OPTIONS="suppressions='$(cd ../.. && pwd)/cmake/sanitizers/tsan.supp'" bin/BagiEngineTests --gtest_filter='TaskSystem*:TaskManager*:TaskScheduler*:ThreadPool*:ParallelFor*:TaskMemory*:TaskAllocation*:TaskLabel*:EventAwaiter*:Threading*'
+```
+
+Nothing is suppressed: `cmake/sanitizers/tsan.supp` takes only vendored, SDK and system code, under the rules in its header. A report depends on which threads met, so a finding may show in one run of several: repeat a run before calling a fix proven. The first runs (macOS, 2026-11-26) found races only in `TaskAllocationTest` and `TaskMemoryTest` (a job's count without a release, so the case reused its stack unordered), fixed there; after that `macos-tsan` ran clean. A game that includes the presets takes `macos-tsan` from its own root.
+
 Timings, `ctest --preset macos-debug` on a warm Debug build, Mahjong row 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs, interleaved (the engine row: one run per column, taken after the games left the engine):
 
 | Set | `-j1` | `-j4` | `-j8` (preset) | `-j14` |

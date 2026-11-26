@@ -1,0 +1,9 @@
+# Runtime suppressions of ThreadSanitizer (TSAN_OPTIONS=suppressions=<this file>, set by the test presets macos-tsan*; the flags:
+# cmake/BagiFuzz.cmake). A file works at run time here, unlike ignorelist.txt: a TSan report does not stop the process, it makes it
+# exit with an error at its end, so a test with a report still fails.
+# Format: <type>:<pattern> lines (race, thread, mutex, signal, deadlock, called_from_lib). The pattern is matched against the function,
+# file and library names of the frames of a report, any frame of it, so a broad pattern also hides a race of engine code that passes
+# through the match: name the narrowest function or file that covers the report.
+# Only vendored code, the SDK and system libraries are listed. Each line needs a comment that says: the library, the report text, why it
+# cannot be fixed here. An engine finding is never listed here.
+# No line is added without a finding behind it.
