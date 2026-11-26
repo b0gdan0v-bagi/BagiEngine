@@ -45,7 +45,7 @@ A benchmark prints its numbers; it never reads the baseline. A metric of the tim
 
 ## Statistics and verdicts
 
-Each metric: the mean of the repetitions and the half-width of its 95 % interval by Student's t (five runs are too few for the 1.96 of the normal approximation). Against the baseline: Welch's interval of the difference of the means. **Regression** or **improvement** needs both: the interval excludes 0, and the change is at least `thresholdPercent` of the baseline's mean (a machine drifts a percent or two between days; five runs of one day do not see that drift). Otherwise **noise**; a metric without a baseline is **new**. A benchmark takes its worst gated verdict.
+Each metric: the mean of the repetitions and the half-width of its 95 % interval by Student's t (five runs are too few for the 1.96 of the normal approximation). Against the baseline: Welch's interval of the difference of the means. **Regression** or **improvement** needs both: the interval excludes 0, and the change is at least `thresholdPercent` of the baseline's mean (a machine drifts a percent or two between days; five runs of one day do not see that drift). Otherwise **noise**; a metric without a baseline is **new**. A benchmark takes its worst gated verdict. A count that a deterministic run repeats exactly takes `thresholdPercent` 0, so any change of it is a verdict; equal samples summarize to exactly their value, so runs with different numbers of repetitions compare equal.
 
 ## The baseline
 

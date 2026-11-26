@@ -56,6 +56,9 @@ def summarize(samples: list[float]) -> Summary:
     n = len(samples)
     if n == 0:
         return Summary(0, 0.0, 0.0, 0.0)
+    if min(samples) == max(samples):
+        # A rounded mean would make two runs of an exact count differ, which a threshold of 0 reports as a change
+        return Summary(n, samples[0], 0.0, 0.0)
     mean = sum(samples) / n
     if n < 2:
         return Summary(n, mean, 0.0, 0.0)

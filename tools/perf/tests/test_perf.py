@@ -56,6 +56,30 @@ def test_deterministic_series_differ_by_the_threshold_alone():
     assert perf_stats.compare(perf_stats.summarize([100.0] * 3), perf_stats.summarize([100.0] * 3), "lower", 3.0).verdict == perf_stats.NOISE
 
 
+def judge_count(new: list[float], old: list[float] | None) -> dict:
+    """One benchmark with an exact count gated at 0 % beside a time metric under the set's 3 %; `old` None: a baseline written before the count."""
+    specs = {"ms": {"better": "lower"}, "draws": {"better": "lower", "thresholdPercent": 0}}
+    ms = perf_stats.summarize([10.0] * 3).to_json()
+    old_metrics = {"ms": ms} if old is None else {"ms": ms, "draws": perf_stats.summarize(old).to_json()}
+    results = {"fake": {"metrics": {"ms": ms, "draws": perf_stats.summarize(new).to_json()}}}
+    baseline = {"benchmarks": {"fake": {"metrics": old_metrics}}}
+    return perf.compare_with(results, baseline, {"benchmarks": [{"name": "fake", "metrics": specs}]}, 3.0)["fake"]
+
+
+def test_a_count_under_a_threshold_of_zero_gates_any_change():
+    assert judge_count([6842.0] * 3, [6842.0] * 3)["verdict"] == perf_stats.NOISE
+    assert judge_count([6843.0] * 3, [6842.0] * 3)["verdict"] == perf_stats.REGRESSION
+    assert judge_count([4.0] * 3, [0.0] * 3)["verdict"] == perf_stats.REGRESSION
+    assert judge_count([0.0] * 3, [0.0] * 3)["verdict"] == perf_stats.NOISE
+    before_the_metric = judge_count([6843.0] * 3, None)
+    assert before_the_metric["metrics"]["draws"]["verdict"] == perf_stats.NEW and before_the_metric["verdict"] == perf_stats.NOISE
+
+
+def test_equal_counts_of_other_run_numbers_are_equal_under_a_threshold_of_zero():
+    count = 15826.78  # a mean per frame whose ten copies do not average back to it in floating point
+    assert judge_count([count] * 10, [count] * 3)["verdict"] == perf_stats.NOISE
+
+
 def test_a_benchmark_takes_its_worst_verdict():
     assert perf_stats.benchmark_verdict(["noise", "improvement", "regression"]) == "regression"
     assert perf_stats.benchmark_verdict(["noise", "improvement", "new"]) == "improvement"
