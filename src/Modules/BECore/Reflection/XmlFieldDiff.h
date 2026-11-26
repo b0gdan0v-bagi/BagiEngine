@@ -62,4 +62,24 @@ namespace BECore::XmlFieldDiff {
         AppendChangedFields(current.GetRootNode(), baseFields.GetRootNode(), target);
     }
 
+    /**
+     * @brief Edits @p target, an element that loads as the object of @p base, so that it loads as the object of @p current
+     *
+     * Only the fields that differ between @p base and @p current are touched. Everything else of @p target stays as written: the
+     * comments, what the type does not read, the fields left to their defaults, the order and the element names.
+     *
+     * - A differing field is replaced whole where it stands, and its other spelling (attribute or element of the name) is removed.
+     * - A field that @p current no longer writes (an emptied Optional) is removed, so the loader keeps the owner's default: a type
+     *   that must load an emptied list under a filled default has to write the empty list.
+     * - A list of unchanged length (as XML shows one: no attributes, elements of one name, so a nested object with one object member
+     *   too) is patched element by element with these rules when the n-th element of @p target loads as the n-th of @p base: the
+     *   same number of them and, in a map, the same keys in the same order. An element whose `type` or `index` differs is replaced
+     *   whole, because what it leaves out would load as the defaults of the other type.
+     * - Any other differing list is written anew, and its elements take the name of the first old one where the loader reads every
+     *   name. Elements of @p target that the object does not hold (a disabled one of a factory list) go with the old list.
+     *
+     * @param current,base The elements that hold the fields, as for AppendChangedFields
+     */
+    void PatchChangedFields(pugi::xml_node current, pugi::xml_node base, pugi::xml_node target);
+
 }  // namespace BECore::XmlFieldDiff

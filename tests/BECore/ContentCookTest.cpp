@@ -507,6 +507,21 @@ namespace BECore::Tests {
 
     }  // namespace
 
+    TEST(ContentCookRegistryTest, EveryReflectedCookerMakesItsRootObjectAndAHandWrittenOneNone) {
+        size_t made = 0;
+        for (const ContentCooker& cooker : ContentCookRegistry::GetInstance().All()) {
+            if (cooker.stem == "TextureLibrary") {
+                EXPECT_EQ(cooker.makeRoot, nullptr);
+                continue;
+            }
+            ASSERT_NE(cooker.makeRoot, nullptr) << String(cooker.stem).c_str();
+            const OwnedObject object = cooker.makeRoot();
+            EXPECT_TRUE(object) << String(cooker.stem).c_str();
+            ++made;
+        }
+        EXPECT_GT(made, 0u);
+    }
+
     TEST(CookCommandTest, NoCookFlagIsNoRequestAndForeignFlagsAreIgnored) {
         const auto none = Parse({"--control", "--cooked=1", "--cook-verifier"});
         ASSERT_TRUE(none.has_value());

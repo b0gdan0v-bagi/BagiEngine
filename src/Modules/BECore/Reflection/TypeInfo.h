@@ -21,11 +21,12 @@
 namespace BECore {
 
     /**
-     * @brief An object made by `TypeInfo::create`: an erased pointer to the object of its own type, and the reference it owns
+     * @brief An object whose type the holder does not name (one made by `TypeInfo::create`): an erased pointer to it, and its ownership
      *
-     * Holds one reference of an intrusive pointer family (`RefCountedAtomic` or `RefCountedNonAtomic`) and gives it back with the
-     * release thunk of the object's own type, so the object is deleted by its own class whatever the caller knows of it. `Get()` is
-     * the address of the **made type** (the derived one); a base subobject is at `TypeInfo::parentOffset` from it.
+     * Holds one reference of an intrusive pointer family (`RefCountedAtomic` or `RefCountedNonAtomic`), or a plain object of its
+     * own, and gives it back with the release thunk of the object's own type, so the object is deleted by its own class whatever
+     * the caller knows of it. `Get()` is the address of the **made type** (the derived one); a base subobject is at
+     * `TypeInfo::parentOffset` from it.
      */
     class OwnedObject {
     public:
@@ -63,6 +64,17 @@ namespace BECore {
                 pointer.Reset();
                 owned._object = object;
                 owned._release = [](void* raw) { static_cast<const Object*>(raw)->ReleaseRef(); };
+            }
+            return owned;
+        }
+
+        /// Takes over a plain object that no reference count owns
+        template <typename T>
+        static OwnedObject Adopt(UniquePtr<T> pointer) {
+            OwnedObject owned;
+            if (T* object = pointer.release(); object != nullptr) {
+                owned._object = object;
+                owned._release = [](void* raw) { const UniquePtr<T> last(static_cast<T*>(raw)); };
             }
             return owned;
         }
