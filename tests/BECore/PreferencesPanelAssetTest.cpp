@@ -4,6 +4,7 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Input/ImGuiItemIndex.h>
 #include <BECore/RefCounted/New.h>
+#include <BECore/ScopedEditorHost.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -219,6 +220,7 @@ namespace BECore::Tests {
         OpenWindow();
         EXPECT_TRUE(_widget->IsOpen());
         EXPECT_NE(Find("##fontScale"), nullptr);
+        EXPECT_NE(Find("##externalEditor"), nullptr) << "a desktop can start the program";
         const ImGuiWindow* window = ImGui::FindWindowByName(String(kWindowLabel).c_str());
         ASSERT_NE(window, nullptr);
         EXPECT_NE(window->Flags & ImGuiWindowFlags_NoDocking, 0);
@@ -227,6 +229,18 @@ namespace BECore::Tests {
         EditorCommandEvent::Emit(EditorCommandIds::kViewPreferences);
         Settle();
         EXPECT_FALSE(_widget->IsOpen());
+    }
+
+    /// The same panel in the browser editor: the host is set before the fixture makes the widget
+    class PreferencesPanelBrowserTest : public PreferencesPanelAssetTest {
+    protected:
+        ScopedEditorHost _browser{EditorHostKind::Browser};
+    };
+
+    TEST_F(PreferencesPanelBrowserTest, ThePageThatCannotStartAProgramAsksForNoneToOpenFiles) {
+        OpenWindow();
+        EXPECT_NE(Find("##viewportGrid"), nullptr);
+        EXPECT_EQ(Find("##externalEditor"), nullptr);
     }
 
     TEST_F(PreferencesPanelAssetTest, ReleasingTheFontScaleSliderAppliesTheValueAndSavesItThroughTheCommand) {

@@ -49,7 +49,7 @@ A `type` that is not registered in the factory is logged as an error by `MakeFro
 
 - A line has no category of its own: it is the module folder of the site's file (`LogCategoryOfFile`: after `Modules/`, else after the last `src/`), `General` without one, at most `kMaxLogCategories` kept and the rest `Other`. `sequence` of a record only grows, also across `Clear()`.
 - A game that ships its own `LoggerConfig.xml` replaces the engine's whole file, so it has to add the `LogHistorySink` entry itself; without it `GetSink<LogHistorySink>()` is null and the Console panel has nothing to show (it says so).
-- The web overlay has no history sink (`tests/BECore/WebConfigTest.cpp` expects its one console sink).
+- The web overlay keeps the history sink beside its console sink, for the Console panel of the web editor; a web page writes no file (`tests/BECore/WebConfigTest.cpp`).
 
 ## Best Practices
 

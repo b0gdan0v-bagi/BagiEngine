@@ -5,6 +5,7 @@
 
 struct SDL_Renderer;
 struct SDL_Texture;
+struct ImDrawData;
 
 namespace BECore {
 
@@ -56,6 +57,9 @@ namespace BECore {
         SDL_Renderer* GetSDLRenderer() const {
             return _renderer;
         }
+
+        /// Draws ImGui's frame over what is drawn so far, at the frame's framebuffer scale. Needs ImGui's SDL renderer backend set up on this renderer
+        void DrawImGui(ImDrawData& data);
 
         /// On SDL's software renderer only the draws that a capture test proved byte-equal to their immediate form are batched (true, the default):
         /// a rect on whole output pixels that is opaque or additive or multiplied, and a transformed rect, which is geometry either way; textured quads

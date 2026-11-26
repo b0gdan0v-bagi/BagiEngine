@@ -26,6 +26,8 @@ namespace BECore {
         BE_REFLECT_FIELD bool viewportGrid = false;
         BE_REFLECT_FIELD int32_t viewportGridStep = 32;
         BE_REFLECT_FIELD String externalEditor;
+        /// The editor's host can start the program of `externalEditor`: a browser page cannot
+        BE_REFLECT_FIELD bool externalEditorSupported = true;
         /// The text of the last failed save; empty after a save that worked
         BE_REFLECT_FIELD String error;
         BE_REFLECT_FIELD bool hasError = false;
