@@ -2307,6 +2307,39 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(expected.variants == content.variants);
     }
 
+    TEST_F(UIWebTest, ALinkedSheetMayClimbWithDotsButNotOutOfItsMountedFolder) {
+        const TestTempFolder temp("BagiEngineUIWebTest");
+        const Path mounted = Path(temp.PathOf("mounted"));
+        const auto write = [](const Path& file, StringView link) { WriteFile(file, Format("<link rel=\"stylesheet\" href=\"{}\"><div id=\"Box\"></div>", link)); };
+        WriteFile(mounted / "common.css", "#Box { width: 8px; height: 8px; background: #112233; }");
+        write(mounted / "ui" / "inside.ui.html", "../common.css");
+        // Beside the mounted folder, and a real file for the document that has no folder
+        const Path outside = Path(temp.PathOf("outside-the-mount.css"));
+        WriteFile(outside, "#Box { width: 8px; height: 8px; background: #445566; }");
+        write(mounted / "climbs.ui.html", "../outside-the-mount.css");
+        write(Path(temp.PathOf("bare.ui.html")), outside.View());
+
+        const PoolString mount = "uiwebmount"_intern;
+        ASSERT_TRUE(CoreManager::GetFileSystem().Mount(mount, mounted));
+        const auto boxColor = [](StringView path) {
+            auto handle = CoreManager::GetResourceManager().Load<UIDocument>(path);
+            UIScreenContent content;
+            if (!handle || !handle->Instantiate(content) || content.elements.empty()) {
+                ADD_FAILURE() << "no document at " << String(path).c_str();
+                return Color{};
+            }
+            return Color(content.elements.front()->color);
+        };
+
+        EXPECT_TRUE(ColorsEqual(boxColor("uiwebmount/ui/inside.ui.html"), Color{0x11, 0x22, 0x33, 255}));
+        EXPECT_FALSE(ColorsEqual(boxColor("uiwebmount/climbs.ui.html"), Color{0x44, 0x55, 0x66, 255}));
+        {
+            const ScopedCurrentDirectory enter(Path(temp.PathOf(".")));
+            EXPECT_FALSE(ColorsEqual(boxColor("bare.ui.html"), Color{0x44, 0x55, 0x66, 255}));
+        }
+        CoreManager::GetFileSystem().Unmount(mount);
+    }
+
     TEST_F(UIWebTest, AMissingHtmlFileFails) {
         auto handle = CoreManager::GetResourceManager().Load<UIDocument>("no/such/file.ui.html");
         EXPECT_FALSE(handle && handle->GetState() == ResourceState::Loaded);

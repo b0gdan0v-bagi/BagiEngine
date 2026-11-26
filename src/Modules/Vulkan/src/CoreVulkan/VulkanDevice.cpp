@@ -148,6 +148,20 @@ namespace BECore {
         return true;
     }
 
+    uint32_t VulkanDevice::GetTimestampValidBits() const {
+        uint32_t count = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(_physicalDevice, &count, nullptr);
+        Vector<VkQueueFamilyProperties> families(count);
+        vkGetPhysicalDeviceQueueFamilyProperties(_physicalDevice, &count, families.data());
+        return _queueFamilies.graphicsFamily < count ? families[_queueFamilies.graphicsFamily].timestampValidBits : 0;
+    }
+
+    float VulkanDevice::ReadTimestampPeriod() const {
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(_physicalDevice, &props);
+        return props.limits.timestampPeriod;
+    }
+
     VulkanQueueFamilyIndices VulkanDevice::FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) const {
 
         VulkanQueueFamilyIndices indices;

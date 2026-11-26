@@ -14,6 +14,7 @@ namespace BECore {
         inline constexpr auto kAssetBrowser = "AssetBrowser"_intern;
         inline constexpr auto kConsole = "Console"_intern;
         inline constexpr auto kProfiler = "Profiler"_intern;
+        inline constexpr auto kPoolStrings = "PoolStrings"_intern;
         inline constexpr auto kGenerate = "Generate"_intern;
         inline constexpr auto kGamePanel = "GamePanel"_intern;
         inline constexpr auto kFileChanges = "FileChanges"_intern;

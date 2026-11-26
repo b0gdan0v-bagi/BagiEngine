@@ -55,7 +55,7 @@ namespace BECore {
 
     Span<const WorkspacePanel> GetWorkspacePanels() {
         using namespace EditorPanelIds;
-        static const Array<WorkspacePanel, 12> panels = {{
+        static const Array<WorkspacePanel, 13> panels = {{
             {kViewport, "Viewport"},
             {kSceneEditor, "Scene Editor"},
             {kConfigEditor, "Config Editor###ConfigEditor"},
@@ -63,6 +63,7 @@ namespace BECore {
             {kAssetBrowser, "Asset Browser###AssetBrowser"},
             {kConsole, "Console###Console"},
             {kProfiler, "Profiler###Profiler"},
+            {kPoolStrings, "Pool Strings###PoolStrings"},
             {kGenerate, "Generate###Generate"},
             {kGamePanel, "Game###GamePanel"},
             {kFileChanges, "File changes###FileChanges"},

@@ -14,7 +14,7 @@ namespace BECore {
         constexpr StringView OverrideItem = "set";
         constexpr StringView VariantItem = "variant";
 
-        /// Writes an optional property as an attribute even when it equals T{} (an override "x is 0" must survive); Ser::Save would drop it under skip-defaults
+        /// A set optional is written even when it equals T{}: an override "x is 0" must survive
         template <typename T>
         void SaveOptional(ISerializer& s, StringView key, const Optional<T>& value) {
             if (value) {

@@ -25,6 +25,8 @@
 #include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Memory/MemTag.h>
+#include <BECore/PoolString/PoolStringMonitor.h>
+#include <BECore/PoolString/PoolStringsControl.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Renderer/RendererManager.h>
@@ -66,7 +68,8 @@ namespace BECore {
           _mainWindowManager(MakeUnique<MainWindowManager>()), _rendererManager(MakeUnique<RendererManager>()), _uiInput(MakeUnique<UIInput>()), _uiEnvironment(MakeUnique<UIEnvironment>()),
           _uiVars(MakeUnique<UIVars>()), _uiStrings(MakeUnique<UIStrings>()), _uiThemes(MakeUnique<UIThemes>()), _textureLibrary(MakeUnique<TextureLibrary>()),
           _fontAtlasLibrary(MakeUnique<FontAtlasLibrary>()), _uiBoxTextureCache(MakeUnique<UIBoxTextureCache>()), _time(MakeUnique<Time>()), _pause(MakeUnique<GamePause>()),
-          _tweenManager(MakeUnique<TweenManager>()), _frameStats(MakeUnique<FrameStatsCollector>()), _controlService(MakeUnique<ControlService>()) {}
+          _tweenManager(MakeUnique<TweenManager>()), _frameStats(MakeUnique<FrameStatsCollector>()), _poolStringMonitor(MakeUnique<PoolStringMonitor>(Details::GetProcessPoolStorage())),
+          _controlService(MakeUnique<ControlService>()) {}
 
     CoreManager::~CoreManager() = default;
 
@@ -162,6 +165,7 @@ namespace BECore {
         RegisterInputControl(*_controlService);
         RegisterImGuiInputControl(*_controlService);
         RegisterProfilerControl(*_controlService);
+        RegisterPoolStringsControl(*_controlService, *_poolStringMonitor);
         RegisterClipboardControl(*_controlService);
         RegisterAudioControl(*_controlService, *_audioManager);
         RegisterFileWatchControl(*_controlService, *_fileWatcher);
@@ -184,6 +188,7 @@ namespace BECore {
 
     void CoreManager::OnGameCycle(PassKey<Application>, FrameKind kind) {
         BE_PROFILE_SCOPE("Game cycle");
+        _poolStringMonitor->BeginFrame(_frameStats->GetOpenFrameNumber());
         {
             // Update: input, commands, tasks, tweens and the logic (FrameStage::Update; the scene's part is SceneUpdate)
             const FrameStatsCollector::StageScope update(*_frameStats, FrameStage::Update);
@@ -219,6 +224,7 @@ namespace BECore {
             BE_PROFILE_SCOPE("Draw widgets");
             _widgetManager->DrawAll();  // ImGui::Render; the present follows in Application (RenderPresentEvent)
         }
+        _poolStringMonitor->EndFrame();
     }
 
     void CoreManager::UpdateGame(FrameKind kind) {

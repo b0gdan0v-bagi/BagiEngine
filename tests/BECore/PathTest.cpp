@@ -317,6 +317,38 @@ namespace BECore::Tests {
             {"/é/ü/ñ", "/é/ü", true},
             {"/é/üñ", "/é/ü", false},
             {"/日本/語/名前", "/日本/語/", true},
+            // ".." that leaves the root
+            {"/a/b/../c", "/a/b", false},
+            {"/a/b/..", "/a/b", false},
+            {"config/../x", "config", false},
+            {"/a/b/c/../../x", "/a/b", false},
+            // ".." that stays inside it, "." and runs of separators
+            {"/a/b/../b/c", "/a/b", true},
+            {"/a/b/c/..", "/a/b", true},
+            {"/a/./b/./c", "/a/b", true},
+            {"/a//b///c", "/a/b", true},
+            {"/a/b/c", "/a//./b", true},
+            {"/a/b/c", "/a/x/../b", true},
+            {"/a/x/c", "/a/x/../b", false},
+            {"/..", "/", true},
+            {"/../a/b", "/a", true},
+            {"a/b/", "a/b", true},
+            {"a/b", "a/b/.", true},
+            {"config2/x", "config", false},
+            // relative paths that still climb after folding
+            {"../../x", "..", false},
+            {"../x", "..", true},
+            {"x", "..", false},
+            {"../x", ".", false},
+            {"../x", "a/..", false},
+            {"x", ".", true},
+            {".", ".", true},
+            {"a/../..", ".", false},
+            // more names than the inline storage holds
+            {"a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t", "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r", true},
+            {"a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/..", "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r", false},
+            {"", ".", false},
+            {"", "a", false},
         };
         for (const Row& row : rows) {
             SCOPED_TRACE(Format("{} under {}", row.path, row.root).c_str());

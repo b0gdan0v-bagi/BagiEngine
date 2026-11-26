@@ -17,12 +17,12 @@ namespace BECore::SceneEvents {
 namespace BECore::Stress {
 
     /**
-     * @brief The scene `StressEntities`: `StressState::GetCount()` child nodes of this node, each with a `TransformComponent` and one running
+     * @brief The scene `StressEntities`: `StressState::GetCount()` child nodes of this node, each with a `TransformComponent` and one looping
      *        tween that moves it on a circle of its own. No node has a renderer component, so the scene's draw list is empty and
      *        the scene costs the update of the nodes and the tweens.
      *
-     * The nodes are made like `StressSpritesComponent`'s, when `StressState::Version()` moved. A tween's `onComplete` starts it again, and a restart
-     * is a `TweenManager::Start` (a handle), so a frame in which some tween ends allocates; at the benchmark counts that is every frame.
+     * The nodes are made like `StressSpritesComponent`'s, when `StressState::Version()` moved. The tween is a `TweenManager::Loop`, so a frame
+     * with an unchanged count starts no tween and allocates nothing.
      * A shrink resets the tail's tweens first (rule 8 of `Animation/CLAUDE.md`: the setter must not outlive what it writes). Every `kSpinEvery`th
      * node also gets a rotation from `SceneUpdateEvent`. Does nothing while the game is not the active `StressGame`.
      */
@@ -42,11 +42,6 @@ namespace BECore::Stress {
             return _entities.size();
         }
 
-        /// The tweens that ended and were started again since the component was made (a test counts them per frame)
-        uint64_t GetRestartCount() const {
-            return _restartCount;
-        }
-
     private:
         struct Entity {
             IntrusivePtr<SceneNode> node;
@@ -58,12 +53,10 @@ namespace BECore::Stress {
 
         /// Brings the nodes to @p count: appends or removes from the tail
         void Rebuild(uint32_t count);
-        /// Starts the tween of node @p index: @p first begins at the node's `startTurn`, a restart at 0
-        void StartTween(uint32_t index, bool first);
+        void StartTween(uint32_t index);
 
         Vector<Entity> _entities;
         FieldView _view;
-        uint64_t _restartCount = 0;
         uint64_t _builtVersion = 0;  // the StressState version the nodes were last brought to; 0 is never a version
     };
 

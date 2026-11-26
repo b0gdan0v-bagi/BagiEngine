@@ -6,6 +6,7 @@
 #include <CoreVulkan/VulkanFramePolicy.h>
 #include <CoreVulkan/VulkanGeometryBuffer.h>
 #include <CoreVulkan/VulkanGeometryPipeline.h>
+#include <CoreVulkan/VulkanGpuTimer.h>
 #include <CoreVulkan/VulkanRectPipeline.h>
 #include <CoreVulkan/VulkanSwapchain.h>
 #include <CoreVulkan/VulkanTexturePipeline.h>
@@ -184,6 +185,8 @@ namespace BECore {
         VulkanGeometryBuffer _geometryBuffer;
         // Freed in Destroy(), while the descriptor pool of the texture pipeline is still there
         IntrusivePtr<ITexture> _whiteTexture;
+        // FrameStats::gpuMs: a pair of timestamps per frame slot, read in AcquireFrame()
+        VulkanGpuTimer _gpuTimer;
 
         VkSurfaceKHR _surface = VK_NULL_HANDLE;
 

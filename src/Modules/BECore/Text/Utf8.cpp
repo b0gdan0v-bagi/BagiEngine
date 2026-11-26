@@ -8,7 +8,6 @@ namespace BECore::Utf8 {
         constexpr uint8_t kContinuationTag = 0x80;
         constexpr uint8_t kContinuationPayload = 0x3F;
         constexpr int kContinuationBits = 6;
-        constexpr char32_t kMaxCodePoint = 0x10FFFF;
         constexpr char32_t kSurrogateFirst = 0xD800;
         constexpr char32_t kSurrogateLast = 0xDFFF;
 

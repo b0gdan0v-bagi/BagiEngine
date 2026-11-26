@@ -134,6 +134,9 @@ namespace BECore {
                 {kSceneDialogsAddNode, "Add Node Dialog: OK", std::nullopt, false},
                 {kSceneDialogsAddComponent, "Add Component Dialog: Add", std::nullopt, false},
                 {kSceneDialogsCancel, "Scene Dialogs: Cancel", std::nullopt, false},
+                {kViewPoolStrings, "Pool Strings", std::nullopt, true},
+                {kPoolStringsRefresh, "Pool Strings: Refresh", std::nullopt, true},
+                {kPoolStringsClearRecords, "Pool Strings: Clear Records", std::nullopt, true},
             };
             return table;
         }

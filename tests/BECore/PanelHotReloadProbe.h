@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 
 namespace BECore::Tests {

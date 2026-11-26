@@ -33,10 +33,15 @@ namespace BECore::Stress::Tests {
         EXPECT_FALSE(result->ramp);
         EXPECT_FALSE(result->IsMeasuring());
         EXPECT_EQ(result->measure, StressMeasure::Work);
+        EXPECT_DOUBLE_EQ(result->budgetMs, 16.6);
         EXPECT_FALSE(result->interleave);
         EXPECT_FALSE(result->noBatching);
         EXPECT_EQ(result->atlases, 4u);
         EXPECT_EQ(result->language, StressLanguage::En);
+        EXPECT_EQ(result->load.spriteSize, 0u);
+        EXPECT_EQ(result->load.world, 1u);
+        EXPECT_EQ(result->load.churn, 0u);
+        EXPECT_FALSE(result->load.mix);
     }
 
     TEST(StressSettingsTest, OtherFlagsOfTheProgramAreIgnored) {
@@ -46,8 +51,8 @@ namespace BECore::Stress::Tests {
     }
 
     TEST(StressSettingsTest, EveryFlagIsRead) {
-        const auto result = Parse({"--stress-scene=ui", "--stress-count=300", "--stress-frames=600", "--stress-warmup=0", "--stress-ramp", "--stress-measure=cpu", "--stress-interleave",
-                                   "--stress-no-batching", "--stress-atlases=8", "--stress-language=ru"});
+        const auto result = Parse({"--stress-scene=ui", "--stress-count=300", "--stress-frames=600", "--stress-warmup=0", "--stress-ramp", "--stress-measure=cpu", "--stress-budget-ms=8.5",
+                                   "--stress-interleave", "--stress-no-batching", "--stress-atlases=8", "--stress-language=ru"});
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->scene, StressScene::Ui);
         EXPECT_EQ(result->count, 300u);
@@ -55,6 +60,7 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(result->warmup, 0u);
         EXPECT_TRUE(result->ramp);
         EXPECT_EQ(result->measure, StressMeasure::Cpu);
+        EXPECT_DOUBLE_EQ(result->budgetMs, 8.5);
         EXPECT_TRUE(result->interleave);
         EXPECT_TRUE(result->noBatching);
         EXPECT_EQ(result->atlases, 8u);
@@ -84,7 +90,7 @@ namespace BECore::Stress::Tests {
 
     TEST(StressSettingsTest, TheBoundsOfTheNumbersAreInclusive) {
         EXPECT_EQ(Parse({"--stress-count=1"})->count, 1u);
-        EXPECT_EQ(Parse({"--stress-count=1000000"})->count, kMaxCount);
+        EXPECT_EQ(Parse({"--stress-count=4000000"})->count, kMaxCount);
         EXPECT_EQ(Parse({"--stress-frames=1"})->frames, 1u);
         EXPECT_EQ(Parse({"--stress-frames=1000000"})->frames, kMaxFrames);
         EXPECT_EQ(Parse({"--stress-warmup=1000000"})->warmup, kMaxFrames);
@@ -94,7 +100,7 @@ namespace BECore::Stress::Tests {
 
     TEST(StressSettingsTest, ANumberOutOfItsBoundsNamesItsFlag) {
         ExpectErrorNaming({"--stress-count=0"}, "--stress-count");
-        ExpectErrorNaming({"--stress-count=1000001"}, "--stress-count");
+        ExpectErrorNaming({"--stress-count=4000001"}, "--stress-count");
         ExpectErrorNaming({"--stress-frames=0"}, "--stress-frames");
         ExpectErrorNaming({"--stress-frames=1000001"}, "--stress-frames");
         ExpectErrorNaming({"--stress-warmup=1000001"}, "--stress-warmup");
@@ -111,6 +117,45 @@ namespace BECore::Stress::Tests {
         ExpectErrorNaming({"--stress-count=99999999999999"}, "--stress-count");
         ExpectErrorNaming({"--stress-frames= 5"}, "--stress-frames");
         ExpectErrorNaming({"--stress-warmup=x"}, "--stress-warmup");
+    }
+
+    TEST(StressSettingsTest, TheBudgetIsADecimalWithinItsBounds) {
+        EXPECT_FLOAT_EQ(static_cast<float>(Parse({"--stress-budget-ms=8.3"})->budgetMs), 8.3f);
+        EXPECT_DOUBLE_EQ(Parse({"--stress-budget-ms=1"})->budgetMs, kMinRampBudgetMs);
+        EXPECT_DOUBLE_EQ(Parse({"--stress-budget-ms=1000"})->budgetMs, kMaxRampBudgetMs);
+        for (const char* wrong : {"--stress-budget-ms=0.5", "--stress-budget-ms=1000.5", "--stress-budget-ms=-8", "--stress-budget-ms=", "--stress-budget-ms", "--stress-budget-ms=fast",
+                                  "--stress-budget-ms=8ms", "--stress-budget-ms=nan", "--stress-budget-ms=inf"}) {
+            ExpectErrorNaming({wrong}, "--stress-budget-ms");
+        }
+    }
+
+    TEST(StressSettingsTest, TheSpriteSizeIsAWholeNumberUpToTheViewHeight) {
+        EXPECT_EQ(Parse({"--stress-sprite-size=1"})->load.spriteSize, 1u);
+        EXPECT_EQ(Parse({"--stress-sprite-size=1080"})->load.spriteSize, kMaxSpriteSize);
+        for (const char* wrong : {"--stress-sprite-size=0", "--stress-sprite-size=1081", "--stress-sprite-size=12.5", "--stress-sprite-size=", "--stress-sprite-size"}) {
+            ExpectErrorNaming({wrong}, "--stress-sprite-size");
+        }
+    }
+
+    TEST(StressSettingsTest, TheWorldIsAWholeNumberOfViews) {
+        EXPECT_EQ(Parse({"--stress-world=1"})->load.world, 1u);
+        EXPECT_EQ(Parse({"--stress-world=8"})->load.world, kMaxWorld);
+        for (const char* wrong : {"--stress-world=0", "--stress-world=9", "--stress-world=1.5", "--stress-world=", "--stress-world"}) {
+            ExpectErrorNaming({wrong}, "--stress-world");
+        }
+    }
+
+    TEST(StressSettingsTest, TheChurnIsAWholeNumberOfSprites) {
+        EXPECT_EQ(Parse({"--stress-churn=1"})->load.churn, 1u);
+        EXPECT_EQ(Parse({"--stress-churn=4000000"})->load.churn, kMaxCount);
+        for (const char* wrong : {"--stress-churn=0", "--stress-churn=4000001", "--stress-churn=-1", "--stress-churn=", "--stress-churn"}) {
+            ExpectErrorNaming({wrong}, "--stress-churn");
+        }
+    }
+
+    TEST(StressSettingsTest, TheMixIsABareFlag) {
+        EXPECT_TRUE(Parse({"--stress-mix"})->load.mix);
+        ExpectErrorNaming({"--stress-mix=1"}, "--stress-mix");
     }
 
     TEST(StressSettingsTest, AnUnknownChoiceNamesItsFlagAndTheChoices) {

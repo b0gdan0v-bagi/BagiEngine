@@ -34,13 +34,14 @@
             <element type="PanelSeparator" id="headerLine" visible="editor.hasSelection"/>
             <element type="PanelRow" id="actions" visible="editor.hasSelection">
               <elements>
-                <element type="PanelButton" id="save" icon="save" text="Save" command="config.save" enableWhen="editor.hasStaged" tooltip="Write the staged changes to the config file"/>
+                <element type="PanelButton" id="save" icon="save" text="Save" command="config.save" enableWhen="editor.hasStaged" tooltip="Write the unsaved changes to the config file"/>
                 <element type="PanelButton" id="reload" icon="refresh-cw" text="Reload" command="configEditor.reload" tooltip="Read the config again from disk"/>
                 <element type="PanelText" id="unsaved" text="(unsaved changes)" style="Warning" visible="editor.hasStaged"/>
-                <element type="PanelText" id="changedOnDisk" text="changed on disk, staged edits dropped" style="Warning" visible="editor.changedOnDisk"/>
+                <element type="PanelText" id="changedOnDisk" text="changed on disk, unsaved edits dropped" style="Warning" visible="editor.changedOnDisk"/>
               </elements>
             </element>
             <element type="PanelSeparator" id="actionsLine" visible="editor.hasSelection"/>
+            <element type="PanelText" id="textMode" bind="editor.textModeNote" style="Disabled" wrap="true" visible="editor.textMode"/>
             <element type="PanelEmptyState" id="configMissing" icon="circle-alert" text="This config is empty or failed to load" visible="editor.configMissing"/>
             <element type="PanelSlot" id="tree" name="configTree" visible="editor.showTree"/>
           </elements>

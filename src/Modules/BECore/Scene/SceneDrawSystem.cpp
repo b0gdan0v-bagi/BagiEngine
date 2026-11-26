@@ -15,6 +15,52 @@ namespace BECore {
     namespace {
 
         constexpr Color kNoTint{255, 255, 255, 255};  // a sprite is drawn as it is: white leaves the texel as it is
+        constexpr float kCullMarginPixels = 1.0f;     // a backend may round a rect that ends just outside the output onto its outermost pixels
+
+        // What reaches the render output, in scene units. The default is everything.
+        struct VisibleArea {
+            float left = -std::numeric_limits<float>::infinity();
+            float top = -std::numeric_limits<float>::infinity();
+            float right = std::numeric_limits<float>::infinity();
+            float bottom = std::numeric_limits<float>::infinity();
+        };
+
+        // The whole output, not only the view: what lies in the bars of a letterbox shows. Everything while the output has no size.
+        VisibleArea FindVisibleArea(const IRenderer& renderer, const ViewTransform& view) {
+            const float width = renderer.GetOutputWidth();
+            const float height = renderer.GetOutputHeight();
+            if (width <= 0.0f || height <= 0.0f) {
+                return {};
+            }
+            return {view.ToViewX(-kCullMarginPixels), view.ToViewY(-kCullMarginPixels), view.ToViewX(width + kCullMarginPixels), view.ToViewY(height + kCullMarginPixels)};
+        }
+
+        // Whether both ends of a span are before @p low or both are after @p high. The ends come in either order (a negative size), and a
+        // NaN end is never outside.
+        bool IsOutside(float end, float otherEnd, float low, float high) {
+            return (end < low && otherEnd < low) || (end > high && otherEnd > high);
+        }
+
+        // Whether the quad or the sprite of a node can touch @p area. Both draw inside the node's rect (a Contain sprite is fitted into it),
+        // turned about the pivot.
+        bool CanReach(const TransformComponent& transform, const VisibleArea& area) {
+            float left = transform._x;
+            float top = transform._y;
+            float right = transform._x + transform._width;
+            float bottom = transform._y + transform._height;
+            if (transform._rotation != 0.0f) {
+                // No turn takes a point of the rect further from the pivot along an axis than the sum of its x and y distances from it: a
+                // loose bound that needs no trigonometry and holds for a pivot outside the rect
+                const float pivotX = transform._x + transform._pivotX * transform._width;
+                const float pivotY = transform._y + transform._pivotY * transform._height;
+                const float reach = std::max(std::abs(left - pivotX), std::abs(right - pivotX)) + std::max(std::abs(top - pivotY), std::abs(bottom - pivotY));
+                left = pivotX - reach;
+                top = pivotY - reach;
+                right = pivotX + reach;
+                bottom = pivotY + reach;
+            }
+            return !IsOutside(left, right, area.left, area.right) && !IsOutside(top, bottom, area.top, area.bottom);
+        }
 
         // The components of a node that the draw list needs. The first of each type counts, as GetComponent<T>().
         struct NodeParts {
@@ -211,10 +257,15 @@ namespace BECore {
         BE_PROFILE_SCOPE("Draw items");
         IRenderer* const renderer = CoreManager::GetRenderer().Get();
         const ViewTransform& view = scene.GetViewTransform();
+        const VisibleArea visible = renderer != nullptr ? FindVisibleArea(*renderer, view) : VisibleArea{};
         PushedClips clips;
         for (const SceneDrawEntry& entry : list.entries) {
             // Read in every pass, like the clips, so enabling and disabling leave the list as it is
             if (!entry.component->IsEnabled()) {
+                continue;
+            }
+            // Culled before the clip switch, so that a clip subtree off the output pushes nothing and splits no batch
+            if (entry.kind != SceneDrawKind::Custom && !CanReach(*entry.transform, visible)) {
                 continue;
             }
             if (renderer != nullptr) {

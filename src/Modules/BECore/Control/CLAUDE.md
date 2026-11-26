@@ -2,7 +2,7 @@
 
 ## Overview
 
-The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (`ping`, `status`, `step`, `quit` live here; the game methods are registered by `Games`, the screenshot by `SDL`). Tools: `tools/control/CLAUDE.md`; fuzz targets: `tests/Fuzz/CLAUDE.md`.
+The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (see "Methods"). Tools: `tools/control/CLAUDE.md`; fuzz targets: `tests/Fuzz/CLAUDE.md`.
 
 | File | Purpose |
 |------|---------|
@@ -110,6 +110,7 @@ Off by default (`--control`, `control="true"`); the command line beats the attri
 | `BECore/Input/ImGuiInputControl` | `imgui_input` (`{events, space?}` to `{events, frames, wantCapture*, wantTextInput}`: events into `ImGuiIO`, answered once ImGui took the queue and a frame reacted; `no_imgui`, `invalid_params`, `imgui_timeout`), `imgui_find` (`{label?, labelContains?, id?, window?, kind?, visibleOnly?, limit?}` to the matches with rects in output pixels; no filter lists the windows); `Input/CLAUDE.md`, `.claude/rules/control-imgui-api.md` |
 | `BECore/Clipboard/ClipboardControl` | `clipboard_set` (`{text}` to `{ok}`), `clipboard_get` (to `{status, text}`; answered after frames, `clipboard_timeout` after 600), `clipboard_paste` (to `{}` once the `PasteEvent` has been delivered, as Cmd+V gives it); `Clipboard/CLAUDE.md` |
 | `BECore/Profiler/ProfilerControl` | `frame_stats` (`{frames?}` 1..240: the last frames, oldest first, with stage times, draws, allocations, arena and pool totals, counters; `Memory/CLAUDE.md`), `profiler_dump` (`{path?}` relative, no `..`: writes the Chrome trace; `not_recording` unless `--trace=` or `--profiler=chrome`), `zone_allocs` (`{top?, reset?}`: allocations per zone, `names`, `sizes`, totals; `enabled` false without `ENGINE_PROFILER_ALLOC`); `Profiler/CLAUDE.md` |
+| `BECore/PoolString/PoolStringsControl` | `pool_strings`; `PoolString/CLAUDE.md`, "Control method" |
 | `BECore/Control/ReflectionControl` | `get_property` (`{root, path}`), `set_property` (`{root, path, value}`), `call_method` (`{root, method, arguments?}`) over a root; `list_types` (`{base?, recursive?, creatable?}`), `describe_type` (`{name}`), `schema`; shapes and codes in `Reflection/CLAUDE.md`, "Reflection methods" |
 | `BECore/FileSystem/FileWatchControl` | `files_rescan` (to `{changes}`), `files_apply` (`{paths?}` to `{applied}`); codes `not_watching`, `invalid_params`; `FileSystem/CLAUDE.md` |
 | `BECore/Widgets/EditorStateControl` | `editor_state` (to `{anyDirty, documents}`); code `not_editor` in the Game mode; `.claude/rules/control-editor-api.md` |

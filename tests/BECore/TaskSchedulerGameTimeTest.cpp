@@ -2,6 +2,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Wait.h>
 #include <TaskSystem/Awaitables.h>
+#include <TaskSystem/LiveTasks.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskManager.h>
@@ -537,7 +538,9 @@ namespace BECore::Tests {
         Scheduler().AdvanceGameTime(7200.0);
         Pump();
         EXPECT_EQ(Stage(), 1) << "DelaySec stays on the wall clock";
-        // The parked task is abandoned with the others at shutdown, like ParkedTask in TaskSystemTest.
+
+        // The parked task keeps itself alive for the hour. Not in TearDown: AbandonAll must not meet a task that still runs on a worker
+        Detail::LiveTasks::GetInstance().AbandonAll();
     }
 
     TEST_F(TaskSchedulerGameTimeManagerTest, TheGameDelayDoesNotMoveWithTheRealClock) {
@@ -591,6 +594,7 @@ namespace BECore::Tests {
         Scheduler().AdvanceGameTime(0.01);
         Pump();  // ProcessDelayedTasks hands the job to the pool
         EXPECT_TRUE(WaitUntil([&] { return Stage() == 2; })) << "the background job never resumed";
+        EXPECT_TRUE(WaitUntil([&] { return handle->IsDone(); })) << "the worker never finished the task";
     }
 
 }  // namespace BECore::Tests

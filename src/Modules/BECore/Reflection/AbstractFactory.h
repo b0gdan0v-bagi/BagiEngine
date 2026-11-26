@@ -43,12 +43,18 @@ namespace BECore {
         /**
          * @brief Register a derived type with its creator function.
          *
-         * Called from static initializers in generated .gen.hpp files. A second registration of the same type
-         * replaces the creator silently (last write wins), but its meta is listed again by GetRegisteredTypes().
+         * Called from static initializers in generated .gen.hpp files. Registering the same type again (an equal
+         * ClassMeta) silently replaces both its creator and its meta (last write wins); the type keeps the place of
+         * its first registration in GetRegisteredTypes().
          */
         void Register(const ClassMeta& meta, CreatorFunc creator) {
-            _creators[meta.typeHash] = creator;
-            _metas.push_back(meta);
+            const auto [it, isNew] = _entries.try_emplace(meta.typeHash, Entry{creator, _metas.size()});
+            if (isNew) {
+                _metas.push_back(meta);
+                return;
+            }
+            it->second.creator = creator;
+            _metas[it->second.metaIndex] = meta;
         }
 
         /**
@@ -84,26 +90,30 @@ namespace BECore {
         /**
          * @brief The ClassMeta registered under class name @p name, or null when no such type is registered.
          *
-         * Lets a loader read a type's purpose before it creates an instance.
+         * Lets a loader read a type's purpose before it creates an instance. The pointer is into GetRegisteredTypes()
+         * and the registration of another type invalidates it.
          */
         [[nodiscard]] const ClassMeta* FindMeta(StringView name) const {
-            const uint64_t hash = StringUtils::GetHash(name);
-            for (const ClassMeta& meta : _metas) {
-                if (meta.typeHash == hash) {
-                    return &meta;
-                }
+            const auto it = _entries.find(StringUtils::GetHash(name));
+            if (it == _entries.end()) {
+                return nullptr;
             }
-            return nullptr;
+            return &_metas[it->second.metaIndex];
         }
 
         /**
-         * @brief All registered ClassMeta entries (e.g. to instantiate every resource loader at startup).
+         * @brief One ClassMeta per registered type (e.g. to instantiate every resource loader at startup).
          */
         [[nodiscard]] const Vector<ClassMeta>& GetRegisteredTypes() const {
             return _metas;
         }
 
     private:
+        struct Entry {
+            CreatorFunc creator = nullptr;
+            size_t metaIndex = 0;
+        };
+
         static constexpr StringView ResolveDebugName() {
             if constexpr (HasReflection<BaseType>) {
                 return ReflectionTraits<BaseType>::name;
@@ -115,14 +125,15 @@ namespace BECore {
         AbstractFactory() = default;
 
         BasePtr FindAndCreate(uint64_t hash) const {
-            auto it = _creators.find(hash);
-            if (it != _creators.end())
-                return it->second();
-            return {};
+            const auto it = _entries.find(hash);
+            if (it == _entries.end()) {
+                return {};
+            }
+            return it->second.creator();
         }
 
         StringView _debugName = ResolveDebugName();
-        HashMap<uint64_t, CreatorFunc> _creators;
+        HashMap<uint64_t, Entry> _entries;
         Vector<ClassMeta> _metas;
     };
 

@@ -500,8 +500,10 @@ def imgui_key(key: str, mods: list[str] | None = None) -> dict[str, Any]:
 def frame_stats(frames: int = 1) -> dict[str, Any]:
     """What the last frames cost, oldest first: {frames: [...], allocTracking, arenas, pools}.
 
-    frames: how many (1 to 240). Each has frame, frameMs (end to end), cpuMs, stagesMs (Update, SceneUpdate, Render, SceneDraw, Present, Wait;
-    the scene stages are inside the other two, Wait is the display wait the Vulkan backend times, inside cpuMs), drawCalls, triangles, textureSwitches (the engine's draws; ImGui's are the counters
+    frames: how many (1 to 240). Each has frame, frameMs (end to end), cpuMs, stagesMs (Update, SceneUpdate, Render, SceneDraw, Present, Wait,
+    Submit; the scene stages are inside the other two, Wait is the display wait the Vulkan backend times, inside cpuMs, Submit is the batch
+    submissions, inside whichever stage flushed), gpuMs (the GPU time of the newest finished frame, some frames old; 0: no value, either
+    a backend without GPU time or a frame its driver gave none for), drawCalls, triangles, textureSwitches (the engine's draws; ImGui's are the counters
     "ImGui draw calls" / "ImGui triangles"), allocCount, allocBytes, liveBytes (0 unless the game was built with ENGINE_PROFILER_ALLOC,
     allocTracking says), arenaUsedBytes, arenaPeakBytes, arenaOverflows (the memory arenas, summed), poolLiveBlocks, poolPageBytes (the block
     pools, summed; a pool shared by threads lags by a few calls) and counters (named values set during the frame). arenas and pools list each arena (name, capacity, used, peak, overflows, chunks) and each block
@@ -535,6 +537,23 @@ def zone_allocs(top: int = 20, reset: bool = False) -> dict[str, Any]:
     the zone, name and size statistics after answering, to measure the next frames.
     """
     return session.call("zone_allocs", {"top": top, "reset": reset})
+
+
+@server.tool()
+@reports_errors
+def pool_strings(frames: int = 60, limit: int = 20, query: str | None = None, source: str | None = None, record: bool | None = None, reset: bool = False) -> dict[str, Any]:
+    """The pool of interned strings (PoolString, which never frees): {checks, growth, recording, search, summary}.
+
+    summary: counts and bytes by source, the blocks and the table. growth: the strings and bytes added in each of the last frames (1 to
+    240); runtime additions in a steady frame are a leak. search: the strings that hold query (ASCII case ignored; every string without
+    it) and come from source ("static", "runtime" or "adopted"): matched counts them all, rows lists the first limit (0 to 1000) by
+    text. checks: pairs of hash collisions and of texts held twice. recording: the new runtime strings by profiler zone, filled while
+    recording is on; record switches it before the answer (a build with the editor only, else not_available), reset drops the records
+    after the answer. Zones are named only in a build with ENGINE_PROFILER_ALLOC.
+    """
+    optional = {"query": query, "source": source, "record": record}
+    given = {name: value for name, value in optional.items() if value is not None}
+    return session.call("pool_strings", {"frames": frames, "limit": limit, "reset": reset, **given})
 
 
 @server.tool()

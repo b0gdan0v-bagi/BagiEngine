@@ -60,9 +60,10 @@ namespace BECore {
 
     /**
      * @brief The stage times of a frame without double counting (FrameStats::stageMs has SceneUpdate inside Update and SceneDraw inside
-     * Render): Update and Render lose their inner stage, and Other is what is left of cpuMs after every other segment, Wait included. A stage longer than the one around it (a
-     * clock hiccup) and a sum over cpuMs give 0 for that segment, never a negative one, so the segments sum to cpuMs unless the stages
-     * together exceed it.
+     * Render): Update and Render lose their inner stage, and Other is what is left of cpuMs after every other segment, Wait included.
+     * Submit is nested inside whatever stage flushed, so it is no segment of its own and stays part of that stage. A stage longer than the
+     * one around it (a clock hiccup) and a sum over cpuMs give 0 for that segment, never a negative one, so the segments sum to cpuMs
+     * unless the stages together exceed it.
      */
     [[nodiscard]] Array<double, kExclusiveStageCount> ExclusiveStageMs(const FrameStats& frame);
 

@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<PanelAsset id="PoolStrings" title="Pool Strings" command="view.poolStrings" open="false" width="720" height="560">
+  <sources>
+    <item name="pool" model="PoolStringsPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelButton" id="refresh" icon="refresh-cw" text="Refresh" command="poolStrings.refresh" tooltip="Take a new snapshot of the pool: the panel shows that moment"/>
+    <element type="PanelSection" id="summary" title="Summary">
+      <elements>
+        <element type="PanelTable" id="sources" source="pool.sources">
+          <columns>
+            <item type="Text" id="source" title="Source" field="source"/>
+            <item type="Text" id="strings" title="Strings" field="strings"/>
+            <item type="Text" id="bytes" title="Bytes" field="bytes"/>
+            <item type="Text" id="blocks" title="Blocks" field="blocks"/>
+            <item type="Text" id="blockBytes" title="Block bytes" field="blockBytes"/>
+          </columns>
+        </element>
+        <element type="PanelText" id="dead" bind="pool.deadText"/>
+        <element type="PanelText" id="tableUse" bind="pool.tableText"/>
+        <element type="PanelText" id="internCalls" bind="pool.internText"/>
+        <element type="PanelText" id="batchCalls" bind="pool.batchText"/>
+        <element type="PanelText" id="counters" bind="pool.countersText"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="checks" title="Checks">
+      <elements>
+        <element type="PanelText" id="noFindings" bind="pool.checksText" visible="!pool.hasFindings"/>
+        <element type="PanelText" id="findings" bind="pool.checksText" style="Error" visible="pool.hasFindings"/>
+        <element type="PanelTable" id="pairs" source="pool.checks" scrollRows="8" visible="pool.hasFindings">
+          <columns>
+            <item type="Text" id="kind" title="Kind" field="kind"/>
+            <item type="Text" id="text" title="Text" field="text"/>
+            <item type="Text" id="firstSource" title="First source" field="firstSource"/>
+            <item type="Text" id="secondSource" title="Second source" field="secondSource"/>
+          </columns>
+        </element>
+        <element type="PanelText" id="morePairs" bind="pool.checksCutText" style="Disabled" visible="pool.checksCut"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="blocks" title="Blocks">
+      <elements>
+        <element type="PanelSlot" id="blocksSlot" name="poolStringBlocks"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="contents" title="Contents">
+      <elements>
+        <element type="PanelRow" id="filters">
+          <elements>
+            <element type="PanelInput" id="search" bind="pool.search" icon="search" hint="part of a string" width="16"/>
+            <element type="PanelCombo" id="sourceFilter" bind="pool.sourceIndex" items="pool.sourceItems" width="14"/>
+            <element type="PanelText" id="matches" bind="pool.matchText" style="Disabled"/>
+          </elements>
+        </element>
+        <element type="PanelSlot" id="contentsSlot" name="poolStringContents"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="growth" title="Growth">
+      <elements>
+        <element type="PanelText" id="noGrowth" bind="pool.growthText" visible="!pool.hasGrowth"/>
+        <element type="PanelText" id="grew" bind="pool.growthText" style="Warning" visible="pool.hasGrowth"/>
+        <element type="PanelSlot" id="growthSlot" name="poolStringGrowth"/>
+      </elements>
+    </element>
+    <element type="PanelSection" id="zones" title="Runtime strings by zone">
+      <elements>
+        <element type="PanelRow" id="recordBar">
+          <elements>
+            <element type="PanelCheckbox" id="record" look="Toggle" bind="pool.recording" text="Record" tooltip="Record each new runtime string with the zone that interned it; recording goes on while the panel is closed"/>
+            <element type="PanelButton" id="clearRecords" icon="trash-2" text="Clear" command="poolStrings.clearRecords" tooltip="Drop the records and the dropped count"/>
+            <element type="PanelText" id="recorded" bind="pool.recordsText" style="Disabled"/>
+          </elements>
+        </element>
+        <element type="PanelText" id="zonesNote" text="Zones are known with ENGINE_PROFILER_ALLOC (preset macos-profile-editor)" style="Disabled" visible="!pool.zonesKnown"/>
+        <element type="PanelSlot" id="zonesSlot" name="poolStringZones"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

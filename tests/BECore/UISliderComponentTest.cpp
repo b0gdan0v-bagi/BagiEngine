@@ -3,7 +3,6 @@
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -693,19 +692,6 @@ namespace BECore::Tests {
         EXPECT_EQ(free->thumbColor.b, 90);
         EXPECT_FLOAT_EQ(Require(Require(loaded->GetRoot().FindByName("Volume"_intern)).GetComponent<UISliderComponent>()).step, 0.05f);
         ExpectSameElementXml(*_canvas, *loaded);
-    }
-
-    TEST_F(UISliderComponentTest, ThePartShapeIsSkippedAsADefaultWhenAsked) {
-        const auto written = [](const UIElement& element) {
-            XmlSerializer serializer;
-            serializer.SetSkipDefaults(true);
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        };
-        EXPECT_EQ(written(Element("Free")).find("partShape"), String::npos);
-        EXPECT_NE(written(Element("Round")).find("partShape=\"Round\""), String::npos);
     }
 
     // ---- the shape of the parts ----------------------------------------------------------------------------------------------

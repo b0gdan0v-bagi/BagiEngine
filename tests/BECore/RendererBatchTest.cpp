@@ -1,3 +1,5 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Renderer/RenderBatch.h>
 #include <Common/AllocCheck.h>
 #include <Common/RecordingRenderer.h>
@@ -43,10 +45,36 @@ namespace BECore::Tests {
             }
         };
 
+        constexpr uint64_t kSubmitNs = 2'000'000;
+        constexpr double kSubmitMs = 2.0;
+
+        uint64_t g_fakeNowNs = 0;
+
+        uint64_t FakeNowNs() {
+            return g_fakeNowNs;
+        }
+
+        /// A batching backend whose every submission takes kSubmitNs of the fake clock
+        class SlowSubmitRenderer : public RecordingRenderer {
+        protected:
+            void SubmitBatch(const RenderBatch& batch) override {
+                g_fakeNowNs += kSubmitNs;
+                RecordingRenderer::SubmitBatch(batch);
+            }
+        };
+
         IntrusivePtr<RecordingRenderer> MakeBatching() {
             auto renderer = New<RecordingRenderer>();
             renderer->SetBatchingEnabled(true);
             return renderer;
+        }
+
+        uint32_t CountedBatches(const RenderCounters& counters) {
+            uint32_t sum = 0;
+            for (const uint32_t count : counters.batchBreaks) {
+                sum += count;
+            }
+            return sum;
         }
 
         void ExpectSameVertex(const GeometryVertex& a, const GeometryVertex& b) {
@@ -183,6 +211,132 @@ namespace BECore::Tests {
         const RenderCounters counters = renderer->TakeRenderCounters();
         EXPECT_EQ(counters.primitives, 2u);
         EXPECT_EQ(counters.drawCalls, 2u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Boundary), 2u);
+        EXPECT_EQ(CountedBatches(counters), 2u);
+        EXPECT_EQ(counters.geometryUploadBytes, 2u * (kQuadVertices * sizeof(GeometryVertex) + kQuadIndices * sizeof(int)));
+    }
+
+    TEST(RendererBatchTest, ACountersPauseHidesTheUploadsAndTheReasonsOfItsDraws) {
+        auto renderer = MakeBatching();
+        {
+            const ScopedRenderCountersPause pause(*renderer);
+            const IntrusivePtr<ITexture> texture = MakeTexture(*renderer, 4, 4);
+            const GeometryVertex triangle[3] = {};
+            const int indices[3] = {0, 1, 2};
+            renderer->DrawTexture(*texture, nullptr, 0, 0, 1, 1);
+            renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+            renderer->DrawGeometry(nullptr, triangle, indices, 0.0f, 0.0f);
+        }
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(CountedBatches(counters), 0u);
+        EXPECT_EQ(counters.geometryUploadBytes, 0u);
+        EXPECT_EQ(counters.textureUploadBytes, 0u);
+    }
+
+    TEST(RendererBatchTest, EachBatchIsCountedUnderTheOneReasonThatEndedIt) {
+        auto renderer = MakeBatching();
+        const IntrusivePtr<ITexture> a = MakeTexture(*renderer, 4, 4);
+        const IntrusivePtr<ITexture> b = MakeTexture(*renderer, 4, 4);
+        const GeometryVertex triangle[3] = {};
+        const int indices[3] = {0, 1, 2};
+
+        renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        renderer->DrawTexture(*a, nullptr, 0, 0, 1, 1);  // Texture: none against one
+        renderer->DrawTexture(*b, nullptr, 0, 0, 1, 1);  // Texture
+        {
+            const ScopedBlendMode add(*renderer, BlendMode::Add);
+            renderer->DrawTexture(*b, nullptr, 0, 0, 1, 1);  // Blend
+        }
+        renderer->DrawTexture(*a, nullptr, 0, 0, 1, 1);  // texture and blend mode both differ: Texture
+        renderer->PushClipRect(Rect{0, 0, 10, 10});      // Clip
+        renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        renderer->PopClipRect();  // Clip
+        renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        renderer->DrawGeometry(nullptr, triangle, indices, 0.0f, 0.0f);  // Unbatched
+        renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        renderer->Flush();  // Boundary
+        renderer->Flush();  // nothing is open
+
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Texture), 3u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Blend), 1u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Full), 0u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Clip), 2u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Unbatched), 1u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Boundary), 1u);
+        EXPECT_EQ(counters.drawCalls, CountedBatches(counters) + 1u) << "the geometry draw is the one that is no batch";
+    }
+
+    TEST(RendererBatchTest, TheUploadsAreTheBytesOfTheGeometryHandedOverAndOfTheTexturesFilled) {
+        auto renderer = MakeBatching();
+        constexpr uint32_t kWidth = 4;
+        constexpr uint32_t kHeight = 2;
+        const IntrusivePtr<ITexture> texture = MakeTexture(*renderer, kWidth, kHeight);
+        EXPECT_FALSE(renderer->CreateTexture(nullptr, kWidth, kHeight));
+        const GeometryVertex triangle[3] = {};
+        const int indices[3] = {0, 1, 2};
+        renderer->DrawTexture(*texture, nullptr, 0, 0, 1, 1);
+        renderer->DrawTexture(*texture, nullptr, 0, 0, 1, 1);
+        renderer->DrawGeometry(nullptr, triangle, indices, 0.0f, 0.0f);
+
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(counters.textureUploadBytes, kWidth * kHeight * 4u);
+        constexpr uint64_t kBatchBytes = 2u * (kQuadVertices * sizeof(GeometryVertex) + kQuadIndices * sizeof(int));
+        EXPECT_EQ(counters.geometryUploadBytes, kBatchBytes + sizeof(triangle) + sizeof(indices));
+    }
+
+    /// Times the process's frame statistics, which Flush() writes to, with the fake clock
+    class RendererBatchSubmitStageTest : public ::testing::Test {
+    protected:
+        void SetUp() override {
+            CoreManager::GetFrameStats().SetClock(FakeNowNs);
+            _renderer->SetBatchingEnabled(true);
+        }
+
+        void TearDown() override {
+            CoreManager::GetFrameStats().SetClock(nullptr);
+        }
+
+        static double EndFrameAndGetSubmitMs() {
+            FrameStatsCollector& stats = CoreManager::GetFrameStats();
+            stats.EndFrame({}, AllocTotals{});
+            return stats.GetLast()->GetStageMs(FrameStage::Submit);
+        }
+
+        IntrusivePtr<SlowSubmitRenderer> _renderer = New<SlowSubmitRenderer>();
+    };
+
+    TEST_F(RendererBatchSubmitStageTest, EverySubmissionOutsideACountersPauseAddsItsTime) {
+        const IntrusivePtr<ITexture> texture = MakeTexture(*_renderer, 4, 4);
+        CoreManager::GetFrameStats().BeginFrame();
+        _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        _renderer->DrawTexture(*texture, nullptr, 0, 0, 1, 1);  // submits the rect
+        {
+            const ScopedRenderCountersPause pause(*_renderer);  // submits the texture, still outside the pause
+            _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+            _renderer->Flush();
+            _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        }
+        _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        _renderer->Flush();
+
+        EXPECT_DOUBLE_EQ(EndFrameAndGetSubmitMs(), 3 * kSubmitMs);
+        EXPECT_EQ(_renderer->calls.size(), 5u) << "the paused batches reached the backend too";
+    }
+
+    TEST_F(RendererBatchSubmitStageTest, ASubmissionOutsideAnOpenFrameRecordsNothing) {
+        CoreManager::GetFrameStats().BeginFrame();
+        EXPECT_DOUBLE_EQ(EndFrameAndGetSubmitMs(), 0.0);
+        const uint64_t frames = CoreManager::GetFrameStats().GetFrameCount();
+
+        _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        _renderer->Flush();
+
+        EXPECT_EQ(_renderer->calls.size(), 1u);
+        EXPECT_EQ(CoreManager::GetFrameStats().GetFrameCount(), frames);
+        EXPECT_DOUBLE_EQ(CoreManager::GetFrameStats().GetLast()->GetStageMs(FrameStage::Submit), 0.0);
+        CoreManager::GetFrameStats().BeginFrame();
+        EXPECT_DOUBLE_EQ(EndFrameAndGetSubmitMs(), 0.0);
     }
 
     TEST(RendererBatchTest, TheViewTransformAndTheOpacityAreAppliedOnceAndMatchTheGeometryDefault) {
@@ -245,6 +399,7 @@ namespace BECore::Tests {
         ASSERT_EQ(renderer->calls.size(), 2u);
         EXPECT_EQ(renderer->calls[0].quads, kMaxBatchQuads);
         EXPECT_EQ(renderer->calls[1].quads, 1u);
+        EXPECT_EQ(renderer->PeekRenderCounters().GetBatchBreaks(BatchBreak::Full), 1u);
     }
 
     TEST(RendererBatchTest, TurningBatchingOffSubmitsTheOpenBatchAndDrawsImmediatelyAfter) {

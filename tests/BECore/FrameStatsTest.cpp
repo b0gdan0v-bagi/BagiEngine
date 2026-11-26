@@ -210,6 +210,28 @@ namespace BECore::Tests {
         EXPECT_DOUBLE_EQ(collector.GetLast()->cpuMs, 6.0);
     }
 
+    TEST(FrameStatsCollectorTest, TheGpuTimeBelongsToTheOpenFrameAlone) {
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+
+        collector.SetGpuTime(7.0);  // no frame is open
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_DOUBLE_EQ(collector.GetLast()->gpuMs, 0.0);
+
+        collector.BeginFrame();
+        collector.SetGpuTime(1.5);
+        collector.SetGpuTime(2.5);
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_DOUBLE_EQ(collector.GetLast()->gpuMs, 2.5);
+        collector.SetGpuTime(9.0);  // the frame is closed
+        EXPECT_DOUBLE_EQ(collector.GetLast()->gpuMs, 2.5);
+
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_DOUBLE_EQ(collector.GetLast()->gpuMs, 0.0) << "a frame nobody timed has no value";
+    }
+
     TEST(FrameStatsCollectorTest, TheAllocationsOfAFrameAreTheDifference) {
         FrameStatsCollector collector;
         collector.SetClock(FakeNow);

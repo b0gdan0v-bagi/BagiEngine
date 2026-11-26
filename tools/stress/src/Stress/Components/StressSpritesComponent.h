@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Math/Rect.h>
+#include <BECore/Math/Vec2.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/ITexture.h>
@@ -8,6 +9,7 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Types/Types.h>
+#include <Stress/SpriteField.h>
 #include <Stress/StressSettings.h>
 #include <cstddef>
 #include <cstdint>
@@ -21,10 +23,15 @@ namespace BECore::Stress {
     /**
      * @brief The scene `StressSprites`: `StressState::GetCount()` spinning sprites on child nodes of this node, one `IRenderer` call each.
      *
+     * With `--stress-mix` an object is a sprite, a text, a shape or a particle emitter (SpriteField's MixKindOf), on a node layer of its own
+     * choice; only the sprites spin and share the atlas runs.
+     *
      * The children are made when `StressState::Version()` moved: a bigger count appends nodes, a smaller one removes them from the tail, the
-     * first nodes are kept. The atlases are made once with `IRenderer::CreateTexture` (the renderer may be missing at `OnAttached`, so at the
+     * first nodes are kept. With `--stress-churn` every update also removes the oldest nodes and appends as many new ones, each with a
+     * child node that holds a StressLifeComponent. The atlases are made once with `IRenderer::CreateTexture` (the renderer may be missing at `OnAttached`, so at the
      * first update) from `SpriteField`'s pixels and shared by the sprites. A steady frame only turns each node by its spin through cached
-     * pointers: no lookup, no allocation. Does nothing while the game is not the active `StressGame`.
+     * pointers, and in a world larger than the view also moves it against the emulated camera (`SpriteField`'s CameraOffset): no lookup, no
+     * allocation. The nodes a churn makes come from pools, so it allocates nothing either once the lists have their size. Does nothing while the game is not the active `StressGame`.
      */
     class StressSpritesComponent : public IComponent {
         BE_CLASS(StressSpritesComponent, CATEGORY = logic)
@@ -37,17 +44,18 @@ namespace BECore::Stress {
 
         void OnAttached() override;
 
-        /// The sprites made so far (a test counts them)
-        size_t GetSpriteCount() const {
-            return _sprites.size();
+        /// The objects of the field made so far (a test counts them)
+        size_t GetObjectCount() const {
+            return _objects.size();
         }
 
     private:
-        struct Sprite {
+        struct FieldObject {
             IntrusivePtr<SceneNode> node;
             IntrusivePtr<TransformComponent> transform;
-            IntrusivePtr<SpriteRendererComponent> renderer;
-            float spin = 0.0f;  // degrees per second
+            IntrusivePtr<SpriteRendererComponent> sprite;  // null for an object of another kind
+            Vec2 position;                                 // in the field; the transform holds it minus the camera's offset
+            float spin = 0.0f;                             // degrees per second; 0 for all but a sprite
         };
 
         void OnUpdate(const SceneEvents::SceneUpdateEvent& event);
@@ -57,12 +65,20 @@ namespace BECore::Stress {
         bool EnsureAtlases(uint32_t atlases);
         /// Brings the nodes to @p count: appends or removes from the tail, and re-places atlas and blend mode of the kept ones when the runs moved
         void Rebuild(uint32_t count, const StressSettings& settings);
-        void ApplyRun(Sprite& sprite, uint32_t atlas, const Rect& srcRect, BlendMode blend);
+        /// Replaces the oldest `settings.load.churn` objects, or all of them when there are fewer, with new ones at the tail
+        void Churn(uint32_t count, const StressSettings& settings);
+        /// Appends objects until there are @p count
+        void Grow(uint32_t count, const StressSettings& settings);
+        /// The placement of `_objects[index]`
+        SpritePlacement PlacementOf(size_t index, uint32_t count, const StressSettings& settings) const;
+        void ApplyRun(SpriteRendererComponent& sprite, uint32_t atlas, const Rect& srcRect, BlendMode blend);
 
-        Vector<Sprite> _sprites;
+        Vector<FieldObject> _objects;
         Vector<IntrusivePtr<ITexture>> _atlases;
-        uint64_t _builtVersion = 0;  // the StressState version the nodes were last brought to; 0 is never a version
-        uint32_t _placedCount = 0;   // the count the atlas and blend mode of the nodes follow (the runs depend on it)
+        uint64_t _builtVersion = 0;   // the StressState version the nodes were last brought to; 0 is never a version
+        uint32_t _placedCount = 0;    // the count the atlas and blend mode of the nodes follow (the runs depend on it)
+        uint32_t _firstSerial = 0;    // `_objects[i]` is the object `_firstSerial + i` of SpriteField: a churn moves it on
+        double _cameraSeconds = 0.0;  // how long the emulated camera has moved: a float sum would drift in a long run
         bool _atlasesFailed = false;
         bool _cleanedUp = false;
     };

@@ -79,6 +79,73 @@ namespace BECore::Tests {
         EXPECT_TRUE(fs.Exists("config/A.xml"));
     }
 
+    TEST_F(FileSystemTest, PathInTopLayerNamesThePlaceInTheTopLayerAndMakesNothing) {
+        Touch(_engine / "config" / "A.xml");
+        MakeDirectory(_game / "config");
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.AddContentRoot(_game);
+        fs.Initialize();
+
+        // The top layer even for a file that a lower layer has
+        EXPECT_EQ(fs.PathInTopLayer("config/A.xml"), Normal(_game / "config" / "A.xml"));
+        EXPECT_EQ(fs.PathInTopLayer("config/made/deep"), Normal(_game / "config" / "made" / "deep"));
+        EXPECT_EQ(fs.PathInTopLayer("config"), Normal(_game / "config"));
+        EXPECT_EQ(fs.PathInTopLayer("config/"), Normal(_game / "config"));
+        EXPECT_EQ(fs.PathInTopLayer("config/./A.xml").LexicallyNormal(), Normal(_game / "config" / "A.xml"));
+
+        EXPECT_TRUE(fs.PathInTopLayer("nowhere/A.xml").Empty());
+        EXPECT_TRUE(fs.PathInTopLayer((_engine / "config" / "A.xml").View()).Empty());
+        const StringView leaving[] = {"config/../x", "config//A.xml", "config/a//b", "config\\..", StringView("config/a\0b", 10)};
+        for (const StringView path : leaving) {
+            EXPECT_TRUE(fs.PathInTopLayer(path).Empty()) << String(path).c_str();
+        }
+
+        EXPECT_FALSE(PathExists(_game / "config" / "A.xml"));
+        EXPECT_FALSE(PathExists(_game / "config" / "made"));
+    }
+
+    TEST_F(FileSystemTest, ResolvePathDoesNotFollowAVirtualPathOutOfWhereItLooks) {
+        // Beside the content root: reachable from a layer, a root and the working directory by climbing only
+        const Path outside = _base / "outside.txt";
+        Touch(outside);
+        MakeDirectory(_engine / "config");
+        MakeDirectory(_engine / "unmounted");
+        MakeDirectory(_base / "cwd" / "work");
+        const ScopedCurrentDirectory enter(_base / "cwd");
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.Initialize();
+
+        // The OS would find the file through each of these joins
+        ASSERT_TRUE(PathExists(_engine / "config" / "../../outside.txt"));
+        ASSERT_TRUE(PathExists(_engine / "unmounted/../../outside.txt"));
+        ASSERT_TRUE(PathExists(Path("work/../../outside.txt")));
+
+        EXPECT_TRUE(fs.ResolvePath("config/../../outside.txt").Empty()) << "mount layer";
+        EXPECT_TRUE(fs.ResolvePath(Format("config/{}", outside.View())).Empty()) << "an absolute remainder";
+        EXPECT_TRUE(fs.ResolvePath("unmounted/../../outside.txt").Empty()) << "root";
+        EXPECT_TRUE(fs.ResolvePath("work/../../outside.txt").Empty()) << "working directory";
+        EXPECT_FALSE(fs.Exists("config/../../outside.txt"));
+
+        // A path that is absolute as a whole is the caller naming a real file
+        EXPECT_EQ(fs.ResolvePath(outside.View()), outside);
+    }
+
+    TEST_F(FileSystemTest, ResolvePathFindsNamesThatOnlyContainDots) {
+        Touch(_engine / "config" / "a..b");
+        Touch(_engine / "config" / "..hidden");
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.Initialize();
+
+        EXPECT_EQ(fs.ResolvePath("config/a..b"), Normal(_engine / "config" / "a..b"));
+        EXPECT_EQ(fs.ResolvePath("config/..hidden"), Normal(_engine / "config" / "..hidden"));
+    }
+
     TEST_F(FileSystemTest, MountLayersAreOrderedLowestPriorityFirst) {
         Touch(_engine / "config" / "A.xml");
         Touch(_game / "config" / "B.xml");

@@ -2,15 +2,15 @@
 
 ## Overview
 
-Scene graph: `SceneManager` → `Scene` → `SceneNode` → `IComponent`. Everything is reflected and loaded from `config/SceneConfig.xml`, so the scene editor and the file stay in sync (`.claude/rules/widgets-module.md`).
+Scene graph: `SceneManager` → `Scene` → `SceneNode` → `IComponent`. Everything is reflected and loaded from `config/SceneConfig.xml`, so the scene editor and the file agree (`.claude/rules/widgets-module.md`).
 
 | Class | Role |
 |-------|------|
 | `SceneManager` | Built by `LoadSceneManagerFromConfig()` (`SceneLoader.h`: `SceneConfig` with its node references expanded, see "Node files") in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
-| `Scene` | `FACTORY_BASE`. Owns a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()`: "Gotchas"; `Draw()` runs `SceneDrawSystem` ("Draw order"). `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes`, leaving generated top-level nodes out (`SceneConfigWriter.h`) |
+| `Scene` | `FACTORY_BASE`. Owns a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()`: "Gotchas"; `Draw()` runs `SceneDrawSystem` ("Draw order"). `PrepareForSave()` copies the live hierarchy back into `_nodes`, leaving generated top-level nodes out (`SceneConfigWriter.h`) |
 | `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children. `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. `_children` is reflected, so a node holds nested `<children>`. **`IsGenerated()`** (a plain member, never in a file): true for a node made at run time (`AddChild`, `CreateNode`, `InstantiateNode`), false for one read from a file or made by `DuplicateNode`; the code that made it makes it again at the next load, so Save and `DuplicateNode` skip it with its subtree and the editor's "Add node" clears it (`SetGenerated(false)`) |
-| `IComponent` | `FACTORY_BASE` and `SubscriptionHolder` (128 bytes, `Events/CLAUDE.md`); `GetNode()`, and `GetScene()`, which is the node's scene ("Component lifecycle") |
-| `SceneNodeFiles` / `SceneLoader` | `SceneNodeFiles`: the expansion of `<node ref>` (`ExpandNodeReference(s)`, `ApplyNodeOverrides`, the node loaders, `LoadSceneDocument`). `SceneLoader`: `LoadSceneManager(configRoot, loader)` builds the `SceneManager` from the expanded copy. `SceneNodeInstance`: `DeserializeNode`, `BuildNodeReference`, `AppendNodeElement` |
+| `IComponent` | `FACTORY_BASE` and `SubscriptionHolder` (`Events/CLAUDE.md`); `GetNode()`, and `GetScene()`, which is the node's scene ("Component lifecycle") |
+| `SceneNodeFiles` / `SceneLoader` | `SceneNodeFiles`: the expansion of `<node ref>` and the node loaders. `SceneLoader`: `LoadSceneManager(configRoot, loader)` builds the `SceneManager` from the expanded copy. `SceneNodeInstance`: one node to and from XML |
 
 ## XML shape
 
@@ -25,13 +25,13 @@ Scene graph: `SceneManager` → `Scene` → `SceneNode` → `IComponent`. Everyt
 </scenes></SceneManager>
 ```
 
-`type` is the component class name; field names lose the leading underscore. A sleeping component has `enabled="false"` ("Component lifecycle"). A `scene` can carry `viewWidth` / `viewHeight` ("View size") and a node `layer="-1"` ("Draw order"). A game's `SceneConfig.xml` replaces the engine's. A node can live in a file (`<node ref="nodes/MyHud"/>`, "Node files").
+`type` is the component class name; field names lose the leading underscore. A `<node type>` makes a `SceneNode` subclass through its factory (unknown: an error and a plain node). A sleeping component has `enabled="false"` ("Component lifecycle"). A `scene` can carry `viewWidth` / `viewHeight` ("View size") and a node `layer="-1"` ("Draw order"). A game's `SceneConfig.xml` replaces the engine's. A node can live in a file (`<node ref="nodes/MyHud"/>`, "Node files").
 
 **Nested nodes:** a node can hold `<children><node name layer>..</node></children>` after its `<components>`, to any depth, in file order, wired like a top-level node (`OnAttached` once). `<node ref>` is a top-level element only: not inside `<children>`.
 
 ## Node files
 
-A game can split its one `SceneConfig.xml`: a node kept in a file of its own is referenced by name from a scene.
+A node kept in a file of its own is referenced by name from a scene.
 
 ```xml
 <!-- config/SceneConfig.xml -->
@@ -53,14 +53,15 @@ A game can split its one `SceneConfig.xml`: a node kept in a file of its own is 
   <node ref="nodes/MahjongSeatPlate" name="SeatEast" layer="3"><components>
     <component type="TransformComponent" x="40"/></components></node>
   ```
-  `name` and `layer` (a new `SceneNode` field extends `kNodeOverrideAttributes`) replace the node's; any other attribute but `ref` is an error. The one child is `<components>` of `<component type>`, each merged into the file's component of that type: an attribute replaces or adds, child elements replace the file's of that name whole. **A field is overridden whole in either spelling** (`color="1,2,3,4"` or `<color .../>`); both in one override, or a `type` the file lacks or a repeated one, is an error. Any problem drops the whole reference; a migration that rewrites components must treat a reference's `<component>` elements too.
-- **Where the file is found:** `MakeFileSystemNodeLoader` walks the layers of `config` from the top; the first with `<ref>.xml` or `<ref>.bin` wins whatever the extension, and both in one layer drop the reference with an error. A `.bin` (a stamped `SceneNode`, `Config/CLAUDE.md`, "Binary configs") becomes the same `<node>` element (`DeserializeNode(IDeserializer&)`, `AppendNodeElement`), so overrides and `InstantiateNode` stay one implementation; it has no `contentVersion`. `MakeDirectoryNodeLoader` reads XML only.
+  `name` and `layer` (`kNodeOverrideAttributes`) replace the node's; any other attribute but `ref` is an error. The one child is `<components>` of `<component type>`, each merged into the file's component of that type: an attribute replaces or adds, child elements replace the file's of that name whole. **A field is overridden whole in either spelling** (`color="1,2,3,4"` or `<color .../>`); both in one override, or a `type` the file lacks or a repeated one, is an error. Any problem drops the whole reference; a migration that rewrites components must treat a reference's `<component>` elements too.
+- **Where the file is found:** `MakeFileSystemNodeLoader` walks the layers of `config` from the top; the first with `<ref>.xml` or `<ref>.bin` wins whatever the extension, and both in one layer drop the reference with an error. A `.bin` (a stamped `SceneNode`, `Config/CLAUDE.md`, "Binary configs") becomes the same `<node>` element, so overrides and `InstantiateNode` stay one implementation; it has no `contentVersion` and no node `type` (the cook refuses a subclass). `MakeDirectoryNodeLoader` reads XML only.
 - **Errors never stop a game:** an invalid reference or override, or a missing, unparsable or wrong-version file, is one `LOG_ERROR`; the element is dropped and the rest loads.
 - **The expansion is done on a copy:** `LoadSceneManager` deserializes an expanded copy; the cached document of `ConfigManager` keeps its references. A tool that reads the **file** calls `LoadSceneDocument`.
 - **A cooked `SceneConfig.bin`** is read as it is by `LoadSceneManagerFromBinary` (stamp `SceneManager`, else one `LOG_ERROR` and an empty manager): the cook expanded the `<node ref>` and checked the version.
 - **`sourceRef`:** `SceneNode::GetSourceRef()` names the node file of an instance (empty for an inline node); only the loader and `InstantiateNode` set it.
 - **Runtime instantiation:** `Scene::InstantiateNode(reference, loader, parent, index)` expands as the XML does (`reference` is a `<node ref>` element with the same overrides), wires the node as `Initialize` does and inserts it into `parent` (default the root) at `index` (clamped, `kAppend` last). A bad reference, an uninitialized scene or a foreign parent: one `LOG_ERROR`, an empty pointer.
-- **The editor saves an instance as `<node ref>`** with the overrides that differ (`BuildNodeReference`: the file without overrides is the baseline, both compared field by field, the result loaded back and refused unless it equals the live node). A node that gained, lost or reordered a component, **has authored children** (the override language has none; generated ones do not count), whose file is gone or changed, or saved without a loader, is written inline with one warning: its data is kept, the link is not. A nested node is always written inline; the writer writes `<children>` recursively. An authored node under a generated parent is not written and is noted. **Save writes only what differs from the defaults** (a field equal to a fresh component's, a scene attribute equal to a default `Scene`'s); the file is not byte for byte (pugixml respaces it).
+- **The editor saves an instance as `<node ref>`** with the overrides that differ (`BuildNodeReference`: the file without overrides is the baseline, both compared field by field, the result loaded back and refused unless it equals the live node). A node that gained, lost or reordered a component, differs in its type or in a field the overrides lack, **has authored children** (generated ones do not count), whose file is gone or changed, or saved without a loader, is written inline with one warning: its data is kept, the link is not. A nested node is always written inline, `<children>` recursively. An authored node under a generated parent is not written and is noted.
+- **A saved node** (`AppendNodeElement`: Save, `DuplicateNode`) takes its own fields from the virtual `SceneNode::Serialize`, so a new reflected field needs nothing in the writer. **Only what differs from the defaults is written** (a node or component field equal to a fresh object's, `name` excepted; a scene attribute equal to a default `Scene`'s); the file is not byte for byte (pugixml respaces it).
 
 ## Editing the tree
 
@@ -81,14 +82,15 @@ A game can split its one `SceneConfig.xml`: a node kept in a file of its own is 
 
 ## Draw order
 
-Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a loop over the scene's `SceneDrawList` (`SceneDrawList.h`): one entry per drawing component of a visible node, sorted by (`GetLayer()`, scene order, the component's index in its node). It is rebuilt only when `IsDrawListValid()` is false (an edit of the tree, of a node's components or of the editor flags); a steady frame only loops. The system draws the quad and the sprite from their fields, read at draw time; every other component draws through `IComponent::OnDraw()`. `HasOnDraw()` is asked once per rebuild: false leaves a component out (default true). The pass ends with `IRenderer::Flush()` after the last clip is popped, inside the zone `SceneDrawSystem::Run`; a custom `OnDraw()` needs no flush (a clip change, `DrawGeometry` and a texture or blend change submit first).
+Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a loop over the scene's `SceneDrawList` (`SceneDrawList.h`): one entry per drawing component of a visible node, sorted by (`GetLayer()`, scene order, the component's index in its node). It is rebuilt only when `IsDrawListValid()` is false (an edit of the tree, of a node's components or of the editor flags); a steady frame only loops. The system draws the quad and the sprite from their fields, read at draw time; every other component draws through `IComponent::OnDraw()`. `HasOnDraw()` is asked once per rebuild: false leaves a component out (default true). The pass ends with `IRenderer::Flush()`; a custom `OnDraw()` needs no flush (a clip change, `DrawGeometry` and a texture or blend change submit first).
 
-- A lower layer is drawn first (default 0, negative = background). On one layer: scene order, parent before children, later siblings on top. **Give a background a lower `layer`**; the order never depends on subscriptions. A child does not inherit its parent's layer.
+- **Culling:** a quad or sprite whose node rect cannot reach the render output (bars included) is skipped, its clip push too: no call, no counted primitive. A turned node's bound is loose; `OnDraw()` is never culled; a sizeless output culls nothing.
+- A lower layer is drawn first (default 0, negative = background). On one layer: scene order, parent before children, later siblings on top. **Give a background a lower `layer`.** A child does not inherit its parent's layer.
 - Only the active scene draws, so `OnDraw()` needs no `IsSceneActive()` check.
 - **Override `OnDraw()`, never subscribe to draw.** `OnDraw()` only reads state and issues renderer calls: it must not add or remove nodes or components, call `SetLayer()` or change the editor flags: the list holds raw pointers and is stale after such a change (Debug asserts).
 - **A node's layer changes only through `SceneNode::SetLayer()`**, which makes the list and the ranks stale: a direct write to the reflected `_layer` (reflection, a field visitor) shows in the order only after the next rebuild, which nothing triggers.
 - `Scene::GetDrawRank(node)` is a node's position in this order (O(1) after any pass); `GetInputOrder(component)` = rank times `kMaxComponentsPerNode` plus the component's index, the key of every `UIInput` handler; `GetDrawPass()` counts the `Draw()` calls, so a target takes input only for a node that drew; a `ClipRectComponent`'s clip is pushed around the entries that name its node as clip owner.
-- **Editor flags** (`SceneNode::GetEditorFlags()`: `Hidden`, `Locked`) are a plain member: no file, `Serialize` or `DuplicateNode` sees it, `Scene::ClearEditorFlags()` resets a tree, `SceneManager::ClearEditorFlags()` every loaded scene. A hidden node and its subtree have no entry but keep item and rank and still update.
+- **Editor flags** (`SceneNode::GetEditorFlags()`: `Hidden`, `Locked`) are a plain member: no file, `Serialize` or `DuplicateNode` sees it, `Scene::ClearEditorFlags()` resets a tree, `SceneManager::ClearEditorFlags()` every loaded scene (the scene editor, when it dies). A hidden node and its subtree have no entry but keep item and rank and still update.
 
 **Rotation, flip and blend** (renderer side: `.claude/rules/rendering-module.md`): `TransformComponent::_rotation` (degrees, clockwise) about `_pivotX` / `_pivotY`, **normalized in the node's rect** (0.5 = center), also for a `Contain` sprite; `_flipX` / `_flipY` mirror the UVs. `_blend` (`Alpha`, `Add`, `Multiply`) is scoped to that one draw. Not rotated: the hit rect of a pointer target, `TextComponent`, UI canvases.
 
@@ -96,7 +98,7 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a 
 
 The components are the truth: reflection, the XML and the inspector build on `SceneNode` + `IComponent`. Each subsystem keeps a dense list derived from them and rebuilt only when its key moved (`SceneUpdateList`, `SceneDrawList`, the particle pools).
 
-- It is **not** a pure ECS: component fields have no setter hooks, so a stored copy (`SceneDrawList` keeps none of the draw data) would be refreshed every frame.
+- It is **not** a pure ECS: component fields have no setter hooks, so a stored copy would be refreshed every frame.
 - The system still makes one `IRenderer` call per quad or sprite; the renderer batches them (`.claude/rules/rendering-module.md`).
 
 ## View size
@@ -119,16 +121,16 @@ A scene says how big its picture is in scene units: `<scene type="Scene" name="G
 - **Decided in `Draw()`, announced in `Update()`.** The pick uses the output size of that very pass (the viewport's target is not the window), before any component draws, so `GetActiveView()` (`{name, width, height, index}`; -1 for the default) is right inside `OnDraw()`. No renderer: default view. `GetViewVersion()` moves exactly when the index changes. `Update()` sends `SceneEvents::SceneViewChangedEvent {scene, view}` once per change, before the fixed updates (`Draw()` never: it must not run handlers that change the scene).
 - `GetViewWidth()` / `GetViewHeight()` are the **active** view's (the default's before the first draw).
 - Both are saved by `Scene::Serialize`. The control API and the editor viewport draw through `Scene::Draw`, so they follow their own output size.
-- **A tool's override.** `GetViewVariants()` lists the variants (read only). `SetViewOverride(optional<int32_t>)` replaces the pick: -1 the default view, `i` variant `i`, nullopt or out of range the normal pick. Not saved; the next `Draw()` picks. A tool sets it right before its own pass and clears it right after (`UI/CLAUDE.md`, "Editor preview").
+- **A tool's override.** `GetViewVariants()` lists the variants. `SetViewOverride(optional<int32_t>)` replaces the pick: -1 the default view, `i` variant `i`, nullopt or out of range the normal pick. Not saved; the next `Draw()` picks. A tool sets it right before its own pass and clears it right after (`UI/CLAUDE.md`, "Editor preview").
 
 ## Built-in components (`Components/`)
 
 | Component | Fields | Behavior |
 |-----------|--------|----------|
 | `TransformComponent` | `_x`, `_y`, `_width`, `_height`, `_rotation`, `_pivotX`, `_pivotY` | Position/size in scene units (pixels when the scene has no view size); others read it. Rotation: "Rotation, flip and blend" |
-| `QuadRendererComponent` | `_color`, `_blend` | `_blend` is `Alpha` (default), `Add` or `Multiply` for this quad's draw only. `HasOnDraw()` is false: `SceneDrawSystem` draws a filled rect at the node's transform; one quad per node counts |
+| `QuadRendererComponent` | `_color`, `_blend` | `HasOnDraw()` is false: `SceneDrawSystem` draws a filled rect at the node's transform; one quad per node counts |
 | `SpriteRendererComponent` | `_spriteId`, `_texturePath`, `_srcRect`, `_fit`, `_blend`, `_flipX`, `_flipY` | `HasOnDraw()` is false: `SceneDrawSystem` draws it; one sprite per node counts, none without a texture. `_fit` (`SpriteFit`): `Stretch` (default, covers the node's rect) or `Contain` (keeps the aspect of `_srcRect` or the texture, centered; `FitSpriteRect()`). |
-| `PointerTargetComponent` | none (base) | The base of a scene object that takes the pointer at its place in the draw order: shape, press / drag / release / enter / exit / move / wheel callbacks (`Input/CLAUDE.md`) |
+| `PointerTargetComponent` | none (base) | The base of a scene object that takes the pointer at its place in the draw order: shape and pointer callbacks (`Input/CLAUDE.md`) |
 | `ClickableComponent` | `_actionName`, `_shape`, `_blocksInput` | A `PointerTargetComponent`: a press in the rect (or ellipse) emits `InputEvents::ActionEvent` |
 | `ClipRectComponent` | none | The node's transform rect clips the node and its subtree, what they draw and what they hit (`Input/CLAUDE.md`) |
 | `TextComponent` | `_text`, `_fontPath`, `_fontSize`, `_color`, `_align`, ... | Draws text in the node's transform box in `OnDraw()` (`Text/CLAUDE.md`) |
@@ -142,7 +144,7 @@ A scene says how big its picture is in scene units: `<scene type="Scene" name="G
 1. Class in `Components/` (or a game module's `Components/`) deriving `IComponent` with `BE_CLASS(Name)`; fields get `BE_REFLECT_FIELD`.
 2. Include `<Generated/Name.gen.hpp>` in its `.cpp`; the directory must be in `reflection_targets.json`; re-run `cmake --preset ...`.
 3. Subscribe in `OnAttached()` through `SubscribeInScene<Event, &Name::Handler>(this)`. Plain `Subscribe` is only for a handler that must run whichever scene is active; `SubscribeInScene` in `Initialize()` joins the list when added at runtime but takes the channel path when read from a file. Drawing is no subscription ("Draw order").
-4. Use it from `config/SceneConfig.xml` with `type="Name"`. The inspector shows its reflected fields automatically.
+4. Use it from `config/SceneConfig.xml` with `type="Name"`.
 
 ## Gotchas
 

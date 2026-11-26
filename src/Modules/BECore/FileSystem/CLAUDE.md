@@ -30,6 +30,8 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 |------|-------|
 | `ResolvePath(virtualPath)` | Returns an existing real `Path` or an empty one |
 | `Exists(virtualPath)` | `ResolvePath` + existence check |
+| `PathInTopLayer(virtualPath)` | Where the path lies in the top layer of its mount point, there or not (for what is about to be made); empty outside a mount point or for a refused path |
+| `IsConfinedVirtualPath(virtualPath)` (free) | The rule for virtual paths, below |
 | `AddContentRoot(path)` | Add a root on top of the existing ones (call before `Initialize()`); adding one twice is a no-op |
 | `Mount(virtualPath, realPath)` / `Unmount(virtualPath)` | Add a directory (must exist) as the top layer of a mount point / drop the mount point with all its layers |
 | `GetMountedPath(mountPoint)` / `GetMountLayers(mountPoint)` | Top layer / all layers (`Vector<Path>`), lowest priority first |
@@ -40,6 +42,8 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 | `AbsoluteNormalPath(path)` (free) | `AbsolutePath` of the file layer in a `Path`; the path as given when the OS cannot say. Roots, mounts and `FileWatcher` keep their paths in this form |
 
 `ResolvePath` tries, in order: absolute path as given → mount point (first path segment) + remainder, layer by layer from the top → relative to each root, top first → relative to the current directory. A missing file gives an empty path, not an error: check the result.
+
+**The rule for virtual paths** (`IsConfinedVirtualPath`), because content and save paths come from data: a relative path with no `..` name, no empty name (`config//x`, `/x`; one trailing `/` is fine) and no NUL byte; `.` is fine; on Windows also no `:` and no name of dots and spaces. `ResolvePath` (for all but an absolute path), `PathInTopLayer` and `FileWatcher` refuse the rest before any lookup, the first two with a warning; nothing is normalised for the caller. The rule is lexical: a link inside a layer is followed. An absolute path passed as a whole resolves as given.
 
 ## Rules
 
@@ -56,7 +60,7 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 
 - **Main thread only**, for the calls and for every callback. A backend may post from its own thread (`IFileWatchSink::Post`): the post goes into a queue under one lock, `Update()` (once per frame, and once per idle cycle of the manual clock, so the queue cannot grow while no frame runs) takes it, so a quiet frame takes no lock and allocates nothing. A handle destroyed inside any callback is safe: the watch stops at once, the removal from the backend waits for the end of `Update()`. `Stop()` is not for a callback. A handle must not outlive the watcher.
 - **The setting.** `fileWatch` of `ApplicationConfig.xml` is `Auto`, `On` or `Off` (`FileWatchSetting.h`, default `Auto`). `Auto` watches in the Editor run mode **or** in a build with asserts on (the Debug builds: nobody edits files next to a Release game); `On` and `Off` are as written; the web never watches. `ShouldWatchFiles` is the pure rule; `Application::Initialize` applies it after the run mode is known and before `OnApplicationInit` (`CoreManager::StartFileWatching`) and logs one line.
-- **Not running** (no `Start`, the web, the setting off): `Watch*` gives an inactive handle (`IsActive()` false) and `Update()` returns at once. A path that is not under a mount point, or whose folder exists in no layer, is inactive too: a folder that appears later is not picked up.
+- **Not running** (no `Start`, the web, the setting off): `Watch*` gives an inactive handle (`IsActive()` false) and `Update()` returns at once. A path that is not under a mount point, fails the rule for virtual paths (`## API`), or whose folder exists in no layer, is inactive too: a folder that appears later is not picked up.
 - **Layers.** A path is watched in **every** layer of its mount point that has the folder, and reported by its virtual path; a file changed in two layers is one notification.
 - **Trap: a file watch watches the parent directory** and the facade filters by file name. An editor saves through a temp file and a rename over the target, which makes no event on the replaced file itself. A directory several watches share is added to the backend once (recursive while any user is a folder watch).
 - **Coalescing.** One pending entry per (watch, virtual path); every post moves its time, and it is delivered once the path was quiet for `kFileWatchSettleSeconds`. The time of a post is the time of the `Update` that took it. `Update(nowSeconds)` takes the clock as a parameter, so a test drives the window without a sleep (`FileWatcherTest`).

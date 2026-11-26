@@ -21,6 +21,10 @@ namespace BECore {
      * a texture draw nothing); every other component with IComponent::HasOnDraw() draws itself through IComponent::OnDraw(), at the place of
      * the component in its node.
      *
+     * A quad or a sprite whose node rect cannot touch the render output (with a rotation: a loose square about the pivot) is not drawn: no
+     * renderer call and no clip push for it. The test is against the output, so what lies in the bars of a letterbox is drawn, and an output
+     * without a size culls nothing. OnDraw() is never culled: the system does not know what it draws.
+     *
      * A hidden node (SceneNode::GetEditorFlags()) and everything below it keep their item and their rank but have no entry; they still update.
      * A disabled component (IComponent::IsEnabled()) keeps its entry, which the loop passes over.
      *

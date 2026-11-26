@@ -4,6 +4,7 @@
 #include <BECore/Text/FontAtlas.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/GlyphOutline.h>
+#include <BECore/Text/Utf8.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -239,6 +240,15 @@ namespace BECore::Tests {
 
         EXPECT_EQ(atlas->GetGlyphCount(), 10u);
         EXPECT_NE(atlas->Find(Glyph(U'5')), nullptr);
+    }
+
+    TEST_F(FontAtlasTest, APreloadRangePastTheLastCodePointEnds) {
+        constexpr char32_t kHighest = 0xFFFFFFFF;  // a loop up to it would never end
+        const GlyphRange ranges[] = {{Utf8::kMaxCodePoint - 1, kHighest}, {kHighest - 1, kHighest}, {U'0', U'9'}};
+
+        EXPECT_TRUE(atlas->PrepareCodePoints(*renderer, ranges));
+
+        EXPECT_EQ(atlas->GetGlyphCount(), 10u);
     }
 
     TEST_F(FontAtlasTest, AFailedUploadLeavesTheGlyphsBlankAndSaysSo) {

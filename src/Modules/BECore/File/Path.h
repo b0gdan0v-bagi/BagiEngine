@@ -15,7 +15,7 @@ namespace BECore {
      * - `PathExtension("a.b.c")` is `.c` (with the dot), `PathStem("a.b.c")` is `a.b`; `PathExtension("a.")` is `.`.
      * - `PathParent("a")` is empty, `PathParent("/a")` is `/`, `PathParent("/")` is `/`, `PathParent("a/b/")` is `a/b`.
      * - A run of separators at the start is one root directory: `PathParent("//a")` is `/` (libc++ keeps `//`; POSIX leaves it open).
-     * A separator is `/`; a backslash is one only on Windows. Nothing here allocates: the results are views into the argument.
+     * A separator is `/`; a backslash is one only on Windows. These four allocate nothing: the results are views into the argument.
      */
     [[nodiscard]] StringView PathParent(StringView path);
     [[nodiscard]] StringView PathFilename(StringView path);
@@ -38,8 +38,10 @@ namespace BECore {
     [[nodiscard]] StringView PathRelativeTo(StringView path, StringView base);
 
     /**
-     * Whether @p path is @p root or lies below it, name by name (`/a/bc` is not under `/a/b`); a trailing separator on either side does not
-     * matter, and an empty @p root matches nothing. Like `PathRelativeTo`, both must be in the same form (see `Path::LexicallyNormal`).
+     * Whether what @p path names is what @p root names or lies below it, by whole names (`/a/bc` is not under `/a/b`) after `.` and `..`
+     * are folded and separators merged as in `Path::LexicallyNormal`; a trailing separator does not matter. A `..` that is left over
+     * climbs out: `../x` is under `..`, not under `.`. An empty @p root holds nothing and an empty @p path is under nothing. Lexical: no
+     * disk access, links are not followed. A path of ordinary depth allocates nothing.
      */
     [[nodiscard]] bool PathIsUnder(StringView path, StringView root);
 
@@ -112,7 +114,7 @@ namespace BECore {
         [[nodiscard]] Path Relative(const Path& base) const {
             return Path(PathRelativeTo(View(), base.View()));
         }
-        /// This path is @p root or lies below it (`PathIsUnder`)
+        /// This path is @p root or lies below it (`PathIsUnder`). `Relative` stays textual: pair the two only on lexically normal paths
         [[nodiscard]] bool IsUnder(const Path& root) const {
             return PathIsUnder(View(), root.View());
         }

@@ -254,19 +254,6 @@ namespace BECore::Tests {
         EXPECT_EQ(loaded, aliased);
     }
 
-    TEST(ReflectionAliasesTest, SkippedDefaultsOmitEmptyAliasFields) {
-        AliasState empty;
-        XmlSerializer serializer;
-        serializer.SetSkipDefaults(true);
-        if (serializer.BeginObject("State")) {
-            empty.Serialize(serializer);
-            serializer.EndObject();
-        }
-        // A Variant has no default to skip (its index is always written): it is the one field left
-        const String xml = serializer.SaveToString();
-        EXPECT_NE(xml.find("<State>\n    <choice index=\"0\" value=\"0\" />\n  </State>"), String::npos) << xml.c_str();
-    }
-
     TEST(ReflectionAliasesTest, TheKeysOfAHashMapComeOutSortedWhatEverTheHashOrder) {
         AliasState state;
         for (int i = 0; i < 40; ++i) {

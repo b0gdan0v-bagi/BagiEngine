@@ -1,9 +1,11 @@
 #include "ReflectionTest.h"
 
+#include <BECore/Control/JsonDeserializer.h>
+#include <BECore/Control/JsonStreamSerializer.h>
+#include <BECore/Control/JsonWriter.h>
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/DataAccessor.h>
-#include <BECore/Reflection/SerializationTraits.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
@@ -112,10 +114,9 @@ namespace BECore::Tests {
             }
         }
 
-        /// Serializes a Player into <Player ...> with the given serializer settings.
-        String SavePlayer(const TestData::Player& player, bool skipDefaults) {
+        /// Serializes a Player into <Player ...>.
+        String SavePlayer(const TestData::Player& player) {
             XmlSerializer serializer;
-            serializer.SetSkipDefaults(skipDefaults);
             if (serializer.BeginObject("Player")) {
                 player.Serialize(serializer);
                 serializer.EndObject();
@@ -181,9 +182,8 @@ namespace BECore::Tests {
             EXPECT_TRUE(loaded == original) << "the value changed during the binary round-trip";
         }
 
-        ByteBuffer SavePlayerBinary(const TestData::Player& player, bool skipDefaults) {
+        ByteBuffer SavePlayerBinary(const TestData::Player& player) {
             BinarySerializer serializer;
-            serializer.SetSkipDefaults(skipDefaults);
             if (serializer.BeginObject("Player")) {
                 player.Serialize(serializer);
                 serializer.EndObject();
@@ -308,6 +308,45 @@ namespace BECore::Tests {
             EXPECT_FALSE(deserializer.HasErrors()) << DescribeErrors(deserializer).c_str();
         }
 
+        /// The object "texts" written with literals and char pointers, through whatever static type @p serializer has
+        template <typename Serializer>
+        void WriteCharPointers(Serializer& serializer) {
+            const char* const pointer = "from a pointer";
+            const char* const none = nullptr;
+            if (serializer.BeginObject("texts")) {
+                serializer.Write("element", "literal");
+                serializer.WriteAttribute("attribute", "literal");
+                serializer.Write("elementPointer", pointer);
+                serializer.WriteAttribute("attributePointer", pointer);
+                serializer.Write("noElement", none);
+                serializer.WriteAttribute("noAttribute", none);
+                serializer.EndObject();
+            }
+        }
+
+        /// What WriteCharPointers wrote. Use through ASSERT_NO_FATAL_FAILURE.
+        void ExpectCharPointerTexts(IDeserializer& reader) {
+            ASSERT_TRUE(reader.BeginObject("texts"));
+            const auto expectElement = [&reader](StringView name, StringView expected) {
+                String text = "stale";
+                EXPECT_TRUE(reader.Read(name, text));
+                EXPECT_EQ(StringView(text), expected);
+            };
+            const auto expectAttribute = [&reader](StringView name, StringView expected) {
+                String text = "stale";
+                EXPECT_TRUE(reader.ReadAttribute(name, text));
+                EXPECT_EQ(StringView(text), expected);
+            };
+            expectElement("element", "literal");
+            expectAttribute("attribute", "literal");
+            expectElement("elementPointer", "from a pointer");
+            expectAttribute("attributePointer", "from a pointer");
+            expectElement("noElement", "");
+            expectAttribute("noAttribute", "");
+            reader.EndObject();
+            EXPECT_FALSE(reader.HasErrors());
+        }
+
     }  // namespace
 
     TEST(ReflectionTest, CompileTimeChecks) {
@@ -334,7 +373,7 @@ namespace BECore::Tests {
         original.name = "Hero"_intern;
         original.isAlive = true;
 
-        const String xml = SavePlayer(original, false);
+        const String xml = SavePlayer(original);
 
         TestData::Player loaded;
         loaded.health = 0;
@@ -352,7 +391,7 @@ namespace BECore::Tests {
         original.name = "Hero"_intern;
         original.isAlive = true;
 
-        const ByteBuffer data = SavePlayerBinary(original, false);
+        const ByteBuffer data = SavePlayerBinary(original);
 
         TestData::Player loaded;
         loaded.health = 0;
@@ -390,38 +429,64 @@ namespace BECore::Tests {
         EXPECT_EQ(loaded.level, original.level);
     }
 
-    TEST(ReflectionTest, BinarySkipDefaults) {
-        TestData::Player player;
-        player.health = 0;
-        player.speed = 0.0f;
-        player.name = PoolString{};
-        player.isAlive = false;
+    TEST(ReflectionTest, AValueEqualToTheTypesDefaultOverwritesTheFieldsOwnDefault) {
+        TestData::Player original;
+        original.health = 0;
+        original.speed = 0.0f;
+        original.isAlive = false;
 
-        const ByteBuffer full = SavePlayerBinary(player, false);
-        const ByteBuffer skipped = SavePlayerBinary(player, true);
+        {
+            SCOPED_TRACE("XML");
+            TestData::Player loaded;
+            ASSERT_NO_FATAL_FAILURE(LoadPlayer(SavePlayer(original), loaded));
+            ExpectPlayersEqual(loaded, original);
+        }
+        {
+            SCOPED_TRACE("binary");
+            TestData::Player loaded;
+            ASSERT_NO_FATAL_FAILURE(LoadPlayerBinary(SavePlayerBinary(original), loaded));
+            ExpectPlayersEqual(loaded, original);
+        }
+    }
 
-        EXPECT_LT(skipped.size(), full.size()) << "skip-defaults binary should be smaller";
-
-        // The defaults must come back as the same values
-        TestData::Player loaded;
-        loaded.health = 0;
-        loaded.speed = 0.0f;
-        loaded.isAlive = false;
-        ASSERT_NO_FATAL_FAILURE(LoadPlayerBinary(skipped, loaded));
-        ExpectPlayersEqual(loaded, player);
-
-        // Non-default values must still be written
-        TestData::Player hero;
-        hero.health = 75;
-        hero.speed = 10.5f;
-        hero.name = "Hero"_intern;
-        hero.isAlive = true;
-
-        const ByteBuffer heroData = SavePlayerBinary(hero, true);
-
-        TestData::Player heroLoaded;
-        ASSERT_NO_FATAL_FAILURE(LoadPlayerBinary(heroData, heroLoaded));
-        ExpectPlayersEqual(heroLoaded, hero);
+    TEST(ReflectionTest, ACharPointerIsWrittenAsTextByEverySerializer) {
+        for (const bool throughBase : {false, true}) {
+            SCOPED_TRACE(throughBase ? "through ISerializer" : "through the serializer's own type");
+            const auto write = [throughBase](auto& serializer) {
+                if (throughBase) {
+                    WriteCharPointers(static_cast<ISerializer&>(serializer));
+                } else {
+                    WriteCharPointers(serializer);
+                }
+            };
+            {
+                SCOPED_TRACE("XML");
+                XmlSerializer serializer;
+                write(serializer);
+                XmlDeserializer reader;
+                ASSERT_TRUE(reader.LoadFromString(serializer.SaveToString()));
+                ASSERT_NO_FATAL_FAILURE(ExpectCharPointerTexts(reader));
+            }
+            {
+                SCOPED_TRACE("binary");
+                BinarySerializer serializer;
+                write(serializer);
+                BinaryDeserializer reader;
+                ASSERT_TRUE(reader.LoadFromBuffer(serializer.GetData()));
+                ASSERT_NO_FATAL_FAILURE(ExpectCharPointerTexts(reader));
+            }
+            {
+                SCOPED_TRACE("JSON");
+                String text;
+                JsonWriter writer(text);
+                JsonStreamSerializer serializer(writer);
+                write(serializer);
+                serializer.Finish();
+                JsonDeserializer reader;
+                ASSERT_TRUE(reader.Load(text)) << text.c_str();
+                ASSERT_NO_FATAL_FAILURE(ExpectCharPointerTexts(reader));
+            }
+        }
     }
 
     TEST(ReflectionTest, BinaryIsSmallerThanXml) {
@@ -1324,58 +1389,6 @@ namespace BECore::Tests {
         // IsDead and GetHealthPercent are const methods, so they are checked by a direct call
         EXPECT_FALSE(player.IsDead());
         EXPECT_EQ(player.GetHealthPercent(), 90.0f);
-    }
-
-    TEST(ReflectionTest, DefaultChecker) {
-        EXPECT_TRUE(DefaultChecker<int32_t>::IsDefault(0));
-        EXPECT_FALSE(DefaultChecker<int32_t>::IsDefault(42));
-        EXPECT_TRUE(DefaultChecker<float>::IsDefault(0.0f));
-        EXPECT_TRUE(DefaultChecker<bool>::IsDefault(false));
-        EXPECT_FALSE(DefaultChecker<bool>::IsDefault(true));
-
-        EXPECT_TRUE(DefaultChecker<PoolString>::IsDefault(PoolString{}));
-        EXPECT_FALSE(DefaultChecker<PoolString>::IsDefault("test"_intern));
-
-        EXPECT_TRUE(DefaultChecker<String>::IsDefault(String{}));
-        EXPECT_FALSE(DefaultChecker<String>::IsDefault(String{"hello"}));
-
-        EXPECT_TRUE(DefaultChecker<Vector<int32_t>>::IsDefault(Vector<int32_t>{}));
-        const Vector<int32_t> nonEmptyVec{1, 2, 3};
-        EXPECT_FALSE(DefaultChecker<Vector<int32_t>>::IsDefault(nonEmptyVec));
-    }
-
-    TEST(ReflectionTest, SkipDefaults) {
-        TestData::Player player;
-        player.health = 0;
-        player.speed = 0.0f;
-        player.name = PoolString{};
-        player.isAlive = false;
-
-        const String fullXml = SavePlayer(player, false);
-        const String skipXml = SavePlayer(player, true);
-
-        EXPECT_LT(skipXml.size(), fullXml.size()) << "skip-defaults XML should be smaller:\n" << skipXml.c_str() << "\nvs\n" << fullXml.c_str();
-
-        // Round-trip of the skip-defaults XML: the defaults must come back as the same values
-        TestData::Player loaded;
-        loaded.health = 0;
-        loaded.speed = 0.0f;
-        loaded.isAlive = false;
-        ASSERT_NO_FATAL_FAILURE(LoadPlayer(skipXml, loaded));
-        ExpectPlayersEqual(loaded, player);
-
-        // Non-default values must still be serialized
-        TestData::Player hero;
-        hero.health = 75;
-        hero.speed = 10.5f;
-        hero.name = "Hero"_intern;
-        hero.isAlive = true;
-
-        const String heroXml = SavePlayer(hero, true);
-
-        TestData::Player heroLoaded;
-        ASSERT_NO_FATAL_FAILURE(LoadPlayer(heroXml, heroLoaded));
-        ExpectPlayersEqual(heroLoaded, hero);
     }
 
     TEST(ReflectionTest, MapSerialization) {

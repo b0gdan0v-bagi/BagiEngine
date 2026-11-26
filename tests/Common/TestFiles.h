@@ -115,6 +115,21 @@ namespace BECore::Tests {
         EXPECT_FALSE(error) << "could not set the write time of " << path.CStr() << ": " << error.message();  //-NoStd: the one std::filesystem boundary of the tests
     }
 
+    /// Gives the file @p to the write time of @p from as the file system holds it, so the two read as equal: SetWriteTime cannot, its time
+    /// comes from the clock at the call
+    inline void CopyWriteTime(const Path& from, const Path& to) {
+        const std::filesystem::path nativeFrom = NativePath(from);                                           //-NoStd: the one std::filesystem boundary of the tests
+        const std::filesystem::path nativeTo = NativePath(to);                                               //-NoStd: the one std::filesystem boundary of the tests
+        std::error_code error;                                                                               //-NoStd: the one std::filesystem boundary of the tests
+        const auto when = std::filesystem::last_write_time(nativeFrom, error);                               //-NoStd: the one std::filesystem boundary of the tests
+        if (error) {                                                                                         //-NoStd: the one std::filesystem boundary of the tests
+            ADD_FAILURE() << "could not read the write time of " << from.CStr() << ": " << error.message();  //-NoStd: the one std::filesystem boundary of the tests
+            return;
+        }
+        std::filesystem::last_write_time(nativeTo, when, error);                                            //-NoStd: the one std::filesystem boundary of the tests
+        EXPECT_FALSE(error) << "could not set the write time of " << to.CStr() << ": " << error.message();  //-NoStd: the one std::filesystem boundary of the tests
+    }
+
     /// Makes the symbolic link @p link to @p target, a folder link when @p target is a folder; the layer reads links but makes none
     inline void CreateSymlink(const Path& link, const Path& target) {
         const std::filesystem::path nativeLink = NativePath(link);      //-NoStd: the one std::filesystem boundary of the tests

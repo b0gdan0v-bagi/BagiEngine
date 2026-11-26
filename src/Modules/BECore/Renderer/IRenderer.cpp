@@ -1,3 +1,5 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
 #include <Generated/IRenderer.gen.hpp>
@@ -155,13 +157,16 @@ namespace BECore {
         }
         const BlendMode blend = GetBlendMode();
         const bool open = _batch.quads > 0;
-        const bool sameKey = open && _batch.texture.Get() == texture && _batch.blend == blend;
+        const bool sameTexture = open && _batch.texture.Get() == texture;
+        const bool sameKey = sameTexture && _batch.blend == blend;
         // Asked when a quad opens a batch for a texture; a refused quad is dropped without disturbing the batch that is open
         if (!sameKey && texture != nullptr && !CanDrawTexture(*texture)) {
             return;
         }
-        if (open && (!sameKey || _batch.quads >= kMaxBatchQuads)) {
-            Flush();
+        if (open && !sameKey) {
+            Flush(sameTexture ? BatchBreak::Blend : BatchBreak::Texture);
+        } else if (open && _batch.quads >= kMaxBatchQuads) {
+            Flush(BatchBreak::Full);
         }
         if (_batch.quads == 0) {
             _batch.texture = IntrusivePtr<ITexture>(texture);
@@ -180,12 +185,19 @@ namespace BECore {
         CountPrimitive(kQuadTriangles);
     }
 
-    void IRenderer::Flush() {
+    void IRenderer::Flush(BatchBreak reason) {
         if (_batch.quads == 0) {
             return;
         }
         CountSubmission(_batch.texture.Get());
-        SubmitBatch(_batch);
+        {
+            Optional<FrameStatsCollector::StageScope> timed;
+            if (_countersPaused == 0) {
+                ++_counters.batchBreaks[+reason];
+                timed.emplace(CoreManager::GetFrameStats(), FrameStage::Submit);
+            }
+            SubmitBatch(_batch);
+        }
         _batch.Reset();
     }
 
@@ -207,7 +219,7 @@ namespace BECore {
     }
 
     void IRenderer::PushClipRect(const Rect& rect) {
-        Flush();  // the batch was drawn under the clip that is about to change
+        Flush(BatchBreak::Clip);  // the batch was drawn under the clip that is about to change
         Rect clip = rect;
         if (!_clipStack.empty()) {
             const Rect& outer = _clipStack.back();
@@ -224,7 +236,7 @@ namespace BECore {
     }
 
     void IRenderer::PopClipRect() {
-        Flush();
+        Flush(BatchBreak::Clip);
         ASSERT(!_clipStack.empty(), "PopClipRect without a matching PushClipRect");
         if (_clipStack.empty()) {
             return;

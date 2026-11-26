@@ -14,7 +14,8 @@ The steps, in order (each command is printed before it runs; its output goes to 
      a test that passes the second time is reported as flaky and is not a failure;
   3. the result of the commit goes to <work>/results.json (alltests_results.py), which the deploy scripts read;
   4. each failure adds or updates the todo entry alltests-<test> (actor alltests): the range of commits since the last green run
-     and the failure text. A failing build is alltests-build.
+     and the failure text. A failing build is alltests-build. An entry the store does not take (it cannot be used, or it refuses the
+     write) is left as <work>/logs/entries/<id>.md, and the result is recorded all the same. A green run calls no store.
 <work> is ~/.cache/bagi-alltests/<repository> (BAGI_ALLTESTS_HOME moves the parent; --work-dir names another).
 Exit code 0 green, 3 red, 1 an error (no result is recorded). Standard library only, Python 3.10+. Never fetches, pulls or pushes.
 """
@@ -43,6 +44,9 @@ TOOLS_DIR = Path(__file__).resolve().parents[1]
 TODO_SCRIPT = TOOLS_DIR / "todo" / "todo.py"
 ACTOR = "alltests"
 ENTRY_PREFIX = "alltests-"
+STORE_REFUSED_EXIT = 2  # todo.py: the store refused (no such entry, a stale version, no right)
+STORE_TIMEOUT_S = 120  # a hung call must not hang the run; the first call of a checkout also downloads the served CLI
+DRAFTS_FOLDER = "entries"  # in the logs folder
 DEFAULT_BASE = "main"
 DEFAULT_AREA = "engine"
 DEFAULT_PRESETS = {"Darwin": "macos-debug", "Windows": "windows-msvc-debug"}
@@ -76,6 +80,14 @@ SMOKE_SKIPPED = "skipped (exit 77): a smoke test that skips found no product or 
 
 class RunError(Exception):
     """The run cannot go on; the message says why. Nothing is recorded."""
+
+
+class StoreUnavailable(Exception):
+    """The todo CLI cannot be used; the message says why."""
+
+
+class StoreRefused(Exception):
+    """The store refused to write one entry; the message says why."""
 
 
 class Tools(NamedTuple):
@@ -311,6 +323,7 @@ class Context(NamedTuple):
     area: str
     tools: Tools
     dry_run: bool
+    drafts: Path
 
 
 def entry_text(context: Context, test: str, since: str, text: str, range_text: str, names: list[str]) -> tuple[str, str]:
@@ -344,22 +357,38 @@ def entry_text(context: Context, test: str, since: str, text: str, range_text: s
     return title, body
 
 
+def last_line(done: subprocess.CompletedProcess) -> str:
+    """The last line the CLI printed: its loader may put a warning before the error."""
+    lines = (done.stderr.strip() or done.stdout.strip()).splitlines()
+    return lines[-1] if lines else f"exit code {done.returncode}"
+
+
 def todo(context: Context, *args: str, body: str | None = None) -> subprocess.CompletedProcess:
+    """One call of the todo CLI, which ends with 0 or with the store's refusal; anything else raises StoreUnavailable."""
     command = [*context.tools.todo, "--actor", ACTOR, *args]
-    return subprocess.run(command, cwd=context.repo, input=body, capture_output=True, text=True, check=False)
+    try:
+        done = subprocess.run(command, cwd=context.repo, input=body, capture_output=True, text=True, check=False, timeout=STORE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        raise StoreUnavailable(f"the todo CLI gave no answer within {STORE_TIMEOUT_S} s") from None
+    except (OSError, ValueError) as error:
+        raise StoreUnavailable(f"the todo CLI cannot be run: {error}") from None
+    if done.returncode not in (0, STORE_REFUSED_EXIT):
+        raise StoreUnavailable(last_line(done))
+    return done
 
 
 def file_entry(context: Context, test: str, title: str, body: str) -> str:
     """Adds the entry, or updates the one of an earlier failure (reopened when it was closed). Returns what was done."""
     entry = entry_id(test)
     shown = todo(context, "show", entry, "--json")
-    if shown.returncode not in (0, 2):
-        raise RunError(f"todo show {entry} failed: {shown.stderr.strip() or shown.stdout.strip()}")
-    if shown.returncode == 2:
+    if shown.returncode == STORE_REFUSED_EXIT:
         args = ["add", entry, "--area", context.area, "--title", title, "--body-file", "-"]
         done = "filed"
     else:
-        data = json.loads(shown.stdout)
+        try:
+            data = json.loads(shown.stdout)
+        except ValueError:
+            raise StoreUnavailable(f"todo show {entry} printed no JSON: {last_line(shown)}") from None
         data = data.get("entry", data)
         args = ["edit", entry, "--body-file", "-"]
         if str(data.get("version", "")):
@@ -373,25 +402,50 @@ def file_entry(context: Context, test: str, title: str, body: str) -> str:
         return f"{done} (dry run)"
     written = todo(context, *args, body=body)
     if written.returncode != 0:
-        raise RunError(f"todo {args[0]} {entry} failed: {written.stderr.strip() or written.stdout.strip()}")
+        raise StoreRefused(last_line(written))
     return done
 
 
+def write_draft(folder: Path, entry: str, title: str, body: str) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{entry}.md").write_text(f"# {title}\n\n{body}", encoding="utf-8")
+
+
 def file_entries(context: Context, data: dict, outcome: Outcome, max_entries: int) -> list[str]:
-    """Files the failures of the run and marks them failing in `data`; returns one line per entry."""
+    """Files the failures of the run and marks them failing in `data`; returns one line per entry.
+
+    The store never ends the run: an entry it does not take becomes a draft, and once it cannot be used it is not asked again."""
     failing = data["failing"]
     failed = outcome.failed
     if len(failed) > max_entries:
         failed = [MANY_FAILURES]
     green = last_green(context.repo, data, context.commit)
     range_text = commit_range(context.repo, green, context.commit)
-    done = []
+    shutil.rmtree(context.drafts, ignore_errors=True)
+    done, drafted = [], []
+    unavailable, refusal = "", ""
     for test in failed:
         since = failing.get(test, {}).get("since", context.commit)
         text = outcome.texts.get(test, "\n".join(outcome.failed) if test == MANY_FAILURES else "")
         title, body = entry_text(context, test, since, text, range_text, outcome.failed)
-        done.append(f"{entry_id(test)} ({file_entry(context, test, title, body)})")
-        failing[test] = {"since": since, "entry": entry_id(test)}
+        entry = entry_id(test)
+        what = ""
+        if not unavailable:
+            try:
+                what = file_entry(context, test, title, body)
+            except StoreUnavailable as error:
+                unavailable = str(error)
+            except StoreRefused as error:
+                refusal = refusal or str(error)
+        if not what:
+            write_draft(context.drafts, entry, title, body)
+            drafted.append(entry)
+            what = "not filed"
+        done.append(f"{entry} ({what})")
+        failing[test] = {"since": since, "entry": entry}
+    if drafted:
+        why = f"the todo store cannot be used: {unavailable}" if unavailable else f"the todo store refused: {refusal}"
+        print(f"alltests: not filed: {', '.join(drafted)} ({why}); drafts in {context.drafts}, file them with /todo-add", flush=True)
     return done
 
 
@@ -480,7 +534,7 @@ def run_checked(args: argparse.Namespace) -> int:
     work = (args.work_dir or results.home() / repo_name).resolve()
     results_file, logs = work / results.RESULTS_FILE_NAME, work / "logs"
     tools = Tools(split_command(args.cmake), split_command(args.ctest), split_command(args.todo))
-    context = Context(repo, repo_name, commit, args.preset, args.base, args.area, tools, args.dry_run)
+    context = Context(repo, repo_name, commit, args.preset, args.base, args.area, tools, args.dry_run, logs / DRAFTS_FOLDER)
     print(f"alltests: {repo_name} at {commit[:12]} ({args.commit or args.base}), preset {args.preset}{ALL_SUFFIX}, work folder {work}", flush=True)
     with Lock(work / "alltests.lock"):
         data = results.load(results_file, repo_name)

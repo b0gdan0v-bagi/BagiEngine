@@ -11,6 +11,7 @@
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodeFiles.h>
+#include <BECore/SceneEditorSaveTypes.h>
 #include <BECore/SceneGeneratedNodesTypes.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UINodeFileSave.h>
@@ -176,6 +177,19 @@ namespace BECore::Tests {
       <node name="Last"/>
     </children></node>
     <node name="Right"/>
+  </nodes></scene>
+</scenes></SceneManager>)";
+
+        // The tags that kTaggedScenesXml gives `Top` and `Nested`
+        constexpr int32_t kTopTag = 7;
+        constexpr int32_t kNestedTag = 9;
+        constexpr const char* kTaggedScenesXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Main"><nodes>
+    <node type="TaggedTestNode" name="Top" tag="7"><children>
+      <node type="TaggedTestNode" name="Nested" tag="9"/>
+      <node type="TaggedTestNode" name="Untagged" tag="0"/>
+    </children></node>
   </nodes></scene>
 </scenes></SceneManager>)";
 
@@ -606,7 +620,7 @@ namespace BECore::Tests {
         _manager->SetActiveScene("Game"_intern);
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
 
-        // The nodes are not written through Serialize: that would add `enabled`, `type` and a `layer` to every node
+        // A node is written with what differs from a fresh one, not as Scene::Serialize writes it: no `type` on a plain SceneNode, no layer 0
         const pugi::xml_node saved = FindSceneElement(ConfigRoot(), "Game");
         ASSERT_TRUE(saved.child("nodes"));
         EXPECT_FALSE(HasAttributeBelow(saved.child("nodes"), "enabled"));
@@ -620,6 +634,35 @@ namespace BECore::Tests {
         ASSERT_TRUE(piece);
         EXPECT_FALSE(piece.attribute("layer"));
         EXPECT_STREQ(board.child("components").first_child().attribute("type").as_string(), "TransformComponent");
+    }
+
+    TEST_F(SceneEditorSaveTest, AFieldOfANodeSubclassSurvivesASaveAndALoad) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kTaggedScenesXml));
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), GetScene("Main")));
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+
+        const SceneNode& top = Require(FindTopLevelNode(Reloaded("Main"), "Top"_intern));
+        EXPECT_EQ(Require(top.Cast<TaggedTestNode>()).tag, kTopTag);
+        ASSERT_EQ(top.GetChildren().size(), 2u);
+        EXPECT_EQ(Require(top.GetChildren()[0]->Cast<TaggedTestNode>()).tag, kNestedTag);
+        EXPECT_EQ(Require(top.GetChildren()[1]->Cast<TaggedTestNode>()).tag, 0);
+
+        const pugi::xml_node untagged = SavedNode(ConfigRoot(), "Main", 0).child("children").last_child();
+        EXPECT_STREQ(untagged.attribute("name").as_string(), "Untagged");
+        EXPECT_FALSE(untagged.attribute("tag"));
+    }
+
+    TEST_F(SceneEditorSaveTest, ADuplicateKeepsTheNodeSubclassAndItsField) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kTaggedScenesXml));
+        Scene& scene = GetScene("Main");
+
+        const IntrusivePtr<SceneNode> copy = scene.DuplicateNode(Require(FindTopLevelNode(scene, "Top"_intern)));
+
+        ASSERT_TRUE(copy);
+        EXPECT_EQ(Require(copy->Cast<TaggedTestNode>()).tag, kTopTag);
+        ASSERT_EQ(copy->GetChildren().size(), 2u);
+        EXPECT_EQ(Require(copy->GetChildren()[0]->Cast<TaggedTestNode>()).tag, kNestedTag);
     }
 
     TEST_F(SceneEditorSaveTest, SavingTwiceGivesTheSameDocument) {

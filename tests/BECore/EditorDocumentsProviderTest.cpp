@@ -11,7 +11,6 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/EditorLayout/EditorDocumentRows.h>
 #include <Widgets/SceneEditor/SceneEditorDocuments.h>
 #include <Widgets/SceneEditor/UINodeFileSession.h>
@@ -85,7 +84,6 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _scenes.Reset();
-            ConfigFieldSchema::DestroyInstance();
             RemoveDirectory(_base);
         }
 

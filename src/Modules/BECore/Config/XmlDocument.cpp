@@ -119,21 +119,25 @@ namespace BECore {
     }
 
     bool XmlDocument::SaveToFile(const Path& filepath) const {
-        const Path parentPath = filepath.Parent();
-        if (!parentPath.Empty() && !CreateDirectories(parentPath)) {
-            return false;
+        // The rename that ends an atomic write would put a plain file in the place of a link, so the file the link names is the target
+        Path target = filepath;
+        if (IsSymbolicLink(filepath)) {
+            auto linked = CanonicalPath(filepath);
+            if (!linked) {
+                return false;
+            }
+            target = Path(eastl::move(*linked));
         }
 
-        // The text stays on the heap: Write takes it and it is what the caller's file ends up holding. It is built before the file is opened, which
-        // truncates it, and reserved like the file that is there: a hand-laid file is about as long as its canonical text, so a save grows it rarely
+        // The text stays on the heap, as it outlives the scratch scope. It is reserved like the file that is there: a hand-laid file is about as
+        // long as its canonical text, so a save grows it rarely
         String text;
 
-        // The DOM wins over the file: what is on disk only lends its layout (blank lines, indentation). The scope ends before the file is opened
-        // for writing, so the bytes it holds are never alive across the truncation. LayOutLikeFile keeps its two pugixml documents and its
-        // canonical texts on the heap (pugixml's allocator, and Strings the comparison with the DOM needs)
+        // The DOM wins over the file: what is on disk only lends its layout (blank lines, indentation). LayOutLikeFile keeps its two pugixml
+        // documents and its canonical texts on the heap (pugixml's allocator, and Strings the comparison with the DOM needs)
         {
             ScratchScope scratch;
-            const auto read = ReadFileBytesScratch(filepath, scratch.GetArena(), kMaxScratchSaveBytes, ReaderLimits::kMaxXmlDocumentBytes);
+            const auto read = ReadFileBytesScratch(target, scratch.GetArena(), kMaxScratchSaveBytes, ReaderLimits::kMaxXmlDocumentBytes);
             const Span<const uint8_t> bytes = read ? read->Bytes() : Span<const uint8_t>{};
             const StringView onDisk(reinterpret_cast<const char*>(bytes.data()), bytes.size());
             text = SerializeCanonical(_doc, _hasByteOrderMark, onDisk.size());
@@ -150,9 +154,7 @@ namespace BECore {
             }
         }
 
-        // In place: a watcher of the folder sees one change of the file, not a temp file and a rename. Every File mode is binary
-        auto out = File::Open(filepath, FileMode::Write);
-        return out && out->Write(StringView(text)) && out->Close().has_value();
+        return WriteFileAtomically(target, StringView(text)).has_value();
     }
 
     XmlNode XmlDocument::GetRoot() const {

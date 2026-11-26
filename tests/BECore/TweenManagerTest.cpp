@@ -3,7 +3,9 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Time/Time.h>
 #include <Common/DestroyTally.h>
+#include <Common/PoolCounters.h>
 #include <Common/Require.h>
+#include <TaskSystem/Task.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -24,6 +26,12 @@ namespace BECore::Tests {
         constexpr int kLaterTweenCount = 2;
         constexpr int kFramesInASecond = 32;
         constexpr int kWarmTweenCount = 8;
+        constexpr float kThreeEighthsSecond = 0.375f;  // does not divide a turn of one second: every turn ends inside a frame
+        constexpr int kLoopCount = 8;
+        constexpr int kTurnLengths = 4;       // loop k of a test turns in 1 + k % this quarters of a second
+        constexpr int kNeighbourCount = 160;  // cancelled together they pass the tombstones a walk tolerates before it compacts
+        constexpr int kNeighboursPerLoop = kNeighbourCount / kLoopCount;
+        constexpr int kManyFrames = 64;
 
         TweenSettings Settings(float duration, float delay = 0.0f, EaseType ease = EaseType::Linear) {
             return {duration, delay, ease};
@@ -38,7 +46,15 @@ namespace BECore::Tests {
             IntrusivePtr<TweenHandle> Start(TweenManager& tweens, TweenSettings settings, float to = kTo) {
                 return tweens.Start<float>(0.0f, to, settings, [this](const float& value) { values.push_back(value); }, [this] { ++completed; }, [this] { ++cancelled; });
             }
+
+            IntrusivePtr<TweenHandle> Loop(TweenManager& tweens, TweenSettings settings) {
+                return tweens.Loop<float>(0.0f, kTo, settings, [this](const float& value) { values.push_back(value); }, [this] { ++cancelled; });
+            }
         };
+
+        Task<void> AwaitResult(IntrusivePtr<TweenHandle> handle, Vector<TweenResult>& results) {
+            results.push_back(co_await AwaitTween(std::move(handle)));
+        }
 
         /// The three callables of a tween, each holding a move-only token that counts its end
         struct Tallies {
@@ -836,6 +852,175 @@ namespace BECore::Tests {
         } else {
             EXPECT_EQ(playAllocations, 0u);
         }
+    }
+
+    TEST(TweenManagerTest, ALoopRunsTurnAfterTurnAndCarriesTheTimePastTheEndOfATurn) {
+        TweenManager tweens;
+        Recorder recorder;
+        const auto handle = recorder.Loop(tweens, Settings(kOneSecond, 0.0f, EaseType::QuadIn));
+        const auto valueAt = [](float turnProgress) { return Lerp(0.0f, kTo, Ease(EaseType::QuadIn, turnProgress)); };
+
+        tweens.Advance(kThreeEighthsSecond);
+        tweens.Advance(kThreeEighthsSecond);
+        tweens.Advance(kThreeEighthsSecond);  // 0.125 s into the second turn: the end of the first one is not written
+
+        EXPECT_EQ(recorder.values, (Vector<float>{valueAt(0.375f), valueAt(0.75f), valueAt(0.125f)}));
+        EXPECT_EQ(handle->GetProgress(), 0.125f);
+
+        tweens.Advance(2.25f);   // over two turns in one step: one call, 0.375 s into the fourth turn
+        tweens.Advance(0.625f);  // exactly to the end of that turn: the start of the next one
+
+        ASSERT_EQ(recorder.values.size(), 5u);
+        EXPECT_EQ(At(recorder.values, 3), valueAt(0.375f));
+        EXPECT_EQ(At(recorder.values, 4), valueAt(0.0f));
+        EXPECT_EQ(handle->GetProgress(), 0.0f);
+    }
+
+    TEST(TweenManagerTest, TheDelayOfALoopIsAppliedOnce) {
+        TweenManager tweens;
+        Recorder recorder;
+        const auto handle = recorder.Loop(tweens, Settings(kOneSecond, kHalfSecond));
+
+        tweens.Advance(kQuarterSecond);
+        EXPECT_TRUE(recorder.values.empty());
+        EXPECT_EQ(handle->GetState(), TweenState::Waiting);
+
+        tweens.Advance(kHalfSecond);  // a quarter of a second past the delay
+        tweens.Advance(kOneSecond);   // one whole turn later, with no second wait
+
+        EXPECT_EQ(recorder.values, (Vector<float>{kQuarterTo, kQuarterTo}));
+        EXPECT_EQ(handle->GetState(), TweenState::Running);
+    }
+
+    TEST(TweenManagerTest, LoopsKeepTheirPlaceInTheWalkThroughTurnsAndACompaction) {
+        TweenManager tweens;
+        Vector<int> calls;
+        Vector<IntrusivePtr<TweenHandle>> neighbours;
+        Vector<int> startOrder;
+        for (int number = 0; number < kNeighbourCount; ++number) {
+            neighbours.push_back(tweens.Delay(kHugeFrame));
+            if (number % kNeighboursPerLoop == 0) {
+                const int loop = number / kNeighboursPerLoop;
+                startOrder.push_back(loop);
+                tweens.Loop<float>(0.0f, kTo, Settings(kQuarterSecond * static_cast<float>(1 + loop % kTurnLengths)), [&calls, loop](const float&) { calls.push_back(loop); });
+            }
+        }
+        const auto walkOfOneFrame = [&] {
+            calls.clear();
+            tweens.Advance(kThreeEighthsSecond);
+            return calls;
+        };
+
+        for (int frame = 0; frame < kManyFrames; ++frame) {
+            ASSERT_EQ(walkOfOneFrame(), startOrder) << "frame " << frame;
+        }
+        for (const IntrusivePtr<TweenHandle>& neighbour : neighbours) {
+            neighbour->Cancel();
+        }
+        for (int frame = 0; frame < kManyFrames; ++frame) {  // the first of them compacts: every loop moves to another slot
+            ASSERT_EQ(walkOfOneFrame(), startOrder) << "frame after the cancel " << frame;
+        }
+        EXPECT_EQ(tweens.GetActiveCount(), static_cast<size_t>(kLoopCount));
+    }
+
+    TEST(TweenManagerTest, ALoopNeverCompletesAndOnlyACancelEndsItAndItsAwait) {
+        TweenManager tweens;
+        Recorder recorder;
+        const auto handle = recorder.Loop(tweens, Settings(kQuarterSecond));
+        Vector<TweenResult> results;
+        Task<void> task = AwaitResult(handle, results);
+        task.Resume();
+
+        for (int frame = 0; frame < kManyFrames; ++frame) {
+            tweens.Advance(kHugeFrame);
+        }
+
+        EXPECT_EQ(handle->GetState(), TweenState::Running);
+        EXPECT_EQ(tweens.GetActiveCount(AnimationFrameClass::DecorativeLoop), 1u);
+        EXPECT_TRUE(results.empty());
+
+        handle->Cancel();
+        handle->Cancel();
+        tweens.Advance(kQuarterSecond);
+
+        EXPECT_TRUE(handle->IsCancelled());
+        EXPECT_EQ(recorder.values.size(), static_cast<size_t>(kManyFrames));
+        EXPECT_EQ(recorder.cancelled, 1);
+        EXPECT_EQ(results, (Vector<TweenResult>{TweenResult::Cancelled}));
+        EXPECT_EQ(tweens.GetActiveCount(), 0u);
+    }
+
+    TEST(TweenManagerTest, ALoopMayBeCancelledByItsOwnSetter) {
+        TweenManager tweens;
+        IntrusivePtr<TweenHandle> handle;
+        int calls = 0;
+        int cancelled = 0;
+        handle = tweens.Loop<float>(
+            0.0f, kTo, Settings(kQuarterSecond),
+            [&](const float&) {
+                if (++calls == kLaterTweenCount) {
+                    handle->Cancel();
+                }
+            },
+            [&cancelled] { ++cancelled; });
+
+        for (int frame = 0; frame < kManyFrames; ++frame) {
+            tweens.Advance(kThreeEighthsSecond);
+        }
+
+        EXPECT_EQ(calls, kLaterTweenCount);
+        EXPECT_EQ(cancelled, 1);
+        EXPECT_TRUE(handle->IsCancelled());
+    }
+
+    TEST(TweenManagerTest, ALoopOfNoLengthIsOneOrdinaryStep) {
+        for (const float duration : {0.0f, -kOneSecond, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()}) {
+            TweenManager tweens;
+            Recorder recorder;
+            const auto handle = recorder.Loop(tweens, Settings(duration));
+            EXPECT_EQ(handle->GetFrameClass(), AnimationFrameClass::FiniteEffect);
+
+            tweens.Advance(kSixtyFourthSecond);
+            tweens.Advance(kSixtyFourthSecond);
+
+            EXPECT_EQ(recorder.values, (Vector<float>{kTo})) << duration;
+            EXPECT_EQ(handle->GetState(), TweenState::Completed);
+            EXPECT_EQ(recorder.cancelled, 0);
+        }
+    }
+
+    TEST(TweenManagerTest, AnInfiniteFrameLeavesNoNaNInALoop) {
+        for (const float delay : {0.0f, kQuarterSecond}) {
+            TweenManager tweens;
+            Recorder recorder;
+            const auto handle = recorder.Loop(tweens, Settings(kOneSecond, delay));
+
+            tweens.Advance(std::numeric_limits<float>::infinity());
+            EXPECT_EQ(handle->GetProgress(), 0.0f) << delay;
+            tweens.Advance(kQuarterSecond);  // the time in the slot is finite again, so the loop goes on
+
+            EXPECT_EQ(recorder.values, (Vector<float>{0.0f, kQuarterTo})) << delay;
+        }
+    }
+
+    TEST(TweenManagerTest, TheTurnsOfALoopMakeNoHandleAndAllocateNothing) {
+        TweenManager tweens;
+        float value = 0.0f;
+        for (int loop = 0; loop < kLoopCount; ++loop) {
+            tweens.Loop<float>(0.0f, kTo, Settings(kQuarterSecond * static_cast<float>(1 + loop % kTurnLengths)), [&value](const float& next) { value = next; });
+        }
+        tweens.Advance(kOneSecond);
+        const uint64_t handles = PoolAllocations("TweenHandle");  // a restart makes a handle, a turn of a loop does not
+        ASSERT_NE(handles, 0u);
+
+        const uint64_t allocations = AllocationsOf([&] {
+            for (int frame = 0; frame < kManyFrames; ++frame) {
+                tweens.Advance(kThreeEighthsSecond);
+            }
+        });
+
+        EXPECT_EQ(PoolAllocations("TweenHandle"), handles);
+        EXPECT_EQ(allocations, 0u);  // always zero without the tracker: the handle count above is the check there
     }
 
 }  // namespace BECore::Tests

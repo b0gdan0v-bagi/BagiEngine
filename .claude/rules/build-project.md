@@ -9,7 +9,7 @@ paths:
 
 # Build, format and include facts of this repository
 
-Read by the skills `build`, `clang-format` and `strip-pch-includes` (they read it by path: it is not loaded into every session). The three skills are the same text in the engine repository and in a game that carries the engine as the submodule `engine/` (symlinks into `engine/.claude/skills/`); what differs between the repositories is here. A game has a file of the same name with the same headings and fields: this file is its template. The todo areas are in `todo-project.md`, not here.
+Read by the skills `build`, `clang-format` and `strip-pch-includes`, and for its section "Presets by purpose" by `qa` and `perf` (they read it by path: it is not loaded into every session). The first three skills are the same text in the engine repository and in a game that carries the engine as the submodule `engine/` (symlinks into `engine/.claude/skills/`); what differs between the repositories is here. A game has a file of the same name with the same headings and fields: this file is its template. The todo areas are in `todo-project.md`, not here.
 
 ## Terms
 
@@ -86,7 +86,7 @@ A `-L` / `-LE` on the command line narrows a preset further and never widens it:
 
 **Parallel run.** `ctest --preset <p>` runs 8 tests at once (`execution.jobs` 8 in `test-base` of `CMakePresets.json`; the game repositories get it through the included presets). `-j1` runs them one at a time, `-jN` sets another number; `CTEST_PARALLEL_LEVEL` does **not** override a preset. The smoke test takes the `bagi_control_smoke` lock (no other smoke test beside it; unit tests run beside it). With `ENGINE_TESTS_PER_CASE=ON` only (the shards are fixed `add_test` entries, nothing is rewritten when ctest starts), do not start several `ctest`s in one build folder at the same moment right after a build (`gtest_discover_tests` rewrites `<Exe>[1]_tests.cmake` and two writers corrupt it: delete `build/<p>/**/<Exe>*_tests.cmake` and run `ctest -N` once). Rules for a test that runs beside others: `.claude/rules/tests-module.md`.
 
-**The machine's pool of jobs.** On a machine where `tools/todo/buildslots.py install` ran, `MAKEFLAGS` names a jobserver, and `ctest` (3.29+) on macOS and Linux takes one token of it for each test beyond its first: a run then executes `min(-j, tokens + 1)` tests, so builds and test runs of every checkout share one budget, and four runs started at once do not start 32 tests. The preset's `-j` 8 stays the ceiling of one run (unlike Ninja, ctest keeps the jobserver with an explicit `-j`). Waiting for a token does not count against a test's timeout. A test executable started by hand, outside `ctest`, and every `ctest` on Windows (no jobserver client there) are outside the pool. `python3 tools/todo/buildslots.py status` shows the pools.
+**The machine's pool of jobs** is optional: the build never calls the todo store, and without the pool the parallelism is the default. On a machine where `tools/todo/buildslots.py install` ran, `MAKEFLAGS` names a jobserver, and `ctest` (3.29+) on macOS and Linux takes one token of it for each test beyond its first: a run then executes `min(-j, tokens + 1)` tests, so builds and test runs of every checkout share one budget, and four runs started at once do not start 32 tests. The preset's `-j` 8 stays the ceiling of one run (unlike Ninja, ctest keeps the jobserver with an explicit `-j`). Waiting for a token does not count against a test's timeout. A test executable started by hand, outside `ctest`, and every `ctest` on Windows (no jobserver client there) are outside the pool. `python3 tools/todo/buildslots.py status` shows the pools.
 
 **Fuzzing** (`tests/Fuzz/CLAUDE.md`). The corpus of every fuzz target is replayed by `FuzzCorpusTest` in every preset, and mutated in the `extended` entry `BagiFuzzMutations`: `ctest --preset <p>-all -R Fuzz` (from `build/<p>`, `BAGI_FUZZ_ITERATIONS=2000000 bin/BagiEngineTests --gtest_filter='FuzzCorpus/*'` is a longer mutation run: a shard's entry runs the corpus with other cases, and the environment of `BagiFuzzMutations` wins over the shell's). Long runs are libFuzzer with ASan + UBSan, which needs Homebrew LLVM (`brew install llvm` once; Apple clang has no libFuzzer runtime). This is the command until the CI entry `no-ci` exists:
 
@@ -130,6 +130,34 @@ ctest --preset windows-clang-asan
 ```
 
 No `-D` is needed: the mixin `asan-windows-crt` makes the build static (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`, `ENGINE_STATIC_SDL=ON`, the SDL_image codecs static), because the ASan runtime for `/MD` fails every DLL link with `duplicate symbol: malloc` and the static one refuses an `/MD` object; the executables need no ASan DLL. Timing with other workers running (14 cores): configure 1.6 min, build of those three targets (about 1050 steps) 3.2 min, `ctest` (4472 tests, `-j8`) 3.4 min. The test preset has no `detect_stack_use_after_return` (on Windows `TaskSystemTest.ConcurrentStartAndCancelKeepStatusConsistent`, 20000 threads, runs out of commit memory: `failed to allocate FakeStack (error code: 1455)`). A report is a finding as on macOS, and the same ignore list applies (its `miniz.h` line has `*` for the separator, as the Windows path has a backslash there). The result: no sanitizer report in engine code; one failure, `RoomClientSocketTest.AServerThatStopsIsRetriedUntilTheGiveUpTime` (2 connections in the 700 ms give-up time, not 3), which fails the same way in `windows-clang-debug` (a refused connect on Windows takes longer than the test's backoff assumes: not the sanitizers'); `BagiRoomServerSmoke` and `BagiRoomServerHostile` skip, the TLS tests skip, `BagiStressControlSmoke` skips unless `BagiStress` is built. Under a loaded `-j8` a few timing-sensitive cases fail once and pass alone and in the next full run: rerun a failed name before calling it a finding. A game that includes the presets takes the same preset from its own root (`python engine/CI/scripts/vs_env.py cmake --preset windows-clang-asan`; Chess: configure 2.0 min, `BagiChess ChessTests BagiChessUci` 1.9 min, `ctest` 2.8 min, all 1374 tests pass, no report). A CI job takes these commands with the other sanitizer commands when the entry `no-ci` is done.
+
+**Thread sanitizer** (`cmake/CLAUDE.md`, "Sanitizers and fuzzing"). `macos-tsan` builds the whole engine, vendored code and SDL included, with ThreadSanitizer (RelWithDebInfo, asserts and expects ON, no editor). A report does not stop the process: it ends with an error (an abort on macOS), so its test fails even when every case passes. By explicit name or for a QA request only:
+
+```bash
+cmake --preset macos-tsan
+cmake --build --preset macos-tsan --target BagiEngineTests StressTests BagiStress   # a full build of its own
+ctest --preset macos-tsan-fast                                                      # macos-tsan adds the smoke and scenario tests
+```
+
+The test preset sets `TSAN_OPTIONS`. To run one executable by hand, from the build folder (a wrong path stops the process at its start):
+
+```bash
+cd build/macos-tsan && TSAN_OPTIONS="suppressions='$(cd ../.. && pwd)/cmake/sanitizers/tsan.supp'" bin/BagiEngineTests --gtest_filter='TaskSystem*:TaskManager*:TaskScheduler*:ThreadPool*:ParallelFor*:TaskMemory*:TaskAllocation*:TaskLabel*:EventAwaiter*:Threading*'
+```
+
+Nothing is suppressed: `cmake/sanitizers/tsan.supp` takes only vendored, SDK and system code, under the rules in its header. A report depends on which threads met, so a finding may show in one run of several: repeat a run before calling a fix proven. The first runs (macOS, 2026-11-26) found races only in `TaskAllocationTest` and `TaskMemoryTest` (a job's count without a release, so the case reused its stack unordered), fixed there; after that `macos-tsan` ran clean. A game that includes the presets takes `macos-tsan` from its own root.
+
+**Coverage** (`cmake/CLAUDE.md`, "Coverage"). `macos-coverage` builds the whole engine, vendored code and SDL included, with Clang's source-based coverage (Debug, ccache off). By explicit name or for a coverage request only:
+
+```bash
+cmake --preset macos-coverage
+cmake --build --preset macos-coverage --target BagiEngineTests StressTests BagiStress   # a full build of its own
+python3 CI/scripts/coverage_report.py --root . --reset                                  # delete the profiles of earlier runs
+ctest --preset macos-coverage                                                           # unit, smoke and scenario tests
+python3 CI/scripts/coverage_report.py --root .                                          # summary.txt and html/index.html
+```
+
+Every run of an instrumented executable adds a profile to `build/macos-coverage/profraw`, so a QA replay, a smoke or an executable started by hand between the reset and the report counts too, for example `python3 tools/qa/bagi_qa.py replay --exe build/macos-coverage/bin/BagiStress --invariants tools/stress/qa/invariants.py <scenario>`. The report goes to `<system temp>/bagi-coverage/<checkout folder>-macos-coverage/`, the script prints both paths (`--out` names another folder, outside every git work tree). Left out: `external/`, the vendored modules, generated code, the build folder and every `tests/` (`--include-tests` keeps those). Limits: a killed or crashed process writes no profile; a source that no instrumented executable links is absent from the report, not shown as 0 %; a profile from before a rebuild does not match the new binaries (the script warns), so reset first. `llvm-cov`'s `functions have mismatched data` is expected here: a function that one executable does not use leaves an empty record (`hash = 0x0` with `-dump`) beside the counted one of another. A full run leaves some hundreds of MB of profiles until the next reset. Exit codes of the script: 0, 1 an llvm tool failed, 2 a bad argument, 77 nothing to report. The tests of the script: `.venv/bin/python -m pytest CI/scripts/tests/test_coverage_report.py CI/scripts/tests/test_instrumentation_cmake.py`. A game takes `macos-coverage` from its own root (`python3 engine/CI/scripts/coverage_report.py --root .`). There is no Windows or Linux preset.
 
 Timings, `ctest --preset macos-debug` on a warm Debug build, Mahjong row 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs, interleaved (the engine row: one run per column, taken after the games left the engine):
 
@@ -177,6 +205,19 @@ Engine, for explaining to the user. With the CMake Tools extension (`cmake.useCM
 - **CMake: Select Configure Preset** and **CMake: Select Build Preset** pick the preset (also in the status bar).
 - **CMake: Configure** / **CMake: Delete Cache and Reconfigure** are the configure step of the `build` skill. **Build** (F7) is the build step.
 - F5 runs a debug configuration; its `program` is `${command:cmake.launchTargetPath}` and it builds first via the `CMake: build` task.
+
+## Presets by purpose
+
+Read by the skills `build`, `qa` and `perf` when a request names what the build is for and not a preset. A game fills every row, `none` where it has no preset for it. The commands of the three diagnostic rows are in "Tests", the paragraphs "Sanitizers", "Thread sanitizer" and "Coverage".
+
+| Row | Purpose | When it is used | Engine value, macOS | Engine value, Windows |
+|-----|---------|-----------------|---------------------|-----------------------|
+| everyday | build, test and play a change | no purpose is named: the `build` skill's default, the loop, the reviewer, `/qa` | `macos-debug` | `windows-clang-debug` |
+| release measure | numbers that are compared with a baseline | `/perf` (the field `preset` of `perf-project.md`) | `macos-release` | `windows-clang-release` |
+| profile | where the time and the allocations go (a trace, the profiler) | a profile build, `/perf-investigate` (the field `profilePreset`) | `macos-profile` | `windows-clang-profile-editor` |
+| sanitizer | memory errors and undefined behaviour | "under the sanitizers", AddressSanitizer, UBSan | `macos-asan` | `windows-clang-asan` |
+| threads | data races | "under the thread sanitizer", a race | `macos-tsan` | none |
+| coverage | which code the tests or a session ran | "coverage" | `macos-coverage` | none |
 
 ## Format
 

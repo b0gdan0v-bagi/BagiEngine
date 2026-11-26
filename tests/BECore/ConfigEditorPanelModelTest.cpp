@@ -2,6 +2,7 @@
 #include <BECore/Config/XmlDocument.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/FileSystem/MountPoints.h>
+#include <BECore/Logger/ConsoleSink.h>
 #include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/FreshText.h>
@@ -9,7 +10,6 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <gtest/gtest.h>
 
@@ -22,6 +22,10 @@ namespace BECore::Tests {
         constexpr StringView kPanelText = "<PanelConfig value=\"one\"/>\n";
         constexpr StringView kOtherPanelText = "<OtherPanelConfig value=\"other\"/>\n";
         constexpr StringView kValueKey = "root@value";
+
+        /// A config with a registered reflected type, so it opens as objects
+        const PoolString kTypedConfig = "LoggerConfig"_intern;
+        constexpr StringView kTypedText = "<root>\n    <!-- the console -->\n    <sinks>\n        <sink type=\"ConsoleSink\" priority=\"1\"/>\n    </sinks>\n</root>\n";
 
     }  // namespace
 
@@ -37,6 +41,7 @@ namespace BECore::Tests {
             MakeEmptyDirectory(_dir);
             WriteFile(_dir / "PanelConfig.xml", kPanelText);
             WriteFile(_dir / "OtherPanelConfig.xml", kOtherPanelText);
+            WriteMoreConfigs();
             ASSERT_TRUE(_fileSystem.Mount(MountPoints::config, _dir));
             _manager.Initialize();
 
@@ -48,9 +53,10 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _model.Reset();
-            ConfigFieldSchema::DestroyInstance();
             RemoveDirectory(_dir);
         }
+
+        virtual void WriteMoreConfigs() {}
 
         const ConfigEditorView& View() const {
             return _model->GetView();
@@ -258,6 +264,112 @@ namespace BECore::Tests {
                 _model->Update();
             }
         });
+    }
+
+    class ConfigEditorTypedModelTest : public ConfigEditorPanelModelTest {
+    protected:
+        void WriteMoreConfigs() override {
+            WriteFile(_dir / "LoggerConfig.xml", kTypedText);
+        }
+
+        /// The one sink of the open document
+        ConsoleSink& Sink() {
+            ReflectedConfigDocument* document = _model->GetDocument();
+            EXPECT_NE(document, nullptr);
+            return *static_cast<ConsoleSink*>(document->GetLists().front().elements.front().object.Get());
+        }
+
+        /// What an edit in the panel does: the object changes and the document is told
+        void SetSinkPriority(int priority) {
+            Sink().SetPriority(priority);
+            _model->GetDocument()->NoteChange();
+            _model->Update();
+        }
+
+        bool ReportsDirty() {
+            Vector<EditorDocumentState> documents;
+            _model->AppendDocuments(documents);
+            return documents.size() == 1 && documents.front().dirty;
+        }
+
+        String TypedOnDisk() const {
+            return ReadFile(_dir / "LoggerConfig.xml");
+        }
+    };
+
+    TEST_F(ConfigEditorTypedModelTest, AConfigOfARegisteredTypeOpensAsObjectsAndAnotherSaysWhyItIsText) {
+        Select(kTypedConfig);
+
+        EXPECT_NE(_model->GetDocument(), nullptr);
+        EXPECT_TRUE(View().showTree);
+        EXPECT_FALSE(View().textMode);
+        EXPECT_TRUE(View().textModeNote.empty());
+
+        Select(kPanelConfig);
+
+        EXPECT_EQ(_model->GetDocument(), nullptr);
+        EXPECT_TRUE(View().textMode);
+        EXPECT_NE(View().textModeNote.find("no reflected type"), String::npos);
+    }
+
+    TEST_F(ConfigEditorTypedModelTest, AnEditedObjectIsUnsavedAndSaveWritesItAndOpensTheConfigAgain) {
+        Select(kTypedConfig);
+        SetSinkPriority(4);
+
+        EXPECT_TRUE(View().hasStaged);
+        EXPECT_TRUE(ReportsDirty());
+
+        Run(EditorCommandIds::kConfigSave);
+
+        EXPECT_NE(TypedOnDisk().find("priority=\"4\""), String::npos);
+        EXPECT_NE(TypedOnDisk().find("<!-- the console -->"), String::npos);
+        EXPECT_FALSE(View().hasStaged);
+        EXPECT_FALSE(ReportsDirty());
+        EXPECT_EQ(Sink().GetPriority(), 4);
+    }
+
+    TEST_F(ConfigEditorTypedModelTest, AReloadWithAnEditedObjectAsksFirstAndDiscardReadsTheFile) {
+        Select(kTypedConfig);
+        SetSinkPriority(4);
+
+        Run(EditorCommandIds::kConfigEditorReload);
+
+        EXPECT_TRUE(View().reloadConfirmOpen);
+        EXPECT_EQ(Sink().GetPriority(), 4);
+
+        Run(EditorCommandIds::kConfigEditorReloadDiscard);
+
+        EXPECT_EQ(Sink().GetPriority(), 1);
+        EXPECT_FALSE(View().hasStaged);
+        EXPECT_EQ(TypedOnDisk(), kTypedText);
+    }
+
+    TEST_F(ConfigEditorTypedModelTest, AChangeOnDiskDropsTheEditsAndOpensTheNewDocument) {
+        Select(kTypedConfig);
+        SetSinkPriority(4);
+        String changed(kTypedText);
+        changed.replace(changed.find("priority=\"1\""), StringView("priority=\"1\"").size(), "priority=\"9\"");
+        WriteFile(_dir / "LoggerConfig.xml", changed);
+
+        _manager.ReloadConfig(kTypedConfig);
+        _model->Update();
+
+        EXPECT_TRUE(View().changedOnDisk);
+        EXPECT_FALSE(View().hasStaged);
+        EXPECT_EQ(Sink().GetPriority(), 9);
+    }
+
+    TEST_F(ConfigEditorTypedModelTest, ASaveThatCannotWriteTheFileKeepsTheConfigUnsaved) {
+        Select(kTypedConfig);
+        SetSinkPriority(4);
+        // A directory where the file was: nothing can be written there
+        RemoveFileIfPresent(_dir / "LoggerConfig.xml");
+        MakeEmptyDirectory(_dir / "LoggerConfig.xml");
+
+        Run(EditorCommandIds::kConfigSave);
+
+        EXPECT_TRUE(View().hasStaged);
+        EXPECT_TRUE(ReportsDirty());
     }
 
 }  // namespace BECore::Tests

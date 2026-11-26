@@ -7,6 +7,10 @@
 
 namespace BECore {
 
+    /// The element name of an array whose elements have no name of their own (reflected containers other than factory lists and maps).
+    /// XmlDeserializer takes a child element of any name for it, and only the asked name for every other element name.
+    inline constexpr StringView kGenericElementName = "item";
+
     /**
      * @brief Object and array nesting shared by ISerializer and IDeserializer.
      */
@@ -34,7 +38,7 @@ namespace BECore {
          * When reading: navigates into the array, count receives the element count
          *
          * @param name Name of the array container
-         * @param elementName Name for individual array elements (e.g., "item")
+         * @param elementName Name for individual array elements (kGenericElementName when they have none)
          * @param count [in/out] Number of elements
          * @return true if array exists or was created
          */
@@ -77,12 +81,10 @@ namespace BECore {
     public:
         virtual ~ISerializer() = default;
 
-        bool IsSkipDefaults() const {
-            return _skipDefaults;
+        [[deprecated("every field is written; remove the call")]] bool IsSkipDefaults() const {
+            return false;
         }
-        void SetSkipDefaults(bool skip) {
-            _skipDefaults = skip;
-        }
+        [[deprecated("every field is written; remove the call")]] void SetSkipDefaults(bool /*skip*/) {}
 
         // =================================================================
         // Primitive types serialization (as child elements)
@@ -125,15 +127,24 @@ namespace BECore {
         virtual void WriteAttribute(StringView name, StringView value) = 0;
         virtual void WriteAttribute(StringView name, const PoolString& value) = 0;
 
+        // =================================================================
+        // Char pointers: a text. Without these a string literal picks `bool`. A null pointer is an empty text.
+        // A derived serializer brings them in with `using`, or its own overloads hide them.
+        // =================================================================
+
+        void Write(StringView name, const char* value) {
+            Write(name, StringView(value != nullptr ? value : ""));
+        }
+        void WriteAttribute(StringView name, const char* value) {
+            WriteAttribute(name, StringView(value != nullptr ? value : ""));
+        }
+
     protected:
         ISerializer() = default;
         ISerializer(const ISerializer&) = default;
         ISerializer& operator=(const ISerializer&) = default;
         ISerializer(ISerializer&&) = default;
         ISerializer& operator=(ISerializer&&) = default;
-
-    private:
-        bool _skipDefaults = false;
     };
 
 }  // namespace BECore

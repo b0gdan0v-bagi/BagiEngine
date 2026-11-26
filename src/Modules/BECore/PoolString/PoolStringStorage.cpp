@@ -1,5 +1,6 @@
 #include "PoolStringStorage.h"
 
+#include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 
 namespace BECore::Details {
@@ -7,6 +8,34 @@ namespace BECore::Details {
     namespace {
 
         std::atomic<uint64_t> g_nextStorageId{1};
+
+        /// Gives each row the block its entry lies in, and with it the origin; a row in no block stays a static one
+        void ClassifyRows(PoolStringSnapshot& snapshot) {
+            struct Range {
+                uintptr_t begin;
+                uint32_t block;
+            };
+            Vector<Range> ranges;
+            ranges.reserve(snapshot.blocks.size());
+            for (uint32_t i = 0; i < snapshot.blocks.size(); ++i) {
+                ranges.push_back({reinterpret_cast<uintptr_t>(snapshot.blocks[i].data), i});
+            }
+            eastl::sort(ranges.begin(), ranges.end(), [](const Range& left, const Range& right) { return left.begin < right.begin; });
+
+            for (PoolStringRow& row : snapshot.strings) {
+                const uintptr_t text = reinterpret_cast<uintptr_t>(row.text.CStr());
+                const auto after = eastl::upper_bound(ranges.begin(), ranges.end(), text, [](uintptr_t address, const Range& range) { return address < range.begin; });
+                if (after == ranges.begin()) {
+                    continue;
+                }
+                const Range& range = *(after - 1);
+                const PoolBlockRow& block = snapshot.blocks[range.block];
+                if (text - range.begin < block.capacity) {
+                    row.block = range.block;
+                    row.origin = block.kind == PoolBlockKind::Runtime ? PoolStringOrigin::Runtime : PoolStringOrigin::Adopted;
+                }
+            }
+        }
 
     }  // namespace
 
@@ -44,25 +73,32 @@ namespace BECore::Details {
         return static_cast<char*>(memory.data);
     }
 
-    char* PoolStringStorage::TakeRuntimeBlock(size_t bytes) {
+    char* PoolStringStorage::TakeRuntimeBlock(size_t bytes, size_t used) {
         char* memory = TakeBlock(bytes);
         ++_runtime.blocks;
         _runtime.blockBytes += bytes;
+        _blocks.push_back({.data = memory, .kind = PoolBlockKind::Runtime, .capacity = bytes, .used = used});
         return memory;
+    }
+
+    void PoolStringStorage::StartCurrentBlock(size_t bytes, size_t used) {
+        _current = TakeRuntimeBlock(bytes, used);
+        _currentBlock = _blocks.size() - 1;
+        _capacity = bytes;
+        _offset = used;
     }
 
     char* PoolStringStorage::AllocateEntryMemory(size_t bytes, size_t entryCount) {
         if (_offset + bytes <= _capacity) {
             char* memory = _current + _offset;
             _offset += bytes;
+            _blocks[_currentBlock].used = _offset;
             return memory;
         }
         if (bytes > PoolString::kBlockBytes || entryCount > 1) {
-            return TakeRuntimeBlock(bytes);
+            return TakeRuntimeBlock(bytes, bytes);
         }
-        _current = TakeRuntimeBlock(PoolString::kBlockBytes);
-        _capacity = PoolString::kBlockBytes;
-        _offset = bytes;
+        StartCurrentBlock(PoolString::kBlockBytes, bytes);
         return _current;
     }
 
@@ -97,6 +133,9 @@ namespace BECore::Details {
         ++_runtime.strings;
         _runtime.bytes += bytes;
         ++_misses;
+        if (_observer != nullptr) {
+            _observer->OnRuntimeString(PoolString(entry));
+        }
         return PoolString(entry);
     }
 
@@ -210,6 +249,11 @@ namespace BECore::Details {
         _runtime.strings += fresh.size();
         _runtime.bytes += bytes;
         _misses += fresh.size();
+        if (_observer != nullptr) {
+            for (const size_t index : fresh) {
+                _observer->OnRuntimeString(out[index]);
+            }
+        }
         return fresh.size();
     }
 
@@ -275,9 +319,7 @@ namespace BECore::Details {
         }
         const size_t aligned = (bytes + kPoolEntryAlignment - 1) & ~(kPoolEntryAlignment - 1);
         if (_capacity - _offset < aligned) {
-            _current = TakeRuntimeBlock(aligned);
-            _capacity = aligned;
-            _offset = 0;
+            StartCurrentBlock(aligned, 0);
         }
     }
 
@@ -288,7 +330,7 @@ namespace BECore::Details {
         UniqueLock lock(_mutex);
         ++_writeLocks;
         char* memory = TakeBlock(aligned);
-        _blocks.push_back({memory, aligned, false});
+        _blocks.push_back({.data = memory, .kind = PoolBlockKind::Allocated, .capacity = aligned});
         ++_unadoptedBlocks;
         _unadoptedBlockBytes += aligned;
         return PoolBlock(memory, aligned, _id, _blocks.size() - 1);
@@ -299,7 +341,7 @@ namespace BECore::Details {
             return PoolAdoptError::NotOwned;
         }
         // A successful adoption empties its token and a token cannot be copied: no live token names an adopted block
-        ASSERT(!_blocks[block._index].adopted);
+        ASSERT(_blocks[block._index].kind == PoolBlockKind::Allocated);
         return std::nullopt;
     }
 
@@ -384,7 +426,12 @@ namespace BECore::Details {
             }
         }
 
-        _blocks[block._index].adopted = true;
+        PoolBlockRow& record = _blocks[block._index];
+        record.kind = PoolBlockKind::Adopted;
+        record.used = usedBytes;
+        record.deadStrings = result.deadStrings;
+        record.deadBytes = result.deadBytes;
+        record.source = String(options.sourceName.begin(), options.sourceName.end());
         _adopted.strings += result.linkedStrings;
         ++_adopted.blocks;
         _adopted.blockBytes += block._capacity;
@@ -396,27 +443,26 @@ namespace BECore::Details {
         return result;
     }
 
-    PoolStringStats PoolStringStorage::GetStats() {
-        PoolStringStats stats;
-        {
-            SharedLock lock(_mutex);
-            stats.stringCount = _table.Used();
-            stats.stringBytes = _runtime.bytes + _static.bytes + _adopted.bytes;
-            stats.blockCount = _runtime.blocks + _adopted.blocks + _unadoptedBlocks;
-            stats.blockBytes = _runtime.blockBytes + _adopted.blockBytes + _unadoptedBlockBytes;
-            stats.tableCapacity = _table.Capacity();
-            stats.tableUsed = _table.Used();
-            stats.longestProbe = _table.LongestProbe();
-            stats.misses = _misses;
-            stats.runtime = _runtime;
-            stats.staticEntries = _static;
-            stats.adopted = _adopted;
-            stats.deadStrings = _deadStrings;
-            stats.deadBytes = _deadBytes;
-            stats.staticDuplicates = _staticDuplicates.load(std::memory_order_relaxed);
-            stats.writeLocks = _writeLocks;
-            stats.heapFallbackBlocks = _heapFallbackBlocks;
-        }
+    void PoolStringStorage::ReadLockedStats(PoolStringStats& stats) const {
+        stats.stringCount = _table.Used();
+        stats.stringBytes = _runtime.bytes + _static.bytes + _adopted.bytes;
+        stats.blockCount = _runtime.blocks + _adopted.blocks + _unadoptedBlocks;
+        stats.blockBytes = _runtime.blockBytes + _adopted.blockBytes + _unadoptedBlockBytes;
+        stats.tableCapacity = _table.Capacity();
+        stats.tableUsed = _table.Used();
+        stats.longestProbe = _table.LongestProbe();
+        stats.misses = _misses;
+        stats.runtime = _runtime;
+        stats.staticEntries = _static;
+        stats.adopted = _adopted;
+        stats.deadStrings = _deadStrings;
+        stats.deadBytes = _deadBytes;
+        stats.staticDuplicates = _staticDuplicates.load(std::memory_order_relaxed);
+        stats.writeLocks = _writeLocks;
+        stats.heapFallbackBlocks = _heapFallbackBlocks;
+    }
+
+    void PoolStringStorage::AddThreadCounters(PoolStringStats& stats) {
         {
             LockGuard lock(_countersMutex);
             for (const UniquePtr<PoolHitCounter>& counter : _hitCounters) {
@@ -426,7 +472,56 @@ namespace BECore::Details {
             }
         }
         stats.internCalls = stats.hits + stats.misses;
+    }
+
+    PoolStringStats PoolStringStorage::GetStats() {
+        PoolStringStats stats;
+        {
+            SharedLock lock(_mutex);
+            ReadLockedStats(stats);
+        }
+        AddThreadCounters(stats);
         return stats;
+    }
+
+    PoolStringTotals PoolStringStorage::GetTotals() {
+        SharedLock lock(_mutex);
+        return {_runtime.strings, _runtime.bytes, _static.strings + _adopted.strings, _static.bytes + _adopted.bytes};
+    }
+
+    void PoolStringStorage::TakeSnapshot(PoolStringSnapshot& snapshot) {
+        size_t stringCount = 0;
+        size_t blockCount = 0;
+        {
+            SharedLock lock(_mutex);
+            stringCount = _table.Used();
+            blockCount = _blocks.size();
+        }
+        // Reserved outside the lock; only what is added in between can make a vector grow under it
+        snapshot.strings.clear();
+        snapshot.strings.reserve(stringCount);
+        snapshot.blocks.reserve(blockCount);
+        snapshot.stats = PoolStringStats();
+        {
+            SharedLock lock(_mutex);
+            ReadLockedStats(snapshot.stats);
+            _table.ForEach([&snapshot](const Entry& entry) { snapshot.strings.push_back({.text = PoolString(&entry)}); });
+            snapshot.blocks.assign(_blocks.begin(), _blocks.end());
+        }
+        AddThreadCounters(snapshot.stats);
+        ClassifyRows(snapshot);
+    }
+
+    void PoolStringStorage::SetObserver(IPoolStringObserver& observer) {
+        UniqueLock lock(_mutex);
+        _observer = &observer;
+    }
+
+    void PoolStringStorage::RemoveObserver(const IPoolStringObserver& observer) {
+        UniqueLock lock(_mutex);
+        if (_observer == &observer) {
+            _observer = nullptr;
+        }
     }
 
 }  // namespace BECore::Details

@@ -1361,6 +1361,29 @@ namespace BECore::Tests {
         EXPECT_EQ(differing, 0u);
     }
 
+    TEST_F(SDLBatchCaptureTest, TheBackendCountsWhyItsBatchesEndedAndWhatItUploaded) {
+        // Position, color and UV, handed to SDL as floats
+        constexpr uint64_t kSdlVertexBytes = 8 * sizeof(float);
+        constexpr uint64_t kQuadBytes = 4 * kSdlVertexBytes + 6 * sizeof(int);
+        renderer->Clear(kBackground);
+        renderer->TakeRenderCounters();
+
+        ASSERT_TRUE(MakeSolidTexture(8, 4, kRed));
+        renderer->DrawFilledRect(10.0f, 10.0f, 20.0f, 20.0f, kRed);
+        renderer->DrawFilledRect(40.0f, 10.0f, 20.0f, 20.0f, kRed);
+        renderer->DrawFilledRect(10.5f, 50.0f, 20.0f, 20.0f, kRed);  // a fractional edge: drawn at once, hands over no geometry
+        renderer->DrawFilledRect(40.0f, 50.0f, 20.0f, 20.0f, kRed);
+        renderer->PushClipRect(Rect{0.0f, 0.0f, 50.0f, 50.0f});
+        renderer->PopClipRect();
+
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(counters.drawCalls, 3u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Unbatched), 1u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Clip), 1u);
+        EXPECT_EQ(counters.geometryUploadBytes, 3 * kQuadBytes);
+        EXPECT_EQ(counters.textureUploadBytes, 8u * 4u * 4u);
+    }
+
     TEST_F(SDLBatchCaptureTest, BatchingDoesNotChangeTheCountOfPrimitives) {
         renderer->Clear(kBackground);
         renderer->SetBatchingEnabled(true);

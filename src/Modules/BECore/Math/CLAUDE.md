@@ -2,6 +2,8 @@
 
 Small value types, header-only except `Color`: `Vec2`, `IVec2`, `Vec3`, `Vec4`, `Mat4`, `Quat`, `Rect`, `Color`. `Vec2` and `Rect` are the 2D scene's; `IVec2` is its integer grid twin (explicit conversions to and from `Vec2`, truncating toward zero); `Vec3`, `Vec4`, `Mat4` and `Quat` are the 3D renderer's (`Renderer/Render3D/`, `.claude/rules/rendering-module.md`, "Generic GPU interface and 3D"). Every type but `Mat4` (a transform is built, never stored in a config) has the `Serialize` / `Deserialize` / `VisitProperties` templates; a new type with a `Serialize` also needs a `WriteMath` overload in `Control/JsonWriteMath.h` (the JSON writer of a reflected field), or its fields write through the slower bridge (`WriteSerializedMember`: a scratch `String`).
 
+`Color::ParseColorFromString` reads the text `r,g,b,a` (four whole numbers 0..255) and gives nothing for any other text: a bad channel is never read as 0.
+
 ## 3D conventions
 
 One set for the scene, `Renderer3D` and every backend, so no matrix has a variant per backend. A test pins each by numbers (`tests/BECore/Mat4Test.cpp`).

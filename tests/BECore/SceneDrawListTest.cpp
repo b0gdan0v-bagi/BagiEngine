@@ -376,6 +376,7 @@ namespace BECore::Tests {
         Draw();
         const uint32_t builds = _scene->GetDrawListBuilds();
 
+        _renderer->ClearCalls();
         ExpectNoAllocations([&] {
             moved->SetLayer(1);
             _scene->Draw();

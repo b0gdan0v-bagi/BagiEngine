@@ -40,7 +40,7 @@ namespace BECore::BinaryFormat {
     //   Element     := u32 size | Entry*                                   (size = bytes after the size field)
     //
     // Everything is little-endian. Entries are matched by name, not by position, so fields can be skipped
-    // (skip-defaults, null pointers, optionals) and reordered. A name that is written twice reads as the last write.
+    // (null pointers, optionals) and reordered. A name that is written twice reads as the last write.
     // Write() and WriteAttribute() produce the same entry: there is no attribute/child split in binary.
     // The version 2 table holds the names of all entries and the text of the PoolString values; a String value is never in it.
     // A version 3 stream keeps the names in its NameTable and the PoolString texts in its PoolSection.

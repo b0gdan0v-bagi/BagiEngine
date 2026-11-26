@@ -34,6 +34,9 @@ namespace BECore {
 
         String SaveToString() const;
 
+        using ISerializer::Write;
+        using ISerializer::WriteAttribute;
+
         void Write(StringView name, bool value) override;
         void Write(StringView name, int8_t value) override;
         void Write(StringView name, uint8_t value) override;
@@ -76,6 +79,12 @@ namespace BECore {
          */
         const pugi::xml_node& GetRootNode() const {
             return _nodeStack.front();
+        }
+
+    protected:
+        /// True outside every object, array and array element, where a write is a field of the serialized object itself
+        bool IsAtRoot() const {
+            return _nodeStack.size() == 1;
         }
 
     private:

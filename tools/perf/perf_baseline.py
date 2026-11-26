@@ -20,6 +20,8 @@ PLAN_KIND = "owner"  # the store has no kind of its own for it; the name `perf-b
 EXIT_STORE_REFUSED = 2  # todo.py: the store refused (404 for a plan that does not exist)
 AREAS_RE = re.compile(r"\bareas (.*?), live updates\b")
 NO_RIGHT_RE = re.compile(r"\bHTTP (?:403|404)\b")  # the store answers 404 to a token that may not see the plan
+STORE_TIMEOUT_S = 120  # a hung call must not hang the run; the first call of a checkout also downloads the served CLI
+LOCAL_HINT = "--baseline-file F uses a local baseline file instead"
 
 
 def _run(command: list[str]) -> str:
@@ -90,21 +92,41 @@ def merge_record(previous: dict | None, results: dict, date: str, preset: str, f
 
 
 class StoreError(Exception):
-    pass
+    """The store cannot be used; the message is one line and names the local alternative."""
 
 
-def _todo(env_file: str | None, *args: str) -> list[str]:
-    return [sys.executable, str(TODO_CLI), *(["--env-file", env_file] if env_file else []), *args]
+def _unusable(message: str) -> StoreError:
+    return StoreError(f"{message} ({LOCAL_HINT})")
+
+
+def _last_line(text: str) -> str:
+    return text.strip().rpartition("\n")[2].strip()
+
+
+def _reason(done: subprocess.CompletedProcess) -> str:
+    """The last line the CLI printed: its loader may put a warning before the error."""
+    return _last_line(done.stderr) or _last_line(done.stdout) or f"exit code {done.returncode}"
+
+
+def _todo(env_file: str | None, *args: str, text: str | None = None) -> subprocess.CompletedProcess:
+    """One call of the todo CLI. Raises StoreError when it cannot be started or does not end in time."""
+    command = [sys.executable, str(TODO_CLI), *(["--env-file", env_file] if env_file else []), *args]
+    try:
+        return subprocess.run(command, input=text, capture_output=True, text=True, timeout=STORE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        raise _unusable(f"todo.py {' '.join(args)}: no answer within {STORE_TIMEOUT_S} s") from None
+    except OSError as error:
+        raise _unusable(f"todo.py {' '.join(args)}: {error}") from None
 
 
 def token_areas(env_file: str | None = None) -> list[str]:
     """The areas the checkout's token holds, as `todo.py ping` names them."""
-    done = subprocess.run(_todo(env_file, "ping"), capture_output=True, text=True)
+    done = _todo(env_file, "ping")
     if done.returncode != 0:
-        raise StoreError(f"todo.py ping: {done.stderr.strip() or done.stdout.strip()}")
+        raise _unusable(f"todo.py ping: {_reason(done)}")
     match = AREAS_RE.search(done.stdout)
     if not match:
-        raise StoreError(f"todo.py ping does not name the token's areas: {done.stdout.strip()}")
+        raise _unusable(f"todo.py ping does not name the token's areas: {_last_line(done.stdout)}")
     return [area.strip() for area in match.group(1).split(",")]
 
 
@@ -120,24 +142,19 @@ def require_area(area: str, env_file: str | None = None) -> None:
 
 def read_store(name: str, env_file: str | None = None) -> str | None:
     """The text of the plan `name` in the todo store, None when it does not exist."""
-    done = subprocess.run(_todo(env_file, "plan", "get", name, "--stdout"), capture_output=True, text=True)
+    done = _todo(env_file, "plan", "get", name, "--stdout")
     if done.returncode == EXIT_STORE_REFUSED:
         return None
     if done.returncode != 0:
-        raise StoreError(f"todo.py plan get {name}: {done.stderr.strip() or done.stdout.strip()}")
+        raise _unusable(f"todo.py plan get {name}: {_reason(done)}")
     return done.stdout
 
 
 def write_store(name: str, content: str, env_file: str | None = None) -> str:
-    done = subprocess.run(
-        _todo(env_file, "--actor", "perf", "plan", "put", name, "--file", "-", "--kind", PLAN_KIND),
-        input=content,
-        capture_output=True,
-        text=True,
-    )
+    done = _todo(env_file, "--actor", "perf", "plan", "put", name, "--file", "-", "--kind", PLAN_KIND, text=content)
     if done.returncode != 0:
-        detail = done.stderr.strip() or done.stdout.strip()
+        detail = _reason(done)
         if NO_RIGHT_RE.search(detail):
-            raise StoreError(f"the token has no right to write the baseline {name} (a missing right, not a missing plan): {detail}")
-        raise StoreError(f"todo.py plan put {name}: {detail}")
+            raise _unusable(f"the token has no right to write the baseline {name} (a missing right, not a missing plan): {detail}")
+        raise _unusable(f"todo.py plan put {name}: {detail}")
     return done.stdout.strip()

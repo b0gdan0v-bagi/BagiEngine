@@ -44,7 +44,7 @@ namespace BECore {
         return id;
     }
 
-    IntrusivePtr<TweenHandle> TweenManager::StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel, bool endless,
+    IntrusivePtr<TweenHandle> TweenManager::StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel, TweenRunMode mode,
                                                         AnimationFrameClass frameClass) {
         auto tween = New<TweenHandle>();
         const uint32_t id = AcquireId();
@@ -59,7 +59,7 @@ namespace BECore {
                   .id = id,
                   .ease = settings.ease,
                   .frameClass = frameClass,
-                  .endless = endless,
+                  .mode = mode,
                   .apply = std::move(apply)};
         _owners[id] = tween;
         if (_walking) {
@@ -70,6 +70,13 @@ namespace BECore {
             _slots.push_back(std::move(slot));
         }
         return tween;
+    }
+
+    IntrusivePtr<TweenHandle> TweenManager::LoopErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onCancel) {
+        // A turn of no length has no time to wrap into
+        const bool loops = std::isfinite(settings.duration) && settings.duration > 0.0f;
+        return StartErased(settings, std::move(apply), {}, std::move(onCancel), loops ? TweenRunMode::Loop : TweenRunMode::Once,
+                           loops ? AnimationFrameClass::DecorativeLoop : AnimationFrameClass::FiniteEffect);
     }
 
     IntrusivePtr<TweenHandle> TweenManager::Delay(float seconds, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel) {
@@ -93,7 +100,8 @@ namespace BECore {
         // the seconds of the step instead of a progress, so no ever larger time is accumulated into one float
         TweenApply apply = endless ? TweenApply([owned = std::move(owned)](float seconds) { owned->Advance(seconds); })
                                    : TweenApply([owned = std::move(owned), duration](float progress) { owned->Evaluate(progress * duration); });
-        auto handle = StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel), endless, frameClass);
+        auto handle = StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel),
+                                  endless ? TweenRunMode::Endless : TweenRunMode::Once, frameClass);
         // A clip callback may cancel its own run (Cancel, CancelAll, a ScopedTween, Clear): the timeline then stops at the clip boundary, so no setter or
         // callback runs after it. The raw pointer is safe: the timeline belongs to the setter, which belongs to the slot, and the handle outlives a setter
         // that runs (`_steppingOwner`)
@@ -194,8 +202,29 @@ namespace BECore {
         CallSetter(slot, seconds);
     }
 
+    void TweenManager::StepLoop(Slot& slot, float dt) {
+        slot.elapsed += dt;
+        if (slot.state == TweenState::Waiting) {
+            if (slot.elapsed < slot.delay) {
+                return;
+            }
+            slot.state = TweenState::Running;
+            slot.elapsed -= slot.delay;  // once: the next turns have no delay
+        }
+        if (slot.elapsed >= slot.duration) {
+            // An infinite step has no place in a turn (`fmod` would answer NaN): the next turn starts over
+            slot.elapsed = std::isfinite(slot.elapsed) ? std::fmod(slot.elapsed, slot.duration) : 0.0f;
+        }
+        slot.progress = slot.elapsed / slot.duration;
+        CallSetter(slot, Ease(slot.ease, slot.progress));
+    }
+
     void TweenManager::Step(Slot& slot, float dt) {
-        if (slot.endless) {
+        if (slot.mode == TweenRunMode::Loop) {
+            StepLoop(slot, dt);
+            return;
+        }
+        if (slot.mode == TweenRunMode::Endless) {
             StepEndless(slot, dt);
             return;
         }

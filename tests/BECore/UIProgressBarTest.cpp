@@ -3,7 +3,6 @@
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -374,24 +373,15 @@ namespace BECore::Tests {
         EXPECT_EQ(CallsIn(*_renderer, DrawKind::Geometry, bar.rect).size(), 1u);
     }
 
-    TEST_F(UIProgressBarTest, ThePartShapeSurvivesAnXmlRoundTripAndTheDefaultIsSkippedWhenAsked) {
-        auto element = [](const UIProgressBar& bar) {
-            XmlSerializer serializer;
-            serializer.SetSkipDefaults(true);
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            bar.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        };
-        EXPECT_EQ(element(Bar("Unit")).find("partShape"), String::npos);
+    TEST_F(UIProgressBarTest, ThePartShapeSurvivesAnXmlRoundTrip) {
         Bar("Unit").partShape = UIPartShape::Round;
-        EXPECT_NE(element(Bar("Unit")).find("partShape=\"Round\""), String::npos);
 
         String xml;
         const auto loaded = XmlRoundTrip(*_canvas, &xml);
         ASSERT_TRUE(loaded);
         EXPECT_EQ(Require(loaded->GetRoot().FindByName("Unit"_intern)).Cast<UIProgressBar>()->partShape, UIPartShape::Round);
         EXPECT_EQ(Require(loaded->GetRoot().FindByName("Percent"_intern)).Cast<UIProgressBar>()->partShape, UIPartShape::Square);
+        EXPECT_NE(xml.find("partShape=\"Round\""), String::npos) << xml.c_str();
     }
 
 }  // namespace BECore::Tests

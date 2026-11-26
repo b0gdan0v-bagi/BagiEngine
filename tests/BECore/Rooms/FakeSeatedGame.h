@@ -46,6 +46,8 @@ namespace BECore::Tests {
         return text;
     }
 
+    // ViewText, ActionsText, OutcomeText, Dump and ExpectNoLeak are defined in the engine's test executable only: a game cannot call them
+
     /// The answers of a seated game as the compact text they are written as: what a client of the wire sees
     [[nodiscard]] String ViewText(const SeatedView& view);
     [[nodiscard]] String ActionsText(const SeatedActions& actions);

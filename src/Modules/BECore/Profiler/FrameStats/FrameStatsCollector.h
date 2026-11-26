@@ -14,10 +14,11 @@
 namespace BECore {
 
     /// The timed stages of a frame (CoreManager::OnGameCycle, Scene::Draw, the present in Application::RunFrame). Wait is timed by the
-    /// renderer backend (the fence and the swapchain acquire, between BeginFrame and the game cycle), a sibling of the others, not nested
-    CORE_ENUM(FrameStage, uint8_t, Update, SceneUpdate, Render, SceneDraw, Present, Wait)
+    /// renderer backend (the fence and the swapchain acquire, between BeginFrame and the game cycle), a sibling of the others, not nested.
+    /// Submit is the batcher's submissions to the backend (IRenderer::Flush), nested inside whichever stage flushed
+    CORE_ENUM(FrameStage, uint8_t, Update, SceneUpdate, Render, SceneDraw, Present, Wait, Submit)
 
-    inline constexpr size_t kFrameStageCount = 6;
+    inline constexpr size_t kFrameStageCount = 7;
     static_assert(kFrameStageCount == EnumUtils<FrameStage>::Count(), "kFrameStageCount follows FrameStage");
     inline constexpr size_t kMaxFrameCounters = 16;
 
@@ -32,7 +33,10 @@ namespace BECore {
         bool paused = false;                        // a held frame: the game did not advance (a stepped frame is a game frame)
         double frameMs = 0.0;                       // from the end of the frame before to the end of this one (the first frame: its cpuMs)
         double cpuMs = 0.0;                         // from BeginFrame to EndFrame
-        Array<double, kFrameStageCount> stageMs{};  // by FrameStage; SceneUpdate is inside Update, SceneDraw inside Render, Wait outside all of them
+        Array<double, kFrameStageCount> stageMs{};  // by FrameStage; SceneUpdate is inside Update, SceneDraw inside Render, Wait outside all of them, Submit inside any
+        /// The GPU time of the newest frame the backend saw finish, so some frames older than the rest of these statistics (the GPU runs
+        /// behind the CPU); 0: no value
+        double gpuMs = 0.0;
         RenderCounters draws;
         uint64_t allocCount = 0;  // the allocations of the frame (ENGINE_PROFILER_ALLOC; 0 without it)
         uint64_t allocBytes = 0;
@@ -78,6 +82,8 @@ namespace BECore {
         void EndStage(FrameStage stage);
         /// Sets @p name to @p value for the open frame (the last value wins); dropped past kMaxFrameCounters names
         void SetCounter(PoolString name, double value);
+        /// Sets FrameStats::gpuMs of the open frame (the last value wins); ignored when no frame is open
+        void SetGpuTime(double ms);
         /// Closes the frame with what the renderer counted and the allocation totals now; no effect without BeginFrame
         void EndFrame(const RenderCounters& draws, const AllocTotals& allocs);
 
@@ -93,6 +99,10 @@ namespace BECore {
         [[nodiscard]] const FrameStats* GetLast() const;
         [[nodiscard]] uint64_t GetFrameCount() const {
             return _frames;
+        }
+        /// The FrameStats::frame that the open frame will get at its end; between two frames, that of the next one
+        [[nodiscard]] uint64_t GetOpenFrameNumber() const {
+            return _frames + 1;
         }
 
         /// Times one stage of the collector for the length of a scope

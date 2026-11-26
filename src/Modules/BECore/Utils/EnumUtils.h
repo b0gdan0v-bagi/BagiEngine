@@ -194,21 +194,9 @@ namespace BECore {
         {EnumTokenizerPtr(T{})};
     };
 
-}  // namespace BECore
-
-namespace BECore::Detail {
-    template <typename T, typename = void>
-    struct HasEnumUtils : std::false_type {};
-
-    template <typename T>
-    struct HasEnumUtils<T, std::enable_if_t<std::is_enum_v<T>>> : std::true_type {};
-}  // namespace BECore::Detail
-
-namespace BECore {
-
-    /// Formats an enum as the name of its value; a string spec works (Format/CLAUDE.md).
-    template <typename Enum>
-    struct Formatter<Enum, std::enable_if_t<Detail::HasEnumUtils<Enum>::value>> : TextFormatter {
+    /// Formats a CORE_ENUM value as its name; a string spec works (Format/CLAUDE.md). Other enums are left to fmt.
+    template <IsReflectedEnum Enum>
+    struct Formatter<Enum> : TextFormatter {
         FormatContext::iterator Format(Enum e, FormatContext& ctx) const {
             return FormatText(EnumUtils<Enum>::ToString(e), ctx);
         }
