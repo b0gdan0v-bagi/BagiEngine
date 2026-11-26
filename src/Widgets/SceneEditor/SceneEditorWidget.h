@@ -88,6 +88,12 @@ namespace BECore {
         /// Answers the end of a rubber-band drag: the nodes the box touches (ScenePick::PickInRect) replace the selection, or are added to it with Ctrl or Shift
         void OnViewportBoxSelect(const ViewportBoxSelectEvent& event);
 
+        /**
+         * @brief Answers a content file dropped onto the viewport: AddSceneNodeOfAsset puts its node into the active scene at the pointer, the node is selected and
+         * revealed and the scene is unsaved. A file that makes no node is one error line
+         */
+        void OnViewportAssetDrop(const ViewportAssetDropEvent& event);
+
         /// Answers the end of a gizmo drag: a Commit marks the scene as changed (Begin, Change and Cancel leave the nodes as the drag found them or put them back)
         void OnTransformEdit(const NodeTransformEditEvent& event);
         void OnSceneEdited(const SceneEditedEvent& event);

@@ -52,4 +52,7 @@ namespace BECore {
      */
     [[nodiscard]] Optional<AssetDragPayload> AcceptAssetDrop(AssetKind kind);
 
+    /// AcceptAssetDrop() for a target that takes several kinds: those @p takes answers true for
+    [[nodiscard]] Optional<AssetDragPayload> AcceptAssetDrop(FunctionRef<bool(AssetKind)> takes);
+
 }  // namespace BECore

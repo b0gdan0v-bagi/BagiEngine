@@ -5,6 +5,8 @@
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Renderer/ITexture.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
@@ -15,6 +17,7 @@
 #include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
+#include <Widgets/SceneEditor/SceneAssetDrop.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneEditorDocuments.h>
@@ -44,6 +47,7 @@ namespace BECore {
         Subscribe<SelectUIElementRequestEvent, &SceneEditorWidget::OnSelectUIElementRequest>(this);
         Subscribe<ViewportEditClickEvent, &SceneEditorWidget::OnViewportClick>(this);
         Subscribe<ViewportBoxSelectEvent, &SceneEditorWidget::OnViewportBoxSelect>(this);
+        Subscribe<ViewportAssetDropEvent, &SceneEditorWidget::OnViewportAssetDrop>(this);
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
         Subscribe<SceneEditedEvent, &SceneEditorWidget::OnSceneEdited>(this);
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
@@ -192,6 +196,31 @@ namespace BECore {
         _hierarchy.selected = _selection.Primary();
         if (_hierarchy.selected && HierarchyPanel::Reveal(*scene, _hierarchy, scene, _hierarchy.selected)) {
             _focusRequested = true;
+        }
+    }
+
+    void SceneEditorWidget::OnViewportAssetDrop(const ViewportAssetDropEvent& event) {
+        Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
+        if (!scene) {
+            return;
+        }
+        SceneAssetDrop drop{event.kind, event.path, Vec2{scene->ScreenToSceneX(event.x), scene->ScreenToSceneY(event.y)}, Vec2{}};
+        if (event.kind == AssetKind::Texture) {
+            const ResourceHandle<ITexture> texture = CoreManager::GetResourceManager().Load<ITexture>(event.path.ToStringView());
+            if (texture && texture->GetState() == ResourceState::Loaded) {
+                drop.textureSize = Vec2{static_cast<float>(texture->GetWidth()), static_cast<float>(texture->GetHeight())};
+            }
+        }
+        const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
+        const std::expected<SceneNode*, String> added = AddSceneNodeOfAsset(*scene, drop, loader);
+        if (!added) {
+            LOG_ERROR("SceneEditor: nothing dropped into scene '{}': {}", scene->GetName().CStr(), added.error());
+            return;
+        }
+        _isDirty = true;
+        if (HierarchyPanel::Reveal(*scene, _hierarchy, scene, *added)) {
+            _focusRequested = true;
+            SyncSelection(*scene);
         }
     }
 

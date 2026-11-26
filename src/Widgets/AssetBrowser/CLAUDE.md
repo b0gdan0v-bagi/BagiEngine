@@ -36,6 +36,6 @@ The window is an asset, `config/panels/AssetBrowserPanel.xml` (`Asset Browser###
 `AssetDrag.{h,cpp}` is the whole contract: a panel draws a source with `DrawAssetDragSource` and takes a drop with `AcceptAssetDrop`, and none handles the ImGui payload (`BE_ASSET`) itself (`AssetDropInspectorTest`).
 
 - **Sources.** A tile of the grid, of a draggable kind (`IsDraggableAsset`): `Texture`, `Font`, `Sound`, `UiDocument`, `Node`. A path that does not fit the payload starts no drag, because a cut path would name another file.
-- **Targets** take one kind each and no disabled item, so a read-only field and a locked node take nothing and show no highlight.
+- **Targets** name the kinds they take and no disabled item is one, so a read-only field and a locked node take nothing and show no highlight. A delivered payload is handed out as a copy: ImGui frees its bytes when the target ends.
 - **An inspector field** takes a file when it is a string marked `BE_FIELD_ATTRS(asset(<Kind>))` (a game's field the same way; `reflection-module.md`): `ImGuiPropertyVisitor` writes the virtual path. An unmarked string takes nothing, since a dropped path would silently spoil a free text. A custom inspector asks for the drop itself, as the sprite renderer's texture combo does (not while a sprite id locks it).
-
+- **The viewport** takes the kinds a scene makes a node of (`MakesSceneNode`: `Texture`, `Font`, `Sound`, `Node`; `widgets-module.md`, "Scene Editor Conventions"). The others have no one obvious component.

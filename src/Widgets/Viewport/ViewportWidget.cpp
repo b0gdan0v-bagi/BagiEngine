@@ -13,11 +13,13 @@
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <Generated/ViewportEvents.gen.hpp>
 #include <Generated/ViewportWidget.gen.hpp>
+#include <Widgets/AssetBrowser/AssetDrag.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
+#include <Widgets/SceneEditor/SceneAssetDrop.h>
 #include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportUIDebug.h>
@@ -206,6 +208,8 @@ namespace BECore {
             const ImVec2 imageMin = ImGui::GetCursorScreenPos();
             ImGui::InvisibleButton(kImageHitArea, shown, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
             const bool imageHovered = ImGui::IsItemHovered();
+            // Taken while the hit area is the last item; sent once the frame of this pass is known
+            const Optional<AssetDragPayload> droppedAsset = AcceptAssetDrop(MakesSceneNode);
 
             // One walk of the tree confirms the whole selection; the outlines, the framing and the node gizmo take this list and never look a node up themselves
             if (activeScene && activeScene == _selectedScene) {
@@ -243,6 +247,11 @@ namespace BECore {
                 DrawSafeAreaOutline(frame, safeArea);
             }
             DrawSelectionOutlines(activeScene, frame);
+
+            if (droppedAsset) {
+                const Vec2 at = frame.ToTarget(ImGui::GetIO().MousePos);
+                ViewportAssetDropEvent::Emit(droppedAsset->kind, PoolString::Intern(StringView(droppedAsset->path)), at.x, at.y);
+            }
 
             // The gizmos go before the mouse is forwarded, so a press on a handle is consumed first. The UI element's handles come before the node gizmo, which stays out of a drag of
             // theirs and of a pointer over one of them

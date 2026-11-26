@@ -57,13 +57,20 @@ namespace BECore {
     }
 
     Optional<AssetDragPayload> AcceptAssetDrop(AssetKind kind) {
+        if (kind == AssetKind::None) {
+            return {};
+        }
+        return AcceptAssetDrop([kind](AssetKind dragged) { return dragged == kind; });
+    }
+
+    Optional<AssetDragPayload> AcceptAssetDrop(FunctionRef<bool(AssetKind)> takes) {
         // BeginDragDropTarget does not look at the disabled flag
-        if (kind == AssetKind::None || (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) != 0) {
+        if ((ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) != 0) {
             return {};
         }
         // Looked at before the target opens: accepting is what draws the highlight
         const AssetDragPayload* dragged = DraggedAsset(ImGui::GetDragDropPayload());
-        if (dragged == nullptr || dragged->kind != kind || !ImGui::BeginDragDropTarget()) {
+        if (dragged == nullptr || !takes(dragged->kind) || !ImGui::BeginDragDropTarget()) {
             return {};
         }
         Optional<AssetDragPayload> result;
