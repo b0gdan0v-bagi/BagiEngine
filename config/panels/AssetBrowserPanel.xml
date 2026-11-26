@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<PanelAsset id="AssetBrowser" title="Asset Browser" command="view.assetBrowser" open="false" width="720" height="420">
+  <sources>
+    <item name="browser" model="AssetBrowserPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="toolbar">
+      <elements>
+        <element type="PanelInput" id="search" bind="browser.search" hint="Search" icon="search" width="16" tooltip="Files at any depth below the folder whose name holds this text"/>
+        <element type="PanelCombo" id="type" bind="browser.typeFilter" width="9" tooltip="Show only the files of one type, at any depth below the folder"/>
+        <element type="PanelButton" id="rescan" icon="refresh-cw" text="Rescan" command="assetBrowser.rescan" tooltip="List the content files again"/>
+      </elements>
+    </element>
+    <element type="PanelRow" id="selection">
+      <elements>
+        <element type="PanelText" id="noSelection" text="No file selected" style="Disabled" visible="!browser.hasSelection"/>
+        <element type="PanelText" id="selectedKind" bind="browser.selectedKind" style="Disabled" visible="browser.hasSelection"/>
+        <element type="PanelText" id="selectedPath" bind="browser.selectedPath" visible="browser.hasSelection"/>
+      </elements>
+    </element>
+    <element type="PanelSeparator" id="selectionLine"/>
+    <element type="PanelRow" id="panes">
+      <elements>
+        <element type="PanelChild" id="folders" width="14" border="true">
+          <elements>
+            <element type="PanelSlot" id="tree" name="assetFolders"/>
+          </elements>
+        </element>
+        <element type="PanelChild" id="files" border="true">
+          <elements>
+            <element type="PanelSlot" id="grid" name="assetGrid" visible="browser.showFiles"/>
+            <element type="PanelEmptyState" id="noMatch" icon="search" text="No file to show in this folder with this search and type" visible="browser.showEmpty"/>
+          </elements>
+        </element>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>

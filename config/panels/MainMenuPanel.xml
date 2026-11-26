@@ -26,6 +26,7 @@
         <element type="PanelMenuItem" id="configEditor" text="Config Editor" command="view.configEditor"/>
         <element type="PanelMenuItem" id="fileChanges" text="File Changes" command="view.fileChanges"/>
         <element type="PanelMenuItem" id="spriteLibrary" text="Sprite Library" command="view.spriteLibrary"/>
+        <element type="PanelMenuItem" id="assetBrowser" text="Asset Browser" command="view.assetBrowser"/>
         <element type="PanelMenuItem" id="gamePanel" text="Game Panel" command="view.game"/>
         <element type="PanelMenuItem" id="console" text="Console" command="view.console"/>
         <element type="PanelMenuItem" id="generate" text="Generate Art" command="view.generate"/>

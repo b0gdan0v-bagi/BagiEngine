@@ -25,6 +25,7 @@ namespace BECore {
         for (const PoolString mount : GetAssetMounts()) {
             _watches.push_back(Watcher().WatchFolder(mount.ToStringView(), [this](FileChange& change) { OnFileChanged(change.virtualPath.ToStringView()); }, kWatchConsumer));
         }
+        _slots.Register();
     }
 
     TypedRef AssetBrowserPanelModel::GetObject() {
@@ -58,6 +59,23 @@ namespace BECore {
         }
         if (_listKey.catalogRevision != _catalogRevision || _listKey.folder != _view.folder || _listKey.search != _view.search || _listKey.filter != _view.typeFilter) {
             RebuildShown();
+        }
+    }
+
+    void AssetBrowserPanelModel::EndUpdate() {
+        if (_clickedFolder) {
+            SelectFolder(_clickedFolder->ToStringView());
+            _clickedFolder.reset();
+        }
+        if (_clickedAsset) {
+            SelectAsset(_clickedAsset->ToStringView());
+            _clickedAsset.reset();
+        }
+    }
+
+    void AssetBrowserPanelModel::OnOpenChanged(bool open) {
+        if (!open) {
+            _slots.ReleaseThumbnails();
         }
     }
 

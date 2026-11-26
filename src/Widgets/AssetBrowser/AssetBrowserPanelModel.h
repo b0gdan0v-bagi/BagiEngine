@@ -5,6 +5,7 @@
 #include <BECore/Resource/AssetKind.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
+#include <Widgets/AssetBrowser/AssetBrowserSlots.h>
 #include <Widgets/AssetBrowser/AssetCatalog.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <cstdint>
@@ -39,7 +40,8 @@ namespace BECore {
      * The catalog is made at the first `Update` and again only after a watched file changed or on `assetBrowser.rescan` (`RunCommand`, which an
      * asset routes only while its panel is open); the shown list only when the catalog, the folder, the search or the filter moved, so a steady
      * `Update` allocates nothing. `Initialize` watches the asset mounts: a notice marks the catalog stale for the next `Update` and drops a changed
-     * texture from the resource cache at once, so a closed panel keeps the cache right too. Refresh rules: `Widgets/AssetBrowser/CLAUDE.md`.
+     * texture from the resource cache at once, so a closed panel keeps the cache right too. It also registers the slots that draw the tree and the
+     * tiles (`AssetBrowserSlots`); what they note is applied in `EndUpdate`. Refresh rules: `Widgets/AssetBrowser/CLAUDE.md`.
      */
     class AssetBrowserPanelModel : public IPanelModel {
         BE_CLASS(AssetBrowserPanelModel)
@@ -49,10 +51,12 @@ namespace BECore {
 
         AssetBrowserPanelModel() = default;
 
-        /// Starts the watches; called once by the widget that hosts the model, after the seams below are set
+        /// Starts the watches and registers the slots; called once by the widget that hosts the model, after the seams below are set
         void Initialize() override;
         [[nodiscard]] TypedRef GetObject() override;
         void Update() override;
+        void EndUpdate() override;
+        void OnOpenChanged(bool open) override;
         bool RunCommand(StringView id, StringView argument) override;
 
         /// Lists @p fileSystem instead of CoreManager's (a test); it must outlive the model
@@ -66,6 +70,16 @@ namespace BECore {
         void SelectFolder(StringView folder);
         /// Selects a listed file; any other text selects nothing
         void SelectAsset(StringView path);
+
+        /// A click of this frame on a folder of the tree, applied in `EndUpdate`
+        void NoteFolderClick(PoolString folder) {
+            _clickedFolder = folder;
+        }
+
+        /// A click of this frame on a tile, applied in `EndUpdate`
+        void NoteAssetClick(PoolString path) {
+            _clickedAsset = path;
+        }
 
         [[nodiscard]] const AssetCatalog& GetCatalog() const {
             return _catalog;
@@ -110,6 +124,9 @@ namespace BECore {
         FileWatcher* _watcher = nullptr;
         Eviction _eviction;
         Vector<FileWatchHandle> _watches;
+        AssetBrowserSlots _slots{*this};
+        Optional<PoolString> _clickedFolder;  ///< the empty string is the root, so "no click" is the empty optional
+        Optional<PoolString> _clickedAsset;
         uint32_t _catalogRevision = 0;
         bool _catalogStale = true;
     };

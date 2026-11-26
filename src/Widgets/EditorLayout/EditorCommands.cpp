@@ -54,6 +54,7 @@ namespace BECore {
                 {kViewFileChanges, "File Changes", std::nullopt, true},
                 {kViewSpriteLibrary, "Sprite Library", std::nullopt, true},
                 {kViewViewport, "Viewport", std::nullopt, true},
+                {kViewAssetBrowser, "Asset Browser", std::nullopt, true},
                 {kViewGenerate, "Generate Art", std::nullopt, true},
                 {kArtGenService, "Generate: Service (start, disconnect)", std::nullopt, false},
                 {kArtGenSetup, "Generate: Setup (plan, install, start, stop, cancel, dismiss)", std::nullopt, false},
