@@ -2,6 +2,7 @@
 #include <BECore/Memory/ConcurrentBlockPool.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Wait.h>
+#include <TaskSystem/LiveTasks.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskManager.h>
@@ -24,8 +25,9 @@ namespace BECore::Tests {
         /// Larger than the last class: the frame of a coroutine that keeps this much across a suspension lives on the heap
         constexpr size_t kHeapFrameBytes = 4 * kBiggestPooled;
 
-        /// Live blocks of every class together. Tasks other tests left parked stay in the count and a task made on another thread changes it, so only
-        /// the difference between two readings of one test means something, and only while the test runs no pool or scheduler
+        /// Live blocks of every class together. Tasks other tests left parked stay in the count and a task made or ended on another thread changes it,
+        /// so only two readings of one test compare, and only when nothing made before the first one is freed between them: a test that calls
+        /// LiveTasks::AbandonAll calls it before the first reading too
         size_t LiveBlocks() {
             size_t total = 0;
             for (size_t i = 0; i < TaskMemory::kClassCount; ++i) {
@@ -211,6 +213,7 @@ namespace BECore::Tests {
     }
 
     TEST(TaskMemoryTest, TasksAbandonedWhileParkedAreGivenBackWithTheirHandles) {
+        Detail::LiveTasks::GetInstance().AbandonAll();
         const size_t before = LiveBlocks();
         {
             Vector<IntrusivePtr<TaskHandle<void>>> handles;
@@ -268,6 +271,7 @@ namespace BECore::Tests {
     }
 
     TEST(TaskMemoryTest, AFrameAboveTheLastClassWorksAndTakesNoBlockOfAClass) {
+        Detail::LiveTasks::GetInstance().AbandonAll();
         const size_t before = LiveBlocks();
         {
             auto handle = New<TaskHandle<void>>(BigFrame());
