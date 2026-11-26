@@ -5,6 +5,7 @@
 
 namespace BECore {
 
+    class ComponentDefaults;
     struct ComponentTouches;
 
     /**
@@ -44,10 +45,15 @@ namespace BECore {
      * With @p touches the fields a client of the control API changed are marked, and an edit removes the mark: the generic inspector marks each field where
      * it stands, a custom one gets a line per mark at its top and an edit of anything removes them all. With no mark and no flash nothing differs.
      *
+     * With @p defaults the fields that differ from the default are marked and have a reset arrow (DrawDefaultMark): the generic inspector beside each field,
+     * a custom one in a line per field at its top. A click resets that field once the inspector has run and removes its touch mark; the answer is true then.
+     * A field at its default draws nothing more.
+     *
      * @param component The component to inspect and edit (must not be null)
      * @param touches What TouchHighlights knows of this component; null draws it unmarked
+     * @param defaults What the component is compared with and reset by; null marks no difference
      * @return True if any field was changed
      */
-    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches = nullptr);
+    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches = nullptr, ComponentDefaults* defaults = nullptr);
 
 }  // namespace BECore

@@ -524,7 +524,7 @@ namespace BECore {
                     highlights.Dismiss(nodeId, typeMeta.typeName, kCanvasElementsField);
                 }
                 const ComponentTouches touches{highlights, nodeId, typeMeta.typeName};
-                changed |= RenderComponentInspector(component.Get(), &touches);
+                changed |= RenderComponentInspector(component.Get(), &touches, &_componentDefaults);
                 return changed;
             });
             if (answer.changed) {

@@ -14,3 +14,11 @@ The rest of the Scene Editor (selection, hierarchy, dialogs, Save, the viewport)
 ## Defaults
 
 `ComponentDefaults` (`ComponentDefaults.h`) says what differs from a fresh component and restores it field by field; the contract is in the header. It is a member of `SceneEditorWidget`, so the prototypes die with the widget. Only top-level fields are compared: a change inside a struct or a list marks the whole field, and a reset replaces it whole. A reset runs `OnPropertyWritten` and nothing else, so a component that derives one field from another does it there.
+
+## Marks and reset arrows
+
+`RenderComponentInspector` with a `ComponentDefaults` marks each differing top-level field (`DrawDefaultMark`): the accent bar and the reset arrow stand in the indent left of the field and take no room, so a field at its default draws exactly as without defaults and no field id moves.
+
+- A `readonly` field and a disabled scope (a locked node) have the bar and no arrow. A field whose visitor draws nothing has neither; the card's "Reset" still covers it.
+- A custom inspector cannot mark its own controls, so the card lists one line per differing field above it; its signature does not change, so a game's inspector gets the arrows too.
+- A click is applied after the inspector has run, makes the scene unsaved and removes that field's touch mark only.

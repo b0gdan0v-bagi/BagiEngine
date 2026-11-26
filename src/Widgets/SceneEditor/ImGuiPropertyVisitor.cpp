@@ -8,6 +8,8 @@
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
+#include <Widgets/SceneEditor/ComponentDefaults.h>
+#include <Widgets/SceneEditor/DefaultMarkDraw.h>
 #include <Widgets/SceneEditor/FieldPresentation.h>
 #include <imgui.h>
 
@@ -151,7 +153,7 @@ namespace BECore {
     }
 
     void ImGuiPropertyVisitor::BeginField(const FieldAttributes& attributes) {
-        if (_touches && _fields.empty()) {
+        if (_fields.empty()) {
             const ImVec2 position = ImGui::GetCursorScreenPos();
             _fieldLeft = position.x;
             _fieldTop = position.y;
@@ -167,13 +169,26 @@ namespace BECore {
             return;
         }
         _fields.pop_back();
-        if (!_touches || !_fields.empty() || _fieldName.empty()) {
+        if (!_fields.empty() || _fieldName.empty()) {
+            return;
+        }
+        // Before the touch mark adds its line: the default mark spans the field alone
+        ShowDifference(ImGui::GetCursorScreenPos().y - ImGui::GetStyle().ItemSpacing.y);
+        if (!_touches) {
             return;
         }
         if (_fieldEdited) {
             _touches->highlights.Dismiss(_touches->nodeId, _touches->component, _fieldName);
         }
         ShowTouch();
+    }
+
+    void ImGuiPropertyVisitor::ShowDifference(float bottom) {
+        for (const ComponentFieldDifference& difference : _differences) {
+            if (difference.field == _fieldName && DrawDefaultMark(difference, _fieldLeft, _fieldTop, bottom)) {
+                _resetRequest = difference.field;
+            }
+        }
     }
 
     int ImGuiPropertyVisitor::NextId(StringView name) {

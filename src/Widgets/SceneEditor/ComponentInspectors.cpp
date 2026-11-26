@@ -16,6 +16,8 @@
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
+#include <Widgets/SceneEditor/ComponentDefaults.h>
+#include <Widgets/SceneEditor/DefaultMarkDraw.h>
 #include <Widgets/SceneEditor/ImGuiPropertyVisitor.h>
 #include <imgui.h>
 
@@ -34,6 +36,20 @@ namespace BECore {
                 DrawTouchMark(client, field, field);
                 FillItemWithTouchFlash(touches.highlights.FieldAlpha(touches.nodeId, touches.component, field));
             });
+        }
+
+        /// The differences of a component whose inspector does not draw field by field, a line each; the field whose arrow was clicked, or empty
+        StringView DrawDifferenceLines(Span<const ComponentFieldDifference> differences) {
+            StringView clicked;
+            for (const ComponentFieldDifference& difference : differences) {
+                const float left = ImGui::GetCursorScreenPos().x;
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextDisabled("%.*s differs from the default", static_cast<int>(difference.field.size()), difference.field.data());
+                if (DrawDefaultMark(difference, left, ImGui::GetItemRectMin().y - ImGui::GetStyle().FramePadding.y, ImGui::GetItemRectMax().y)) {
+                    clicked = difference.field;
+                }
+            }
+            return clicked;
         }
 
         bool InspectSpriteRenderer(SpriteRendererComponent& s) {
@@ -296,25 +312,38 @@ namespace BECore {
         GetRegistry()[typeHash] = eastl::move(func);
     }
 
-    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches) {
+    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches, ComponentDefaults* defaults) {
         if (!component) {
             return false;
         }
 
+        const Span<const ComponentFieldDifference> differences = defaults ? defaults->Compare(*component) : Span<const ComponentFieldDifference>{};
+        StringView reset;
+        bool changed = false;
         const auto it = GetRegistry().find(component->GetTypeMeta().typeHash);
         if (it != GetRegistry().end()) {
             if (touches) {
                 DrawMarkLines(*touches);
             }
-            const bool changed = it->second(component);
+            reset = DrawDifferenceLines(differences);
+            changed = it->second(component);
             if (changed && touches) {
                 touches->highlights.DismissComponent(touches->nodeId, touches->component);
             }
-            return changed;
+        } else {
+            ImGuiPropertyVisitor visitor(touches, differences);
+            changed = component->AcceptPropertyVisitor(visitor);
+            reset = visitor.ResetRequest();
         }
 
-        ImGuiPropertyVisitor visitor(touches);
-        return component->AcceptPropertyVisitor(visitor);
+        // After the inspector has run, which reads the differences and may hold references into the fields
+        if (!reset.empty() && defaults->Reset(*component, reset)) {
+            changed = true;
+            if (touches) {
+                touches->highlights.Dismiss(touches->nodeId, touches->component, reset);
+            }
+        }
+        return changed;
     }
 
 }  // namespace BECore

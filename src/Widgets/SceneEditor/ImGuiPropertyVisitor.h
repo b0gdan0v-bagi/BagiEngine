@@ -5,6 +5,7 @@
 
 namespace BECore {
 
+    struct ComponentFieldDifference;
     struct ComponentTouches;
 
     /**
@@ -28,6 +29,9 @@ namespace BECore {
      * With a ComponentTouches, a top-level field that a client of the control API changed is marked once it is drawn: its flash over it and the line
      * "changed: <client>" under it (a change inside a compound or a list marks the top-level field). An edit of the field removes the mark.
      *
+     * A top-level field named by one of the differences from the default gets DrawDefaultMark beside it once it is drawn; a click of its arrow changes
+     * nothing during the walk and is answered by `ResetRequest()`. A field that draws nothing has no mark.
+     *
      * Containers (the hooks of `IPropertyVisitor`; the dispatch applies what they ask, after the list, never here):
      * - a sequence or a map is a tree node `name (size)`, an `x` button after each element and a `+` after the last; a
      *   button the `ListInfo` does not allow is drawn disabled. A map with text keys has a key field before its `+`, which
@@ -43,9 +47,14 @@ namespace BECore {
     class ImGuiPropertyVisitor : public IPropertyVisitor {
     public:
         ImGuiPropertyVisitor() = default;
-        /// Marks the fields of the component @p touches names, which must outlive the visit; null marks nothing
-        explicit ImGuiPropertyVisitor(const ComponentTouches* touches) : _touches(touches) {}
+        /// Marks the fields of the component @p touches names (null: none) and the fields @p differences names; both must outlive the visit
+        explicit ImGuiPropertyVisitor(const ComponentTouches* touches, Span<const ComponentFieldDifference> differences = {}) : _touches(touches), _differences(differences) {}
         ~ImGuiPropertyVisitor() override = default;
+
+        /// The serialized name of the field whose reset arrow was clicked in this walk, in static storage; empty when none was
+        [[nodiscard]] StringView ResetRequest() const {
+            return _resetRequest;
+        }
 
         bool Visit(StringView name, bool& value) override;
         bool Visit(StringView name, int8_t& value) override;
@@ -99,9 +108,13 @@ namespace BECore {
         bool Edited(bool changed);
         /// The mark and the flash of the top-level field that was just drawn
         void ShowTouch() const;
+        /// The default mark of the top-level field that was just drawn, when it differs
+        void ShowDifference(float bottom);
 
         int _idCounter = 0;
         const ComponentTouches* _touches = nullptr;
+        Span<const ComponentFieldDifference> _differences;
+        StringView _resetRequest;
         StringView _fieldName;    ///< of the open top-level field; empty until a widget of it names it
         float _fieldLeft = 0.0f;  ///< the screen position the open top-level field began at
         float _fieldTop = 0.0f;
