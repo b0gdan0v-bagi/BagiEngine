@@ -56,17 +56,29 @@ namespace BECore::Tests {
     };
 
     /**
-     * @brief A RoomHub with the demo games (`cards`, `cards-leaky`), a manual clock, and in-memory transports for RoomClients.
+     * @brief A RoomHub with a manual clock and in-memory transports for RoomClients, over the demo games (`cards`, `cards-leaky`) or a game's own.
      *
      * No socket and no thread: a transport call into the hub is a direct call, and what the hub sends is queued for the client's
      * next PollEvent(). The test moves the clock with Advance(), which also ticks the hub (computers move, the grace runs out).
      * A new connection is refused while SetRefusing(true) (the server is down). The close codes follow RoomWebSocketServer.
+     *
+     * For a game's tests: include `<BECore/Rooms/HubTransport.h>` (namespace `BECore::Tests`) and link the test target with
+     * `RoomsModule RoomClientModule RoomServerModule` (the last for the demo games and `GetRoomCloseCode`, so desktop only). What the
+     * registrar's factories and the observer capture must outlive the world: declare it before the world.
      */
     class HubWorld {
     public:
+        /// Registers the games of a world instead of the demo games
+        using GameRegistrar = MoveOnlyFunction<void(SeatedGameRegistry&)>;
+        /// Sees every text once per recipient, inside the hub's send, so the game is still as it was when the hub sent it. A text
+        /// that a blackholed link then loses is seen too. It must not call back into the hub or a transport
+        using TextObserver = MoveOnlyFunction<void(ConnectionId, const String&)>;
+
         /// @param useBroadcast The sink sets `broadcast` (as the room server's does), so the hub sends a shared text in one call
-        explicit HubWorld(RoomHubSettings settings, RandomFn random = MakeSequence(11), bool useBroadcast = false)
-            : _hub(MakeRegistry(), std::move(settings), std::move(random), MakeSink(useBroadcast)) {}
+        /// @param registrar Called once, by this constructor
+        /// @param observer A game keys what it keeps per connection by the id (`HubClientLinks::Last().id`)
+        explicit HubWorld(RoomHubSettings settings, RandomFn random = MakeSequence(11), bool useBroadcast = false, GameRegistrar registrar = {}, TextObserver observer = {})
+            : _observer(std::move(observer)), _hub(MakeRegistry(std::move(registrar)), std::move(settings), std::move(random), MakeSink(useBroadcast)) {}
 
         /// The usual grace and abandon timeout with @p computerDelay between the moves of computers
         static RoomHubSettings MakeSettings(std::chrono::milliseconds computerDelay = std::chrono::milliseconds(0)) {
@@ -118,13 +130,20 @@ namespace BECore::Tests {
         void Disconnect(HubLink& link, uint16_t code, StringView reason);
 
     private:
-        SeatedGameRegistry& MakeRegistry() {
-            _registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); });
-            _registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return MakeUnique<LeakyDemoCardGame>(); });
+        SeatedGameRegistry& MakeRegistry(GameRegistrar registrar) {
+            if (registrar) {
+                registrar(_registry);
+            } else {
+                _registry.Register(SeatedGameInfo{"cards", DemoCardGame::kSeatCount}, [] { return MakeUnique<DemoCardGame>(); });
+                _registry.Register(SeatedGameInfo{"cards-leaky", DemoCardGame::kSeatCount}, [] { return MakeUnique<LeakyDemoCardGame>(); });
+            }
             return _registry;
         }
 
-        void QueueTextFor(ConnectionId id, StringView text) {
+        void QueueTextFor(ConnectionId id, const String& text) {
+            if (_observer) {
+                _observer(id, text);
+            }
             if (const auto found = _byId.find(id); found != _byId.end() && !found->second->blackhole) {
                 found->second->QueueText(text);
             }
@@ -156,6 +175,7 @@ namespace BECore::Tests {
         // The registry is destroyed after the hub, which holds a reference to it
         SeatedGameRegistry _registry;
         ManualClock _clock;
+        TextObserver _observer;
         RoomHub _hub;
         Map<ConnectionId, SharedPtr<HubLink>> _byId;
         ConnectionId _nextId = 1;
