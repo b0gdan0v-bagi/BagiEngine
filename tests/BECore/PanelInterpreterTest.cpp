@@ -1,6 +1,7 @@
 #include <BECore/Input/ImGuiItemIndex.h>
 #include <BECore/PanelInterpreterProbe.h>
 #include <BECore/Reflection/TypedRef.h>
+#include <BECore/ScopedEditorHost.h>
 #include <BECore/Widgets/PanelAssets/PanelAssetLoader.h>
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
 #include <Common/AllocCheck.h>
@@ -329,6 +330,26 @@ namespace BECore::Tests {
         <element type="PanelMenuItems" id="rowNames" source="probe.rows" itemField="name" command="probe.pickRow"/>
       </elements>
     </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kHostMenu = R"(
+<PanelAsset id="HostMenu" title="Host menu" window="Bar" open="true">
+  <elements>
+    <element type="PanelMenu" id="file" title="File">
+      <elements>
+        <element type="PanelMenuItem" id="art" text="Art" command="view.generate"/>
+        <element type="PanelMenuItem" id="save" text="Save" command="scene.save"/>
+      </elements>
+    </element>
+  </elements>
+</PanelAsset>)";
+
+        constexpr const char* kHostButtons = R"(
+<PanelAsset id="HostButtons" title="Host buttons">
+  <elements>
+    <element type="PanelButton" id="trace" text="Trace" command="profiler.trace" argument="write"/>
+    <element type="PanelButton" id="save" text="Save" command="scene.save"/>
   </elements>
 </PanelAsset>)";
 
@@ -1642,6 +1663,23 @@ namespace BECore::Tests {
         EXPECT_EQ(lastCommand, "probe.open");
         EXPECT_EQ(lastArgument, "a.xml");
         EXPECT_EQ(TimesNoted("probe.open"), 1);
+    }
+
+    TEST_F(PanelInterpreterTest, TheControlOfACommandTheHostDoesNotOfferIsNotDrawn) {
+        menuBar = true;
+        const ScopedEditorHost host(EditorHostKind::Browser);
+        Load(kHostMenu);
+        OpenMenu("file", "File");
+        const ImGuiWindow* popup = MenuPopup();
+        ASSERT_NE(popup, nullptr);
+
+        EXPECT_FALSE(RecordOf(ItemId(*popup, "art", "Art###art")).has_value());
+        EXPECT_TRUE(RecordOf(ItemId(*popup, "save", "Save###save")).has_value());
+
+        menuBar = false;
+        Load(kHostButtons);
+        EXPECT_FALSE(RecordOf(Chain(HostId(), {"trace", "Trace"})).has_value());
+        EXPECT_TRUE(RecordOf(Chain(HostId(), {"save", "Save"})).has_value());
     }
 
     TEST_F(PanelInterpreterTest, AMenuNotesItsOpenCommandOnTheFirstOpenFrameOnlyAndAgainAfterAClose) {

@@ -91,6 +91,9 @@ namespace BECore {
      * and clamped at every change; `step` 0 steps by one. **A multiline input** (`PanelInput lines`) is `lines` text lines high on the same buffer. A button of width
      * `kPanelFillLineWidth` fills the rest of its line.
      *
+     * **The editor's host.** A button, a menu item or the items of a list whose command the host does not offer (`EditorHost.h`) are not drawn, whatever their `visible` says; the
+     * host is asked once, in `Prepare`.
+     *
      * Main thread only; needs an ImGui frame in progress.
      */
     class PanelInterpreter {

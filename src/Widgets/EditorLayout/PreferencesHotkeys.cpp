@@ -2,6 +2,7 @@
 
 #include <Generated/PreferencesHotkeys.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorHost.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
 
 namespace BECore {
@@ -43,6 +44,9 @@ namespace BECore {
     void PreferencesHotkeys::Rebuild(const HotkeyMap& hotkeys) {
         _rows.clear();
         for (const EditorCommand& command : GetEditorCommands()) {
+            if (!IsEditorCommandAvailable(command.id.ToStringView())) {
+                continue;
+            }
             const Optional<KeyChord> chord = hotkeys.GetChord(command.id);
             HotkeyRow row;
             row.id = String(command.id.ToStringView());

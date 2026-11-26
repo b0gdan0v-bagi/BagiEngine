@@ -73,7 +73,7 @@
         <element type="PanelSlot" id="zoneAllocsSlot" name="profilerZoneAllocs"/>
       </elements>
     </element>
-    <element type="PanelSection" id="trace" title="Chrome trace" defaultOpen="false">
+    <element type="PanelSection" id="trace" title="Chrome trace" defaultOpen="false" visible="profiler.traceFileSupported">
       <elements>
         <element type="PanelText" id="traceNote" text="Zones are recorded with ENGINE_PROFILER=ON (preset macos-profile-editor)" visible="!profiler.zonesRecorded"/>
         <element type="PanelButton" id="traceRecord" text="Record" command="profiler.trace" argument="record" width="6" visible="profiler.zonesRecorded and !profiler.recording"/>

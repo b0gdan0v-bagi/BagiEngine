@@ -25,6 +25,8 @@ namespace BECore {
     // Must be registered after ImGuiWidget and the `Bar` assets it draws (`MainToolbarPanel`, `MainMenuPanel`: their models update before
     // this widget draws them) and before the other editor windows, so they dock into this space.
     //
+    // In a browser it also shows, once per page load, that nothing changed here is kept (EditorHost.h).
+    //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
     // (EditorCommandEvent): quit, switch mode, reset the layout and open the palette (`view.preferences` is the Preferences asset's own command, `view.saveLayout` is run by `EditorDialogsModel`). It
     // also turns the chords of the hotkey map into those events. The menu bar is the asset `MainMenuPanel` and the toolbar's buttons the asset `MainToolbarPanel`, both drawn through
@@ -68,6 +70,8 @@ namespace BECore {
         void ApplyPreferences(const EditorPreferences& preferences);
 
         void DrawMenuBar();
+        /// The modal that says a browser editor keeps nothing; opened on the first Update after Initialize took the notice
+        void DrawReloadNotice();
         /// Emits the command of every chord pressed this frame
         void DispatchHotkeys();
         /// Pause / Resume through the model, written to the engine's GamePause (the pause of a manual clock is not lifted)
@@ -93,6 +97,7 @@ namespace BECore {
         EditorLayoutHostHandle _hostHandle;
         bool _preferencesNotified = false;  // NotifyPreferencesChanged waits here for the next Update
         bool _preferencesAnnounced = false;
+        bool _reloadNoticePending = false;
         bool _layoutInitialized = false;
         bool _forceResetLayout = false;
     };
