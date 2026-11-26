@@ -379,6 +379,16 @@ namespace BECore::Tests {
         EXPECT_NEAR(sum, frame.cpuMs, kTolerance);
     }
 
+    TEST(ExclusiveStageMsTest, SubmitStaysInsideTheStageThatFlushed) {
+        FrameStats frame;
+        frame.cpuMs = 10.0;
+        frame.stageMs[+FrameStage::Render] = 7.0;
+        frame.stageMs[+FrameStage::SceneDraw] = 6.0;
+        const auto without = ExclusiveStageMs(frame);
+        frame.stageMs[+FrameStage::Submit] = 4.0;
+        EXPECT_EQ(ExclusiveStageMs(frame), without);
+    }
+
     TEST(ExclusiveStageMsTest, AWaitLongerThanCpuMsClampsOtherToZero) {
         FrameStats frame;
         frame.cpuMs = 5.0;

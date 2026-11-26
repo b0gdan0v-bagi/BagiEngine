@@ -504,8 +504,8 @@ namespace BECore::Tests {
     }
 
     TEST(TweenDenseStorageTest, AnAdvanceInWhichATweenEndsAndRestartsItselfAllocatesNothing) {
-        // The restart is the pattern of the stress scene: the next tween comes from `onComplete`, goes to `_pending` and is merged after the
-        // walk. Its handle is a pooled block that the pool hands out from its free list once it has grown, so the warm-up covers it
+        // A restart from `onComplete`: the next tween goes to `_pending` and is merged after the walk. Its handle is a pooled block that the pool hands out from its free list once it has grown, so
+        // the warm-up covers it
         struct Restarter {
             TweenManager* tweens = nullptr;
             IntrusivePtr<TweenHandle> handle;

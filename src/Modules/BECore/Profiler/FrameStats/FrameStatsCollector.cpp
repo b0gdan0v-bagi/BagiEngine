@@ -72,6 +72,12 @@ namespace BECore {
         }
     }
 
+    void FrameStatsCollector::SetGpuTime(double ms) {
+        if (_open) {
+            _current.gpuMs = ms;
+        }
+    }
+
     void FrameStatsCollector::EndFrame(const RenderCounters& draws, const AllocTotals& allocs) {
         if (!_open) {
             return;
@@ -104,6 +110,9 @@ namespace BECore {
         BE_PROFILE_COUNTER("Primitives", draws.primitives);
         BE_PROFILE_COUNTER("Allocations", _current.allocCount);
         BE_PROFILE_COUNTER("Live bytes", _current.liveBytes);
+        if (_current.gpuMs > 0.0) {
+            BE_PROFILE_COUNTER("GPU ms", _current.gpuMs);
+        }
     }
 
     Vector<FrameStats> FrameStatsCollector::GetHistory(size_t count) const {

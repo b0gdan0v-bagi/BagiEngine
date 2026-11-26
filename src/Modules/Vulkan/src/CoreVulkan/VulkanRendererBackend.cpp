@@ -131,6 +131,7 @@ namespace BECore {
         if (!CreateSyncObjects()) {
             return false;
         }
+        _gpuTimer.Initialize(_device, kMaxFramesInFlight);
 
         // The geometry pipeline draws a batch in one call; the clip is the scissor of that call (SubmitBatch)
         SetBatchingEnabled(true);
@@ -182,6 +183,8 @@ namespace BECore {
             vkDestroyCommandPool(vkDevice, _commandPool, nullptr);
             _commandPool = VK_NULL_HANDLE;
         }
+
+        _gpuTimer.Destroy(vkDevice);
 
         // The white texel's descriptor set belongs to the texture pipeline's pool, so it goes first
         _whiteTexture = {};
@@ -287,6 +290,10 @@ namespace BECore {
         if (!FrameCallSucceeded(waited, "waiting for the GPU")) {
             return;
         }
+        // The slot's last submit has finished, so its timestamps can be read, whatever becomes of this frame
+        if (const Optional<double> gpuMs = _gpuTimer.TakeResult(_device, frameIdx)) {
+            frameStats.SetGpuTime(*gpuMs);
+        }
 
         const auto acquire = [&] {
             SwapchainStatus status = SwapchainStatus::Failed;
@@ -326,6 +333,8 @@ namespace BECore {
             AbandonFrame(frameIdx);
             return;
         }
+
+        _gpuTimer.BeginFrame(cmd, frameIdx);
 
         _currentExtent = _swapchain.GetExtent();  // what GetOutputWidth() answers before the first pass of the frame opens
         _frameAcquired = true;
@@ -382,6 +391,7 @@ namespace BECore {
         VkCommandBuffer cmd = _commandBuffers[frameIdx];
 
         vkCmdEndRenderPass(cmd);
+        _gpuTimer.EndFrame(cmd, frameIdx);
         if (!FrameCallSucceeded(vkEndCommandBuffer(cmd), "ending the command buffer")) {
             AbandonFrame(frameIdx);
             return;
@@ -414,6 +424,7 @@ namespace BECore {
             return;
         }
 
+        _gpuTimer.MarkSubmitted(frameIdx);
         _lastLoggedFailure = VK_SUCCESS;
         _inSwapchainPass = false;
         _frameAcquired   = false;

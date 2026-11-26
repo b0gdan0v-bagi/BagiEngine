@@ -27,9 +27,10 @@ namespace BECore::Stress::Tests {
             BECore::Tests::EngineEnvironment::EnsureCoreServices();
         }
 
-        /// The scenes the app ships, from the file next to the sources: the app's own content is not mounted in the test environment
+        /// The scenes the app ships, from the source tree: the app's own content is not mounted in the test environment. Not through `__FILE__`, which
+        /// is relative to the build folder under a ccache base_dir, and the benchmarks run the executable from the repository root
         static Path ShippedSceneConfig() {
-            return Path(__FILE__).Parent().Parent() / "config" / "SceneConfig.xml";
+            return Path(BagiContentRoots::kEngine) / "tools" / "stress" / "config" / "SceneConfig.xml";
         }
 
         void StartGame(const Vector<String>& arguments = {}) {

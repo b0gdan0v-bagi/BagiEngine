@@ -48,7 +48,7 @@ def test_a_charter_over_every_scene_and_language_finds_nothing(stress_exe, tmp_p
         assert session.act({"type": "set_count", "count": count}).accepted
         session.step(2)
     assert session.act({"type": "set_count", "count": SWEEP[-1]}).accepted  # accepted, changes nothing
-    assert not session.act({"type": "set_count", "count": 1_000_001}, expect_refusal=True).accepted
+    assert not session.act({"type": "set_count", "count": session.state()["state"]["maxCount"] + 1}, expect_refusal=True).accepted
     assert not session.act({"type": "set_scene", "scene": "nowhere"}, expect_refusal=True).accepted
     session.reset()
     session.step(2)

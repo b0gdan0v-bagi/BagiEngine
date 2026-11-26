@@ -341,7 +341,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressGameControlTest, TheWritingFormsAreAlphabetical) {
-        EXPECT_EQ(WrittenState(control), Format(R"({{"count":100,"language":"en","maxCount":1000000,"scene":"sprites","scenes":{}}})", kSceneListText));
+        EXPECT_EQ(WrittenState(control), Format(R"({{"count":100,"language":"en","maxCount":4000000,"scene":"sprites","scenes":{}}})", kSceneListText));
 #ifdef STRESS_WITH_RMLUI
         constexpr StringView rmlUiAction = R"({"scene":"rmlui","type":"set_scene"},)";
 #else

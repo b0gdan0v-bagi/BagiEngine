@@ -106,6 +106,15 @@ Then open the Tracy viewer of the **same version** as the vendored client (v0.15
 
 In Tracy every `Mutex` and `SharedMutex` is a lockable named after its `BE_LOCK_SITE` (`Task queue`, `Pool busy report`, ...): open the viewer's **Locks** window (or the lock rows of a thread's timeline) to see who held it, who waited and for how long. A lock shows once it has been used while the viewer is connected; Tracy's `lock wait` zones of the Chrome trace are not duplicated there.
 
+## GPU time
+
+`gpuMs` of `frame_stats` (and the trace counter `GPU ms`) is the span the GPU spent on one frame: a timestamp at the start of the frame's command buffer, after the wait for the swapchain image, to one after its last render pass (offscreen passes included, texture uploads not). No zone inside a frame is timed.
+
+- **Backends:** Vulkan only. SDL (`SDL_Renderer`, SDL GPU) has no timestamp query and the web has neither, so they report 0, as does a Vulkan device without timestamps (one info line at start-up).
+- **Lag:** the value is read when the frame slot comes round again, so it belongs to the frame two before the one that carries it. Skip the first frames after a change of the load.
+- **0 means no value, not no work.** Average over the frames that have one. KosmicKrisp (Mesa on Metal) often answers with an earlier frame's timestamps when frames follow each other closely; the backend drops those, so on a light load most frames have no value.
+- **Which driver on macOS:** the instance asks for no portability drivers, so the loader hides MoltenVK and the game runs the other driver the SDK installs, KosmicKrisp; `VK_LOADER_DEBUG=driver` prints which.
+
 ## Marking code
 
 ```cpp
@@ -147,4 +156,15 @@ Counting allocations costs nothing measurable on one thread (the replacement cal
 Use them on a `macos-profile` or Release build when the zones show a slow stage but not why, or for code without zones.
 
 - **macOS, Instruments Time Profiler:** `xcrun xctrace record --template 'Time Profiler' --launch -- build/macos-profile/bin/BagiStress`, then open the `.trace` in Instruments. Allocations: the `Allocations` template. An `os_signpost` backend that would show the zones inside Instruments is not built (a later entry may add it).
+- **macOS, `sample`** (nothing to install; a Release build keeps the function names, an inlined function counts in its caller). A game without a window, uncapped:
+
+  ```bash
+  cd build/macos-release/bin
+  ./BagiStress --control --control-port=0 --hidden-window --backend=vulkan --stress-scene=sprites --stress-count=500000 > /tmp/game.log 2>&1 &
+  sleep 8   # the scene is built and the frames are steady
+  sample $! 10 -mayDie -file /tmp/sample.txt
+  kill $!
+  ```
+
+  The end of the file ("Sort by top of stack") is the self time per function, the call tree above it gives a subtree's total: the draw pass is `SceneDrawSystem::Run` less the `IRenderer::Flush` calls under it (the submissions). A leaf's samples can include its wait for values the caller loaded, so read neighbouring functions as one step.
 - **Windows, Visual Studio:** Debug > Performance Profiler > CPU Usage on a Release build (or ETW with Windows Performance Recorder / WPA for whole-system views).

@@ -1,3 +1,5 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Renderer/RenderBatch.h>
 #include <Common/AllocCheck.h>
 #include <Common/RecordingRenderer.h>
@@ -40,6 +42,24 @@ namespace BECore::Tests {
             }
             void* GetNativeHandle() const override {
                 return nullptr;
+            }
+        };
+
+        constexpr uint64_t kSubmitNs = 2'000'000;
+        constexpr double kSubmitMs = 2.0;
+
+        uint64_t g_fakeNowNs = 0;
+
+        uint64_t FakeNowNs() {
+            return g_fakeNowNs;
+        }
+
+        /// A batching backend whose every submission takes kSubmitNs of the fake clock
+        class SlowSubmitRenderer : public RecordingRenderer {
+        protected:
+            void SubmitBatch(const RenderBatch& batch) override {
+                g_fakeNowNs += kSubmitNs;
+                RecordingRenderer::SubmitBatch(batch);
             }
         };
 
@@ -183,6 +203,60 @@ namespace BECore::Tests {
         const RenderCounters counters = renderer->TakeRenderCounters();
         EXPECT_EQ(counters.primitives, 2u);
         EXPECT_EQ(counters.drawCalls, 2u);
+    }
+
+    /// Times the process's frame statistics, which Flush() writes to, with the fake clock
+    class RendererBatchSubmitStageTest : public ::testing::Test {
+    protected:
+        void SetUp() override {
+            CoreManager::GetFrameStats().SetClock(FakeNowNs);
+            _renderer->SetBatchingEnabled(true);
+        }
+
+        void TearDown() override {
+            CoreManager::GetFrameStats().SetClock(nullptr);
+        }
+
+        static double EndFrameAndGetSubmitMs() {
+            FrameStatsCollector& stats = CoreManager::GetFrameStats();
+            stats.EndFrame({}, AllocTotals{});
+            return stats.GetLast()->GetStageMs(FrameStage::Submit);
+        }
+
+        IntrusivePtr<SlowSubmitRenderer> _renderer = New<SlowSubmitRenderer>();
+    };
+
+    TEST_F(RendererBatchSubmitStageTest, EverySubmissionOutsideACountersPauseAddsItsTime) {
+        const IntrusivePtr<ITexture> texture = MakeTexture(*_renderer, 4, 4);
+        CoreManager::GetFrameStats().BeginFrame();
+        _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        _renderer->DrawTexture(*texture, nullptr, 0, 0, 1, 1);  // submits the rect
+        {
+            const ScopedRenderCountersPause pause(*_renderer);  // submits the texture, still outside the pause
+            _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+            _renderer->Flush();
+            _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        }
+        _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        _renderer->Flush();
+
+        EXPECT_DOUBLE_EQ(EndFrameAndGetSubmitMs(), 3 * kSubmitMs);
+        EXPECT_EQ(_renderer->calls.size(), 5u) << "the paused batches reached the backend too";
+    }
+
+    TEST_F(RendererBatchSubmitStageTest, ASubmissionOutsideAnOpenFrameRecordsNothing) {
+        CoreManager::GetFrameStats().BeginFrame();
+        EXPECT_DOUBLE_EQ(EndFrameAndGetSubmitMs(), 0.0);
+        const uint64_t frames = CoreManager::GetFrameStats().GetFrameCount();
+
+        _renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        _renderer->Flush();
+
+        EXPECT_EQ(_renderer->calls.size(), 1u);
+        EXPECT_EQ(CoreManager::GetFrameStats().GetFrameCount(), frames);
+        EXPECT_DOUBLE_EQ(CoreManager::GetFrameStats().GetLast()->GetStageMs(FrameStage::Submit), 0.0);
+        CoreManager::GetFrameStats().BeginFrame();
+        EXPECT_DOUBLE_EQ(EndFrameAndGetSubmitMs(), 0.0);
     }
 
     TEST(RendererBatchTest, TheViewTransformAndTheOpacityAreAppliedOnceAndMatchTheGeometryDefault) {
