@@ -15,7 +15,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
   "area": "engine",
   "preset": "macos-release",
   "profilePreset": "macos-profile",
-  "targets": ["BagiStress", "BagiEngineTests"],
+  "targets": ["BagiStress", "BagiEngineTests", "StressTests"],
   "repetitions": 5,
   "thresholdPercent": 3,
   "benchmarks": [
@@ -65,7 +65,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "stress-entities",
-      "about": "BagiStress entities without a window: 30000 nodes with a transform and a tween each, nothing drawn, 3000 frames after 120 of warm-up. work_ms_p50 is about 1.7 ms (p99 2.3), a run about 6 s; 50000 nodes would be 3.3 ms and 12 s",
+      "about": "BagiStress entities without a window: 30000 nodes with a transform and a looping tween each, nothing drawn, 3000 frames after 120 of warm-up. On a Mac16,7 (M4 Pro), macos-release, three runs on a machine loaded by other loops: work_ms_p50 0.49 to 0.50 ms, p99 0.52 to 0.55 (with every tween restarted from onComplete, runs alternated with these: 0.51 to 0.53, p99 0.70 to 0.72)",
       "fast": true,
       "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "entities", "--count", "30000", "--frames", "3000", "--warmup", "120"],
       "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "entities", "--count", "30000", "--frames", "3000", "--warmup", "120", "--trace", "{trace}"],
@@ -75,6 +75,17 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false},
         "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
+      }
+    },
+    {
+      "name": "stress-entities-aging",
+      "about": "The `entities` field as it ages (StressEntitiesAgingTest, no game loop): 100000 nodes, a frame of 1/32 s timed over the scene update and the advance of the tweens. young_ms is the median of the first 30 frames, old_ms of 60 frames after two more longest orbits of game time; old_over_young is the guard and about 1 is expected. The line's young2_ms (not a metric) is the field built again in the same process: when old_ms is above young_ms, a young2_ms back near young_ms puts the cost on the age of the field, one near old_ms on the machine or on state that outlives a field (a pool's free list). On a Mac16,7 (M4 Pro), macos-release, three runs each, alternated on a machine loaded by other loops: with every tween restarted from onComplete (engine 0165bee9e) young_ms 2.05 to 2.23, old_ms 1.87 to 2.12, old_over_young 0.91 to 0.95 (its young frames also carry the growth of the tween manager's lists); with looping tweens young_ms 1.67 to 1.74, old_ms 1.68 to 1.76, old_over_young 1.00 to 1.03. gate false until a baseline shows the noise",
+      "fast": false,
+      "command": ["{bin}/StressTests", "--gtest_also_run_disabled_tests", "--gtest_filter=StressEntitiesAgingTest.DISABLED_*"],
+      "metrics": {
+        "old_over_young": {"source": "regex", "pattern": "^EntitiesAging .* old_over_young=([0-9.]+)", "unit": "ratio", "better": "lower", "gate": false},
+        "young_ms": {"source": "regex", "pattern": "^EntitiesAging .* young_ms=([0-9.]+)", "unit": "ms/frame", "better": "lower", "gate": false},
+        "old_ms": {"source": "regex", "pattern": "^EntitiesAging .* old_ms=([0-9.]+)", "unit": "ms/frame", "better": "lower", "gate": false}
       }
     },
     {
@@ -122,7 +133,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "stress-entities-ramp",
-      "about": "BagiStress entities ramp: the count at which work_ms fits 16.6 ms, about 150000 to 158000 nodes in 6 to 7 s over three runs (168000 to 189000 over three runs with inline subscription lists, `IComponent` at 128 bytes, on a machine loaded by other loops; the line says verified true; a fixed run of 150000 nodes after 500 warm-up frames has work_ms_p50 16.7 ms). The tweens restart every frame at these counts. gate false until a baseline shows the noise of the number",
+      "about": "BagiStress entities ramp: the count at which work_ms fits 16.6 ms. On a Mac16,7 (M4 Pro), macos-release, three runs on a machine loaded by other loops: 838000 to 920000 nodes, every line verified true (with every tween restarted from onComplete, runs alternated with these: 769000 to 809000); a fixed run of 150000 nodes after 500 warm-up frames has work_ms_p50 2.6 ms. gate false until a baseline shows the noise of the number",
       "fast": false,
       "repetitions": 3,
       "timeoutSeconds": 180,
