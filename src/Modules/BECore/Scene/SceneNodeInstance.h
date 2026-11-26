@@ -34,6 +34,13 @@ namespace BECore {
     };
 
     /**
+     * @brief Appends to @p parent the `<component type="..">` element of @p component with its serialized fields: the form it has in a scene file
+     *
+     * Of @p options only `skipDefaults` applies.
+     */
+    void AppendComponentElement(pugi::xml_node parent, const IComponent& component, const NodeWriteOptions& options = {});
+
+    /**
      * @brief Appends to @p parent the `<node>` element of @p node and, in `<children>`, of every node below it: the inline form of a scene file
      *
      * `name`, `layer`, `<components>` (each with its serialized fields) and `<children>`, the last two only when there are any; the order is

@@ -22,6 +22,8 @@ PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console
 MENU_ITEMS = ["Command Palette...", "Preferences...", "Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Layouts", "Reset to Defaults"]
 PALETTE_COMMANDS = ["Game Panel", "Switch Game and Editor", "Console", "Save Scene"]
 TRANSFORM_FIELDS = 7
+CARD_ICON = "\ue194"  # any glyph of the Lucide range
+CARD_MENU = "\ue0b7##card_menu"
 HIERARCHY = "Scene Editor/##hierarchy_8D0B9DE4"
 INSPECTOR = "Scene Editor/##inspector_828F5624"
 
@@ -32,6 +34,10 @@ def item(label, window, x, y, width, height, visible=True):
 
 def part_before_hashes(name):
     return name.split("##")[0]
+
+
+def card_header(component):
+    return f"{CARD_ICON} {component}##card"
 
 
 class FakeEditor:
@@ -100,8 +106,9 @@ class FakeEditor:
         found = [item("##node_name", INSPECTOR, x + 54, 166.0, 241.0, 24.0), item("##node_layer", INSPECTOR, x + 52, 196.0, 183.0, 23.0), item("-", INSPECTOR, x + 241, 196.0, 23.0, 23.0)]
         y = 251.0
         for component, fields in (("TransformComponent", TRANSFORM_FIELDS), ("StressRunComponent", 0)):
-            found.append(item(component, INSPECTOR, x + 5, y, 361.0, 24.0))
-            found.append(item("", INSPECTOR, x + 344, y + 5, 14.0, 14.0))
+            found.append(item(card_header(component), INSPECTOR, x + 5, y, 361.0, 24.0))
+            # a pixel lower than the header: the helper must leave it out by its label, not by its place
+            found.append(item(CARD_MENU, INSPECTOR, x + 342, y + 1, 23.0, 23.0))
             y += 30.0
             if component in self.sections:
                 for index in range(fields):
@@ -206,8 +213,8 @@ class FakeEditor:
             self.search = ""
         elif window == HIERARCHY and label.startswith(" "):
             self.selected = next(key for key in self.names if f" {self.names[key]}" == label)
-        elif label in ("TransformComponent", "StressRunComponent") and was_hovering == self.hover_target:
-            self.sections ^= {label}
+        elif label.endswith("##card") and was_hovering == self.hover_target:
+            self.sections ^= {label.split(" ", 1)[1].split("##")[0]}
         elif label.startswith("##") and label[2:].isdigit() and "ctrl" in event.get("mods", []):
             self.focus = label
         elif label.startswith("##") and label[2:].isdigit():
@@ -291,6 +298,17 @@ def test_a_section_that_is_open_is_not_toggled_shut_by_another_field(ed):
     editor.set_number_field(ed, editor.field_label(0), 1, "TransformComponent")
     editor.set_number_field(ed, editor.field_label(1), 2, "TransformComponent")
     assert ed.sections == {"TransformComponent"}
+
+
+def test_the_menu_button_of_a_card_is_neither_its_header_nor_a_field(ed):
+    editor.widen_left_dock(ed)
+    editor.select_node(ed, "Run")
+    editor.open_component(ed, "TransformComponent")
+    assert ed.sections == {"TransformComponent"}
+    with pytest.raises(SessionError, match=r"0 controls called '.*##card_menu'"):
+        editor.set_number_field(ed, CARD_MENU, 1, "TransformComponent")
+    with pytest.raises(SessionError, match=r"0 visible component cards are headed 'QuadRendererComponent'.*##card"):
+        editor.open_component(ed, "QuadRendererComponent")
 
 
 def test_a_field_that_is_not_in_the_section_lists_what_is(ed):

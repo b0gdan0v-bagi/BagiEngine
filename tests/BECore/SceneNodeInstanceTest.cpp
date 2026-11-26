@@ -334,6 +334,19 @@ namespace BECore::Tests {
         ExpectBuilt(node, R"(<node ref="nodes/Box"><components><component type="TransformComponent" rotation="45"/></components></node>)");
     }
 
+    TEST_F(SceneNodeInstanceTest, AComponentElementIsTheOneItsNodeElementHolds) {
+        SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
+        const IntrusivePtr<TransformComponent> transform = node.GetComponent<TransformComponent>();
+        pugi::xml_document alone;
+        pugi::xml_document inNode;
+
+        AppendComponentElement(alone, Require(transform.Get()), NodeWriteOptions{.skipDefaults = true});
+        AppendNodeElement(inNode, node, NodeWriteOptions{.skipDefaults = true});
+
+        EXPECT_EQ(XmlText(alone.first_child()), String(R"(<component type="TransformComponent" x="1" y="2" width="30" height="40"/>)"));
+        EXPECT_EQ(XmlText(inNode.child("node").child("components").first_child()), XmlText(alone.first_child()));
+    }
+
     TEST_F(SceneNodeInstanceTest, TheResultIsAppendedAfterWhatIsThere) {
         SceneNode& node = LoadNode(R"(<node ref="nodes/Box"/>)");
         pugi::xml_document out;

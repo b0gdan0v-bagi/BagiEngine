@@ -49,7 +49,9 @@ PALETTE_ESCAPES = 2  # the first Escape leaves the focused query field, the seco
 FIELD_LABEL_FORMAT = "##{}"
 ICON_ROW = re.compile("^[\ue000-\uf8ff] (?P<name>[^#]+)$")  # a hierarchy row is a Lucide glyph, a space and the node's name
 FIELD_LABEL = re.compile(r"^##\d+$")
-COMPONENT_TYPE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# the header of a component's card in the inspector: a Lucide glyph, a space, the type name and `##card`
+COMPONENT_TYPE = re.compile("^[\ue000-\uf8ff] (?P<type>[A-Za-z_][A-Za-z0-9_]*)##card$")
+CARD_MENU_MARK = "##card_menu"  # ends the label of the "..." button on a card's header, which is neither a header nor a field
 
 LEFT_DOCK_SPLITTER = (211.0, 400.0)  # the gap between the left column and the viewport in the default layout (output pixels)
 LEFT_DOCK_DRAG_TO = (500.0, 700.0)
@@ -244,7 +246,7 @@ def _visible_rows(session: Any, name: str) -> list[HierarchyRow]:
 
 
 def inspector_labels(session: Any) -> list[str]:
-    """The labels of the inspector's items that have one, in drawn order: the name and layer fields, the component headers, the `##<index>` fields."""
+    """The labels of the inspector's items that have one, in drawn order: the name and layer fields, the card headers and menu buttons, the `##<index>` fields."""
     return [item["label"] for item in find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD) if item["label"]]
 
 
@@ -259,16 +261,20 @@ def open_component(session: Any, component: str) -> None:
 
 
 def _component_header(session: Any, component: str) -> dict[str, Any]:
-    return find_item(session, CHILD_WINDOWS, INSPECTOR_CHILD, label=component)
+    items = find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD)
+    found = [item for item in items if item["visible"] and (match := COMPONENT_TYPE.match(item["label"])) and match["type"] == component]
+    if len(found) != 1:
+        shown = ", ".join(repr(item["label"]) for item in items if item["label"] and item["visible"])
+        raise SessionError(f"{len(found)} visible component cards are headed '{component}' in the inspector; it shows: {shown}")
+    return found[0]
 
 
 def _section_items(session: Any, header: dict[str, Any]) -> list[dict[str, Any]]:
-    """The items under a component's header, down to the next header: the controls are indented, a header is not."""
+    """The items of a component's card under its header, down to the next card's header; the cards' menu buttons are left out."""
     items = find_items(session, CHILD_WINDOWS, INSPECTOR_CHILD)
-    headers = [item for item in items if COMPONENT_TYPE.match(item["label"]) and item["x"] <= header["x"] + 1]
-    below = [item for item in headers if item["y"] > header["y"]]
+    below = [item for item in items if COMPONENT_TYPE.match(item["label"]) and item["y"] > header["y"]]
     end = below[0]["y"] if below else float("inf")
-    return [item for item in items if header["y"] < item["y"] < end and item["label"]]
+    return [item for item in items if header["y"] < item["y"] < end and item["label"] and not item["label"].endswith(CARD_MENU_MARK)]
 
 
 def _field(session: Any, label: str, component: str | None) -> dict[str, Any]:

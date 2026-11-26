@@ -9,6 +9,7 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/PanelAssets/PanelSlots.h>
+#include <Widgets/SceneEditor/ComponentDefaults.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/ISceneEditorHost.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
@@ -126,8 +127,8 @@ namespace BECore {
         /// `SceneDialogsModel` by SceneAddNodeRequestEvent)
         void ApplyHierarchyAnswers(Scene& scene);
 
-        /// The slot `sceneComponents` of the inspector bar: the components of the selected node with their remove buttons, the "UI elements" section and the
-        /// inspectors, disabled for a locked node. Drawn directly when no inspector bar is registered, so a game without its asset line keeps the component list
+        /// The slot `sceneComponents` of the inspector bar: a card per component of the selected node (ComponentCard) with the "UI elements" section and the
+        /// inspectors in it, disabled for a locked node. Drawn directly when no inspector bar is registered, so a game without its asset line keeps the component list
         void DrawComponents();
 
         /**
@@ -141,8 +142,9 @@ namespace BECore {
         /// panel assets are updated before this widget, so its own Update has not yet dropped a node that died or a scene that was replaced
         [[nodiscard]] SceneNode* FindInspected() const;
 
-        HierarchyState _hierarchy;           // the primary node, the rename and the pending tree edit of the hierarchy panel
-        SceneSelection _selection;           // every selected node; its primary is `_hierarchy.selected`
+        HierarchyState _hierarchy;  // the primary node, the rename and the pending tree edit of the hierarchy panel
+        SceneSelection _selection;  // every selected node; its primary is `_hierarchy.selected`
+        ComponentDefaults _componentDefaults;
         Vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
         Vector<SceneNode*> _announcedNodes;  // what SceneSelectionChangedEvent last told
         const Scene* _announcedNodesScene = nullptr;

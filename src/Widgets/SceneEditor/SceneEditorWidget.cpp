@@ -20,6 +20,7 @@
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/PanelAssets/PanelBars.h>
+#include <Widgets/SceneEditor/ComponentCard.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneAssetDrop.h>
@@ -509,34 +510,28 @@ namespace BECore {
 
         TouchHighlights& highlights = TouchHighlights::GetInstance();
         const uint64_t nodeId = _hierarchy.selected->GetRuntimeId();
+        const ComponentCardContext card{_componentDefaults, highlights, nodeId};
         const auto& components = _hierarchy.selected->GetComponents();
         PoolString componentToRemove;
         for (size_t i = 0; i < components.size(); ++i) {
             const auto& component = components[i];
             const auto& typeMeta = component->GetTypeMeta();
 
-            ImGui::PushID(static_cast<int>(i));
-
-            bool visible = true;
-            const bool isOpen = ImGui::CollapsingHeader(typeMeta.typeName.data(), &visible);
-            FillItemWithTouchFlash(highlights.ComponentAlpha(nodeId, typeMeta.typeName));
-
-            if (isOpen) {
-                ImGui::Indent();
+            const ComponentCardAnswer answer = DrawComponentCard(static_cast<int>(i), *component, card, [&]() -> bool {
+                bool changed = false;
                 if (typeMeta.typeHash == UICanvasComponent::GetStaticTypeMeta().typeHash && RenderUIElements(static_cast<UICanvasComponent&>(*component.Get()))) {
-                    _isDirty = true;
+                    changed = true;
                     highlights.Dismiss(nodeId, typeMeta.typeName, kCanvasElementsField);
                 }
                 const ComponentTouches touches{highlights, nodeId, typeMeta.typeName};
-                if (RenderComponentInspector(component.Get(), &touches)) {
-                    _isDirty = true;
-                }
-                ImGui::Unindent();
+                changed |= RenderComponentInspector(component.Get(), &touches);
+                return changed;
+            });
+            if (answer.changed) {
+                _isDirty = true;
             }
 
-            ImGui::PopID();
-
-            if (!visible) {
+            if (answer.remove) {
                 componentToRemove = PoolString::Intern(typeMeta.typeName);
                 break;
             }
