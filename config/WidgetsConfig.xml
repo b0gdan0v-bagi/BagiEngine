@@ -4,6 +4,8 @@
     <widget
       type="ImGuiWidget" />
     <widget
+      type="RemoteSessionWidget" />
+    <widget
       type="AssetPanelWidget"
       asset="MainToolbarPanel" />
     <widget
@@ -20,6 +22,9 @@
     <widget
       type="AssetPanelWidget"
       asset="EditorDialogsPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="AttachPanel" />
     <widget
       type="ViewportWidget">
       <clearColor

@@ -7,6 +7,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Scene/ScenePick.h>
 #include <BECore/Time/GamePause.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIEnvironment.h>
@@ -17,8 +18,8 @@
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelBars.h>
+#include <Widgets/RemoteEditor/RemoteSessionRegistry.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
-#include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportUIDebug.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>
@@ -81,11 +82,8 @@ namespace BECore {
         // area or the density of the target in Game mode whatever state the widget dies in
         CoreManager::GetUIEnvironment().SetSafeAreaOverride(std::nullopt);
         CoreManager::GetUIEnvironment().SetPixelDensityOverride(std::nullopt);
-        // A gizmo drag in progress gives the nodes their start values back, so the scene is not left half moved
-        if (_gizmos.IsDragging()) {
-            _gizmos.AbortDrag(CoreManager::GetSceneManager().GetActiveScene());
-        }
-        _uiGizmos.AbortDrag(CoreManager::GetSceneManager().GetActiveScene());
+        // A drag in progress gives the nodes their start values back, so the scene is not left half moved
+        DropLocalInput();
         // The target's destructor waits for the GPU and gives back its ImGui texture. It needs the device and the ImGui context
         // alive: the widgets die last-first (the viewport before ImGuiWidget) and before the renderer's cleanup
         _renderTarget = {};
@@ -125,7 +123,17 @@ namespace BECore {
 
     void ViewportWidget::Update() {
         BE_PROFILE_SCOPE("ViewportWidget::Update");
+        RemoteSession* const remote = RemoteSessionRegistry::GetInstance().GetRemote();
+        if (remote != nullptr) {
+            DropLocalInput();
+        } else {
+            _remoteView.Release();
+        }
         if (!_open) {
+            return;
+        }
+        if (remote != nullptr) {
+            DrawRemoteWindow(*remote);
             return;
         }
         DrawViewportWindow();
@@ -134,6 +142,25 @@ namespace BECore {
         if (toolbar.GetPreview().overlays.findings && !_uiDebug.DrawFindingsWindow()) {
             toolbar.ClearFindingsOverlay();
         }
+    }
+
+    void ViewportWidget::DropLocalInput() {
+        SceneManager* const sceneManager = CoreManager::FindSceneManager();
+        Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
+        _gizmos.AbortDrag(scene);
+        _uiGizmos.AbortDrag(scene);
+        _boxSelect.Cancel();
+        _cameraInput.Cancel();
+        _pointer.Reset();
+        _frameRequested = false;
+    }
+
+    void ViewportWidget::DrawRemoteWindow(RemoteSession& session) {
+        ImGui::SetNextWindowSize({800.0f, 600.0f}, ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Viewport", &_open)) {
+            _remoteView.Draw(session);
+        }
+        ImGui::End();
     }
 
     void ViewportWidget::DrawViewportWindow() {

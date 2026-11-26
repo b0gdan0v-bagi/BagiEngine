@@ -1,0 +1,1 @@
+{"id":54,"method":"scene_set","params":{"component":"ParticleEmitterComponent","node":"Sparks","path":"effect.maxParticles","value":18446744073709551615}}

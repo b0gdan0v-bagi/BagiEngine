@@ -35,15 +35,6 @@ namespace BECore::HierarchyModel {
             return false;
         }
 
-        bool HasComponentOfType(const SceneNode& node, StringView typeName) {
-            for (const auto& component : node.GetComponents()) {
-                if (component->GetTypeMeta().typeName == typeName) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         size_t IndexAmongSiblings(const SceneNode& node) {
             const SceneNode* parent = node.GetParent();
             if (!parent) {
@@ -135,19 +126,19 @@ namespace BECore::HierarchyModel {
         return !query.empty() || !componentType.empty();
     }
 
-    bool NodeMatchesFilter(const SceneNode& node, StringView query, StringView componentType) {
-        if (!query.empty() && !ContainsIgnoreCase(node.GetName().ToStringView(), query)) {
+    bool NodeMatchesFilter(const IHierarchySource& source, HierarchyRow row, StringView query, StringView componentType) {
+        if (!query.empty() && !ContainsIgnoreCase(source.GetName(row), query)) {
             return false;
         }
-        return componentType.empty() || HasComponentOfType(node, componentType);
+        return componentType.empty() || source.HasComponent(row, componentType);
     }
 
-    bool SubtreeMatchesFilter(const SceneNode& node, StringView query, StringView componentType) {
-        if (NodeMatchesFilter(node, query, componentType)) {
+    bool SubtreeMatchesFilter(const IHierarchySource& source, HierarchyRow row, StringView query, StringView componentType) {
+        if (NodeMatchesFilter(source, row, query, componentType)) {
             return true;
         }
-        for (const auto& child : node.GetChildren()) {
-            if (SubtreeMatchesFilter(*child, query, componentType)) {
+        for (size_t i = 0, count = source.GetChildCount(row); i < count; ++i) {
+            if (SubtreeMatchesFilter(source, source.GetChild(row, i), query, componentType)) {
                 return true;
             }
         }

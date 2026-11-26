@@ -34,6 +34,13 @@ namespace BECore {
         virtual void OnAttached() {}
 
         /**
+         * @brief Called after a field of this component was written by name from outside (`scene_set`); @p field is the serialized name of the top-level field.
+         *
+         * A component that keeps something made from a field makes it again here. A field that is read when it is used needs nothing.
+         */
+        virtual void OnPropertyWritten(StringView /*field*/) {}
+
+        /**
          * @brief Draw this component. Called once per frame while its scene is the active one, in the draw order of Scene::Draw().
          *
          * A component that draws itself overrides it and does not subscribe to an event for drawing: the order of event handlers is not

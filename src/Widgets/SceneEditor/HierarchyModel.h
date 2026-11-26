@@ -2,6 +2,7 @@
 
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <Widgets/SceneEditor/HierarchySource.h>
 
 namespace BECore::HierarchyModel {
 
@@ -83,15 +84,15 @@ namespace BECore::HierarchyModel {
     bool IsFilterActive(StringView query, StringView componentType);
 
     /**
-     * @brief Whether the node itself passes the filter of the hierarchy panel
+     * @brief Whether the row itself passes the filter of the hierarchy panel
      *
      * The name must contain @p query (ASCII letters compared without case; empty keeps every name) and, when @p componentType is not empty, the node
      * must carry a component of that type name. Allocates nothing.
      */
-    bool NodeMatchesFilter(const SceneNode& node, StringView query, StringView componentType);
+    bool NodeMatchesFilter(const IHierarchySource& source, HierarchyRow row, StringView query, StringView componentType);
 
-    /// True when the node or any node below it passes the filter: an ancestor of a match stays in the tree (the panel dims it and opens its path)
-    bool SubtreeMatchesFilter(const SceneNode& node, StringView query, StringView componentType);
+    /// True when the row or any row below it passes the filter: an ancestor of a match stays in the tree (the panel dims it and opens its path)
+    bool SubtreeMatchesFilter(const IHierarchySource& source, HierarchyRow row, StringView query, StringView componentType);
 
     /// The upper quarter of a row drops before it, the lower quarter after it, the middle into it. @p fractionOfRowHeight is 0 at the top of the row, 1 at the bottom
     DropPlace ClassifyDropPlace(float fractionOfRowHeight);

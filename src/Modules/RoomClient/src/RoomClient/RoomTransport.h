@@ -32,8 +32,8 @@ namespace BECore {
         String reason;
     };
 
-    /// How much one connection takes and holds; the defaults are those of the rooms. Only the browser transport takes them: the desktop one is
-    /// bounded by WebSocketClientSettings
+    /// How much one connection takes and holds; the defaults are those of the rooms. The browser transport always has them, the desktop one only
+    /// when it is made with them: without, WebSocketClientSettings bounds it
     struct RoomTransportLimits {
         /// The longest message taken from the other end; a longer one ends the connection (1009)
         size_t maxMessageBytes = RoomLimits::kMaxServerMessageBytes;

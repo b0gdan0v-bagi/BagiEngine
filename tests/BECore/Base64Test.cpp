@@ -55,4 +55,34 @@ namespace BECore::Tests {
         EXPECT_EQ(encoded.substr(encoded.size() - 4), String("/w=="));     // the last byte, 255, with padding
     }
 
+    TEST(Base64Test, DecodingGivesBackEveryLengthIntoTheSameBuffer) {
+        Vector<uint8_t> data;
+        for (int value = 255; value >= 0; --value) {
+            data.push_back(static_cast<uint8_t>(value));
+        }
+        Vector<uint8_t> decoded{1, 2, 3};
+        for (size_t length = 0; length <= data.size(); ++length) {
+            const String encoded = Base64Encode(Span<const uint8_t>(data.data(), length));
+
+            ASSERT_TRUE(Base64Decode(encoded, decoded)) << length;
+            ASSERT_TRUE(decoded == Vector<uint8_t>(data.begin(), data.begin() + length)) << length;
+        }
+    }
+
+    TEST(Base64Test, DecodingRefusesWhatTheEncoderCannotWrite) {
+        const StringView bad[] = {
+            "Z",    "Zg",    "Zg=",  "Zm9vY",             // no whole group
+            "====", "Z===",  "=m9v", "Zg==Zm9v", "Zm=v",  // padding out of place
+            "Zm9 ", "Zm9\n", "Zm-_", "Zm9\xFF",           // no characters of the alphabet
+            "Zh==", "Zm9=",                               // bits under the padding
+        };
+        for (const StringView text : bad) {
+            Vector<uint8_t> decoded{1, 2, 3};
+            EXPECT_FALSE(Base64Decode(text, decoded)) << String(text).c_str();
+            EXPECT_TRUE(decoded.empty()) << String(text).c_str();
+        }
+        Vector<uint8_t> decoded;
+        EXPECT_FALSE(Base64Decode(StringView("Zm\0v", 4), decoded));
+    }
+
 }  // namespace BECore::Tests

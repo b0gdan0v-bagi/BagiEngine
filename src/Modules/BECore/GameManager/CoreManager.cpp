@@ -30,8 +30,12 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
+#include <BECore/Scene/SceneControl.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNodeControl.h>
+#include <BECore/Scene/ScenePickControl.h>
+#include <BECore/Scene/SceneSaveControl.h>
 #include <BECore/Tests/TestManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/GamePause.h>
@@ -154,6 +158,15 @@ namespace BECore {
         _controlService->SetPause(_pause.get());
         RegisterControlBuiltins(*_controlService);
         RegisterUIControl(*_controlService);
+        const auto activeScene = [] {
+            SceneManager* scenes = FindSceneManager();
+            return scenes != nullptr ? scenes->GetActiveScene() : nullptr;
+        };
+        RegisterSceneControl(*_controlService, activeScene);
+        RegisterSceneNodeControl(*_controlService, activeScene);
+        // The editor draws the scene into the viewport's target, so only the Game mode shows it on the screen
+        RegisterScenePickControl(*_controlService, activeScene, [] { return GetWidgetManager().GetMode() == RunMode::Game; });
+        RegisterSceneSaveControl(*_controlService, activeScene, [] { return &GetConfigManager(); });
         RegisterInputControl(*_controlService);
         RegisterImGuiInputControl(*_controlService);
         RegisterProfilerControl(*_controlService);

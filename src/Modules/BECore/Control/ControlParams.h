@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Types/Types.h>
 
@@ -27,5 +28,11 @@ namespace BECore {
 
     /// A boolean member; nullopt when absent or not a boolean
     [[nodiscard]] Optional<bool> GetParamBool(JsonView params, StringView key);
+
+    /// A string member the method cannot do without: GetParamString(), or the `invalid_params` that names @p key
+    [[nodiscard]] std::expected<String, ControlError> RequireParamString(JsonView params, StringView key);
+
+    /// @p text of a client as an error message quotes it: its start when it is long
+    [[nodiscard]] String ShownClientText(StringView text);
 
 }  // namespace BECore

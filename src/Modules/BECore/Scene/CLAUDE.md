@@ -7,8 +7,10 @@ Scene graph: `SceneManager` → `Scene` → `SceneNode` → `IComponent`. Everyt
 | Class | Role |
 |-------|------|
 | `SceneManager` | Built by `LoadSceneManagerFromConfig()` (`SceneLoader.h`: `SceneConfig` with its node references expanded, see "Node files") in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
-| `Scene` | `FACTORY_BASE`. Owns a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()` runs the fixed update list once per step due, then the frame list ("Gotchas"), and emits both events for plain subscribers; `Draw()` runs `SceneDrawSystem` ("Draw order"). `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes`, leaving generated top-level nodes out (`SceneConfigWriter.h`) |
+| `Scene` | `FACTORY_BASE`. Owns a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()` runs the fixed update list once per step due, then the frame list ("Gotchas"), and emits both events for plain subscribers; `Draw()` runs `SceneDrawSystem` ("Draw order"). `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes`, leaving generated top-level nodes out |
+| `SceneConfigWriter` | A live scene into its `<scene>` of a `SceneConfig`, and the save of the file (`SaveSceneToConfig`): the editor's Save and `scene_save` (`SceneSaveControl.h`) |
 | `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children. `_components` / `_children` are `SmallVector`s (`ComponentList` / `ChildList`). `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. `_children` is reflected, so a node holds nested `<children>`. **`IsGenerated()`** (a plain member, never in a file): true for a node made at run time (`AddChild`, `CreateNode`, `InstantiateNode`), false for one read from a file or made by `DuplicateNode`; the code that made it makes it again at the next load, so Save and `DuplicateNode` skip it with its subtree and the editor's "Add node" clears it (`SetGenerated(false)`) |
+| `ScenePick` | What a point or a box of the render output picks, and a node's selection outlines (`ScenePick.h`): the editor's viewport and `scene_pick` (`ScenePickControl.h`) |
 | `IComponent` | `FACTORY_BASE` and `SubscriptionHolder` (128 bytes, `Events/CLAUDE.md`); gets its `Scene&` / `SceneNode&` through `GetScene()` / `GetNode()` |
 | `SceneNodeFiles` / `SceneLoader` | `SceneNodeFiles`: the expansion of `<node ref>` and the node loaders. `SceneLoader`: `LoadSceneManager(configRoot, loader)` builds the `SceneManager` from the expanded copy. `SceneNodeInstance`: one node to and from XML |
 
@@ -91,8 +93,7 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a 
 
 The components are the truth: reflection, the XML and the inspector build on `SceneNode` + `IComponent`. Each subsystem keeps a dense list derived from them and rebuilt only when its key moved (`SceneUpdateList`, `SceneDrawList`, the particle pools).
 
-- It is **not** a pure ECS: component fields have no setter hooks, so a stored copy would be refreshed every frame, which costs the read it was meant to save.
-- The system still makes one `IRenderer` call per quad or sprite; the renderer batches them (`.claude/rules/rendering-module.md`).
+- It is **not** a pure ECS: component fields have no setter hooks, so a stored copy would be refreshed every frame, which costs the read it was meant to save. Only a write by name (`scene_set`) calls `IComponent::OnPropertyWritten(field)`, where a component remakes what it keeps from the field.
 
 ## View size
 
@@ -136,12 +137,11 @@ A scene says how big its picture is in scene units: `<scene type="Scene" name="G
 
 1. Class in `Components/` (or a game module's `Components/`) deriving `IComponent` with `BE_CLASS(Name)`; fields get `BE_REFLECT_FIELD`.
 2. Include `<Generated/Name.gen.hpp>` in its `.cpp`; the directory must be in `reflection_targets.json`; re-run `cmake --preset ...`.
-3. Subscribe in `OnAttached()` through `SubscribeInScene<Event, &Name::Handler>(this)`. Plain `Subscribe` is only for a handler that must run whichever scene is active; `SubscribeInScene` in `Initialize()` joins the list when added at runtime but takes the channel path when read from a file. A component that draws overrides `OnDraw()` instead of subscribing (see "Draw order"); `HasOnDraw()` returns false only for one that never draws.
+3. Subscribe in `OnAttached()` through `SubscribeInScene<Event, &Name::Handler>(this)`. Plain `Subscribe` is only for a handler that must run whichever scene is active; `SubscribeInScene` in `Initialize()` joins the list when added at runtime but takes the channel path when read from a file.
 4. Use it from `config/SceneConfig.xml` with `type="Name"`.
 
 ## Gotchas
 
 - **Update events are lists, input events are global.** `SubscribeInScene` of `SceneUpdateEvent` / `SceneFixedUpdateEvent` registers in the scene's list (`SceneUpdateList.h`), which `Scene::Update()` runs when the scene was active at its start: no tree walk, no per-call filter. Last registered first, stable; a component leaves with its node or `RemoveComponent`, and one added to a removed node never joins. A handler may add and remove nodes and components: an added one first runs next pass, a removed one is skipped. `MouseButtonDownEvent` and `ActionEvent` are global `EventBase` events and `OnAttached()` runs for the components of **every** scene at load: `SubscribeInScene` filters them per call by `IsActive()`, plain `Subscribe` makes an inactive scene react.
-- A component that reads a model owned by its `IGame` does nothing unless `GameManager::GetActive()` is that game. `SceneEventsTest.cpp` loads scenes from an XML string: copy its setup.
+- A component that reads a model owned by its `IGame` does nothing unless `GameManager::GetActive()` is that game.
 - Do not keep `SceneNode*` / `IComponent*` across scene edits; hold `IntrusivePtr` or look up again.
-- Do not draw from `Update` or change state from `Draw`; the frame order is in `BECore/CLAUDE.md`. Movement and animation scale by `SceneUpdateEvent::deltaTime`.

@@ -2,11 +2,12 @@
 
 #if BE_WITH_REMOTE_CONTROL
 
+#include <EASTL/algorithm.h>
+
 namespace BECore {
 
     namespace {
 
-        constexpr StringView kLogName = "Room client";
         constexpr StringView kThreadName = "RoomClient";
         constexpr uint32_t kThreadOrder = 230;  // the reader takes this and the writer the next number (the server's threads start at 210)
 
@@ -26,9 +27,14 @@ namespace BECore {
 
     std::expected<void, String> NativeRoomTransport::Open(StringView url) {
         WebSocketClientSettings settings;
-        settings.logName = String(kLogName);
+        settings.logName = _logName;
         settings.threadName = String(kThreadName);
         settings.threadOrder = kThreadOrder;
+        if (_limits) {
+            settings.maxMessageBytes = _limits->maxMessageBytes;
+            settings.maxOutboxBytes = _limits->maxSendBufferBytes;
+            settings.maxInboxBytes = eastl::max(settings.maxInboxBytes, _limits->maxMessageBytes);
+        }
         return _client.Open(url, std::move(settings));
     }
 

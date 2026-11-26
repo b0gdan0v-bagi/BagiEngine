@@ -1,10 +1,15 @@
+#include <BECore/FakeControlEndpoint.h>
+#include <BECore/Reflection/PropertyAccess.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
+#include <Widgets/RemoteEditor/RemoteHierarchySource.h>
+#include <Widgets/RemoteEditor/RemoteSession.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <gtest/gtest.h>
@@ -16,22 +21,37 @@ namespace BECore::Tests {
         using namespace HierarchyModel;
 
         // Root: A, B (B1 (B1a), B2), C. Components: A has a transform, B1a a quad, C a transform and a quad
-        constexpr const char* kTreeScene = R"(
-<SceneManager><scenes>
-  <scene type="Scene" name="Main"><nodes>
-    <node name="A"><components><component type="TransformComponent"/></components></node>
-    <node name="Branch"><children>
-      <node name="B1"><children>
-        <node name="Leaf"><components><component type="QuadRendererComponent"/></components></node>
-      </children></node>
-      <node name="B2"/>
-    </children></node>
-    <node name="C"><components>
-      <component type="TransformComponent"/>
-      <component type="QuadRendererComponent"/>
-    </components></node>
-  </nodes></scene>
-</scenes></SceneManager>)";
+        constexpr const char* kTreeNodes = R"(
+<node name="A"><components><component type="TransformComponent"/></components></node>
+<node name="Branch"><children>
+  <node name="B1"><children>
+    <node name="Leaf"><components><component type="QuadRendererComponent"/></components></node>
+  </children></node>
+  <node name="B2"/>
+</children></node>
+<node name="C"><components>
+  <component type="TransformComponent"/>
+  <component type="QuadRendererComponent"/>
+</components></node>)";
+
+        /// A session attached to a program whose scene is the tree above
+        struct AttachedProgram {
+            AttachedProgram() {
+                EXPECT_TRUE(session.Attach("ws://127.0.0.1:8765").has_value());
+                Exchange();
+                EXPECT_EQ(session.GetState(), RemoteSessionState::Attached);
+            }
+
+            void Exchange() {
+                session.Poll(now);
+                endpoint.Serve();
+                session.Poll(now);
+            }
+
+            FakeControlEndpoint endpoint{kTreeNodes};
+            RemoteSession session{endpoint.Factory()};
+            RemoteSessionTime now{};
+        };
 
         constexpr const char* kTransform = "TransformComponent";
         constexpr const char* kQuad = "QuadRendererComponent";
@@ -52,7 +72,8 @@ namespace BECore::Tests {
 
         void SetUp() override {
             XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(kTreeScene));
+            const String config = SceneConfigText(kTreeNodes);
+            ASSERT_TRUE(deserializer.LoadFromString(config.c_str()));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
@@ -77,19 +98,58 @@ namespace BECore::Tests {
 
         /// The names of the nodes that pass the filter, in tree order
         String Matches(StringView query, StringView type) {
+            const SceneSelection none;
+            HierarchyState state;
+            return MatchesOf(LocalHierarchySource(*_scene, state, none), query, type);
+        }
+
+        static String MatchesOf(const IHierarchySource& source, StringView query, StringView type) {
             String out;
-            Collect(Root(), query, type, out);
+            Collect(source, source.GetRoot(), query, type, out);
             return out;
         }
 
-        void Collect(const SceneNode& node, StringView query, StringView type, String& out) {
-            for (const auto& child : node.GetChildren()) {
-                if (NodeMatchesFilter(*child, query, type)) {
+        static void Collect(const IHierarchySource& source, HierarchyRow row, StringView query, StringView type, String& out) {
+            for (size_t i = 0; i < source.GetChildCount(row); ++i) {
+                const HierarchyRow child = source.GetChild(row, i);
+                if (NodeMatchesFilter(source, child, query, type)) {
                     out.append(out.empty() ? "" : " ");
-                    out.append(child->GetName().CStr());
+                    out.append(source.GetName(child));
                 }
-                Collect(*child, query, type, out);
+                Collect(source, child, query, type, out);
             }
+        }
+
+        bool SubtreeMatches(const char* name, StringView query, StringView type) {
+            const SceneSelection none;
+            HierarchyState state;
+            return SubtreeMatchesFilter(LocalHierarchySource(*_scene, state, none), LocalHierarchySource::RowOf(Node(name)), query, type);
+        }
+
+        /// Every row below the root as `depth name icon`
+        static Vector<String> Rows(const IHierarchySource& source) {
+            Vector<String> out;
+            AddRows(source, source.GetRoot(), 0, out);
+            return out;
+        }
+
+        static void AddRows(const IHierarchySource& source, HierarchyRow row, size_t depth, Vector<String>& out) {
+            out.push_back(Format("{} {} {}", depth, source.GetName(row), source.GetIcon(row)));
+            for (size_t i = 0; i < source.GetChildCount(row); ++i) {
+                AddRows(source, source.GetChild(row, i), depth + 1, out);
+            }
+        }
+
+        /// Asks a row and what is below it for all the panel reads in a frame; how many rows there were
+        static size_t Walk(const IHierarchySource& source, HierarchyRow row) {
+            size_t rows = source.GetName(row) != nullptr && source.GetIcon(row) != nullptr && source.GetId(row) != nullptr ? 1 : 0;
+            static_cast<void>(source.IsSelected(row));
+            static_cast<void>(source.IsHidden(row));
+            static_cast<void>(NodeMatchesFilter(source, row, "b", kQuad));
+            for (size_t i = 0; i < source.GetChildCount(row); ++i) {
+                rows += Walk(source, source.GetChild(row, i));
+            }
+            return rows;
         }
 
         /// Applies a drop that CanDrop allows with Scene::MoveNode and returns the tree as text
@@ -144,13 +204,116 @@ namespace BECore::Tests {
     }
 
     TEST_F(HierarchyModelTest, AnAncestorOfAMatchStaysInTheTree) {
-        EXPECT_FALSE(NodeMatchesFilter(Node("Branch"), "", kQuad));
-        EXPECT_TRUE(SubtreeMatchesFilter(Node("Branch"), "", kQuad));
-        EXPECT_TRUE(SubtreeMatchesFilter(Node("B1"), "", kQuad));
-        EXPECT_TRUE(SubtreeMatchesFilter(Node("Leaf"), "", kQuad));
-        EXPECT_FALSE(SubtreeMatchesFilter(Node("B2"), "", kQuad));
-        EXPECT_FALSE(SubtreeMatchesFilter(Node("A"), "", kQuad));
-        EXPECT_TRUE(SubtreeMatchesFilter(Root(), "leaf", ""));
+        const SceneSelection none;
+        HierarchyState state;
+        const LocalHierarchySource source(*_scene, state, none);
+        EXPECT_FALSE(NodeMatchesFilter(source, LocalHierarchySource::RowOf(Node("Branch")), "", kQuad));
+        EXPECT_TRUE(SubtreeMatches("Branch", "", kQuad));
+        EXPECT_TRUE(SubtreeMatches("B1", "", kQuad));
+        EXPECT_TRUE(SubtreeMatches("Leaf", "", kQuad));
+        EXPECT_FALSE(SubtreeMatches("B2", "", kQuad));
+        EXPECT_FALSE(SubtreeMatches("A", "", kQuad));
+        EXPECT_TRUE(SubtreeMatchesFilter(source, source.GetRoot(), "leaf", ""));
+    }
+
+    TEST_F(HierarchyModelTest, TheTreeOfAnotherProgramShowsAndFiltersAsTheLocalOne) {
+        AttachedProgram program;
+        const RemoteHierarchySource remote(program.session);
+        const SceneSelection none;
+        HierarchyState state;
+        const LocalHierarchySource local(program.endpoint.GetScene(), state, none);
+
+        EXPECT_EQ(Rows(remote), Rows(local));
+        for (const StringView query : {"", "b", "LEAF", "root", "nothing"}) {
+            for (const StringView type : {"", kTransform, kQuad}) {
+                EXPECT_EQ(MatchesOf(remote, query, type), MatchesOf(local, query, type)) << query.data() << " / " << type.data();
+                EXPECT_EQ(NodeMatchesFilter(remote, remote.GetRoot(), query, type), NodeMatchesFilter(local, local.GetRoot(), query, type)) << query.data();
+                EXPECT_EQ(SubtreeMatchesFilter(remote, remote.GetRoot(), query, type), SubtreeMatchesFilter(local, local.GetRoot(), query, type)) << query.data();
+            }
+        }
+        Vector<String> remoteTypes;
+        Vector<String> localTypes;
+        remote.CollectComponentTypes(remoteTypes);
+        local.CollectComponentTypes(localTypes);
+        EXPECT_EQ(remoteTypes, localTypes);
+        EXPECT_FALSE(remote.IsTruncated());
+    }
+
+    TEST_F(HierarchyModelTest, AClickOnARowOfAnotherProgramSelectsInTheSession) {
+        AttachedProgram program;
+        RemoteHierarchySource source(program.session);
+        const HierarchyRow root = source.GetRoot();
+        const HierarchyRow branch = source.GetChild(root, 1);
+        const HierarchyRow inner = source.GetChild(branch, 0);
+        EXPECT_EQ(source.EditableNode(root), nullptr);
+        EXPECT_EQ(source.EditableNode(inner), nullptr);
+
+        source.Click(inner, kSelectionModifierCtrl);
+        EXPECT_EQ(program.session.GetSelection(), Optional<String>(String("Branch/B1")));
+        EXPECT_TRUE(source.IsSelected(inner));
+        EXPECT_FALSE(source.IsSelected(branch));
+        EXPECT_FALSE(source.IsSelected(root));
+
+        source.Click(root, 0);
+        EXPECT_FALSE(program.session.GetSelection().has_value());
+        EXPECT_FALSE(source.IsSelected(inner));
+    }
+
+    TEST_F(HierarchyModelTest, OnlyTheRowsAboveTheRevealedNodeOfAnotherProgramAreOnItsPath) {
+        AttachedProgram program;
+        // A name that begins the name of a node on the path
+        program.endpoint.Node("A").SetName("Bran"_intern);
+        program.now += RemoteSessionTiming::kTreeInterval;
+        program.Exchange();
+        RemoteHierarchySource source(program.session);
+        const HierarchyRow root = source.GetRoot();
+        const HierarchyRow namesake = source.GetChild(root, 0);
+        const HierarchyRow branch = source.GetChild(root, 1);
+        const HierarchyRow inner = source.GetChild(branch, 0);
+        EXPECT_FALSE(source.IsOnRevealPath(root));
+        EXPECT_FALSE(source.Reveal("Branch/B1/Gone").has_value());
+
+        ASSERT_TRUE(source.Reveal("Branch/B1/Leaf").has_value());
+        EXPECT_TRUE(source.IsOnRevealPath(root));
+        EXPECT_TRUE(source.IsOnRevealPath(branch));
+        EXPECT_TRUE(source.IsOnRevealPath(inner));
+        EXPECT_FALSE(source.IsOnRevealPath(namesake));
+        EXPECT_FALSE(source.IsOnRevealPath(source.GetChild(root, 2)));
+        const HierarchyRow leaf = source.GetChild(inner, 0);
+        EXPECT_TRUE(source.IsRevealTarget(leaf));
+        EXPECT_FALSE(source.IsRevealTarget(inner));
+        EXPECT_FALSE(source.IsOnRevealPath(leaf));
+    }
+
+    TEST_F(HierarchyModelTest, ARowOfAnotherProgramKeepsItsIdOverANewReadOfTheTree) {
+        AttachedProgram program;
+        const RemoteHierarchySource source(program.session);
+        const HierarchyRow root = source.GetRoot();
+        const void* const rootId = source.GetId(root);
+        const void* const first = source.GetId(source.GetChild(root, 0));
+        const void* const last = source.GetId(source.GetChild(root, 2));
+        EXPECT_NE(first, last);
+        EXPECT_NE(first, rootId);
+
+        // Another text, so the tree is built again
+        program.endpoint.Node("A").SetLayer(5);
+        program.now += RemoteSessionTiming::kTreeInterval;
+        program.Exchange();
+        ASSERT_EQ(Require(program.session.GetTree().Find("A")).layer, 5);
+
+        EXPECT_EQ(source.GetId(source.GetRoot()), rootId);
+        EXPECT_EQ(source.GetId(source.GetChild(root, 0)), first);
+        EXPECT_EQ(source.GetId(source.GetChild(root, 2)), last);
+    }
+
+    TEST_F(HierarchyModelTest, AWalkOfTheTreeOfAnotherProgramAllocatesNothing) {
+        AttachedProgram program;
+        program.session.Select("Branch/B1");
+        const RemoteHierarchySource source(program.session);
+        size_t seen = Walk(source, source.GetRoot());  // an icon's first lookup may set itself up
+
+        ExpectNoAllocations([&] { seen = Walk(source, source.GetRoot()); });
+        EXPECT_GT(seen, 0u);
     }
 
     TEST(HierarchyModelPlaceTest, TheQuartersOfARowGiveThePlace) {
@@ -349,7 +512,7 @@ namespace BECore::Tests {
     TEST_F(HierarchyModelTest, ANodeOfAnotherSceneIsRefused) {
         auto other = New<SceneManager>();
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(kTreeScene));
+        ASSERT_TRUE(deserializer.LoadFromString(SceneConfigText(kTreeNodes).c_str()));
         other->Deserialize(deserializer);
         other->Initialize();
         Scene* otherScene = other->GetSceneByName("Main"_intern);
@@ -481,7 +644,7 @@ namespace BECore::Tests {
     TEST_F(HierarchyModelTest, RevealIgnoresAnotherSceneANodeNotInTheTreeAndNull) {
         auto other = New<SceneManager>();
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString(kTreeScene));
+        ASSERT_TRUE(deserializer.LoadFromString(SceneConfigText(kTreeNodes).c_str()));
         other->Deserialize(deserializer);
         other->Initialize();
         Scene* otherScene = other->GetSceneByName("Main"_intern);

@@ -2,13 +2,13 @@
 
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Scene/ScenePick.h>
 #include <BECore/UI/UIAnchorPresets.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UILayout.h>
 #include <BECore/UI/UIRectEdit.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
-#include <Widgets/SceneEditor/ScenePick.h>
 #include <imgui.h>
 
 namespace BECore {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Config/XmlNode.h>
+#include <BECore/Math/Vec2.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
@@ -52,6 +53,11 @@ namespace BECore {
          * Nothing may add or remove nodes or components, or change a layer or the editor flags, while this runs (checked in Debug).
          */
         void Draw();
+
+        /// The width and height of the render output that the last Draw() drew into, in pixels; both 0 while the scene never drew (or drew with no renderer)
+        Vec2 GetDrawOutputSize() const {
+            return _drawOutputSize;
+        }
 
         /**
          * @brief The place of @p node in the draw order: how many nodes Draw() draws before it. A higher rank is drawn later, so on top.
@@ -275,7 +281,8 @@ namespace BECore {
         BE_REFLECT_FIELD Vector<SceneViewVariant> _viewVariants;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(no_factory) Vector<IntrusivePtr<SceneNode>> _nodes;
         IntrusivePtr<SceneNode> _rootNode;
-        ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*
+        ViewTransform _viewTransform;  // fit of the view to the output, set by Draw(), read by ScreenToScene*
+        Vec2 _drawOutputSize;
         int32_t _activeViewIndex = -1;  // index in _viewVariants, -1 the default view; set by Draw()
         uint32_t _viewVersion = 0;
         uint32_t _announcedViewVersion = 0;  // the version Update() last sent SceneViewChangedEvent for

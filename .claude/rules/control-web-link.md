@@ -60,7 +60,7 @@ The page retries after every close but 1008: after 1 s, doubling to 10 s, and fr
 - A message without a channel aborts the connection like a refused send (a script cannot close with 1002), and what the transport still holds of it does not run.
 - A failed dial also puts one error of the browser's own into its console, which no script can silence: a page with no bridge shows one per retry. `localhost` reaches the bridge's 127.0.0.1 in Chromium and WebKit.
 - One Info line per outage, and the one Warning of a 1008: a QA run reads warnings as findings. The token is never logged.
-- `ControlLink::kTransportLimits` are the `RoomTransportLimits` the browser transport of a link takes; its defaults are those of the rooms, and the desktop transport takes none.
+- `ControlLink::kTransportLimits` are the `RoomTransportLimits` the browser transport of a link takes; its defaults are those of the rooms. The desktop transport takes them only from a caller that passes them (the remote editor).
 
 **What a linked page does not do as a desktop game does:**
 
@@ -78,6 +78,8 @@ BAGI_WEB_DIST=build/web-control-dist/debug .venv/bin/python tools/web/tests/web_
 ```
 
 It serves the dist with `serve.py`, runs the bridge on the control port with a token of its own, opens the page and copies the browser's console to stdout, so the engine's log lines are the "game's" log. It exits 0 when the page says the game ended (after `quit`), 1 when the page aborted, threw, crashed or was closed (a `[Fatal] web_game:` line says which) or the port is taken, 77 without a dist, Playwright or the browser. A page that never dials (a release build) is not noticed: the harness's start-up timeout ends it. The variables (`BAGI_WEB_DIST`, `BAGI_WEB_BROWSER`, `BAGI_WEB_HEADED`) and the flags are in its docstring; the Playwright venv is that of `tools/web/tests/CLAUDE.md`. It starts as a script through its first line, which Windows does not do.
+
+**The desktop editor attaches to a page** through the bridge as to a desktop game: `--attach=ws://127.0.0.1:<control port>` (`src/Widgets/RemoteEditor/CLAUDE.md`, "Trying it by hand"). The control port takes the editor like any other client, so it listens only once the page is linked and the editor retries until then. `scene_save` in a page writes into the page's memory and answers `persistent: false`: the scene is lost on a reload. `tools/control/tests/attach_smoke.py --game-exe tools/web/web_game.py` checks the pair.
 
 **Against a headless desktop game**, a harness meets:
 
