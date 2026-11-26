@@ -10,6 +10,7 @@
 #include <Widgets/ConfigEditor/FieldInspectors.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorDocumentRows.h>
+#include <Widgets/Feedback/ToastEvents.h>
 
 namespace BECore {
 
@@ -91,6 +92,8 @@ namespace BECore {
         if (saved) {
             _showChangedOnDisk = false;
             ClearTransientState();
+        } else {
+            EditorToastEvent::Emit(ToastLevel::Error, "Save failed: {}"_format(_selectedConfig.ToStringView()));
         }
         _viewDirty = true;
     }
