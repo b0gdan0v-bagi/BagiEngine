@@ -147,6 +147,9 @@ namespace BECore::Tests {
 
         String name = "Test";
         EXPECT_EQ("Name: {}"_format(name), "Name: Test");
+
+        EXPECT_EQ("{0}{1}{0}"_format(1, 2), "121");
+        EXPECT_EQ("{id}/{id}"_format(FormatArg("id", 9)), "9/9");
     }
 
 }  // namespace BECore::Tests

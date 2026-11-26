@@ -97,34 +97,10 @@ namespace BECore {
 
     namespace {
 
-        // The lookup of pugixml's child(name) and attribute(name) over a view: an empty name matches nothing there either, and the name needs no NUL
-        pugi::xml_node FindChild(pugi::xml_node parent, StringView name) {
-            if (name.empty()) {
-                return pugi::xml_node();
-            }
-            for (pugi::xml_node child = parent.first_child(); child; child = child.next_sibling()) {
-                if (StringView(child.name()) == name) {
-                    return child;
-                }
-            }
-            return pugi::xml_node();
-        }
-
-        pugi::xml_attribute FindAttribute(pugi::xml_node node, StringView name) {
-            if (name.empty()) {
-                return pugi::xml_attribute();
-            }
-            for (pugi::xml_attribute attribute = node.first_attribute(); attribute; attribute = attribute.next_attribute()) {
-                if (StringView(attribute.name()) == name) {
-                    return attribute;
-                }
-            }
-            return pugi::xml_attribute();
-        }
-
-        /// The first element at or after @p node among its siblings (a comment between elements is no element)
-        pugi::xml_node SkipToElement(pugi::xml_node node) {
-            while (node && node.type() != pugi::node_element) {
+        /// The first element at or after @p node among its siblings that is named @p name, of any name when it is empty (a comment or a text
+        /// is no element)
+        pugi::xml_node SkipToElement(pugi::xml_node node, StringView name) {
+            while (node && (node.type() != pugi::node_element || (!name.empty() && StringView(node.name()) != name))) {
                 node = node.next_sibling();
             }
             return node;
@@ -138,7 +114,7 @@ namespace BECore {
         }
 
         NoteAsked(name, false, true);
-        return FindChild(_nodeStack.back(), name);
+        return FindXmlChild(_nodeStack.back(), name);
     }
 
     pugi::xml_attribute XmlDeserializer::GetAttribute(StringView name) const {
@@ -147,7 +123,7 @@ namespace BECore {
         }
 
         NoteAsked(name, true, false);
-        return FindAttribute(_nodeStack.back(), name);
+        return FindXmlAttribute(_nodeStack.back(), name);
     }
 
     bool XmlDeserializer::HasKey(StringView name) const {
@@ -250,12 +226,12 @@ namespace BECore {
         _scopes.back().checked = true;
     }
 
-    void XmlDeserializer::OpenScope(bool isArray) {
+    void XmlDeserializer::OpenScope(bool takesEveryElement) {
         if (GetDiagnostics() == DiagnosticsMode::Off) {
             return;
         }
         SyncScopes();
-        _scopes.back().isArray = isArray;
+        _scopes.back().takesEveryElement = takesEveryElement;
     }
 
     void XmlDeserializer::CloseScope() {
@@ -300,7 +276,7 @@ namespace BECore {
                 ReportUnknown(scope, "attribute", name);
             }
         }
-        if (scope.isArray) {
+        if (scope.takesEveryElement) {
             return;
         }
 
@@ -800,9 +776,13 @@ namespace BECore {
             return false;
         }
 
+        // Empty: the array takes an element of any name
+        const StringView filter = elementName == kGenericElementName ? StringView() : elementName;
+
         // Counted first, so the count is an upper bound for the caller's reserve and an array over the limit is refused before any element is read
+        const pugi::xml_node first = SkipToElement(node.first_child(), filter);
         size_t elementCount = 0;
-        for (pugi::xml_node child = SkipToElement(node.first_child()); child; child = SkipToElement(child.next_sibling())) {
+        for (pugi::xml_node child = first; child; child = SkipToElement(child.next_sibling(), filter)) {
             if (++elementCount > ReaderLimits::kMaxArrayElements) {
                 ReportError(name, "Array has more elements than the limit");
                 return false;
@@ -811,13 +791,18 @@ namespace BECore {
 
         ArrayContext ctx;
         ctx.parentNode = node;
-        ctx.cursor = SkipToElement(node.first_child());
+        ctx.cursor = first;
+        ctx.elementName = filter.empty() ? StringView() : StringView(first.name());
         ctx.count = elementCount;
         count = elementCount;
         _arrayStack.push_back(ctx);
         _nodeStack.push_back(node);
         PushPathSegment(name);
-        OpenScope(true);
+        OpenScope(filter.empty());
+        if (!filter.empty()) {
+            // So that the check of the array's scope reports the elements of every other name
+            NoteAsked(filter, false, true);
+        }
         return true;
     }
 
@@ -842,7 +827,7 @@ namespace BECore {
         }
         PushPathArrayIndex(ctx.index++);
         _nodeStack.push_back(ctx.cursor);
-        ctx.cursor = SkipToElement(ctx.cursor.next_sibling());
+        ctx.cursor = SkipToElement(ctx.cursor.next_sibling(), ctx.elementName);
         OpenScope(false);
         return true;
     }

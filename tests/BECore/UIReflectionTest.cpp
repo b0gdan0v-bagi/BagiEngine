@@ -108,9 +108,8 @@ namespace BECore::Tests {
             EXPECT_TRUE(expected._variants == actual._variants);
         }
 
-        String ToXml(const UICanvasComponent& canvas, bool skipDefaults) {
+        String ToXml(const UICanvasComponent& canvas) {
             XmlSerializer serializer;
-            serializer.SetSkipDefaults(skipDefaults);
             EXPECT_TRUE(serializer.BeginObject("component"));
             canvas.Serialize(serializer);
             serializer.EndObject();
@@ -232,18 +231,16 @@ namespace BECore::Tests {
     // ---- the tree round-trips -------------------------------------------------------------------------------------------
 
     TEST(UIReflectionTest, ANestedTreeSavesAndLoadsBack) {
-        for (const bool skipDefaults : {false, true}) {
-            const auto canvas = MakeCanvas();
-            const String xml = ToXml(*canvas, skipDefaults);
-            const auto loaded = FromXml(xml);
+        const auto canvas = MakeCanvas();
+        const String xml = ToXml(*canvas);
+        const auto loaded = FromXml(xml);
 
-            ASSERT_NO_FATAL_FAILURE(ExpectSameCanvas(*canvas, *loaded)) << "skipDefaults " << skipDefaults;
-            EXPECT_EQ(ToXml(*loaded, skipDefaults), xml) << "the second save differs, skipDefaults " << skipDefaults;
-        }
+        ASSERT_NO_FATAL_FAILURE(ExpectSameCanvas(*canvas, *loaded));
+        EXPECT_EQ(ToXml(*loaded), xml) << "the second save differs";
     }
 
     TEST(UIReflectionTest, TheFileIsFlatAndReadable) {
-        const String xml = ToXml(*MakeCanvas(), true);
+        const String xml = ToXml(*MakeCanvas());
 
         // Style properties are attributes of the element itself, lengths and colors are one attribute each
         EXPECT_NE(xml.find("<element"), String::npos) << xml.c_str();
@@ -256,7 +253,7 @@ namespace BECore::Tests {
         EXPECT_NE(xml.find("<children"), String::npos);
         EXPECT_EQ(xml.find("<style"), String::npos);
         EXPECT_EQ(xml.find("<color"), String::npos);
-        // Defaults stay out
+        // A style writes only what differs from its default
         EXPECT_EQ(xml.find("spacing=\"0\""), String::npos);
         EXPECT_EQ(xml.find("aspectMode=\"Fit\""), String::npos);
     }
@@ -277,7 +274,7 @@ namespace BECore::Tests {
         ASSERT_EQ(canvas->_elements.size(), 1u);
         EXPECT_EQ(canvas->_elements[0]->style.rect.x, UILength::Px(12.0f));
         EXPECT_EQ(canvas->_elements[0]->style.rect.y, UILength::Percent(5.0f));
-        const String saved = ToXml(*canvas, true);
+        const String saved = ToXml(*canvas);
         EXPECT_NE(saved.find("x=\"12\""), String::npos);
         EXPECT_NE(saved.find("y=\"5%\""), String::npos);
     }
@@ -299,16 +296,16 @@ namespace BECore::Tests {
         const UIRectSpec& plain = canvas->_elements[1]->style.rect;
         EXPECT_FALSE(plain.anchorMin || plain.anchorMax || plain.pivot);
 
-        const String saved = ToXml(*canvas, true);
+        const String saved = ToXml(*canvas);
         EXPECT_NE(saved.find("anchorMin=\"0.1,0.5\""), String::npos) << saved.c_str();  // written as plain numbers
         EXPECT_NE(saved.find("anchorMax=\"0.9,0.5\""), String::npos);
         EXPECT_NE(saved.find("pivot=\"0.5,0\""), String::npos);
         const auto again = FromXml(saved);
         ASSERT_NO_FATAL_FAILURE(ExpectSameElements(canvas->_elements, again->_elements));
-        EXPECT_EQ(ToXml(*again, true), saved);
+        EXPECT_EQ(ToXml(*again), saved);
 
         // A file that never names them gets none of them back: its second save is its first
-        const String unnamed = ToXml(*MakeCanvas(), true);
+        const String unnamed = ToXml(*MakeCanvas());
         EXPECT_EQ(unnamed.find("anchorMin"), String::npos);
         EXPECT_EQ(unnamed.find("anchorMax"), String::npos);
         EXPECT_EQ(unnamed.find("pivot"), String::npos);
@@ -317,7 +314,7 @@ namespace BECore::Tests {
         auto element = MakeElement("Zero");
         element->style.rect.pivot = Vec2{0.0f, 0.0f};
         zero->_elements.push_back(element);
-        EXPECT_NE(ToXml(*zero, true).find("pivot=\"0,0\""), String::npos);
+        EXPECT_NE(ToXml(*zero).find("pivot=\"0,0\""), String::npos);
     }
 
     TEST(UIReflectionTest, AMalformedEdgeAnchorIsReportedAndLeavesTheOtherFieldsAlone) {
@@ -449,10 +446,10 @@ namespace BECore::Tests {
     TEST_F(UIReflectionSceneTest, ASceneSavesItsCanvasBack) {
         const auto canvas = Canvas();
         ASSERT_TRUE(canvas);
-        const String xml = ToXml(*canvas, true);
+        const String xml = ToXml(*canvas);
         const auto loaded = FromXml(xml);
         ExpectSameCanvas(*canvas, *loaded);
-        EXPECT_EQ(ToXml(*loaded, true), xml);
+        EXPECT_EQ(ToXml(*loaded), xml);
     }
 
     TEST_F(UIReflectionSceneTest, ElementsAddedInCodeAreNotSavedBack) {
@@ -461,7 +458,7 @@ namespace BECore::Tests {
         canvas->GetRoot().AddChild("CodeOnly"_intern);
         canvas->Invalidate();
 
-        const auto loaded = FromXml(ToXml(*canvas, true));
+        const auto loaded = FromXml(ToXml(*canvas));
         EXPECT_EQ(loaded->_elements.size(), 1u);
         EXPECT_EQ(loaded->GetRoot().FindByName("CodeOnly"_intern), nullptr);
     }
@@ -471,14 +468,12 @@ namespace BECore::Tests {
         EXPECT_FALSE(canvas->_extendToOutput);
         canvas->_extendToOutput = true;
 
-        for (const bool skipDefaults : {false, true}) {
-            const String xml = ToXml(*canvas, skipDefaults);
-            EXPECT_NE(xml.find("extendToOutput=\"true\""), String::npos);
-            EXPECT_TRUE(FromXml(xml)->_extendToOutput);
-        }
+        const String xml = ToXml(*canvas);
+        EXPECT_NE(xml.find("extendToOutput=\"true\""), String::npos);
+        EXPECT_TRUE(FromXml(xml)->_extendToOutput);
 
         canvas->_extendToOutput = false;
-        EXPECT_FALSE(FromXml(ToXml(*canvas, false))->_extendToOutput);
+        EXPECT_FALSE(FromXml(ToXml(*canvas))->_extendToOutput);
     }
 
     static_assert(std::is_base_of_v<Color, UIColor>);

@@ -183,6 +183,7 @@ namespace BECore::Tests {
         EXPECT_EQ(tree.Parent(0), kNoTag);
         EXPECT_TRUE(tree.Range(0).IsEmpty());
         EXPECT_FALSE(tree.Find("a").has_value());
+        EXPECT_TRUE(tree.IsValid());
         const BakedTagTree zero{};
         EXPECT_EQ(memcmp(&tree, &zero, sizeof(BakedTagTree)), 0);
     }
@@ -192,6 +193,30 @@ namespace BECore::Tests {
         tree.parent[0] = 1;
         tree.parent[1] = 0;
         EXPECT_GT(tree.Depth(0), kMaxTagDepth);
+    }
+
+    TEST(BakedTagTreeTest, ABlockWhoseAccessorsWouldReadOutsideItIsNotValid) {
+        const BakedTagTree good = BakeOf({"a.b", "c"});
+        ASSERT_TRUE(good.IsValid());
+        const TagId last = static_cast<TagId>(good.Count() - 1);
+
+        const auto expectInvalid = [&good](StringView what, auto&& damage) {
+            BakedTagTree block = good;
+            damage(block);
+            EXPECT_FALSE(block.IsValid()) << ToStd(what);
+        };
+        expectInvalid("too many tags", [](BakedTagTree& block) { block.count = kMaxTagCount + 1; });
+        expectInvalid("a blob over the limit", [](BakedTagTree& block) { block.nameBlobSize = kMaxTagNameBlob + 1; });
+        expectInvalid("an offset that does not ascend", [](BakedTagTree& block) { block.nameOffset[1] = block.nameOffset[0]; });
+        expectInvalid("an offset past the next one", [](BakedTagTree& block) { block.nameOffset[1] = block.nameOffset[2] + 1; });
+        expectInvalid("an offset at the end of the blob", [last](BakedTagTree& block) { block.nameOffset[last] = block.nameBlobSize; });
+        expectInvalid("an offset past the block", [](BakedTagTree& block) { block.nameOffset[1] = 0xFFFF; });
+        expectInvalid("no NUL before the next name", [](BakedTagTree& block) { block.names[block.nameOffset[1] - 1] = 'x'; });
+        expectInvalid("no NUL at the end of the blob", [](BakedTagTree& block) { block.names[block.nameBlobSize - 1] = 'x'; });
+        expectInvalid("a tag that is its own parent", [](BakedTagTree& block) { block.parent[1] = 1; });
+        expectInvalid("a parent with a higher id", [](BakedTagTree& block) { block.parent[0] = 1; });
+        expectInvalid("a subtree that ends before its tag", [last](BakedTagTree& block) { block.subtreeEnd[last] = 0; });
+        expectInvalid("a subtree that ends past the tags", [](BakedTagTree& block) { block.subtreeEnd[0] = block.count; });
     }
 
     TEST(BakedTagTreeTest, ALongestPathFillsTheDeepestAndLongestSlot) {
@@ -215,6 +240,7 @@ namespace BECore::Tests {
         tree.FillBaked(block);
 
         ASSERT_EQ(block.Count(), kMaxTagCount);
+        EXPECT_TRUE(block.IsValid());
         for (size_t i = 0; i < kMaxTagCount; ++i) {
             const TagId id = static_cast<TagId>(i);
             ASSERT_EQ(block.Name(id), tree.Name(id)) << i;
@@ -238,6 +264,7 @@ namespace BECore::Tests {
         BakedTagTree block{};
         tree.FillBaked(block);
 
+        EXPECT_TRUE(block.IsValid());
         EXPECT_EQ(block.nameBlobSize, kMaxTagNameBlob);
         EXPECT_EQ(block.names[kMaxTagNameBlob - 1], '\0');
         ASSERT_EQ(block.Count(), kFit + 1);
@@ -257,6 +284,7 @@ namespace BECore::Tests {
         tree.FillBaked(block);
 
         ASSERT_EQ(block.Count(), tree.Count());
+        EXPECT_TRUE(block.IsValid());
         for (size_t i = 0; i < tree.Count(); ++i) {
             const TagId id = static_cast<TagId>(i);
             EXPECT_EQ(block.Name(id), tree.Name(id));

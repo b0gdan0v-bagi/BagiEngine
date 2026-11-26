@@ -540,6 +540,34 @@ namespace BECore::Tests {
         EXPECT_EQ(loaded.value.leaves.size(), 2u);
     }
 
+    TEST(XmlDiagnosticsTest, ANamedArrayReadsOnlyTheElementsOfItsNameAndReportsEveryOtherNameOnce) {
+        constexpr StringView kDocument = "<Holder><probes><whatever type=\"DiagProbeReads\" id=\"1\"/><probe type=\"DiagProbeReads\" id=\"2\"/><whatever/>"
+                                         "<probe type=\"DiagProbeReads\" id=\"3\"/></probes></Holder>";
+        for (const DiagnosticsMode mode : {DiagnosticsMode::Off, DiagnosticsMode::Warn, DiagnosticsMode::Error}) {
+            SCOPED_TRACE(static_cast<int>(mode));
+            LoadedDocument<Holder> loaded(mode, kDocument);
+            ASSERT_EQ(loaded.value.probes.size(), 2u);
+            EXPECT_EQ(loaded.value.probes[0]->Cast<DiagProbeReads>()->id, 2);
+            EXPECT_EQ(loaded.value.probes[1]->Cast<DiagProbeReads>()->id, 3);
+            const Vector<String> expected = mode == DiagnosticsMode::Off ? Vector<String>{} : Vector<String>{"probes.whatever: Unknown element 'whatever'"};
+            EXPECT_EQ(loaded.Findings(), expected);
+            EXPECT_EQ(loaded.reader.HasErrors(), mode == DiagnosticsMode::Error);
+        }
+    }
+
+    TEST(XmlDiagnosticsTest, AnArrayWithNoElementOfItsNameIsEmpty) {
+        XmlDeserializer reader;
+        reader.SetDiagnostics(DiagnosticsMode::Warn);
+        ASSERT_TRUE(reader.LoadFromString("<root><list><foo/><foo/></list></root>"));
+        size_t count = 7;
+        ASSERT_TRUE(reader.BeginArray("list", "sprite", count));
+        EXPECT_EQ(count, 0u);
+        EXPECT_FALSE(reader.BeginArrayElement());
+        reader.EndArray();
+        ASSERT_EQ(reader.GetWarnings().size(), 1u);
+        EXPECT_EQ(reader.GetWarnings()[0].path, "list.foo");
+    }
+
     TEST(XmlDiagnosticsTest, ADisabledFactoryElementIsNotReadAndHasNoUnknownKeys) {
         LoadedDocument<Holder> loaded(DiagnosticsMode::Warn, "<Holder><probes><probe type=\"DiagProbeReads\" enabled=\"false\" id=\"2\" bogus=\"x\"/>"
                                                              "<probe type=\"DiagProbeReads\" id=\"3\" bogus=\"x\"/></probes></Holder>");

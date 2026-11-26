@@ -11,8 +11,8 @@ namespace BECore {
      * @brief Binary serializer (writer): compact, name-keyed, little-endian
      *
      * Same call sequence as XmlSerializer, so every type that serializes to XML serializes to binary.
-     * Layout: BinaryFormat.h (version 3). Skipped fields (SetSkipDefaults, null pointers, empty optionals) are not
-     * written; the reader finds the rest by name.
+     * Layout: BinaryFormat.h (version 3). Null pointers and empty optionals are not written; the reader finds the rest
+     * by name.
      *
      * The stream has two tables, one entry per distinct text each, and the entries carry the index. The name table holds
      * the names of all entries. The pool section holds the text of PoolString values as ready pool entries (the pool's own
@@ -61,6 +61,9 @@ namespace BECore {
         /// Writes the bytes to a file through WriteFileAtomically: the folder is made and a reader sees the old file or the whole new one,
         /// never a half file. False if it cannot be written.
         bool SaveToFile(const Path& path) const;
+
+        using ISerializer::Write;
+        using ISerializer::WriteAttribute;
 
         void Write(StringView name, bool value) override;
         void Write(StringView name, int8_t value) override;

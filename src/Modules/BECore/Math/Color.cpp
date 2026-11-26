@@ -1,28 +1,30 @@
 #include "Color.h"
 
+#include <BECore/Reflection/StrictText.h>
+
 namespace BECore {
 
+    namespace {
+
+        constexpr size_t kChannelCount = 4;
+
+    }  // namespace
+
     Optional<Color> Color::ParseColorFromString(StringView data) {
-        if (data.empty()) {
-            return {};
+        const auto tokens = StringUtils::Split(data, ',');
+        if (tokens.size() != kChannelCount) {
+            return std::nullopt;
         }
 
-        const auto& tokens = BECore::StringUtils::Split(data, ',');
-
-        if (tokens.size() != 4) {
-            return {};
-        }
-
-        const auto fromStringView = [](StringView s) -> unsigned char {
-            unsigned char result;
-            auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), result);
-            if (ec == std::errc{}) {
-                return result;
+        unsigned char channels[kChannelCount] = {};
+        for (size_t i = 0; i < kChannelCount; ++i) {
+            const auto channel = StringUtils::ParseNumber<unsigned char>(StrictText::TrimAsciiSpaces(tokens[i]));
+            if (!channel) {
+                return std::nullopt;
             }
-            return 0;
-        };
-
-        return Color{fromStringView(tokens[0]), fromStringView(tokens[1]), fromStringView(tokens[2]), fromStringView(tokens[3])};
+            channels[i] = *channel;
+        }
+        return Color{channels[0], channels[1], channels[2], channels[3]};
     }
 
 }  // namespace BECore

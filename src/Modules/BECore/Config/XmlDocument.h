@@ -36,7 +36,7 @@ namespace BECore {
         bool LoadFromString(StringView xmlContent);
 
         /**
-         * @brief Creates the missing parent folders and writes the document, laid out like the file that is there
+         * @brief Creates the missing parent folders and replaces the file by the document, laid out like the file that is there
          *
          * The text is the document's, two-space indentation and every attribute of an element on one line; when the file
          * already exists the lines the edit did not touch keep its layout (blank lines, indentation) through MergeXmlLayout,
@@ -47,7 +47,10 @@ namespace BECore {
          * The comments and the XML declaration the file had are kept (they are nodes of the document), a declaration it did not
          * have is not added, and a UTF-8 byte order mark the document started with is written again. What is on disk never
          * wins over the document: a change made to the file after the load is overwritten.
-         * @return false when the file cannot be opened for writing
+         *
+         * The write is WriteFileAtomically, so a failed save leaves the old file; the file that replaces it has the default permissions.
+         * A symbolic link is followed and stays: the file it names is replaced.
+         * @return false when the file cannot be written, or @p filepath is a link that leads nowhere
          */
         bool SaveToFile(const Path& filepath) const;
 

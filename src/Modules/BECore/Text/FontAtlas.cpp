@@ -5,6 +5,7 @@
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Text/GlyphOutline.h>
 #include <BECore/Text/ShelfPacker.h>
+#include <BECore/Text/Utf8.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 
@@ -58,13 +59,16 @@ namespace BECore {
     bool FontAtlas::PrepareCodePoints(IRenderer& renderer, Span<const GlyphRange> ranges) {
         const ScratchScope scratch;
         size_t count = 0;
+        // The ranges are the caller's: an end cut to the last code point bounds the count, and the loop variable below cannot wrap
         for (const GlyphRange& range : ranges) {
-            count += range.last >= range.first ? static_cast<size_t>(range.last - range.first) + 1 : 0;
+            const char32_t last = std::min(range.last, Utf8::kMaxCodePoint);
+            count += last >= range.first ? static_cast<size_t>(last - range.first) + 1 : 0;
         }
         ArenaVector<uint32_t> glyphs;
         glyphs.reserve(count);
         for (const GlyphRange& range : ranges) {
-            for (char32_t codePoint = range.first; codePoint <= range.last; ++codePoint) {
+            const char32_t last = std::min(range.last, Utf8::kMaxCodePoint);
+            for (char32_t codePoint = range.first; codePoint <= last; ++codePoint) {
                 if (const uint32_t glyph = _font->FindGlyph(codePoint); glyph != 0) {
                     glyphs.push_back(glyph);
                 }

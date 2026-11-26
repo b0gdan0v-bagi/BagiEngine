@@ -18,6 +18,7 @@ namespace BECore {
         constexpr Color() = default;
         constexpr Color(unsigned char r_, unsigned char g_, unsigned char b_, unsigned char a_) : r(r_), g(g_), b(b_), a(a_) {}
 
+        /// The color of a text `r,g,b,a`: four whole decimal numbers 0..255, spaces around each allowed; nullopt for any other text
         static Optional<Color> ParseColorFromString(StringView data);
 
         template <typename Serializer>

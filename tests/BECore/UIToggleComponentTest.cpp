@@ -3,7 +3,6 @@
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -731,19 +730,6 @@ namespace BECore::Tests {
         EXPECT_EQ(Require(Require(loaded->GetRoot().FindByName("CustomSwitch"_intern)).GetComponent<UISwitchComponent>()).thumbColor.b, kThumbAuthored.b);
         EXPECT_EQ(Require(Require(loaded->GetRoot().FindByName("Sound"_intern)).GetComponent<UIToggleComponent>()).offValue, "off"_intern);
         ExpectSameElementXml(*_canvas, *loaded);
-    }
-
-    TEST_F(UIToggleComponentTest, ThePartShapeIsSkippedAsADefaultWhenAsked) {
-        auto xmlOf = [](const UIElement& element) {
-            XmlSerializer serializer;
-            serializer.SetSkipDefaults(true);
-            EXPECT_TRUE(serializer.BeginObject("element"));
-            element.Serialize(serializer);
-            serializer.EndObject();
-            return serializer.SaveToString();
-        };
-        EXPECT_EQ(xmlOf(El("SoundSwitch")).find("partShape"), String::npos);
-        EXPECT_NE(xmlOf(El("RoundSwitch")).find("partShape=\"Round\""), String::npos);
     }
 
     // The switch element is as wide as the track and the air at its right end

@@ -57,7 +57,8 @@ namespace BECore {
          */
         bool Prepare(IRenderer& renderer, Span<const uint32_t> glyphs);
 
-        /// Prepare() for the glyphs that the font has for the code points of the ranges (a code point it lacks is skipped, not replaced)
+        /// Prepare() for the glyphs that the font has for the code points of the ranges (a code point it lacks is skipped, not replaced).
+        /// A range is cut at Utf8::kMaxCodePoint; one that starts past its end is empty
         bool PrepareCodePoints(IRenderer& renderer, Span<const GlyphRange> ranges);
 
         /// Null until Prepare() has seen the glyph

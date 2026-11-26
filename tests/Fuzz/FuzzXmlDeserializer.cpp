@@ -191,6 +191,21 @@ namespace BECore::Fuzz {
             return StringView(name);
         }
 
+        /// Whether @p node is an element of an array the reader was asked for with @p elementName
+        bool IsArrayElement(pugi::xml_node node, StringView elementName) {
+            return node.type() == pugi::node_element && (elementName == kGenericElementName || NameOf(node.name()) == elementName);
+        }
+
+        /// The name of the first child element, so a walk by name enters something whatever the document calls it
+        StringView FirstElementName(pugi::xml_node parent) {
+            for (const pugi::xml_node child : parent.children()) {
+                if (child.type() == pugi::node_element) {
+                    return NameOf(child.name());
+                }
+            }
+            return kGenericElementName;
+        }
+
         /// Reads a loaded document by following a second parse of the same text: it needs no type, it asks the reader for what the document holds
         class DocumentWalker {
         public:
@@ -229,24 +244,27 @@ namespace BECore::Fuzz {
                     WalkScope(child, depth + 1);
                     _reader.EndObject();
 
-                    WalkArray(child, name, depth);
+                    WalkArray(child, name, kGenericElementName, depth);
+                    if (const StringView firstName = FirstElementName(child); firstName != kGenericElementName) {
+                        WalkArray(child, name, firstName, depth);
+                    }
                 }
             }
 
         private:
-            void WalkArray(pugi::xml_node arrayNode, StringView name, size_t depth) {
-                // The elements of an array are its child elements: a comment or a text node between them is none
+            void WalkArray(pugi::xml_node arrayNode, StringView name, StringView elementName, size_t depth) {
+                // The elements of an array are the child elements IsArrayElement takes: a comment or a text node between them is none
                 size_t expectedCount = 0;
                 for (const pugi::xml_node element : arrayNode.children()) {
-                    expectedCount += element.type() == pugi::node_element ? 1u : 0u;
+                    expectedCount += IsArrayElement(element, elementName) ? 1u : 0u;
                 }
                 size_t count = 0;
-                FUZZ_CHECK(_reader.BeginArray(name, "item", count));
+                FUZZ_CHECK(_reader.BeginArray(name, elementName, count));
                 FUZZ_CHECK(count == expectedCount);
 
                 size_t entered = 0;
                 for (const pugi::xml_node element : arrayNode.children()) {
-                    if (element.type() != pugi::node_element) {
+                    if (!IsArrayElement(element, elementName)) {
                         continue;
                     }
                     if (entered == kWalkArrayElementLimit) {

@@ -135,6 +135,55 @@ namespace BECore::Tests {
         EXPECT_FALSE(document.SaveToFile(folder));
     }
 
+    TEST_F(XmlDocumentTest, AFailedSaveLeavesTheFileAsItWas) {
+        WriteFile(_path, kWithComments);
+        MakeDirectory(Path(Format("{}{}", _path.View(), kAtomicTempSuffix)));
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromString("<root />"));
+
+        EXPECT_FALSE(document.SaveToFile(_path));
+        EXPECT_EQ(ReadFile(_path), String(kWithComments));
+    }
+
+    TEST_F(XmlDocumentTest, ASaveLeavesNoTemporaryFile) {
+        Saved("<root />");
+        EXPECT_FALSE(PathExists(Path(Format("{}{}", _path.View(), kAtomicTempSuffix))));
+    }
+
+#ifndef _WIN32
+    TEST_F(XmlDocumentTest, ASaveThroughASymbolicLinkWritesTheLinkedFileAndKeepsTheLink) {
+        const Path linked = PathOf("linked.xml");
+        WriteFile(linked, "<old />\n");
+        CreateSymlink(_path, linked);
+
+        EXPECT_EQ(Saved("<root />\n"), "<root />\n");
+        EXPECT_TRUE(IsSymbolicLink(_path));
+        EXPECT_EQ(ReadFile(linked), "<root />\n");
+    }
+
+    TEST_F(XmlDocumentTest, ASaveToALinkThatLeadsNowhereFailsAndKeepsTheLink) {
+        CreateSymlink(_path, PathOf("gone.xml"));
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromString("<root />"));
+
+        EXPECT_FALSE(document.SaveToFile(_path));
+        EXPECT_TRUE(IsSymbolicLink(_path));
+        EXPECT_FALSE(PathExists(PathOf("gone.xml")));
+    }
+#endif
+
+    TEST_F(XmlDocumentTest, ANodeIsFoundByANameThatIsNotNulTerminated) {
+        XmlDocument document;
+        ASSERT_TRUE(document.LoadFromString(R"(<root ab="long" a="short"><ab /><a x="1" /></root>)"));
+        const XmlNode root = document.GetRoot();
+        const StringView name = StringView("ab").substr(0, 1);
+
+        EXPECT_EQ(root.GetChild(name).GetAttribute("x"), Optional<StringView>("1"));
+        EXPECT_EQ(root.GetAttribute(name), Optional<StringView>("short"));
+        EXPECT_TRUE(root.GetChild("").IsEmpty());
+        EXPECT_FALSE(root.GetAttribute("").has_value());
+    }
+
     TEST_F(XmlDocumentTest, ASaveMakesAMissingFolderWithANonAsciiName) {
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromString("<root />"));
