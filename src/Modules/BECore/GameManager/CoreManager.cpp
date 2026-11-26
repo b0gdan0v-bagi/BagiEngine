@@ -30,6 +30,7 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
+#include <BECore/Scene/SceneControl.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Tests/TestManager.h>
@@ -154,6 +155,10 @@ namespace BECore {
         _controlService->SetPause(_pause.get());
         RegisterControlBuiltins(*_controlService);
         RegisterUIControl(*_controlService);
+        RegisterSceneControl(*_controlService, [] {
+            SceneManager* scenes = FindSceneManager();
+            return scenes != nullptr ? scenes->GetActiveScene() : nullptr;
+        });
         RegisterInputControl(*_controlService);
         RegisterImGuiInputControl(*_controlService);
         RegisterProfilerControl(*_controlService);
