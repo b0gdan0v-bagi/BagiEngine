@@ -26,6 +26,7 @@ namespace BECore {
     class IRenderer;
     class LoggerManager;
     class MainWindowManager;
+    class PoolStringMonitor;
     class RendererManager;
     class ResourceManager;
     class SceneManager;
@@ -141,6 +142,11 @@ namespace BECore {
         /// The cost of the last frames: stage times, draws, allocations, named counters (Profiler/CLAUDE.md, "Frame statistics")
         static FrameStatsCollector& GetFrameStats() {
             return *GetInstance()._frameStats;
+        }
+
+        /// What each frame added to the `PoolString` pool and, while recording, which strings and from which zone (`PoolString/CLAUDE.md`, "Inspection"). Main thread only
+        static PoolStringMonitor& GetPoolStringMonitor() {
+            return *GetInstance()._poolStringMonitor;
         }
 
         static ControlService& GetControlService() {
@@ -267,6 +273,7 @@ namespace BECore {
         // destructor then drops the tweens before the scenes go, a second guarantee besides Clear(); moving it above _sceneManager could break that silently
         UniquePtr<TweenManager> _tweenManager;
         UniquePtr<FrameStatsCollector> _frameStats;
+        UniquePtr<PoolStringMonitor> _poolStringMonitor;  // before _controlService, whose methods read it
         UniquePtr<ControlService> _controlService;
     };
 

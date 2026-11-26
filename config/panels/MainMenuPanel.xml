@@ -28,6 +28,7 @@
         <element type="PanelMenuItem" id="spriteLibrary" text="Sprite Library" command="view.spriteLibrary"/>
         <element type="PanelMenuItem" id="gamePanel" text="Game Panel" command="view.game"/>
         <element type="PanelMenuItem" id="console" text="Console" command="view.console"/>
+        <element type="PanelMenuItem" id="poolStrings" text="Pool Strings" command="view.poolStrings"/>
         <element type="PanelMenuItem" id="generate" text="Generate Art" command="view.generate"/>
         <element type="PanelMenuItem" id="profiler" text="Profiler" command="view.profiler"/>
         <element type="PanelSeparator" id="layoutsLine"/>

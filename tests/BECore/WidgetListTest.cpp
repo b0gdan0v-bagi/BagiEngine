@@ -183,7 +183,7 @@ namespace BECore::Tests {
 
         const Vector<String> expected{"ImGuiWidget",      "AssetPanelWidget", "AssetPanelWidget", "AssetPanelWidget", "EditorLayoutWidget", "AssetPanelWidget", "AssetPanelWidget",
                                       "ViewportWidget",   "AssetPanelWidget", "AssetPanelWidget", "AssetPanelWidget", "SceneEditorWidget",  "AssetPanelWidget", "AssetPanelWidget",
-                                      "AssetPanelWidget", "AssetPanelWidget", "AssetPanelWidget", "AssetPanelWidget", "AssetPanelWidget"};
+                                      "AssetPanelWidget", "AssetPanelWidget", "AssetPanelWidget", "AssetPanelWidget", "AssetPanelWidget",   "AssetPanelWidget"};
         EXPECT_EQ(types, expected);
     }
 

@@ -111,6 +111,8 @@ namespace BECore {
         /// Makes @p zone the innermost open zone of the calling thread, the one allocations are charged to by name; returns the previous one
         /// (ProfileZone nests strictly, so it restores it at its end)
         static const ProfileSite* ExchangeCurrentZone(const ProfileSite* zone);
+        /// The innermost open zone of the calling thread, null outside every zone. `ProfileZone` sets it only with ENGINE_PROFILER_ALLOC
+        [[nodiscard]] static const ProfileSite* GetCurrentZone();
         /// The allocations per innermost zone x name, the most bytes first; empty without ENGINE_PROFILER_ALLOC. Allocates
         [[nodiscard]] static Vector<AllocSiteStats> GetNameStats();
         /// The allocation sizes per innermost zone, in power-of-two buckets (AllocSiteTable.h), the most allocations first; empty without

@@ -33,6 +33,10 @@ namespace BECore {
         /// Check the hash of every entry against its text (`PoolAdoptOptions::verifyHashes`). On in a build with asserts: a cook's output
         /// was verified when it was written, so a release build trusts it and a debug build proves it.
         bool verifyHashes = ENGINE_ENABLE_ASSERTS != 0;
+
+        /// Names the adopted block in a snapshot of the pool (`PoolAdoptOptions::sourceName`); `LoadContentFile` takes the
+        /// path when it is empty. Read during the call only.
+        StringView sourceName;
     };
 
     /**
