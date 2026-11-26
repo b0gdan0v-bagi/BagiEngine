@@ -1,6 +1,6 @@
 # tools/perf
 
-The benchmark runner of the skills `perf` and `perf-investigate` (`.claude/skills/perf/`, `.claude/skills/perf-investigate/`) and of the merge sentinel of `todo-merge`. Standard library only, Python 3.10+. The engine knows nothing of it; what a repository measures is its benchmark set in `.claude/rules/perf-project.md`.
+The benchmark runner of the skills `perf`, `perf-investigate` and `perf-render` (`.claude/skills/perf*/`) and of the merge sentinel of `todo-merge`. Standard library only, Python 3.10+. The engine knows nothing of it; what a repository measures is its benchmark set in `.claude/rules/perf-project.md`.
 
 | File | Purpose |
 |------|---------|
