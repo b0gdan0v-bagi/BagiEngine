@@ -29,9 +29,9 @@ Fields the `build` skill reads. A game fills every row.
 | Field | Meaning | Engine value |
 |-------|---------|--------------|
 | Product | the executable (target name; the file is `build/<preset>/bin/<name>[.exe]`) | `BagiStress` |
-| Tests | the gtest targets; the argument `tests` builds exactly these (`--target <tests>`) | `BagiEngineTests StressTests` |
-| Default build | what `cmake --build --preset <p>` with no `--target` builds | every target: the product and the test executables |
-| Source paths | the paths of `git status --porcelain -- <paths>` (a configure trigger) and of the `BE_CLASS` / `BE_EVENT` / `BE_REFLECT_FIELD` search | `src tests tools/stress` |
+| Tests | the gtest targets; the argument `tests` builds exactly these (`--target <tests>`) | `BagiEngineTests StressTests DemoTests` |
+| Default build | what `cmake --build --preset <p>` with no `--target` builds | every target: the product, `BagiDemo` and the test executables |
+| Source paths | the paths of `git status --porcelain -- <paths>` (a configure trigger) and of the `BE_CLASS` / `BE_EVENT` / `BE_REFLECT_FIELD` search | `src tests tools/stress tools/demo` |
 | Extra configure triggers | cases besides the common ones (below) that need `cmake --preset <p>` | a change of `BE_WITH_EDITOR` (`-DBE_WITH_EDITOR=...`, or a switch between a preset with and without the editor): the set of runtime and test sources changes (see "Gotchas") |
 | Extra failure hints | cause and fix for a configure, compile or link failure that is specific to this repository | see "Failure hints" |
 | Extra gotchas | facts about the output, the tests or the run that hold only here | see "Gotchas" |
@@ -70,7 +70,7 @@ Engine:
 
 ### Tests
 
-Engine: `ctest --preset <p>` runs the gtest executables `BagiEngineTests` and `StressTests` as shards (`<Exe>.Shard<k>`, `ENGINE_TEST_SHARDS` per executable, many cases in one process; a failing case, a crash and a re-run of one case: `.claude/rules/tests-module.md`, "Shards"; `-DENGINE_TESTS_PER_CASE=ON` makes one entry per case), `BagiStressControlSmoke` and `BagiStressScenario.*`, Python scripts that start `BagiStress` `--headless` and play it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
+Engine: `ctest --preset <p>` runs the gtest executables `BagiEngineTests`, `StressTests` and `DemoTests` as shards (`<Exe>.Shard<k>`, `ENGINE_TEST_SHARDS` per executable, many cases in one process; a failing case, a crash and a re-run of one case: `.claude/rules/tests-module.md`, "Shards"; `-DENGINE_TESTS_PER_CASE=ON` makes one entry per case), `BagiStressControlSmoke`, `BagiDemoControlSmoke` and `BagiStressScenario.*`, Python scripts that start the game `--headless` and play it over the control API. A smoke test is skipped (exit code 77) when its executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
 
 **Labels and presets.** The `be_add_*` helpers label their entries: `unit` (the gtest shards), `smoke` (control smoke tests), `scenario` (scenario files and their QA replays); `native-watch` marks `BagiNativeFileWatch` (the real OS file watch, run in no preset: `ctest --test-dir build/<p> -L native-watch` for a change of the watch backends, `tests-module.md`); `extended` marks what only the full run needs: the hygiene checks (`BagiHeadersStandalone`, `BagiTypesCheck`, `BagiIncludeStyle`, `BagiPoolStrings`, `BagiThirdPartyNotices`), `BagiFuzzMutations`, `BagiRoomServerSmoke` (also `smoke`), `BagiRoomServerHostile`, `BagiTlsLocalEndpoint`. Every test preset `<p>` has four siblings (mixins `test-*` of `CMakePresets.json`, so the games get them too):
 
@@ -115,7 +115,7 @@ Findings land in `build/<preset>/fuzz-artifacts/`, never in the repository; the 
 
 ```bash
 cmake --preset macos-asan
-cmake --build --preset macos-asan --target BagiEngineTests StressTests BagiStress   # no target: also the room server and its probe; about 8 minutes from scratch
+cmake --build --preset macos-asan --target BagiEngineTests StressTests DemoTests BagiStress BagiDemo   # no target: also the room server and its probe; about 8 minutes from scratch
 ctest --preset macos-asan                                                          # the engine set: about 150 to 220 s at -j8 (macos-debug: about 70 s)
 ```
 
@@ -125,7 +125,7 @@ Windows, `windows-clang-asan` (LLVM 19 on `PATH`; run on Windows 11, 2026-11-14,
 
 ```bash
 python CI/scripts/vs_env.py cmake --preset windows-clang-asan
-python CI/scripts/vs_env.py cmake --build --preset windows-clang-asan --target BagiEngineTests StressTests BagiStress
+python CI/scripts/vs_env.py cmake --build --preset windows-clang-asan --target BagiEngineTests StressTests DemoTests BagiStress BagiDemo
 ctest --preset windows-clang-asan
 ```
 
@@ -135,7 +135,7 @@ No `-D` is needed: the mixin `asan-windows-crt` makes the build static (`CMAKE_M
 
 ```bash
 cmake --preset macos-tsan
-cmake --build --preset macos-tsan --target BagiEngineTests StressTests BagiStress   # a full build of its own
+cmake --build --preset macos-tsan --target BagiEngineTests StressTests DemoTests BagiStress BagiDemo   # a full build of its own
 ctest --preset macos-tsan-fast                                                      # macos-tsan adds the smoke and scenario tests
 ```
 
@@ -151,7 +151,7 @@ Nothing is suppressed: `cmake/sanitizers/tsan.supp` takes only vendored, SDK and
 
 ```bash
 cmake --preset macos-coverage
-cmake --build --preset macos-coverage --target BagiEngineTests StressTests BagiStress   # a full build of its own
+cmake --build --preset macos-coverage --target BagiEngineTests StressTests DemoTests BagiStress BagiDemo   # a full build of its own
 python3 CI/scripts/coverage_report.py --root . --reset                                  # delete the profiles of earlier runs
 ctest --preset macos-coverage                                                           # unit, smoke and scenario tests
 python3 CI/scripts/coverage_report.py --root .                                          # summary.txt and html/index.html
@@ -227,7 +227,7 @@ Fields the `clang-format` skill reads (the `strip-pch-includes` skill uses `Pyth
 |-------|---------|--------------|
 | Python | the interpreter `<py>`. The two scripts use only the standard library, so no venv is needed; `uv run python` also works. A repository may name its venv interpreter instead (a game on Windows: `engine\.venv\Scripts\python`) | `python3` (Windows: `python`) |
 | `<engine>` and `<R>` | the values of the two terms for the default run | `.` and `.` (so `--root .`, which is also the scripts' default here) |
-| Format scope | the folders `--all` covers (also for `strip-pch-includes`) | `src/`, `config/`. The engine's own `tests/` is **not** covered by `--all` (`--changed` formats it) |
+| Format scope | the folders `--all` covers (also for `strip-pch-includes`) | `src/`, `config/`, `tools/stress/`, `tools/demo/`. The engine's own `tests/` is **not** covered by `--all` (`--changed` formats it) |
 | Ignore file | the `.clang-format-ignore` in the root of `<R>`: required, one path or prefix per line, `#` comments, not merged with a default | `external/`, `build/`, `.venv/`, the vendored modules under `src/Modules/` (EABase, fmt, imgui, pugixml, RmlUi, tracy, Vulkan), `src/Modules/BECore/pch.h`, `src/Modules/BECore/Assert/StackTrace.cpp`. `BECore` itself is project code and is formatted |
 | `--root` | never left out where it matters | a default in the engine repository; **required in a game**, because without it the scripts format the engine |
 | Launcher | whether a GUI runs the same scripts | yes, see "Launcher" |
@@ -251,7 +251,7 @@ Fields the `strip-pch-includes` skill reads (it shares `Python`, `Format scope` 
 |-------|---------|--------------|
 | PCH | the header whose includes are dropped from sources; always the engine's, relative to `<engine>` | `src/Modules/BECore/pch.h` (the script's default) |
 | Strip example dir | a bounded folder of `<R>` for the dry run and the first real pass | `src/Widgets` (also `src/Modules/BECore`, which the script does not exclude) |
-| After a pass | what to build and run to validate the scope | `cmake --build --preset <p>` (the `build` skill), then `ctest --preset <p>`; `BagiEngineTests` for engine code, `StressTests` for `tools/stress` |
+| After a pass | what to build and run to validate the scope | `cmake --build --preset <p>` (the `build` skill), then `ctest --preset <p>`; `BagiEngineTests` for engine code, `StressTests` for `tools/stress`, `DemoTests` for `tools/demo` |
 
 The commands, written with the engine values:
 

@@ -13,7 +13,7 @@ Two kinds of tests, in two places:
 
 | Kind | Where | Runs | Use for |
 |------|-------|------|---------|
-| GoogleTest (unit / module) | `tests/` (target `BagiEngineTests`) and `tools/stress/tests/` (`StressTests`); a game's tests live in its repository | `ctest --preset <preset>`, or the binary directly | Everything that can run without the game loop: containers, reflection, serialization, events, tasks, file system layering, game rules |
+| GoogleTest (unit / module) | `tests/` (target `BagiEngineTests`), `tools/stress/tests/` (`StressTests`) and `tools/demo/tests/` (`DemoTests`); a game's tests live in its repository | `ctest --preset <preset>`, or the binary directly | Everything that can run without the game loop: containers, reflection, serialization, events, tasks, file system layering, game rules |
 | `ITest` (runtime) | `src/Modules/BECore/Tests/`, listed in `config/TestsConfig.xml` | At game startup, from `CoreManager::OnApplicationPreInit()` | Checks that need the live game engine (window, renderer, scene) |
 
 Default to GoogleTest. Add an `ITest` only when the check cannot run in the test executable.
@@ -27,10 +27,11 @@ tests/
 └── BECore/             # engine tests of every module (+ ReflectionTest.h / ReflectionEventTest.h / SceneEventsTest.h / TimeTest.h: reflected test data)
     └── Rooms/          # the Rooms module and Games' ISeatedGame: FakeSeatedGame, HubHarness (TestClient.h), RoomsScenarioTest.cpp, and the socket tests over `RoomServer`: RoomSocketClient.h, WireJudge.h, ManualClock.h, RoomServerScenarioTest.cpp, RoomHostileTest.cpp, RoomServerHostileTest.cpp, RoomTableDriver.h (src/Modules/Rooms/CLAUDE.md and src/Modules/RoomServer/CLAUDE.md, "Tests"), and the client: FakeRoomTransport.h, HubTransport.h, JudgedTransport.h, RoomClientPlayer.h, RoomClientTest.cpp, RoomClientHubTest.cpp, RoomClientSocketTest.cpp (src/Modules/RoomClient/CLAUDE.md)
 tools/stress/tests/     # StressTests (be_add_game_tests in tools/stress/CMakeLists.txt); a game's tests are in its repository: tests/, built as <Name>Tests
+tools/demo/tests/       # DemoTests, the same way (tools/demo/CMakeLists.txt)
 ```
 
 ```bash
-cmake --build --preset macos-debug --target BagiEngineTests StressTests
+cmake --build --preset macos-debug --target BagiEngineTests StressTests DemoTests
 ctest --preset macos-debug                                       # each gtest executable in shards, 8 entries at a time, without label extended
 ctest --preset macos-debug-all                                   # every test, the hygiene checks and fuzz mutations included
 ctest --preset macos-debug -j1                                   # one at a time

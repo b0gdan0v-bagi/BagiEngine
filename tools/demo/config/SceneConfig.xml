@@ -1,0 +1,224 @@
+<?xml version="1.0"?>
+<SceneManager contentVersion="5">
+  <scenes>
+    <!-- The scene of BagiDemo, made to be browsed and edited: one group node per kind of component (tools/demo/CLAUDE.md) -->
+    <scene type="Scene" name="DemoScene" viewWidth="1280" viewHeight="720">
+      <nodes>
+        <node name="Background" layer="-1">
+          <children>
+            <node name="Sky" layer="-1">
+              <components>
+                <component type="TransformComponent" x="0" y="0" width="1280" height="720" />
+                <component type="QuadRendererComponent">
+                  <color r="24" g="30" b="50" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="Stage" layer="-1">
+              <components>
+                <component type="TransformComponent" x="24" y="132" width="912" height="564" />
+                <component type="QuadRendererComponent">
+                  <color r="34" g="43" b="70" a="255" />
+                </component>
+              </components>
+            </node>
+          </children>
+        </node>
+        <node name="Text">
+          <children>
+            <node name="Title">
+              <components>
+                <component type="TransformComponent" x="24" y="14" width="912" height="62" />
+                <component type="TextComponent" text="BagiEngine demo scene" fontFamily="Russo One" fontSize="46" align="Center" wrap="false" overflow="AutoFit" outlineWidth="2" shadowOffsetX="3" shadowOffsetY="4">
+                  <color r="255" g="226" b="140" a="255" />
+                  <outlineColor r="90" g="45" b="10" a="255" />
+                  <shadowColor r="0" g="0" b="0" a="150" />
+                </component>
+              </components>
+            </node>
+            <node name="Subtitle">
+              <components>
+                <component type="TransformComponent" x="24" y="82" width="912" height="44" />
+                <component type="TextComponent" text="Sprites, text and particles of the engine. In the editor, pick a node and change a field." fontSize="20" align="Center" wrap="false" overflow="AutoFit">
+                  <color r="196" g="208" b="236" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="ContainCaption">
+              <components>
+                <component type="TransformComponent" x="48" y="270" width="200" height="26" />
+                <component type="TextComponent" text="Sprite" fontSize="18" align="Center" wrap="false">
+                  <color r="236" g="240" b="250" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="StretchCaption">
+              <components>
+                <component type="TransformComponent" x="272" y="270" width="200" height="26" />
+                <component type="TextComponent" text="Fit: Stretch" fontSize="18" align="Center" wrap="false">
+                  <color r="236" g="240" b="250" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="FitCaption">
+              <components>
+                <component type="TransformComponent" x="496" y="270" width="200" height="26" />
+                <component type="TextComponent" text="Fit: Contain" fontSize="18" align="Center" wrap="false">
+                  <color r="236" g="240" b="250" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="WrappedText">
+              <components>
+                <component type="TransformComponent" x="724" y="156" width="188" height="140" />
+                <component type="TextComponent" text="A text wraps inside its box. Кириллица тоже: PT Sans Bold." fontFamily="PT Sans" fontWeight="700" fontSize="22">
+                  <color r="150" g="230" b="190" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="FlipCaption">
+              <components>
+                <component type="TransformComponent" x="48" y="446" width="256" height="26" />
+                <component type="TextComponent" text="Flip X" fontSize="18" align="Center" wrap="false">
+                  <color r="236" g="240" b="250" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="AddCaption">
+              <components>
+                <component type="TransformComponent" x="372" y="446" width="200" height="26" />
+                <component type="TextComponent" text="Blend: Add" fontSize="18" align="Center" wrap="false">
+                  <color r="236" g="240" b="250" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="MultiplyCaption">
+              <components>
+                <component type="TransformComponent" x="636" y="446" width="200" height="26" />
+                <component type="TextComponent" text="Blend: Multiply" fontSize="18" align="Center" wrap="false">
+                  <color r="236" g="240" b="250" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="FountainCaption">
+              <components>
+                <component type="TransformComponent" x="144" y="664" width="240" height="26" />
+                <component type="TextComponent" text="Looping emitter" fontSize="18" align="Center" wrap="false">
+                  <color r="236" g="240" b="250" a="255" />
+                </component>
+              </components>
+            </node>
+            <node name="BurstCaption">
+              <components>
+                <component type="TransformComponent" x="576" y="664" width="240" height="26" />
+                <component type="TextComponent" text="Burst emitter" fontSize="18" align="Center" wrap="false">
+                  <color r="236" g="240" b="250" a="255" />
+                </component>
+              </components>
+            </node>
+          </children>
+        </node>
+        <node name="Sprites">
+          <children>
+            <node name="Gem">
+              <components>
+                <component type="TransformComponent" x="88" y="150" width="120" height="112" />
+                <component type="SpriteRendererComponent" spriteId="DemoGem" fit="Contain" />
+              </components>
+            </node>
+            <node name="CrateStretched">
+              <components>
+                <component type="TransformComponent" x="282" y="178" width="180" height="64" />
+                <component type="SpriteRendererComponent" spriteId="DemoCrate" fit="Stretch" />
+              </components>
+            </node>
+            <node name="ContainBox">
+              <components>
+                <component type="TransformComponent" x="506" y="164" width="180" height="92" />
+                <component type="QuadRendererComponent">
+                  <color r="62" g="76" b="118" a="255" />
+                </component>
+                <component type="SpriteRendererComponent" spriteId="DemoStar" fit="Contain" />
+              </components>
+            </node>
+            <node name="Arrow">
+              <components>
+                <component type="TransformComponent" x="66" y="338" width="100" height="100" />
+                <component type="SpriteRendererComponent" spriteId="DemoArrow" />
+              </components>
+            </node>
+            <node name="ArrowFlipped">
+              <components>
+                <component type="TransformComponent" x="188" y="338" width="100" height="100" />
+                <component type="SpriteRendererComponent" spriteId="DemoArrow" flipX="true" />
+              </components>
+            </node>
+            <node name="AddBlend">
+              <components>
+                <component type="TransformComponent" x="408" y="338" width="100" height="100" />
+                <component type="SpriteRendererComponent" spriteId="DemoOrb" />
+              </components>
+              <children>
+                <node name="AddGlow">
+                  <components>
+                    <component type="TransformComponent" x="450" y="326" width="110" height="110" />
+                    <component type="SpriteRendererComponent" spriteId="DemoGlow" blend="Add" />
+                  </components>
+                </node>
+              </children>
+            </node>
+            <node name="MultiplyBlend">
+              <components>
+                <component type="TransformComponent" x="668" y="338" width="100" height="100" />
+                <component type="SpriteRendererComponent" spriteId="DemoCrate" />
+              </components>
+              <children>
+                <node name="MultiplyGlass">
+                  <components>
+                    <component type="TransformComponent" x="724" y="326" width="80" height="100" />
+                    <component type="QuadRendererComponent" blend="Multiply">
+                      <color r="110" g="170" b="255" a="255" />
+                    </component>
+                  </components>
+                </node>
+              </children>
+            </node>
+          </children>
+        </node>
+        <node name="Particles">
+          <children>
+            <node name="Fountain">
+              <components>
+                <component type="TransformComponent" x="264" y="648" width="0" height="0" />
+                <component type="ParticleEmitterComponent">
+                  <effect looping="true" rate="40" maxParticles="512" seed="7" lifetimeMin="1.1" lifetimeMax="1.5" speedMin="180" speedMax="240" direction="270" spread="34" gravityY="220" sizeJitter="0.35" spriteId="DemoSpark" blend="Add" frameClass="DecorativeLoop">
+                    <size from="30" to="8" />
+                    <color>
+                      <from r="255" g="224" b="130" a="255" />
+                      <to r="255" g="70" b="40" a="0" />
+                    </color>
+                  </effect>
+                </component>
+              </components>
+            </node>
+            <node name="Sparks">
+              <components>
+                <component type="TransformComponent" x="696" y="576" width="0" height="0" />
+                <component type="ParticleEmitterComponent" burstAction="DemoBurst">
+                  <effect burstCount="48" maxParticles="384" seed="3" lifetimeMin="0.8" lifetimeMax="1.4" speedMin="50" speedMax="150" gravityY="90" sizeJitter="0.4" rotationJitter="180" spriteId="DemoStar" frameClass="FiniteEffect">
+                    <size from="24" to="6" />
+                    <rotation from="0" to="180" />
+                    <color ease="QuadIn">
+                      <from r="255" g="255" b="255" a="255" />
+                      <to r="255" g="255" b="255" a="0" />
+                    </color>
+                  </effect>
+                </component>
+              </components>
+            </node>
+          </children>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>

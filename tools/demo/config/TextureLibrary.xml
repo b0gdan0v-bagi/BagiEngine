@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<root>
+  <sprites>
+    <sprite name="DemoGem" texturePath="assets/textures/demo_atlas.png">
+      <srcRect x="0" y="0" w="64" h="64" />
+    </sprite>
+    <sprite name="DemoStar" texturePath="assets/textures/demo_atlas.png">
+      <srcRect x="64" y="0" w="64" h="64" />
+    </sprite>
+    <sprite name="DemoGlow" texturePath="assets/textures/demo_atlas.png">
+      <srcRect x="128" y="0" w="64" h="64" />
+    </sprite>
+    <sprite name="DemoRing" texturePath="assets/textures/demo_atlas.png">
+      <srcRect x="192" y="0" w="64" h="64" />
+    </sprite>
+    <sprite name="DemoArrow" texturePath="assets/textures/demo_atlas.png">
+      <srcRect x="0" y="64" w="64" h="64" />
+    </sprite>
+    <sprite name="DemoCrate" texturePath="assets/textures/demo_atlas.png">
+      <srcRect x="64" y="64" w="64" h="64" />
+    </sprite>
+    <sprite name="DemoSpark" texturePath="assets/textures/demo_atlas.png">
+      <srcRect x="128" y="64" w="64" h="64" />
+    </sprite>
+    <sprite name="DemoOrb" texturePath="assets/textures/demo_atlas.png">
+      <srcRect x="192" y="64" w="64" h="64" />
+    </sprite>
+  </sprites>
+</root>

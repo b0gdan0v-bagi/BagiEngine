@@ -3,7 +3,7 @@
 Remove #include lines from C/C++ sources that are already present in the PCH.
 
 Parses src/Modules/BECore/pch.h (or given path), collects include paths, then
-walks sources under src/, config/ and tools/stress/ and removes matching includes. Supports
+walks sources under src/, config/, tools/stress/ and tools/demo/ and removes matching includes. Supports
 --dir to limit to a subfolder (e.g. src/Widgets) for incremental runs.
 
 Only source files are processed (`.cpp .cc .cxx .c .mm`), never a header: a header has to include what it uses and compile
@@ -12,7 +12,7 @@ output says how many headers were skipped.
 
 Modes:
   --changed  Only files with uncommitted changes (git).
-  --all      All C/C++ sources under src/, config/ and tools/stress/.
+  --all      All C/C++ sources under src/, config/, tools/stress/ and tools/demo/.
 
 Options:
   --dir REL_PATH  Only process files under this path (relative to project root).
@@ -145,7 +145,7 @@ def main() -> int:
     )
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--changed", action="store_true", help="Only changed files (git)")
-    scope.add_argument("--all", action="store_true", help="All sources under src/, config/ and tools/stress/")
+    scope.add_argument("--all", action="store_true", help="All sources under src/, config/, tools/stress/ and tools/demo/")
     parser.add_argument(
         "--dir",
         metavar="REL_PATH",
