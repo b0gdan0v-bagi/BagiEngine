@@ -4,6 +4,8 @@
 #include <BECore/PoolString/PoolBlockSource.h>
 #include <BECore/PoolString/PoolEntryTable.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/PoolString/PoolStringObserver.h>
+#include <BECore/PoolString/PoolStringSnapshot.h>
 #include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
@@ -32,6 +34,15 @@ namespace BECore::Details {
     };
 
     inline constinit thread_local PoolThreadCounterCache t_counterCache;
+
+    /// The strings and aligned entry bytes of the table by what makes them grow: `runtime` is what `Intern` and
+    /// `InternBatch` copied, `other` the registered and the adopted entries
+    struct PoolStringTotals {
+        size_t runtimeStrings = 0;
+        size_t runtimeBytes = 0;
+        size_t otherStrings = 0;
+        size_t otherBytes = 0;
+    };
 
     /// The pool itself: the table, the blocks the entries live in, the locks and the statistics. `PoolString` calls the
     /// one process-wide instance; a test builds its own over a fake `IPoolBlockSource` and a small table to check
@@ -98,6 +109,21 @@ namespace BECore::Details {
 
         [[nodiscard]] PoolStringStats GetStats();
 
+        /// Cheap enough for every frame: the shared lock and no walk over the counters of the threads
+        [[nodiscard]] PoolStringTotals GetTotals();
+
+        /// Refills `snapshot` with every string of the table and every block. The table and the blocks are copied under the
+        /// shared lock, so they agree with each other; the lock is released before the call returns. The call counters of
+        /// `snapshot.stats` are read as in `GetStats`. A walk over the whole table: not for every frame.
+        void TakeSnapshot(PoolStringSnapshot& snapshot);
+
+        /// One observer at a time: a second one takes the place of the first. `observer` is not owned and is removed
+        /// before it dies. Takes the unique lock, so it must not be called from the observer.
+        void SetObserver(IPoolStringObserver& observer);
+
+        /// Removes `observer` if it is the one set. No call of it is running or will follow once this returns.
+        void RemoveObserver(const IPoolStringObserver& observer);
+
     private:
         using Entry = PoolStringEntry;
 
@@ -118,18 +144,15 @@ namespace BECore::Details {
         size_t _unadoptedBlockBytes = 0;
         size_t _deadStrings = 0;
         size_t _deadBytes = 0;
-        struct BlockRecord {
-            char* data;
-            size_t capacity;
-            bool adopted;
-        };
-        Vector<BlockRecord> _blocks;  // every block `AllocateBlock` gave out; a token's `_index` points here
+        Vector<PoolBlockRow> _blocks;  // every block the pool holds, in the order it took them; a token's `_index` points here
+        IPoolStringObserver* _observer = nullptr;
         // Counted under either lock (a registration of entries that all lost needs no unique lock), so atomic
         std::atomic<size_t> _staticDuplicates{0};
         UniquePtr<IPoolBlockSource> _fallback;  // the heap source, made on the first empty answer of `_source`
         char* _current = nullptr;               // the block that small entries go into
         size_t _offset = 0;
         size_t _capacity = 0;
+        size_t _currentBlock = 0;  // the record of `_current` in `_blocks`, meaningless while `_capacity` is 0
 
         // One counter per thread that ever interned. A counter outlives its thread (the sum must keep its hits) and is
         // never freed, like the pool; the threads of the engine are a small fixed set.
@@ -160,8 +183,17 @@ namespace BECore::Details {
         /// `heapFallbackBlocks` and nothing else
         char* TakeBlock(size_t bytes);
 
-        /// A block for the entries `Intern` and its kin copy: `TakeBlock`, counted in `runtime`
-        char* TakeRuntimeBlock(size_t bytes);
+        /// A block for the entries `Intern` and its kin copy: `TakeBlock`, counted in `runtime` and recorded with `used` bytes taken
+        char* TakeRuntimeBlock(size_t bytes, size_t used);
+
+        /// Takes a runtime block that small entries go into from now on, its first `used` bytes taken
+        void StartCurrentBlock(size_t bytes, size_t used);
+
+        /// The fields of `GetStats` that the lock guards; the caller holds either lock
+        void ReadLockedStats(PoolStringStats& stats) const;
+
+        /// The call counters of every thread, added to `stats`; takes no lock of the pool
+        void AddThreadCounters(PoolStringStats& stats);
 
         /// `NotOwned` when `block` is not a block this storage gave out (an empty or spent token included); the caller holds either lock
         [[nodiscard]] Optional<PoolAdoptError> CheckToken(const PoolBlock& block) const;
@@ -176,5 +208,8 @@ namespace BECore::Details {
         /// Returns how many new strings it added.
         size_t InternBatchMisses(Span<const StringView> texts, Span<const uint64_t> hashes, Span<PoolString> out, Vector<size_t>& missing);
     };
+
+    /// The storage behind `PoolString`, made on the first use and never destroyed
+    [[nodiscard]] PoolStringStorage& GetProcessPoolStorage();
 
 }  // namespace BECore::Details

@@ -2,6 +2,7 @@
 
 #include <BECore/Assert/AssertMacros.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -102,6 +103,15 @@ namespace BECore {
         /// The largest distance of a slot of the table from its home slot, as of now (growth recomputes it)
         [[nodiscard]] size_t LongestProbe() const noexcept {
             return _longestProbe;
+        }
+
+        /// Every entry once, in slot order
+        void ForEach(FunctionRef<void(const T&)> visit) const {
+            for (const Slot& slot : _slots) {
+                if (slot.entry != nullptr) {
+                    visit(*slot.entry);
+                }
+            }
         }
 
         [[nodiscard]] const T* Find(uint64_t hash, StringView str) const noexcept {

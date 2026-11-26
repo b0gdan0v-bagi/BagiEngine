@@ -121,6 +121,7 @@ namespace BECore {
                 PoolAdoptOptions adoptOptions;
                 adoptOptions.verifyHashes = options.verifyHashes;
                 adoptOptions.maxTextBytes = ReaderLimits::kMaxPoolStringBytes;
+                adoptOptions.sourceName = options.sourceName;
                 const auto adopted = PoolString::AdoptBlock(block, section.bytes, Span<PoolString>(content.strings.data(), content.strings.size()), adoptOptions);
                 if (!adopted.has_value()) {
                     return std::unexpected(Format("Binary pool section refused: {}", EnumUtils<PoolAdoptError>::ToString(adopted.error())));
@@ -161,6 +162,9 @@ namespace BECore {
             const std::expected<size_t, String> done = file->Read(destination, bytes);
             return done.has_value() && *done == bytes;
         };
+        if (options.sourceName.empty()) {
+            options.sourceName = path.View();
+        }
         return LoadContent(*size, readFile, options);
     }
 
