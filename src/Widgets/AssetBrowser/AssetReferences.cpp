@@ -2,10 +2,12 @@
 
 #include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <Widgets/AssetBrowser/AssetCatalog.h>
+#include <Widgets/AssetBrowser/AssetFileOps.h>
 
 namespace BECore {
 
@@ -31,6 +33,22 @@ namespace BECore {
 
         /// What ends a word that may be a link
         constexpr StringView kWordDelimiters = " \t\r\"'`()<>=,;{}[]|";
+
+        /// A name with one of these is a pattern that stands for names
+        constexpr StringView kPatternCharacters = "*%$";
+
+        /// A quoted text with one of these is a template, a list or a sentence and not one name with spaces
+        constexpr StringView kNotInAValue = "<>{}|;=,\"*%$";
+
+        /// What may follow a name that ends a sentence
+        constexpr StringView kSentenceEnd = ".:!?";
+
+        /// The query and the fragment of a link
+        constexpr StringView kLinkSuffixStart = "?#";
+
+        constexpr StringView kUtf8ByteOrderMark = "\xEF\xBB\xBF";
+        constexpr StringView kStyleElementOpen = "<style";
+        constexpr StringView kStyleElementClose = "</style";
 
         struct NamedEntity {
             StringView name;
@@ -157,10 +175,10 @@ namespace BECore {
             }
         }
 
-        /// Blanks the comments of a style sheet that are not inside a string. An unclosed one stays
-        void BlankStyleComments(String& text) {
+        /// Blanks the comments of the style sheet in `[begin, end)` of @p text that are not inside a string. An unclosed one stays
+        void BlankStyleComments(String& text, size_t begin, size_t end) {
             char quote = '\0';
-            for (size_t i = 0; i < text.size(); ++i) {
+            for (size_t i = begin; i < end; ++i) {
                 const char c = text[i];
                 if (quote != '\0') {
                     if (c == '\\') {
@@ -172,11 +190,26 @@ namespace BECore {
                     quote = c;
                 } else if (StringView(text).substr(i).starts_with(kStyleCommentOpen)) {
                     const size_t close = StringView(text).find(kStyleCommentClose, i + kStyleCommentOpen.size());
-                    if (close != StringView::npos) {
+                    if (close != StringView::npos && close + kStyleCommentClose.size() <= end) {
                         Blank(text, i, close + kStyleCommentClose.size());
                         i = close + kStyleCommentClose.size() - 1;
                     }
                 }
+            }
+        }
+
+        /// Blanks the comments of the style elements of a document, which are no comments of its markup
+        void BlankEmbeddedStyleComments(String& text) {
+            const String lower = ToLowerAscii(StringView(text));
+            for (size_t at = lower.find(kStyleElementOpen.data()); at != String::npos;) {
+                const size_t open = lower.find('>', at);
+                if (open == String::npos) {
+                    return;
+                }
+                const size_t close = lower.find(kStyleElementClose.data(), open);
+                const size_t end = close == String::npos ? lower.size() : close;
+                BlankStyleComments(text, open + 1, end);
+                at = lower.find(kStyleElementOpen.data(), end);
             }
         }
 
@@ -280,12 +313,12 @@ namespace BECore {
             return 2;
         }
 
-        /// @p text without its comments, its references and escapes replaced by what they stand for, `\` as `/` and in lower case. The lines stay
-        String SearchableText(String text, SourceSyntax syntax) {
+        /// @p text without its comments, its references and escapes replaced by what they stand for and `\` as `/`. The lines stay
+        String ReadableText(String text, SourceSyntax syntax) {
             if (syntax == SourceSyntax::Markup) {
                 BlankMarkupComments(text);
             } else if (syntax == SourceSyntax::Style) {
-                BlankStyleComments(text);
+                BlankStyleComments(text, 0, text.size());
             }
 
             String decoded;
@@ -304,9 +337,7 @@ namespace BECore {
                 i += taken;
             }
 
-            for (char& c : decoded) {
-                c = c == '\\' ? '/' : ToLowerAscii(c);
-            }
+            eastl::replace(decoded.begin(), decoded.end(), '\\', '/');
             return decoded;
         }
 
@@ -414,25 +445,6 @@ namespace BECore {
             }
         }
 
-        void CheckFile(const Path& realPath, StringView name, const SourceExtension& source, const Target& target, AssetReferences& out) {
-            auto text = ReadTextFile(realPath);
-            // A zero byte is a UTF-16 file, which the engine's XML reader takes and this search cannot
-            if (!text || text->find('\0') != String::npos) {
-                out.unchecked.push_back(String(name));
-                return;
-            }
-            const String searchable = SearchableText(std::move(*text), source.syntax);
-            const String folder = source.linksFromFolder ? ToLowerAscii(PathParent(name)) : String();
-
-            Vector<uint32_t> lines;
-            CollectLines(searchable, folder, target, lines);
-            eastl::sort(lines.begin(), lines.end());
-            lines.erase(eastl::unique(lines.begin(), lines.end()), lines.end());
-            for (const uint32_t line : lines) {
-                out.uses.push_back({String(name), line});
-            }
-        }
-
         const SourceExtension* FindSource(StringView name) {
             const String extension = ToLowerAscii(PathExtension(name));
             for (const SourceExtension& source : kSourceExtensions) {
@@ -464,35 +476,55 @@ namespace BECore {
             }
         }
 
-        /// The files of the mount points, each as the top layer has it
-        void CheckMounts(const FileSystem& fileSystem, StringView assetPath, const Target& target, AssetReferences& out) {
+        /// Takes a source file that was read: its name (virtual, or below the content root), its row of `kSourceExtensions` and its text
+        using SourceVisitor = FunctionRef<void(StringView name, const SourceExtension& source, String text)>;
+
+        void ReadSource(const Path& realPath, StringView name, const SourceExtension& source, Vector<String>& unchecked, SourceVisitor onSource) {
+            auto text = ReadTextFile(realPath);
+            // A zero byte is a UTF-16 file, which the engine's XML reader takes and this search cannot
+            if (!text || text->find('\0') != String::npos) {
+                unchecked.push_back(String(name));
+                return;
+            }
+            onSource(name, source, std::move(*text));
+        }
+
+        /// Walks every layer of the mount points: records what cannot be seen into and gives each file to @p onFile, once per layer that has it
+        void WalkMounts(const FileSystem& fileSystem, Vector<String>& unchecked, FunctionRef<void(StringView mount, StringView relativePath)> onFile) {
+            for (const PoolString mount : GetAssetMounts()) {
+                const StringView name = mount.ToStringView();
+                for (const Path& layer : fileSystem.GetMountLayers(mount)) {
+                    WalkSources(layer, name, unchecked, [&onFile, name](StringView relative) { onFile(name, relative); });
+                }
+            }
+        }
+
+        /// The source files of the mount points but @p skipped, each as the top layer has it
+        void ReadMountSources(const FileSystem& fileSystem, StringView skipped, Vector<String>& unchecked, SourceVisitor onSource) {
             Array<StringView, eastl::size(kSourceExtensions)> extensions;
             for (size_t i = 0; i < extensions.size(); ++i) {
                 extensions[i] = kSourceExtensions[i].extension;
             }
             for (const PoolString mount : GetAssetMounts()) {
-                for (const Path& layer : fileSystem.GetMountLayers(mount)) {
-                    WalkSources(layer, mount.ToStringView(), out.unchecked, [](StringView) {});
-                }
                 for (const PoolString file : fileSystem.EnumerateFiles(mount, Span<const StringView>(extensions.data(), extensions.size()))) {
                     const StringView name = file.ToStringView();
                     const SourceExtension* source = FindSource(name);
-                    if (source != nullptr && name != assetPath && !IsAssetSidecar(name)) {
-                        CheckFile(fileSystem.ResolvePath(name), name, *source, target, out);
+                    if (source != nullptr && name != skipped && !IsAssetSidecar(name)) {
+                        ReadSource(fileSystem.ResolvePath(name), name, *source, unchecked, onSource);
                     }
                 }
             }
         }
 
         /// The JSON files of the Generate panel, which name pictures by paths from the content root
-        void CheckArtGen(const FileSystem& fileSystem, const Target& target, AssetReferences& out) {
+        void ReadArtGenSources(const FileSystem& fileSystem, Vector<String>& unchecked, SourceVisitor onSource) {
             const Path folder = fileSystem.GetRootPath() / kArtGenFolder;
             const Optional<FileInfo> info = GetFileInfo(folder.View());
             if (!info || info->kind != FileKind::Directory) {
                 return;
             }
             Vector<String> files;
-            WalkSources(folder, kArtGenFolder, out.unchecked, [&files](StringView relative) {
+            WalkSources(folder, kArtGenFolder, unchecked, [&files](StringView relative) {
                 const SourceExtension* source = FindSource(relative);
                 if (source != nullptr && source->syntax == SourceSyntax::Json && !IsAssetSidecar(relative)) {
                     files.push_back(String(relative));
@@ -500,8 +532,20 @@ namespace BECore {
             });
             eastl::sort(files.begin(), files.end(), [](const String& left, const String& right) { return PathCompare(left, right) < 0; });
             for (const String& relative : files) {
-                CheckFile(folder / relative, Format("{}/{}", kArtGenFolder, relative), *FindSource(relative), target, out);
+                ReadSource(folder / relative, Format("{}/{}", kArtGenFolder, relative), *FindSource(relative), unchecked, onSource);
             }
+        }
+
+        /// A source file as a use of an asset is looked for in it
+        struct SearchedSource {
+            String name;
+            /// Where a relative link of the file starts; empty when it has none
+            String folder;
+            String text;  ///< readable, in lower case
+        };
+
+        SearchedSource MakeSearchedSource(StringView name, const SourceExtension& source, StringView readable) {
+            return {String(name), source.linksFromFolder ? ToLowerAscii(PathParent(name)) : String(), ToLowerAscii(readable)};
         }
 
         Target MakeTarget(StringView assetPath) {
@@ -518,6 +562,197 @@ namespace BECore {
             return target;
         }
 
+        void SortUnique(Vector<String>& texts) {
+            eastl::sort(texts.begin(), texts.end());
+            texts.erase(eastl::unique(texts.begin(), texts.end()), texts.end());
+        }
+
+        /// Whether a name of the content leads to a file
+        class ContentFiles {
+        public:
+            /// @p files: the virtual paths of the files of every layer
+            ContentFiles(const FileSystem& fileSystem, const Vector<String>& files) : _fileSystem(fileSystem) {
+                _lowered.reserve(files.size());
+                for (const String& file : files) {
+                    _lowered.push_back(ToLowerAscii(StringView(file)));
+                }
+                eastl::sort(_lowered.begin(), _lowered.end());
+            }
+
+            /// Whether a layer has the file of @p path, ASCII case ignored, or for an XML file of `config` its cooked form
+            [[nodiscard]] bool Has(StringView path) const {
+                if (HasFile(path)) {
+                    return true;
+                }
+                const StringView extension = PathExtension(path);
+                return PathIsUnder(ToLowerAscii(path), MountPoints::config.ToPoolString().ToStringView()) && EqualsIgnoreAsciiCase(extension, kNodeFileExtension) &&
+                       HasFile(Format("{}{}", path.substr(0, path.size() - extension.size()), kNodeBinaryExtension));
+            }
+
+        private:
+            [[nodiscard]] bool HasFile(StringView path) const {
+                // The listing enters no linked folder, a path through one loads all the same
+                return eastl::binary_search(_lowered.begin(), _lowered.end(), ToLowerAscii(path)) || _fileSystem.Exists(path);
+            }
+
+            const FileSystem& _fileSystem;
+            Vector<String> _lowered;
+        };
+
+        /// The listed file name that @p text is, without the end of a sentence or the suffix of a link; empty when it is none
+        StringView ListedName(StringView text) {
+            while (!text.empty() && kSentenceEnd.find(text.back()) != StringView::npos) {
+                text.remove_suffix(1);
+            }
+            if (AssetKindOfName(text) == AssetKind::None) {
+                text = text.substr(0, text.find_first_of(kLinkSuffixStart));
+            }
+            const bool isName = AssetKindOfName(text) != AssetKind::None && text.find_first_of(kPatternCharacters) == StringView::npos;
+            return isName ? text : StringView();
+        }
+
+        /// Whether a path from the virtual root may start at @p at: it is no piece of a longer path or of a URL
+        bool StartsPath(StringView line, size_t at) {
+            if (at == 0) {
+                return true;
+            }
+            const char before = line[at - 1];
+            return !IsNameCharacter(before) && before != '.' && before != '/' && before != ':';
+        }
+
+        /// The whole quoted, bracketed or element text that starts at @p at; empty when none does
+        StringView ValueAt(StringView line, size_t at) {
+            size_t before = at;
+            while (before > 0 && IsSpace(line[before - 1])) {
+                --before;
+            }
+            if (before == 0) {
+                return {};
+            }
+            const char open = line[before - 1];
+            if (open != '"' && open != '\'' && open != '(' && open != '>') {
+                return {};
+            }
+            size_t end = line.find(open == '(' ? ')' : open == '>' ? '<' : open, at);
+            if (end == StringView::npos) {
+                return {};
+            }
+            while (end > at && IsSpace(line[end - 1])) {
+                --end;
+            }
+            return line.substr(at, end - at);
+        }
+
+        /// Whether the path @p name leads nowhere; a path whose `..` steps leave the mount points is a relative one and not judged
+        bool IsMissing(const ContentFiles& files, StringView name) {
+            const Path normal = Path(name).LexicallyNormal();
+            const String lower = ToLowerAscii(normal.View());
+            const bool mounted = eastl::any_of(GetAssetMounts().begin(), GetAssetMounts().end(), [&lower](PoolString mount) { return PathIsUnder(lower, mount.ToStringView()); });
+            return mounted && !files.Has(normal.View());
+        }
+
+        /// The missing name of a path that starts at @p at of @p line; empty when there is none
+        StringView MissingPathAt(const ContentFiles& files, StringView line, size_t at) {
+            const size_t end = line.find_first_of(kWordDelimiters, at);
+            const StringView word = line.substr(at, end == StringView::npos ? StringView::npos : end - at);
+
+            // A name with a space is whole only as a value of its own
+            StringView spaced;
+            const StringView value = ValueAt(line, at);
+            if (value.size() > word.size() && value[word.size()] == ' ' && !word.ends_with('/') && value.find_first_of(kNotInAValue) == StringView::npos) {
+                spaced = ListedName(value);
+                if (!spaced.empty() && !IsMissing(files, spaced)) {
+                    return {};
+                }
+            }
+            const StringView name = ListedName(word);
+            const StringView found = name.empty() ? spaced : name;
+            return !found.empty() && IsMissing(files, found) ? found : StringView();
+        }
+
+        /// Appends the paths of @p readable, the ReadableText of the file @p file, that lead nowhere
+        void CollectMissingPaths(const ContentFiles& files, StringView file, StringView readable, Vector<MissingAsset>& out) {
+            uint32_t number = 1;
+            for (size_t start = 0; start < readable.size(); ++number) {
+                const size_t end = readable.find('\n', start);
+                const StringView line = readable.substr(start, end == StringView::npos ? StringView::npos : end - start);
+                const String lower = ToLowerAscii(line);
+                for (const PoolString mount : GetAssetMounts()) {
+                    const StringView folder = mount.ToStringView();
+                    for (size_t at = StringView(lower).find(folder); at != StringView::npos; at = StringView(lower).find(folder, at + 1)) {
+                        if (at + folder.size() >= line.size() || line[at + folder.size()] != '/' || !StartsPath(line, at)) {
+                            continue;
+                        }
+                        if (const StringView name = MissingPathAt(files, line, at); !name.empty()) {
+                            out.push_back({String(name), {String(file), number}});
+                        }
+                    }
+                }
+                start = end == StringView::npos ? readable.size() : end + 1;
+            }
+        }
+
+        /// Appends the references of the `<node>` elements at and below @p element that lead to no node file
+        void CollectMissingRefs(const ContentFiles& files, StringView file, StringView text, pugi::xml_node element, Vector<MissingAsset>& out) {
+            if (const pugi::xml_attribute ref = element.attribute(kNodeRefAttribute.data()); ref && StringView(element.name()) == kNodeElementName) {
+                const StringView value = ref.value();
+                if (!IsValidNodeRef(value) || !files.Has(Format("{}/{}{}", kNodeFilesMountPoint, value, kNodeFileExtension))) {
+                    const auto line = static_cast<uint32_t>(eastl::count(text.begin(), text.begin() + element.offset_debug(), '\n')) + 1;
+                    out.push_back({String(value), {String(file), line}});
+                }
+            }
+            for (const pugi::xml_node child : element.children()) {
+                CollectMissingRefs(files, file, text, child, out);
+            }
+        }
+
+        /// Checks the node references of the XML file @p file of `config` when it is a scene or a node file, and notes a node file
+        void CheckSceneOrNodeFile(const ContentFiles& files, StringView file, StringView text, Vector<String>& nodeFiles, ContentAssetCheck& out) {
+            // The offsets of the parser then index the same text
+            if (text.starts_with(kUtf8ByteOrderMark)) {
+                text.remove_prefix(kUtf8ByteOrderMark.size());
+            }
+            pugi::xml_document document;
+            const bool parsed = static_cast<bool>(document.load_buffer(text.data(), text.size(), pugi::parse_default, pugi::encoding_utf8));
+            const pugi::xml_node root = document.document_element();
+            const AssetKind kind = AssetKindOfConfigXml(file, parsed ? StringView(root.name()) : StringView());
+            if (kind != AssetKind::Scene && kind != AssetKind::Node) {
+                return;
+            }
+            if (!parsed) {
+                out.unchecked.push_back(String(file));
+                return;
+            }
+            if (kind == AssetKind::Node) {
+                nodeFiles.push_back(String(file));
+            }
+            CollectMissingRefs(files, file, text, root, out.missing);
+        }
+
+        /// The order of `ContentAssetCheck::missing`
+        bool IsListedBefore(const MissingAsset& left, const MissingAsset& right) {
+            if (left.use.file != right.use.file) {
+                return left.use.file < right.use.file;
+            }
+            return left.use.line != right.use.line ? left.use.line < right.use.line : left.name < right.name;
+        }
+
+        bool IsUsed(StringView assetPath, const Vector<SearchedSource>& sources) {
+            const Target target = MakeTarget(assetPath);
+            Vector<uint32_t> lines;
+            for (const SearchedSource& source : sources) {
+                // Every use holds the file's name or the node reference, so most files are done with here
+                const bool mayName = source.text.find(target.fileName) != String::npos || (!target.nodeRef.empty() && source.text.find(target.nodeRef) != String::npos);
+                if (mayName && source.name != assetPath) {
+                    CollectLines(source.text, source.folder, target, lines);
+                    if (!lines.empty()) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
     }  // namespace
 
     AssetReferences FindAssetReferences(const FileSystem& fileSystem, StringView assetPath) {
@@ -526,13 +761,69 @@ namespace BECore {
         if (target.fileName.empty()) {
             return references;
         }
-        CheckMounts(fileSystem, assetPath, target, references);
-        CheckArtGen(fileSystem, target, references);
+        const auto search = [&references, &target](StringView name, const SourceExtension& source, String text) {
+            const SearchedSource searched = MakeSearchedSource(name, source, ReadableText(std::move(text), source.syntax));
+            Vector<uint32_t> lines;
+            CollectLines(searched.text, searched.folder, target, lines);
+            eastl::sort(lines.begin(), lines.end());
+            lines.erase(eastl::unique(lines.begin(), lines.end()), lines.end());
+            for (const uint32_t line : lines) {
+                references.uses.push_back({searched.name, line});
+            }
+        };
+        WalkMounts(fileSystem, references.unchecked, [](StringView, StringView) {});
+        ReadMountSources(fileSystem, assetPath, references.unchecked, search);
+        ReadArtGenSources(fileSystem, references.unchecked, search);
 
         // A folder of a mount point is walked once per layer
-        eastl::sort(references.unchecked.begin(), references.unchecked.end());
-        references.unchecked.erase(eastl::unique(references.unchecked.begin(), references.unchecked.end()), references.unchecked.end());
+        SortUnique(references.unchecked);
         return references;
+    }
+
+    ContentAssetCheck CheckContentAssets(const FileSystem& fileSystem) {
+        ContentAssetCheck check;
+        Vector<String> files;
+        WalkMounts(fileSystem, check.unchecked, [&files](StringView mount, StringView relative) {
+            String path = Format("{}/{}", mount, relative);
+            PathToGenericSeparators(path);
+            files.push_back(std::move(path));
+        });
+        SortUnique(files);
+        const ContentFiles content(fileSystem, files);
+
+        Vector<SearchedSource> sources;
+        Vector<String> nodeFiles;
+        ReadMountSources(fileSystem, {}, check.unchecked, [&](StringView name, const SourceExtension& source, String text) {
+            if (AssetKindOfName(name) == AssetKind::Config) {
+                CheckSceneOrNodeFile(content, name, text, nodeFiles, check);
+            }
+            String readable = ReadableText(std::move(text), source.syntax);
+            sources.push_back(MakeSearchedSource(name, source, readable));
+            if (source.syntax == SourceSyntax::Markup && source.linksFromFolder) {
+                BlankEmbeddedStyleComments(readable);
+            }
+            CollectMissingPaths(content, name, readable, check.missing);
+        });
+        ReadArtGenSources(fileSystem, check.unchecked, [&sources](StringView name, const SourceExtension& source, String text) {
+            sources.push_back(MakeSearchedSource(name, source, ReadableText(std::move(text), source.syntax)));
+        });
+
+        for (const String& file : files) {
+            AssetKind kind = AssetKindOfName(file);
+            if (kind == AssetKind::Config && eastl::find(nodeFiles.begin(), nodeFiles.end(), file) != nodeFiles.end()) {
+                kind = AssetKind::Node;
+            }
+            if (IsChangeableAssetKind(kind) && ResolveContentRootFile(fileSystem, file) && !IsUsed(file, sources)) {
+                check.unused.push_back(file);
+            }
+        }
+
+        eastl::sort(check.missing.begin(), check.missing.end(), IsListedBefore);
+        // One line may hold a name twice
+        const auto isSame = [](const MissingAsset& left, const MissingAsset& right) { return !IsListedBefore(left, right) && !IsListedBefore(right, left); };
+        check.missing.erase(eastl::unique(check.missing.begin(), check.missing.end(), isSame), check.missing.end());
+        SortUnique(check.unchecked);
+        return check;
     }
 
 }  // namespace BECore

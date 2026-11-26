@@ -34,6 +34,9 @@ namespace BECore {
      */
     [[nodiscard]] AssetKind AssetKindOfName(StringView virtualPath);
 
+    /// The kind of a `.xml` under `config`, from its name and its document element (empty for a file that does not parse)
+    [[nodiscard]] AssetKind AssetKindOfConfigXml(StringView virtualPath, StringView rootElementName);
+
     /// Whether the file is the Generate panel's record beside a picture or a sound, `<name>.artgen.json`: part of that file, not an asset of its own
     [[nodiscard]] bool IsAssetSidecar(StringView virtualPath);
 

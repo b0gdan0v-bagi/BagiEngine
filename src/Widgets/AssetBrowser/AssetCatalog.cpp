@@ -53,16 +53,12 @@ namespace BECore {
             return false;
         }
 
-        /// What a `.xml` under `config` is: an unreadable file is a config like any other
-        AssetKind KindOfConfigXml(const FileSystem& fileSystem, StringView path) {
-            if (PathFilename(path) == kSceneFileName) {
-                return AssetKind::Scene;
-            }
+        /// What the file of the top layer says a `.xml` under `config` is
+        AssetKind KindOfConfigFile(const FileSystem& fileSystem, StringView path) {
+            // The name alone tells a scene file, so it is not read
             XmlDocument document;
-            if (document.LoadFromFile(fileSystem.ResolvePath(path)) && document.GetRoot().Name() == kNodeElementName) {
-                return AssetKind::Node;
-            }
-            return AssetKind::Config;
+            const bool loaded = PathFilename(path) != kSceneFileName && document.LoadFromFile(fileSystem.ResolvePath(path));
+            return AssetKindOfConfigXml(path, loaded ? document.GetRoot().Name() : StringView());
         }
 
     }  // namespace
@@ -101,9 +97,16 @@ namespace BECore {
         return AssetKind::None;
     }
 
+    AssetKind AssetKindOfConfigXml(StringView virtualPath, StringView rootElementName) {
+        if (PathFilename(virtualPath) == kSceneFileName) {
+            return AssetKind::Scene;
+        }
+        return rootElementName == kNodeElementName ? AssetKind::Node : AssetKind::Config;
+    }
+
     AssetKind AssetKindOfFile(const FileSystem& fileSystem, StringView virtualPath) {
         const AssetKind kind = AssetKindOfName(virtualPath);
-        return kind == AssetKind::Config ? KindOfConfigXml(fileSystem, virtualPath) : kind;
+        return kind == AssetKind::Config ? KindOfConfigFile(fileSystem, virtualPath) : kind;
     }
 
     void AssetCatalog::Rebuild(const FileSystem& fileSystem) {
