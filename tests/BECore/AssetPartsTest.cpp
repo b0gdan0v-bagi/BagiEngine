@@ -20,10 +20,14 @@ namespace BECore::Tests {
     namespace {
 
         constexpr const char* kMountPoint = "BagiAssetPartsTest";
+        /// The folder of the layer a case mounts above the fixture's one
+        constexpr const char* kUpperLayer = "upper";
         constexpr int32_t kSimValue = 1;
         constexpr int32_t kVisualValue = 2;
         constexpr int32_t kEditorValue = 3;
         constexpr int32_t kSplitValue = 9;
+        constexpr int32_t kUpperValue = 7;
+        constexpr int32_t kUpperSplitValue = 8;
         constexpr auto kOlder = std::chrono::hours(1);
 
         constexpr const char* kWholeXml = R"(<asset>
@@ -33,6 +37,14 @@ namespace BECore::Tests {
         </asset>)";
 
         constexpr const char* kSplitSimXml = R"(<sim><PartSimProbe value="9"/></sim>)";
+
+        String WholeSimXml(int32_t value) {
+            return Format(R"(<asset><sim><PartSimProbe value="{}"/></sim></asset>)", value);
+        }
+
+        String SplitSimXml(int32_t value) {
+            return Format(R"(<sim><PartSimProbe value="{}"/></sim>)", value);
+        }
 
         Task<Optional<PartSimProbe>> LoadSimAsync(String path) {
             auto loaded = co_await CoreManager::GetResourceManager().LoadSerializedPartAsync<PartSimProbe>(path, AssetPurpose::Sim);
@@ -61,6 +73,16 @@ namespace BECore::Tests {
 
         bool FileExists(const char* fileName) const {
             return PathExists(_dir / fileName);
+        }
+
+        /// The fixture's folder stays the lower layer; its TearDown unmounts both
+        void MountUpperLayer() const {
+            MakeDirectory(_dir / kUpperLayer);
+            ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), _dir / kUpperLayer));
+        }
+
+        int32_t SimValue() const {
+            return Require(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)).value;
         }
 
         /// The serialized form of an object, to compare what two loads produced
@@ -190,6 +212,56 @@ namespace BECore::Tests {
         EXPECT_EQ(sim->value, kSplitValue);
     }
 
+    TEST_F(AssetPartsTest, ASplitAsOldAsTheWholeFileIsStale) {
+        WriteFile("gem.asset.xml", kWholeXml);
+        WriteFile("gem.sim.xml", kSplitSimXml);
+        CopyWriteTime(_dir / "gem.asset.xml", _dir / "gem.sim.xml");
+        ASSERT_EQ(Require(GetFileInfo(_dir / "gem.sim.xml")).modifyTimeNs, Require(GetFileInfo(_dir / "gem.asset.xml")).modifyTimeNs);
+
+        EXPECT_EQ(SimValue(), kSimValue);
+    }
+
+    TEST_F(AssetPartsTest, AnOverrideOfTheWholeFileBeatsANewerSplitOfALowerLayer) {
+        ASSERT_NO_FATAL_FAILURE(MountUpperLayer());
+        WriteFile("gem.asset.xml", kWholeXml);
+        Age("gem.asset.xml", 2 * kOlder);
+        WriteFile("upper/gem.asset.xml", WholeSimXml(kUpperValue));
+        Age("upper/gem.asset.xml", kOlder);
+        WriteFile("gem.sim.xml", kSplitSimXml);
+
+        EXPECT_EQ(SimValue(), kUpperValue);
+    }
+
+    TEST_F(AssetPartsTest, TheFreshSplitBesideTheWinningWholeFileServes) {
+        ASSERT_NO_FATAL_FAILURE(MountUpperLayer());
+        WriteFile("gem.asset.xml", kWholeXml);
+        Age("gem.asset.xml", kOlder);
+        WriteFile("gem.sim.xml", kSplitSimXml);
+        WriteFile("upper/gem.asset.xml", WholeSimXml(kUpperValue));
+        Age("upper/gem.asset.xml", kOlder);
+        WriteFile("upper/gem.sim.xml", SplitSimXml(kUpperSplitValue));
+
+        EXPECT_EQ(SimValue(), kUpperSplitValue);
+    }
+
+    TEST_F(AssetPartsTest, ASplitAloneInAHigherLayerDoesNotBeatALowerWholeFile) {
+        ASSERT_NO_FATAL_FAILURE(MountUpperLayer());
+        WriteFile("gem.asset.xml", kWholeXml);
+        Age("gem.asset.xml", kOlder);
+        WriteFile("gem.sim.xml", kSplitSimXml);
+        WriteFile("upper/gem.sim.xml", SplitSimXml(kUpperSplitValue));
+
+        EXPECT_EQ(SimValue(), kSplitValue);
+    }
+
+    TEST_F(AssetPartsTest, WithNoWholeFileTheSplitOfTheTopLayerServes) {
+        ASSERT_NO_FATAL_FAILURE(MountUpperLayer());
+        WriteFile("gem.sim.xml", kSplitSimXml);
+        WriteFile("upper/gem.sim.xml", SplitSimXml(kUpperSplitValue));
+
+        EXPECT_EQ(SimValue(), kUpperSplitValue);
+    }
+
     TEST_F(AssetPartsTest, ABinaryWholeFileIsReadByPartName) {
         BinarySerializer serializer;
         const auto writePart = [&serializer](StringView part, StringView object, int32_t value) {
@@ -310,6 +382,7 @@ namespace BECore::Tests {
         Age("gem.sim.xml", kOlder);
         EXPECT_EQ(Require(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)).value, 7);
 
+        Age("gem.asset.xml", kOlder);
         ASSERT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
         EXPECT_EQ(Require(Load<PartSimProbe>("gem.asset.xml", AssetPurpose::Sim)).value, 7);
         EXPECT_FALSE(Load<PartVisualProbe>("gem.asset.xml", AssetPurpose::Visual).has_value());
@@ -325,12 +398,13 @@ namespace BECore::Tests {
         EXPECT_TRUE(FileExists(Format("{}/gem.visual.xml", folder).c_str()));
         EXPECT_TRUE(FileExists(Format("{}/gem.editor.xml", folder).c_str()));
 
-        // A split file that is not older than the whole file wins over it
+        // A split file written after the whole file wins over it
+        Age(whole.c_str(), kOlder);
         WriteFile(Format("{}/gem.sim.xml", folder).c_str(), kSplitSimXml);
         EXPECT_EQ(Require(Load<PartSimProbe>(whole.c_str(), AssetPurpose::Sim)).value, kSplitValue);
 
         // A whole file that is newer than its split files serves instead
-        Age(Format("{}/gem.sim.xml", folder).c_str(), kOlder);
+        Age(Format("{}/gem.sim.xml", folder).c_str(), 2 * kOlder);
         EXPECT_EQ(Require(Load<PartSimProbe>(whole.c_str(), AssetPurpose::Sim)).value, kSimValue);
     }
 
