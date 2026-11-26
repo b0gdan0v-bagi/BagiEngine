@@ -1,5 +1,7 @@
 #include "StressSettings.h"
 
+#include <BECore/UI/UIValueText.h>
+
 namespace BECore::Stress {
 
     namespace {
@@ -63,6 +65,20 @@ namespace BECore::Stress {
             return std::nullopt;
         }
 
+        /// ReadNumber for a decimal number
+        Optional<String> ReadDecimal(const CommandLine& line, StringView flag, double minimum, double maximum, double& target) {
+            const auto value = line.FindValue(flag);
+            if (!value) {
+                return line.HasFlag(flag) ? Optional(FlagError(flag, "needs a value")) : std::nullopt;
+            }
+            const auto number = UIText::ParseFiniteFloat(*value);
+            if (!number || *number < minimum || *number > maximum) {
+                return FlagError(flag, Format("'{}' is not a number from {} to {}", *value, minimum, maximum));
+            }
+            target = *number;
+            return std::nullopt;
+        }
+
         /// The error of a bare flag that was given a value (`--stress-ramp=1`), or nullopt
         Optional<String> CheckBareFlag(const CommandLine& line, StringView flag) {
             return line.FindValue(flag) ? Optional(FlagError(flag, "is a flag without a value")) : std::nullopt;
@@ -100,6 +116,7 @@ namespace BECore::Stress {
             ReadNumber(commandLine, StressFlags::kWarmup, 0, kMaxFrames, settings.warmup),
             CheckBareFlag(commandLine, StressFlags::kRamp),
             ReadChoice(commandLine, StressFlags::kMeasure, kMeasureNames, settings.measure),
+            ReadDecimal(commandLine, StressFlags::kBudgetMs, kMinRampBudgetMs, kMaxRampBudgetMs, settings.budgetMs),
             CheckBareFlag(commandLine, StressFlags::kInterleave),
             CheckBareFlag(commandLine, StressFlags::kNoBatching),
             ReadNumber(commandLine, StressFlags::kAtlases, kMinAtlases, kMaxAtlases, settings.atlases),

@@ -6,8 +6,8 @@ namespace BECore::Stress {
 
     namespace {
 
-        /// Room for the ramp line (under 300 characters), so that writing it does not grow the string
-        constexpr size_t kLineReserve = 384;
+        /// Room for the ramp line with large numbers in every key, so that writing it does not grow the string
+        constexpr size_t kLineReserve = 768;
 
         /// The count after @p count on the way up: x kRampGrowth, at least +1, never above kMaxCount
         uint32_t Grown(uint32_t count) {
@@ -35,11 +35,15 @@ namespace BECore::Stress {
             line += Format("\"{}\":\"{}\",", key, value);
         }
 
+        void AddNumber(String& line, StringView key, double value) {
+            line += Format("\"{}\":{},", key, FormatNumber(value));
+        }
+
     }  // namespace
 
-    RampController::RampController(StressMeasure measure, uint32_t maxFrames) : _measure(measure), _maxFrames(maxFrames) {}
+    RampController::RampController(StressMeasure measure, double budgetMs, uint32_t maxFrames) : _measure(measure), _budgetMs(budgetMs), _maxFrames(maxFrames) {}
 
-    RampNext RampController::OnFrame(double measureMs) {
+    RampNext RampController::OnFrame(const StressSample& sample) {
         if (_phase == Phase::Done) {
             return {_count, true};
         }
@@ -54,7 +58,8 @@ namespace BECore::Stress {
             return {_count, false};
         }
 
-        _window[_measured++] = measureMs;
+        _stepSum.Add(sample);
+        _window[_measured++] = _measure == StressMeasure::Work ? sample.workMs : sample.cpuMs;
         if (_measured < kMeasureFrames) {
             return {_count, false};
         }
@@ -63,7 +68,12 @@ namespace BECore::Stress {
         ++_result.steps;
         Array<double, kMeasureFrames> sorted = _window;
         eastl::sort(sorted.begin(), sorted.end());
-        OnStepEnd(NearestRank(sorted, kRampPercentile) <= kRampBudgetMs);
+        _stepCount = _count;
+        _stepStages = _stepSum.Mean();
+        OnStepEnd(NearestRank(sorted, kRampPercentile) <= _budgetMs);
+        if (_stepCount == _lo) {
+            _loStages = _stepStages;
+        }
         return {_count, _phase == Phase::Done};
     }
 
@@ -121,12 +131,17 @@ namespace BECore::Stress {
         _count = count;
         _settleLeft = kSettleFrames;
         _measured = 0;
+        _stepSum = {};
     }
 
     void RampController::Finish(uint32_t count, bool verified) {
         _phase = Phase::Done;
         _result.objectsAt60fps = count;
         _result.verified = verified;
+        if (count != 0) {
+            // A published count is either that of the last full step or `_lo`
+            _result.stages = count == _stepCount ? _stepStages : _loStages;
+        }
     }
 
     String FormatRampLine(const RampResult& result, StressMeasure measure, const RampRunContext& context) {
@@ -136,21 +151,27 @@ namespace BECore::Stress {
         AddBool(line, "aborted", result.aborted);
         AddBool(line, "allocTracking", context.allocTracking);
         AddInteger(line, "atlases", context.atlases);
-        line += Format("\"budgetMs\":{},", FormatNumber(kRampBudgetMs));
+        AddNumber(line, "budgetMs", context.budgetMs);
         AddBool(line, "capped", result.capped);
+        AddNumber(line, "drawMs", result.stages.drawMs);
         AddInteger(line, "frames", result.frames);
+        AddNumber(line, "gpuMs", result.stages.gpuMs);
         AddBool(line, "interleave", context.interleave);
         AddBool(line, "manualClock", context.manualClock);
         AddText(line, "measure", ToFlagValue(measure));
         AddInteger(line, "measureFrames", kMeasureFrames);
         AddText(line, "mode", "ramp");
         AddInteger(line, "objectsAt60fps", result.objectsAt60fps);
+        AddNumber(line, "presentMs", result.stages.presentMs);
         AddText(line, "scene", ToFlagValue(context.scene));
         AddInteger(line, "settleFrames", kSettleFrames);
         AddInteger(line, "steps", result.steps);
-        line += Format("\"verified\":{}", result.verified ? "true" : "false");
+        AddNumber(line, "submitMs", result.stages.submitMs);
+        AddNumber(line, "updateMs", result.stages.updateMs);
+        AddBool(line, "verified", result.verified);
+        AddNumber(line, "waitMs", result.stages.waitMs);
+        line.back() = '}';  // the comma of the last member
         line.insert(size_t{0}, 1, '{');
-        line += '}';
         return line;
     }
 

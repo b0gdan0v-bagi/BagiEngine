@@ -183,8 +183,9 @@ namespace BECore {
         [[nodiscard]] const RenderCounters& PeekRenderCounters() const {
             return _counters;
         }
-        // While any pause is alive the draws are not counted (the profiler's own overlay, ScopedRenderCountersPause). Both calls submit the open
-        // batch first, so a draw is counted inside the pause it was made in or outside it, never half and half.
+        // While any pause is alive the draws are not counted and their submissions not timed (the profiler's own overlay,
+        // ScopedRenderCountersPause). Both calls submit the open batch first, so a draw is counted inside the pause it was made in or outside
+        // it, never half and half.
         void PauseCounters();
         void ResumeCounters();
 
@@ -198,7 +199,8 @@ namespace BECore {
 
         /// Submits the open batch, if any, so every draw made so far has reached the backend. The scene calls it at the end of its pass; the
         /// renderer calls it itself wherever the order or the state would otherwise be lost (a clip change, another texture or blend mode, a
-        /// draw that is not batched, the frame and target boundaries of a backend, which calls it too).
+        /// draw that is not batched, the frame and target boundaries of a backend, which calls it too). Outside a counters pause the backend's
+        /// SubmitBatch() is timed as FrameStage::Submit of the open frame.
         void Flush();
 
     protected:

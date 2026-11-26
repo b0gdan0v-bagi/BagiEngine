@@ -207,6 +207,7 @@ namespace BECore::Stress::Tests {
         ASSERT_TRUE(parsed.IsParsed());
         EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "workMs").value_or(0.0), 3.0);
         EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "cpuMs").value_or(0.0), 10.0);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "presentMs").value_or(0.0), 7.0);
     }
 
     TEST_F(StressRunTest, ACountChangeRestartsTheWarmUp) {
@@ -337,11 +338,27 @@ namespace BECore::Stress::Tests {
         const int64_t found = GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0);
         EXPECT_LE(found, 301);
         EXPECT_GE(found, 290);
+        EXPECT_TRUE(parsed.Root().Find("updateMs").has_value()) << "the ramp line carries the stages";
 
         Frame(kFastMs);
         Frame(kFastMs);
         EXPECT_EQ(_lines.size(), 1u);
         EXPECT_EQ(_quit.count, 1);
+    }
+
+    TEST_F(StressRunTest, TheBudgetFlagIsWhatTheRampHoldsAndItsLineNames) {
+        constexpr double kMsPerObject = 0.055;  // 33 / 0.055 = 600
+        StartRamp({"--stress-budget-ms=33"});
+
+        RampFramesUntilDone(kMsPerObject);
+
+        ASSERT_EQ(_lines.size(), 1u);
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed()) << _lines[0].c_str();
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "budgetMs").value_or(0.0), 33.0);
+        const int64_t found = GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0);
+        EXPECT_LE(found, 600);
+        EXPECT_GE(found, 575);
     }
 
     TEST_F(StressRunTest, TheRampHoldsToTheWorkTimeUnlessTheCpuTimeIsAsked) {

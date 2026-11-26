@@ -14,7 +14,8 @@ time limit) is an error with the end of the game's log on stderr and exit code 1
 `--backend sdl-gpu|vulkan` runs the game on that GPU backend in a hidden window (`--hidden-window --backend=<it>` instead of `--headless`;
 `software`, the default, is the headless run). A machine without the backend cannot start the game, which logs `BACKEND_UNAVAILABLE_MARKER`
 before it exits: that is not an error here but the line `skip: <the game's own words>` on stdout and exit code 77 (`EXIT_SKIPPED`), which
-`perf.py` reports as a skipped benchmark. Any other early exit stays an error. `--no-batching` passes `--stress-no-batching`.
+`perf.py` reports as a skipped benchmark. Any other early exit stays an error. `--no-batching` passes `--stress-no-batching`, `--budget-ms`
+passes `--stress-budget-ms` (the frame time a `--ramp` holds; the game checks the value).
 """
 
 import argparse
@@ -68,6 +69,8 @@ def stress_flags(args: argparse.Namespace) -> list[str]:
         flags.append("--stress-interleave")
     if args.no_batching:
         flags.append("--stress-no-batching")
+    if args.budget_ms is not None:
+        flags.append(f"--stress-budget-ms={args.budget_ms}")
     if args.trace:
         flags.append(f"--trace={Path(args.trace).resolve()}")
     return flags
@@ -169,8 +172,9 @@ def main() -> int:
     parser.add_argument("--count", type=int, default=DEFAULT_COUNT, help=f"objects in a fixed run (default {DEFAULT_COUNT})")
     parser.add_argument("--frames", type=int, default=DEFAULT_FRAMES, help=f"measured frames of a fixed run (default {DEFAULT_FRAMES})")
     parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUP, help=f"frames before measuring (default {DEFAULT_WARMUP})")
-    parser.add_argument("--ramp", action="store_true", help="find the objects at 60 fps instead of a fixed run")
+    parser.add_argument("--ramp", action="store_true", help="find the largest count whose frames fit the budget instead of a fixed run")
     parser.add_argument("--measure", choices=MEASURES, default="work", help="the number the ramp budgets: workMs or the whole cpuMs (default work)")
+    parser.add_argument("--budget-ms", help="the frame time in ms the ramp holds (the game's default: 16.6, a frame of 60 fps)")
     parser.add_argument("--interleave", action="store_true", help="change the atlas and the blend mode on every sprite (the worst case)")
     parser.add_argument("--atlases", type=int, default=DEFAULT_ATLASES, help=f"atlases of the sprites scene (default {DEFAULT_ATLASES})")
     parser.add_argument("--backend", choices=BACKENDS, default=DEFAULT_BACKEND, help="the renderer: software (headless, default) or a GPU backend in a hidden window; a machine without it skips")
