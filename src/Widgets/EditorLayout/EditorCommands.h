@@ -109,6 +109,8 @@ namespace BECore {
         inline constexpr auto kFileChangesRescan = "fileChanges.rescan"_intern;
         inline constexpr auto kFileChangesApplyAll = "fileChanges.applyAll"_intern;
         inline constexpr auto kFileChangesApply = "fileChanges.apply"_intern;
+        /// The Asset Browser's Rescan button: AssetBrowserPanelModel lists the content files again, only while its panel is open
+        inline constexpr auto kAssetBrowserRescan = "assetBrowser.rescan"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

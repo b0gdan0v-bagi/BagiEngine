@@ -66,6 +66,7 @@ namespace BECore {
                 {kFileChangesRescan, "File Changes: Rescan", std::nullopt, true},
                 {kFileChangesApplyAll, "File Changes: Apply All", std::nullopt, true},
                 {kFileChangesApply, "File Changes: Apply One", std::nullopt, true},
+                {kAssetBrowserRescan, "Asset Browser: Rescan", std::nullopt, false},
                 {kConsolePause, "Console: Pause / Resume", std::nullopt, true},
                 {kConsoleClear, "Console: Clear Log", std::nullopt, true},
                 {kConsoleClearOutput, "Console: Clear Output", std::nullopt, true},
