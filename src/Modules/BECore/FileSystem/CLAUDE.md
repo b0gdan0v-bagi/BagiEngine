@@ -28,6 +28,7 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 |------|-------|
 | `ResolvePath(virtualPath)` | Returns an existing real `Path` or an empty one |
 | `Exists(virtualPath)` | `ResolvePath` + existence check |
+| `PathInTopLayer(virtualPath)` | Where the path lies in the top layer of its mount point, there or not (for what is about to be made); empty outside a mount point |
 | `AddContentRoot(path)` | Add a root on top of the existing ones (call before `Initialize()`); adding one twice is a no-op |
 | `Mount(virtualPath, realPath)` / `Unmount(virtualPath)` | Add a directory (must exist) as the top layer of a mount point / drop the mount point with all its layers |
 | `GetMountedPath(mountPoint)` / `GetMountLayers(mountPoint)` | Top layer / all layers (`Vector<Path>`), lowest priority first |

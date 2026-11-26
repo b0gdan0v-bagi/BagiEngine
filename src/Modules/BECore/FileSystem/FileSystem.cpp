@@ -10,6 +10,27 @@ namespace BECore {
 
     namespace {
 
+        struct MountedName {
+            StringView mountPoint;  ///< the first segment, whether such a mount point exists or not
+            StringView remainder;   ///< what follows its separator
+        };
+
+        MountedName SplitMountPoint(StringView virtualPath) {
+            const size_t slash = virtualPath.find_first_of("/\\");
+            if (slash == StringView::npos) {
+                return {virtualPath, {}};
+            }
+            return {virtualPath.substr(0, slash), virtualPath.substr(slash + 1)};
+        }
+
+        Path JoinLayer(const Path& layer, StringView remainder) {
+            Path path = layer;
+            if (!remainder.empty()) {
+                path /= remainder;
+            }
+            return path;
+        }
+
         bool IsDirectory(const Path& path) {
             const Optional<FileInfo> info = GetFileInfo(path.View());
             return info.has_value() && info->kind == FileKind::Directory;
@@ -166,28 +187,14 @@ namespace BECore {
             return PathExists(path) ? path : Path{};
         }
 
-        size_t firstSlash = virtualPath.find_first_of("/\\");
-
-        StringView mountPoint;
-        StringView remainingPath;
-
-        if (firstSlash != StringView::npos) {
-            mountPoint = virtualPath.substr(0, firstSlash);
-            remainingPath = virtualPath.substr(firstSlash + 1);
-        } else {
-            mountPoint = virtualPath;
-        }
+        const MountedName name = SplitMountPoint(virtualPath);
 
         // Heterogeneous lookup: no allocation for the mount point; layers from the top
-        auto it = _mountPoints.Find(mountPoint);
+        auto it = _mountPoints.Find(name.mountPoint);
 
         if (it != _mountPoints.end()) {
             for (auto layer = it->second.rbegin(); layer != it->second.rend(); ++layer) {
-                Path fullPath = *layer;
-
-                if (!remainingPath.empty()) {
-                    fullPath /= remainingPath;
-                }
+                Path fullPath = JoinLayer(*layer, name.remainder);
 
                 if (PathExists(fullPath)) {
                     return fullPath;
@@ -216,6 +223,17 @@ namespace BECore {
     bool FileSystem::Exists(StringView virtualPath) const {
         const Path resolved = ResolvePath(virtualPath);
         return !resolved.Empty() && PathExists(resolved);
+    }
+
+    Path FileSystem::PathInTopLayer(StringView virtualPath) const {
+        const MountedName name = SplitMountPoint(virtualPath);
+        auto it = _mountPoints.Find(name.mountPoint);
+        if (it == _mountPoints.end() || it->second.empty()) {
+            return {};
+        }
+        const Path& top = it->second.back();
+        const Path path = JoinLayer(top, name.remainder);
+        return path.IsUnder(top) ? path : Path{};
     }
 
     Path FileSystem::GetMountedPath(PoolString virtualPath) const {

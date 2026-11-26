@@ -22,10 +22,11 @@ namespace BECore {
     /**
      * @brief Open the content of one part of the asset @p assetPath, with the purpose filter set to @p part
      *
-     * The split file of the part (`SplitPartPath`) is used when it resolves and is not older than the whole file (or the
-     * whole file is missing): its root is the part element, so the object of the part is the first child. Otherwise the
-     * whole file is opened (XML or binary) and the reader is entered into the part element. Either way the reader never
-     * visits another part, and every reflected object read through it is checked against the filter.
+     * The split file of the part (`SplitPartPath`) is used only from the real folder of the whole file that wins the content
+     * layers and only when its write time is strictly later; when no layer has the whole file, the split file the layers
+     * resolve is used. Its root is the part element, so the object of the part is the first child. Otherwise the whole file
+     * is opened (XML or binary) and the reader is entered into the part element. Either way the reader never visits another
+     * part, and every reflected object read through it is checked against the filter.
      *
      * @return The reader positioned inside the part, a null pointer when the whole file has no such part, or a message
      *         when no file of the asset opens or @p part is `Common`.
@@ -38,6 +39,8 @@ namespace BECore {
         Optional<String> visual;
         Optional<String> editor;
 
+        /// The text of @p part, which must not be `Common`
+        Optional<String>& Get(AssetPurpose part);
         const Optional<String>& Get(AssetPurpose part) const;
     };
 
@@ -58,9 +61,11 @@ namespace BECore {
      * The files are named by `SplitPartPath` and land next to the source, or in @p outputVirtualFolder (same file names)
      * when it is given; the folder is created inside its mount point when it does not exist yet. A part that is gone from
      * the source has its old split file removed, so the files mirror the source. Nothing is touched when the source does
-     * not split. The files are newer than the source, so `OpenAssetPart` prefers them.
+     * not split. `OpenAssetPart` prefers the files only beside the source and with a later write time; files in another
+     * output folder serve only where no whole file resolves.
      *
-     * @return false (and an error in the log) when the source does not read or split or a file cannot be written.
+     * @return false (and an error in the log) when the source does not read or split, a file cannot be written or the
+     *         old file of a gone part cannot be removed; a failed part does not stop the others.
      */
     bool SplitAssetFile(StringView virtualAssetPath, StringView outputVirtualFolder = {});
 

@@ -79,6 +79,28 @@ namespace BECore::Tests {
         EXPECT_TRUE(fs.Exists("config/A.xml"));
     }
 
+    TEST_F(FileSystemTest, PathInTopLayerNamesThePlaceInTheTopLayerAndMakesNothing) {
+        Touch(_engine / "config" / "A.xml");
+        MakeDirectory(_game / "config");
+
+        FileSystem fs;
+        fs.AddContentRoot(_engine);
+        fs.AddContentRoot(_game);
+        fs.Initialize();
+
+        // The top layer even for a file that a lower layer has
+        EXPECT_EQ(fs.PathInTopLayer("config/A.xml"), Normal(_game / "config" / "A.xml"));
+        EXPECT_EQ(fs.PathInTopLayer("config/made/deep"), Normal(_game / "config" / "made" / "deep"));
+        EXPECT_EQ(fs.PathInTopLayer("config"), Normal(_game / "config"));
+
+        EXPECT_TRUE(fs.PathInTopLayer("nowhere/A.xml").Empty());
+        EXPECT_TRUE(fs.PathInTopLayer((_engine / "config" / "A.xml").View()).Empty());
+        EXPECT_TRUE(fs.PathInTopLayer("config//A.xml").Empty());
+
+        EXPECT_FALSE(PathExists(_game / "config" / "A.xml"));
+        EXPECT_FALSE(PathExists(_game / "config" / "made"));
+    }
+
     TEST_F(FileSystemTest, MountLayersAreOrderedLowestPriorityFirst) {
         Touch(_engine / "config" / "A.xml");
         Touch(_game / "config" / "B.xml");
