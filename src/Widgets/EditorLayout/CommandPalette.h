@@ -5,6 +5,7 @@
 #include <Widgets/EditorLayout/HotkeyMap.h>
 #include <Widgets/Feedback/UIMotion.h>
 #include <cstddef>
+#include <cstdint>
 
 namespace BECore {
 
@@ -26,8 +27,14 @@ namespace BECore {
             _matches.Invalidate();
         }
 
-        /// Draws the popup; returns the id of the chosen command, or an empty PoolString
-        PoolString Draw(const HotkeyMap& hotkeys);
+        /// Draws the popup over the editor's table; returns the id of the chosen command, or an empty PoolString
+        PoolString Draw(const HotkeyMap& hotkeys) {
+            return Draw(hotkeys, GetEditorCommands(), 0);
+        }
+
+        /// Draws the popup over @p commands. @p version has to move whenever they are another list, also in the same memory: the palette holds
+        /// pointers into it and drops them then
+        PoolString Draw(const HotkeyMap& hotkeys, Span<const EditorCommand> commands, uint64_t version);
 
     private:
         char _query[kMaxPaletteQueryLength + 1] = {};
@@ -35,9 +42,10 @@ namespace BECore {
         bool _openRequested = false;
         bool _focusQuery = false;
         Fade _fade;
-        // The filtered rows and, parallel to them, the chord text of each; both change only with the query
+        // The filtered rows and, parallel to them, the chord text of each; both change only with the query and the list
         CommandMatchList _matches;
         Vector<String> _chordTexts;
+        uint64_t _commandsVersion = 0;
     };
 
 }  // namespace BECore

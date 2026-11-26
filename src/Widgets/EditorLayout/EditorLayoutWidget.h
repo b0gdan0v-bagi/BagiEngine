@@ -14,6 +14,8 @@
 #include <Widgets/EditorLayout/MainToolbar.h>
 #include <Widgets/EditorLayout/StatusBar.h>
 #include <Widgets/Feedback/ToastOverlay.h>
+#include <Widgets/GamePanel/GameCommandRunner.h>
+#include <Widgets/GamePanel/GameEditorCommands.h>
 #include <expected>
 #include <imgui.h>
 
@@ -90,6 +92,8 @@ namespace BECore {
         ToastOverlay _toasts;
 
         CommandPalette _palette;
+        GameEditorCommands _gameCommands;  // the rows of the palette: the table and the active game's
+        GameCommandRunner _gameRunner;
 
         String _pendingLayoutText;  // a named layout waiting for the next frame start
 

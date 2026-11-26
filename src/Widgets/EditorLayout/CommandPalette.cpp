@@ -38,7 +38,7 @@ namespace BECore {
 
     }  // namespace
 
-    PoolString CommandPalette::Draw(const HotkeyMap& hotkeys) {
+    PoolString CommandPalette::Draw(const HotkeyMap& hotkeys, Span<const EditorCommand> commands, uint64_t version) {
         if (_openRequested) {
             _openRequested = false;
             _query[0] = '\0';
@@ -71,8 +71,12 @@ namespace BECore {
             _selected = 0;
         }
 
-        const Span<const EditorCommand> table = GetEditorCommands();
-        if (_matches.Update(_query, table)) {
+        // The matcher compares only the list's memory and size
+        if (version != _commandsVersion) {
+            _commandsVersion = version;
+            _matches.Invalidate();
+        }
+        if (_matches.Update(_query, commands)) {
             _chordTexts.clear();
             for (const EditorCommand* match : _matches.GetMatches()) {
                 _chordTexts.push_back(ChordText(*match, hotkeys));
