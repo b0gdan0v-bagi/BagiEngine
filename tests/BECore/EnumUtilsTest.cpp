@@ -6,7 +6,19 @@ namespace BECore::Tests {
 
     using ColorUtils = EnumUtils<TestColor>;
 
+    /// An enum without CORE_ENUM that says itself how it is written, as a third-party one may.
+    enum PlainState : uint8_t { PlainStateIdle = 3 };
+
+    /// The name fmt looks for.
+    constexpr int format_as(PlainState state) {
+        return state * 10;
+    }
+
     // Compile-time checks: a regression breaks the build.
+
+    static_assert(HasFormatter<TestColor>);
+    static_assert(!HasFormatter<PlainState>);
+    static_assert(!HasFormatter<std::byte>);  //-NoStd: a standard enum that fmt formats itself
 
     static_assert(ColorUtils::ToString(TestColor::Red) == "Red");
     static_assert(ColorUtils::ToString(TestColor::Green) == "Green");
@@ -150,8 +162,12 @@ namespace BECore::Tests {
 
     TEST(EnumUtilsTest, AnEnumIsFormattableThroughTheLayer) {
         static_assert(Formattable<TestColor>);
-        static_assert(HasFormatter<TestColor>);
         EXPECT_EQ(Format("{}", TestColor::Green), "Green");
+    }
+
+    TEST(EnumUtilsTest, AnEnumWithoutCoreEnumIsLeftToFmt) {
+        EXPECT_EQ(Format("{}", PlainStateIdle), "30");
+        EXPECT_EQ(Format("{}", std::byte{7}), "7");  //-NoStd: a standard enum that fmt formats itself
     }
 
 }  // namespace BECore::Tests

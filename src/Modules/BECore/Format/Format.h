@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Format/Formatter.h>
+#include <BECore/PoolString/StaticPoolString.h>
 #include <BECore/Types/Types.h>
 #include <cstddef>
 #include <cstdio>
@@ -112,23 +113,21 @@ namespace BECore {
     using Details::Format::Print;
     using Details::Format::PrintLine;
 
-    /// What `"{}"_format` makes: calling it formats with the literal as the format string, parsed at run time (RuntimeFormat).
+    /// What `"{}"_format` makes: calling it is Format with the literal, so the literal is checked at compile time against the
+    /// arguments of that call. The text is a template argument because only a constant can be checked.
+    template <Details::FixedString Str>
     class FormatLiteral {
     public:
-        constexpr FormatLiteral(StringView format) : _format(format) {}
-
         template <typename... Args>
         [[nodiscard]] String operator()(Args&&... args) const {
-            return Details::Format::Format(RuntimeFormat(_format), std::forward<Args>(args)...);
+            return Details::Format::Format(ToStd(Str.View()), std::forward<Args>(args)...);
         }
-
-    private:
-        StringView _format;
     };
 
     inline namespace Literals {
-        [[nodiscard]] constexpr FormatLiteral operator""_format(const char* str, size_t len) {
-            return FormatLiteral(StringView(str, len));
+        template <Details::FixedString Str>
+        [[nodiscard]] consteval auto operator""_format() {
+            return FormatLiteral<Str>{};
         }
     }  // namespace Literals
 

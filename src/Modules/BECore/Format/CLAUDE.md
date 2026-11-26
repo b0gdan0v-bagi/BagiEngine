@@ -4,13 +4,13 @@ The engine's names for formatting text. Code spells these, not `fmt::`: the libr
 
 | Name | What it is |
 |------|------------|
-| `Format(fmt, args...)` / `"{}"_format(args...)` | A `String`. The format string of `Format` is a literal checked at compile time. |
+| `Format(fmt, args...)` / `"{}"_format(args...)` | A `String`. The format string is a literal checked at compile time in both forms. |
 | `AppendFormat(String&, ...)`, `FormatTo(it, ...)` | Into a string or an output iterator. |
 | `FormatToN(char*, capacity, ...)` | Into a fixed buffer, allocates nothing, cuts at the capacity, **does not write a terminating zero**; the `FormatResult` has the full `size` and `truncated`. |
 | `Print`, `PrintLine`, `Print(FILE*, ...)` | To stdout or a C stream. |
 | `FormatString<Args...>` | The type of a checked format string, for a function that forwards to `Format`. |
 | `RuntimeFormat(StringView)` | A format string that is not a literal (a string table entry, a user text); parsed when called, so a bad string is a run-time error. Not for a literal. |
-| `FormatArg("name", value)` | The argument of `{name}`. It holds a reference to the value: use it inside the expression of the call, never store it. The name is a `const char*` that must outlive the call. |
+| `FormatArg("name", value)` | The argument of `{name}`. It holds a reference to the value: use it inside the expression of the call, never store it. The name is a `const char*` that must outlive the call. A call with one is **not** checked at compile time: a bad string aborts at run time. |
 | `Formattable<T>`, `HasFormatter<T>` | Concepts: fmt can format `T`; a `Formatter<T>` exists. |
 | `FormatContext`, `FormatParseContext` | What a `Formatter` reads and writes. |
 | `Formatter<T>`, `TextFormatter` | How a type is formatted (below). |
@@ -30,7 +30,7 @@ struct BECore::Formatter<Point> : TextFormatter {
 
 - `Parse(FormatParseContext&)` reads the spec (`{:>8}`) and must be `constexpr`; `Format(const T&, FormatContext&) const` writes the value. A specialization names no `fmt::`.
 - A type written as text derives from `TextFormatter`: it parses the usual string spec (`{:>8}`, `{:<6}`, `{:.3}`) and `FormatText(StringView, ctx)` writes the text with that spec. Only a type with its own spec writes `Parse` itself.
-- Every `CORE_ENUM` type is formattable through a `Formatter` of `Utils/EnumUtils.h` (the name of the value, a string spec works); do not specialize one for it.
+- Every `CORE_ENUM` type is formattable through a `Formatter` of `Utils/EnumUtils.h` (the name of the value, a string spec works); do not specialize one for it. Any other enum is left to fmt (its `format_as`).
 - One bridge, `fmt::formatter<T, char>` constrained by `HasFormatter<T>`, hands every such type to fmt. Do not add a second `fmt::formatter` for a type that has a `Formatter`: the two are ambiguous.
 - `String` and `StringView` are formattable through `fmt::formatter` specializations in `Format.h`: a layer file may name `fmt::`; nothing else may (the vendored `src/Modules/fmt/` is never edited).
 

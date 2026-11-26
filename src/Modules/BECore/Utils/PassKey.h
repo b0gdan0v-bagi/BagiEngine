@@ -4,20 +4,17 @@
 
 namespace BECore {
     /**
-     * Limits a method or constructor to T and its descendants: it takes a `PassKey<T>` (`void Open(PassKey<Manager>)`), an allowed caller
-     * passes `{}` (`obj.Open({})`), any other caller does not compile. The key moves and is never copied.
+     * Limits a method or constructor to T and its descendants: it takes a `PassKey<T>` (`void Open(PassKey<Manager>)`), T passes `{}`
+     * (`obj.Open({})`), a class derived from T passes its own key (`obj.Open(PassKey<Derived>{})`), which converts, and any other
+     * caller does not compile. The key moves and is never copied.
      */
     template <typename T>
-    class PassKey {
-    protected:
-        // Protected, so that only T (a friend) and its descendants can construct a key.
-        constexpr PassKey() noexcept = default;
-
+    class PassKey final {
     private:
+        // T is the only friend and the class is final: with any other way to the constructor a stranger could make the key.
         friend T;
 
-        template <typename U>
-        friend class PassKey;
+        constexpr PassKey() noexcept = default;
 
         PassKey(const PassKey&) = delete;
         PassKey& operator=(const PassKey&) = delete;
