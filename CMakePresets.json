@@ -136,6 +136,16 @@
             }
         },
         {
+            "name": "coverage",
+            "hidden": true,
+            "description": "Clang source-based coverage on all code (ENGINE_COVERAGE, cmake/BagiFuzz.cmake; report: CI/scripts/coverage_report.py), Debug. ccache off: an object cached from another checkout would map the coverage to that checkout's sources",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "ENGINE_COVERAGE": "ON",
+                "ENGINE_CCACHE": "OFF"
+            }
+        },
+        {
             "name": "asan-windows-crt",
             "hidden": true,
             "description": "No DLL in the build, one static release C runtime (/MT, asserts and expects stay ON, no NDEBUG): the ASan runtime for /MD is a DLL thunk set that defines malloc, so every DLL of the build fails to link with 'duplicate symbol: malloc' against the UCRT import, and the static ASan runtime (asan_cxx is /MT) is refused by an /MD object (/failifmismatch RuntimeLibrary). So SDL, SDL_image and its codecs are static too (the engine's executables then need no SDL DLL); the debug C runtime is not supported by the ASan runtime",
@@ -296,6 +306,11 @@
             "name": "macos-tsan",
             "displayName": "macOS Clang with ThreadSanitizer",
             "inherits": ["ninja", "host-macos", "clang", "tsan"]
+        },
+        {
+            "name": "macos-coverage",
+            "displayName": "macOS Clang Debug with source-based coverage (no ccache)",
+            "inherits": ["ninja", "host-macos", "clang", "coverage"]
         },
         {
             "name": "macos-time-trace",
@@ -513,6 +528,12 @@
             "displayName": "macOS Clang with ThreadSanitizer",
             "inherits": "build-macos",
             "configurePreset": "macos-tsan"
+        },
+        {
+            "name": "macos-coverage",
+            "displayName": "macOS Clang Debug with source-based coverage",
+            "inherits": "build-macos",
+            "configurePreset": "macos-coverage"
         },
         {
             "name": "macos-time-trace",
@@ -803,6 +824,16 @@
         { "name": "macos-tsan-fast", "inherits": ["test-fast", "macos-tsan"] },
         { "name": "macos-tsan-smoke", "inherits": ["test-smoke", "macos-tsan"] },
         { "name": "macos-tsan-scenarios", "inherits": ["test-scenarios", "macos-tsan"] },
+        {
+            "name": "macos-coverage",
+            "displayName": "macOS Clang Debug with source-based coverage",
+            "inherits": "test-macos",
+            "configurePreset": "macos-coverage"
+        },
+        { "name": "macos-coverage-all", "inherits": ["test-all", "macos-coverage"] },
+        { "name": "macos-coverage-fast", "inherits": ["test-fast", "macos-coverage"] },
+        { "name": "macos-coverage-smoke", "inherits": ["test-smoke", "macos-coverage"] },
+        { "name": "macos-coverage-scenarios", "inherits": ["test-scenarios", "macos-coverage"] },
         {
             "name": "macos-time-trace",
             "displayName": "macOS Clang Debug with -ftime-trace",

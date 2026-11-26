@@ -1,5 +1,5 @@
 # =============================================================================
-# Sanitizers on every target and libFuzzer executables over the fuzz targets of tests/Fuzz
+# Instrumentation of every target (sanitizers, coverage) and libFuzzer executables over the fuzz targets of tests/Fuzz
 # =============================================================================
 # Included once by cmake/BagiEngine.cmake before the first target, so the flags reach every target (the vendored libraries too).
 #
@@ -14,6 +14,10 @@
 #   ENGINE_FUZZ            OFF  The fuzz presets: address;undefined, the same flags as above.
 #   ENGINE_FUZZ_LIBFUZZER  OFF  Also instrument for libFuzzer (-fsanitize=fuzzer-no-link) and define be_add_fuzz_executable(). Needs ENGINE_FUZZ
 #                               and a compiler with the libFuzzer runtime: Apple clang has none, Homebrew LLVM has (preset macos-fuzz).
+#   ENGINE_COVERAGE        OFF  Clang source-based coverage on all code (preset macos-coverage), independent of the sanitizers. A configure error
+#                               with another compiler and on the web. Every run of an instrumented executable that exits writes a profile into
+#                               <binary dir>/profraw with no environment variable (LLVM_PROFILE_FILE overrides the path);
+#                               CI/scripts/coverage_report.py makes the report.
 #
 # Sets BE_SANITIZED (ON when any sanitizer is on) for the code after it. Asserts and expects are the preset's business: macos-fuzz,
 # macos-asan and macos-tsan keep them ON, because an assertion that an input can reach is a finding, and macos-fuzz-shipped turns them OFF, the flags
@@ -24,6 +28,7 @@ include_guard(GLOBAL)
 set(ENGINE_SANITIZE "" CACHE STRING "Sanitizers on every target, a ';' list of: address, undefined, thread (the presets macos-asan, macos-fuzz, macos-tsan)")
 option(ENGINE_FUZZ "Build every target with AddressSanitizer and UndefinedBehaviorSanitizer (the fuzz presets); the same as ENGINE_SANITIZE=address;undefined" OFF)
 option(ENGINE_FUZZ_LIBFUZZER "Instrument for libFuzzer and build the BagiFuzz<Name> executables (needs ENGINE_FUZZ and a compiler with libFuzzer)" OFF)
+option(ENGINE_COVERAGE "Clang source-based coverage on every target (preset macos-coverage; report: CI/scripts/coverage_report.py)" OFF)
 
 if(ENGINE_FUZZ_LIBFUZZER AND NOT ENGINE_FUZZ)
     message(FATAL_ERROR "ENGINE_FUZZ_LIBFUZZER needs ENGINE_FUZZ=ON (the fuzzers run under the sanitizers)")
@@ -91,6 +96,20 @@ if(BE_SANITIZERS)
 else()
     set(BE_SANITIZED OFF)
     message(STATUS "Sanitizers: DISABLED")
+endif()
+
+if(ENGINE_COVERAGE)
+    if(EMSCRIPTEN)
+        message(FATAL_ERROR "ENGINE_COVERAGE: no coverage on the web (coverage_report.py reads the profiles of desktop executables); use a desktop preset (macos-coverage)")
+    endif()
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "ENGINE_COVERAGE needs Clang (-fcoverage-mapping); this compiler is ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+    # %m: one file per instrumented image (an executable and each of its shared libraries); %p: one per process, so parallel tests do not meet
+    set(BE_COVERAGE_PROFILE_FLAG "-fprofile-instr-generate=${CMAKE_BINARY_DIR}/profraw/%m_%p.profraw")
+    add_compile_options(${BE_COVERAGE_PROFILE_FLAG} -fcoverage-mapping)
+    add_link_options(${BE_COVERAGE_PROFILE_FLAG})
+    message(STATUS "Coverage: ENABLED (profiles in ${CMAKE_BINARY_DIR}/profraw)")
 endif()
 
 # be_add_fuzz_executable(<Name> <Function>)

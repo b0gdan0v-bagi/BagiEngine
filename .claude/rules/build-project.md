@@ -147,6 +147,18 @@ cd build/macos-tsan && TSAN_OPTIONS="suppressions='$(cd ../.. && pwd)/cmake/sani
 
 Nothing is suppressed: `cmake/sanitizers/tsan.supp` takes only vendored, SDK and system code, under the rules in its header. A report depends on which threads met, so a finding may show in one run of several: repeat a run before calling a fix proven. The first runs (macOS, 2026-11-26) found races only in `TaskAllocationTest` and `TaskMemoryTest` (a job's count without a release, so the case reused its stack unordered), fixed there; after that `macos-tsan` ran clean. A game that includes the presets takes `macos-tsan` from its own root.
 
+**Coverage** (`cmake/CLAUDE.md`, "Coverage"). `macos-coverage` builds the whole engine, vendored code and SDL included, with Clang's source-based coverage (Debug, ccache off). By explicit name or for a coverage request only:
+
+```bash
+cmake --preset macos-coverage
+cmake --build --preset macos-coverage --target BagiEngineTests StressTests BagiStress   # a full build of its own
+python3 CI/scripts/coverage_report.py --root . --reset                                  # delete the profiles of earlier runs
+ctest --preset macos-coverage                                                           # unit, smoke and scenario tests
+python3 CI/scripts/coverage_report.py --root .                                          # summary.txt and html/index.html
+```
+
+Every run of an instrumented executable adds a profile to `build/macos-coverage/profraw`, so a QA replay, a smoke or an executable started by hand between the reset and the report counts too, for example `python3 tools/qa/bagi_qa.py replay --exe build/macos-coverage/bin/BagiStress --invariants tools/stress/qa/invariants.py <scenario>`. The report goes to `<system temp>/bagi-coverage/<checkout folder>-macos-coverage/`, the script prints both paths (`--out` names another folder, outside every git work tree). Left out: `external/`, the vendored modules, generated code, the build folder and every `tests/` (`--include-tests` keeps those). Limits: a killed or crashed process writes no profile; a source that no instrumented executable links is absent from the report, not shown as 0 %; a profile from before a rebuild does not match the new binaries (the script warns), so reset first. `llvm-cov`'s `functions have mismatched data` is expected here: a function that one executable does not use leaves an empty record (`hash = 0x0` with `-dump`) beside the counted one of another. A full run leaves some hundreds of MB of profiles until the next reset. Exit codes of the script: 0, 1 an llvm tool failed, 2 a bad argument, 77 nothing to report. The tests of the script: `.venv/bin/python -m pytest CI/scripts/tests/test_coverage_report.py CI/scripts/tests/test_instrumentation_cmake.py`. A game takes `macos-coverage` from its own root (`python3 engine/CI/scripts/coverage_report.py --root .`). There is no Windows or Linux preset.
+
 Timings, `ctest --preset macos-debug` on a warm Debug build, Mahjong row 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs, interleaved (the engine row: one run per column, taken after the games left the engine):
 
 | Set | `-j1` | `-j4` | `-j8` (preset) | `-j14` |

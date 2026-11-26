@@ -1,5 +1,6 @@
-"""cmake/BagiFuzz.cmake included alone into a throwaway project (which sanitizer lists configure, and with what flags), and the presets of
-CMakePresets.json that switch the instrumentation on. The configure cases are skipped without cmake and a compiler of Clang or GCC."""
+"""cmake/BagiFuzz.cmake included alone into a throwaway project (which sanitizer lists and ENGINE_COVERAGE configure, with what flags), and the presets of
+CMakePresets.json that switch the instrumentation on. The configure cases are skipped without cmake and a compiler of Clang or GCC,
+those that configure a coverage build without clang++."""
 
 import json
 import shutil
@@ -66,6 +67,41 @@ def test_thread_on_windows_stops_the_configure(tmp_path):
     assert "thread has no runtime on Windows" in refusal(result)
 
 
+needs_clang = pytest.mark.skipif(shutil.which("cmake") is None or shutil.which("clang++") is None, reason="needs cmake and clang++")
+
+
+@needs_clang
+@pytest.mark.parametrize("sanitizers", ["", "address;undefined"], ids=["alone", "with-sanitizers"])
+def test_coverage_instruments_compile_and_link(tmp_path, sanitizers):
+    result = configure(tmp_path, ["-DENGINE_COVERAGE=ON", f"-DENGINE_SANITIZE={sanitizers}", "-DCMAKE_CXX_COMPILER=clang++"])
+    assert result.returncode == 0, result.stdout + result.stderr
+    compile_options = options(result.stdout, "compile")
+    link_options = options(result.stdout, "link")
+    profile = next(option for option in compile_options if option.startswith("-fprofile-instr-generate="))
+    # The path is baked into the binaries: a run needs no environment variable, and two processes do not write one file
+    assert profile.endswith("/build/profraw/%m_%p.profraw"), profile
+    assert profile in link_options
+    assert "-fcoverage-mapping" in compile_options
+    assert "-fcoverage-mapping" not in link_options
+
+
+@needs_compiler
+def test_no_coverage_without_the_option(tmp_path):
+    result = configure(tmp_path, [])
+    assert result.returncode == 0, result.stdout + result.stderr
+    flags = [*options(result.stdout, "compile"), *options(result.stdout, "link")]
+    assert not [flag for flag in flags if flag.startswith(("-fprofile", "-fcoverage"))]
+
+
+@needs_compiler
+@pytest.mark.parametrize("before_include, message", [
+    ("set(CMAKE_CXX_COMPILER_ID GNU)\n", "ENGINE_COVERAGE needs Clang"),
+    ("set(EMSCRIPTEN TRUE)\n", "no coverage on the web"),
+], ids=["gcc", "web"])
+def test_coverage_without_a_desktop_clang_stops_the_configure(tmp_path, before_include, message):
+    assert message in refusal(configure(tmp_path, ["-DENGINE_COVERAGE=ON"], before_include=before_include))
+
+
 def load_presets() -> dict:
     return json.loads(PRESETS_FILE.read_text(encoding="utf-8"))
 
@@ -118,3 +154,15 @@ def test_the_tsan_test_presets_name_a_suppressions_file_that_exists(name):
     prefix = "suppressions='${fileDir}/"
     assert options_text.startswith(prefix) and options_text.endswith("'"), options_text
     assert (ENGINE_ROOT / options_text.removeprefix(prefix).removesuffix("'")).is_file()
+
+
+def test_macos_coverage_is_a_debug_build_that_shares_no_cached_object():
+    presets = load_presets()
+    configure_preset = resolve(presets, "configurePresets", "macos-coverage")
+    assert configure_preset["generator"] == "Ninja"
+    variables = configure_preset["cacheVariables"]
+    assert variables["ENGINE_COVERAGE"] == "ON"
+    assert variables["CMAKE_BUILD_TYPE"] == "Debug"
+    # A hit from another checkout would map the coverage to that checkout's sources
+    assert variables["ENGINE_CCACHE"] == "OFF"
+    assert_preset_family(presets, "macos-coverage")
