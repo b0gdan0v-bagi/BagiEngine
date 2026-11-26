@@ -28,7 +28,7 @@ namespace BECore {
     using SceneProvider = MoveOnlyFunction<Scene*()>;
 
     /**
-     * @brief Registers the control API methods that reach the nodes of a scene by path (SceneNodePath.h): `scene_tree` and `scene_get`.
+     * @brief Registers the control API methods that reach the nodes of a scene by path (SceneNodePath.h): `scene_tree`, `scene_get` and `scene_set`.
      *
      * Shapes and codes: `.claude/rules/control-scene-api.md`. Registering twice replaces the handlers.
      */

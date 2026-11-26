@@ -21,7 +21,9 @@
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
+#include <Events/SceneEvents.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
+#include <Widgets/SceneEditor/SceneEditorWidget.h>
 #include <Widgets/SceneEditor/UINodeFileSession.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>
 
@@ -1304,6 +1306,43 @@ namespace BECore::Tests {
         ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
 
         EXPECT_EQ(XmlText(FindSceneElement(ConfigRoot(), "Main")), expected);
+    }
+
+    /// The unsaved mark of the Scene Editor itself, which needs the engine services
+    class SceneEditorUnsavedTest : public SceneEditorSaveTest {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        void TearDown() override {
+            EngineEnvironment::UseSceneManager({});
+            SceneEditorSaveTest::TearDown();
+        }
+    };
+
+    TEST_F(SceneEditorUnsavedTest, AControlWriteIsUnsavedForANodeOfTheActiveSceneThatSaveWrites) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes());
+        _manager->SetActiveScene("Game"_intern);
+        EngineEnvironment::UseSceneManager(_manager);
+        const IntrusivePtr<SceneEditorWidget> editor = New<SceneEditorWidget>();
+        XmlDeserializer config;
+        ASSERT_TRUE(editor->Initialize(config));
+        Scene& game = GetScene("Game");
+        SceneNode& board = Require(FindTopLevelNode(game, "Board"_intern));
+        const IntrusivePtr<SceneNode> spawned = game.CreateNode("Spawned"_intern, &board);
+        const IntrusivePtr<SceneNode> below = game.CreateNode("Below"_intern, spawned.Get());
+        below->SetGenerated(false);
+        Scene& menu = GetScene("Menu");
+
+        SceneEvents::SceneNodeEditedEvent::Emit(&game, spawned.Get());
+        SceneEvents::SceneNodeEditedEvent::Emit(&game, below.Get());
+        SceneEvents::SceneNodeEditedEvent::Emit(&menu, &Require(FindTopLevelNode(menu, "Title"_intern)));
+        EXPECT_FALSE(editor->GetInspected().dirty);
+
+        SceneEvents::SceneNodeEditedEvent::Emit(&game, &board);
+
+        EXPECT_TRUE(editor->GetInspected().dirty);
     }
 
     TEST_F(SceneEditorSaveTest, AnInvalidRootIsRejected) {

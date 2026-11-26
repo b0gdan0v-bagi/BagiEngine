@@ -10,6 +10,7 @@
 #include <BECore/Scene/SceneControlAnswers.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodePath.h>
+#include <Events/SceneEvents.h>
 
 namespace BECore {
 
@@ -81,6 +82,7 @@ namespace BECore {
         }
 
         struct ComponentTarget {
+            Scene* scene = nullptr;
             SceneNode* node = nullptr;
             IComponent* component = nullptr;
         };
@@ -97,7 +99,7 @@ namespace BECore {
             size_t left = request.index;
             for (const auto& component : (*node)->GetComponents()) {
                 if (component->GetTypeMeta().typeName == StringView(request.component) && left-- == 0) {
-                    return ComponentTarget{*node, component.Get()};
+                    return ComponentTarget{*scene, *node, component.Get()};
                 }
             }
             return Refused(SceneControlErrors::kComponentNotFound,
@@ -245,12 +247,60 @@ namespace BECore {
             call.Reply([&](JsonWriter& writer) { WriteFieldAnswer(writer, *request, *path, *value); });
         }
 
+        void HandleSceneSet(ControlCall& call, ControlService& service, SceneSource& source) {
+            const auto request = ReadComponentRequest(call.Params());
+            if (!request) {
+                call.Fail(request.error());
+                return;
+            }
+            const auto path = RequireParamString(call.Params(), "path");
+            if (!path) {
+                call.Fail(path.error());
+                return;
+            }
+            const auto value = ReadPropertyValue(call.Params());
+            if (!value) {
+                call.Fail(value.error());
+                return;
+            }
+            const auto target = RequireComponent(source, *request);
+            if (!target) {
+                call.Fail(target.error());
+                return;
+            }
+            const TypedRef component = TypedRef::Of(*target->component);
+            // A written PoolString is interned and the pool never frees: only a text it holds already costs it nothing
+            const String* text = std::get_if<String>(&*value);
+            const SetOptions options{.allowInterning = text != nullptr && PoolString::Find(StringView(*text)).has_value()};
+            if (const auto written = SetProperty(component, *path, *value, options); !written) {
+                if (written.error().code == PropertyErrorCode::interning) {
+                    call.Fail(MakePropertyControlError({PropertyErrorCode::interning, "the field takes only a text the program already knows, so that a client cannot grow the string pool"}));
+                } else {
+                    call.Fail(MakePropertyControlError(written.error()));
+                }
+                return;
+            }
+            // A path starts with the name of a field of the component: what a write succeeded through
+            const StringView field = StringView(*path).substr(0, StringView(*path).find_first_of(".["));
+            target->component->OnPropertyWritten(field);
+            // The answer is what the field holds now, which the component may have changed
+            const auto readBack = GetProperty(component, *path);
+            if (!readBack) {
+                call.Fail(ControlErrors::kInternalError, Format("the value was written but cannot be read back: {}", readBack.error().message));
+                return;
+            }
+            ReportNodeTouched(service, *target->node, target->component->GetTypeMeta().typeName, field);
+            SceneEvents::SceneNodeEditedEvent::Emit(target->scene, target->node);
+            call.Reply([&](JsonWriter& writer) { WriteFieldAnswer(writer, *request, *path, *readBack); });
+        }
+
     }  // namespace
 
     void RegisterSceneControl(ControlService& service, SceneProvider activeScene) {
         const IntrusivePtr<SceneSource> source = New<SceneSource>(std::move(activeScene));
         service.RegisterHandler("scene_tree", [source](ControlCall& call) { HandleSceneTree(call, *source); });
         service.RegisterHandler("scene_get", [source](ControlCall& call) { HandleSceneGet(call, *source); });
+        service.RegisterHandler("scene_set", [&service, source](ControlCall& call) { HandleSceneSet(call, service, *source); });
 
         const ControlParamInfo node{"node", "string", true, "The path of the node: names below the scene root joined by '/', '[n]' for a later namesake"};
         const ControlParamInfo component{"component", "string", true, "The type name of a component of the node"};
@@ -262,6 +312,12 @@ namespace BECore {
         service.DescribeMethod("scene_get", {"The fields of a component of a node, or one of them by its path",
                                              {node, component, index, {"path", "string", false, "The field, as in get_property; all fields without it"}},
                                              /*quiet=*/true});
+        service.DescribeMethod("scene_set", {"Writes a field of a component of a node, as an edit in the inspector does",
+                                             {node,
+                                              component,
+                                              index,
+                                              {"path", "string", true, "The field, as in set_property"},
+                                              {"value", "any", true, "A boolean, a number or a string; a name field takes only a text the program knows"}}});
     }
 
     void ReportNodeTouched(ControlService& service, const SceneNode& node, StringView component, StringView field) {
