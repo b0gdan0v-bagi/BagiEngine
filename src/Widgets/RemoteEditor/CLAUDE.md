@@ -10,6 +10,9 @@ Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the co
 | `RemoteFieldWalker` | the visit itself |
 | `RemotePendingWrites` | edits not yet seen in read data |
 | `RemoteSession` | the link: connects, keeps the data above current, sends the writes |
+| `RemoteSessionRegistry` | how a panel finds the editor's one session |
+| `RemoteSessionWidget` | owns that session ("The widget and the panel") |
+| `AttachPanelModel` | the Attach panel (`config/panels/AttachPanel.xml`) |
 
 `Load` of the three data classes rebuilds only for another text, so polling an unchanged scene costs a compare; a rebuild invalidates every pointer into the object. A walk allocates nothing in a steady state.
 
@@ -52,3 +55,9 @@ One unsent write per target, a newer value replacing it, and at most one in flig
 - A poll with nothing due, or with answers that repeat the last ones, allocates nothing in the session (the desktop transport allocates per message).
 
 Tests drive it over `tests/BECore/FakeControlEndpoint.h`: the real methods over a scene, behind a transport in memory that answers on `Serve()`.
+
+## The widget and the panel
+
+`RemoteSessionWidget` is listed in `config/WidgetsConfig.xml` right after `ImGuiWidget`: it polls the session with the steady clock (not the engine's, which a manual clock holds) before the panels read it. The session lasts as long as the widget, so a switch to Game mode detaches. `--attach=<address>` attaches at the start of the program only, not again at a switch back; a refused address is a logged error and the editor starts detached.
+
+A panel asks `RemoteSessionRegistry` for the session in each call and keeps no pointer. `AttachPanelModel` only starts and ends the link and words its state; with no widget in the list it says so. The panel is `view.attach` (Game menu, "Attach to a Running Game..."), its buttons `remote.attach` and `remote.detach`. A browser editor offers none of them (`EditorLayout/CLAUDE.md`, "The editor in a browser").

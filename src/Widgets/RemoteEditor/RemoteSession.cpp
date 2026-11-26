@@ -34,7 +34,7 @@ namespace BECore {
     UniquePtr<IRoomTransport> MakeRemoteTransport() {
 #if BE_WITH_REMOTE_CONTROL
         // A schema is longer than a message of the rooms; the server sends nothing longer than its own queue holds
-        return MakeUnique<NativeRoomTransport>(RoomTransportLimits{.maxMessageBytes = WebSocketServer::kMaxOutboxBytes});
+        return MakeUnique<NativeRoomTransport>(RoomTransportLimits{.maxMessageBytes = WebSocketServer::kMaxOutboxBytes}, "Remote editor");
 #else
         return nullptr;
 #endif

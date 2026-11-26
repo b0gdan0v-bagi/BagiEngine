@@ -104,6 +104,12 @@ namespace BECore {
         inline constexpr auto kViewFileChanges = "view.fileChanges"_intern;
         inline constexpr auto kViewSpriteLibrary = "view.spriteLibrary"_intern;
         inline constexpr auto kViewViewport = "view.viewport"_intern;
+        /// Shows and hides the Attach panel (editing a running game): the `command` of config/panels/AttachPanel.xml
+        inline constexpr auto kViewAttach = "view.attach"_intern;
+        /// The Attach panel's buttons (config/panels/AttachPanel.xml names them). AttachPanelModel owns them and runs them only while its panel is open; none takes an argument.
+        /// attach is also the address field's `submitCommand`
+        inline constexpr auto kRemoteAttach = "remote.attach"_intern;
+        inline constexpr auto kRemoteDetach = "remote.detach"_intern;
         /// The File changes panel's buttons (config/panels/FileChangesPanel.xml names them). FileChangesPanelModel owns them and runs them only while its panel is open;
         /// fileChanges.apply takes the virtual path of a pending row as the argument and does nothing without one
         inline constexpr auto kFileChangesRescan = "fileChanges.rescan"_intern;

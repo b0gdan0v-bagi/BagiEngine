@@ -23,8 +23,9 @@ namespace BECore {
     public:
         NativeRoomTransport() = default;
 
-        /// For a protocol that is not the rooms': @p limits take the place of the client's own, and the inbox holds at least one message of the longest kind
-        explicit NativeRoomTransport(const RoomTransportLimits& limits) : _limits(limits) {}
+        /// For a protocol that is not the rooms': @p limits take the place of the client's own, and the inbox holds at least one message of the longest kind.
+        /// @p logName begins the client's log lines
+        NativeRoomTransport(const RoomTransportLimits& limits, StringView logName) : _limits(limits), _logName(logName) {}
 
         [[nodiscard]] std::expected<void, String> Open(StringView url) override;
         bool SendText(StringView text) override;
@@ -34,6 +35,7 @@ namespace BECore {
 
     private:
         Optional<RoomTransportLimits> _limits;
+        String _logName = "Room client";
         WebSocketClient _client;
         /// Where the client's event is taken: a member, so its buffers keep their capacity
         WebSocketClientEvent _polled;

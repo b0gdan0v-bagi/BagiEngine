@@ -46,7 +46,7 @@ namespace BECore::Tests {
 
     TEST(EditorHostTest, ABrowserDoesNotOfferWhatNeedsAProcessAFileWatchOrAFileToTakeAway) {
         const ScopedEditorHost host(EditorHostKind::Browser);
-        for (const StringView id : {"view.generate", "artgen.run", "artgen.accept", "view.fileChanges", "fileChanges.apply", "profiler.trace"}) {
+        for (const StringView id : {"view.generate", "artgen.run", "artgen.accept", "view.fileChanges", "fileChanges.apply", "profiler.trace", "view.attach", "remote.attach", "remote.detach"}) {
             EXPECT_FALSE(IsEditorCommandAvailable(id)) << id.data();
         }
         for (const StringView id : {"scene.save", "view.profiler", "profiler.spikeClear", "file.quit", "view.console", "game.pause"}) {

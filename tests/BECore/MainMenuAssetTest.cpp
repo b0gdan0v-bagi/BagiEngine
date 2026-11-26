@@ -233,6 +233,13 @@ namespace BECore::Tests {
         }
     }
 
+    TEST_F(MainMenuAssetTest, TheGameMenuOpensTheAttachPanel) {
+        ASSERT_NO_FATAL_FAILURE(StartWidget());
+        ASSERT_NO_FATAL_FAILURE(Click("game"));
+        ASSERT_NO_FATAL_FAILURE(Click("attach"));
+        EXPECT_EQ(_commands.Count(EditorCommandIds::kViewAttach), 1u);
+    }
+
     TEST_F(MainMenuAssetTest, StepOneFrameIsDisabledWhileTheModelCannotStepAndRunsItsCommandOnceItCan) {
         ASSERT_NO_FATAL_FAILURE(StartWidget());
         ASSERT_NO_FATAL_FAILURE(Click("game"));
