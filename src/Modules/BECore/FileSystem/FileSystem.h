@@ -11,6 +11,13 @@ namespace BECore {
     [[nodiscard]] Path AbsoluteNormalPath(const Path& path);
 
     /**
+     * Whether @p virtualPath is a relative path that cannot leave the folder it is joined to: not empty, no NUL byte, a first name (up to
+     * the first `/` or `\`) that is neither empty nor `..`, and after it no name that is empty or `..` (one trailing separator is allowed).
+     * On Windows a name with `:` and a name of dots and spaces other than `.` are refused too. Lexical: links are followed by the OS.
+     */
+    [[nodiscard]] bool IsConfinedVirtualPath(StringView virtualPath);
+
+    /**
      * @brief Virtual paths over content roots: a mount point has several directories (layers), the last added wins
      *
      * Layers, roots and the lookup order: `FileSystem/CLAUDE.md`. Reached through CoreManager::GetFileSystem().
@@ -69,6 +76,12 @@ namespace BECore {
         /// Remove a mount point together with all its layers
         void Unmount(PoolString virtualPath);
 
+        /**
+         * @brief The existing file or folder @p virtualPath names, or an empty path
+         *
+         * An absolute path is returned as given when it exists. Any other path must pass `IsConfinedVirtualPath`: a refused one is looked up
+         * nowhere and logged as a warning.
+         */
         Path ResolvePath(StringView virtualPath) const;
 
         bool Exists(StringView virtualPath) const;
@@ -76,8 +89,8 @@ namespace BECore {
         /**
          * @brief Where @p virtualPath lies in the top layer of its mount point, whether anything is there or not
          *
-         * For a writer that is about to make it; reads and makes nothing. Empty when the first segment is no mount point (an
-         * absolute path too) or what follows it starts at a root (`config//x`) and so leaves the layer.
+         * For a writer that is about to make it; reads and makes nothing. Empty when the first segment is no mount point, and, with a
+         * warning, for a path that fails `IsConfinedVirtualPath` (an absolute one too).
          */
         [[nodiscard]] Path PathInTopLayer(StringView virtualPath) const;
 

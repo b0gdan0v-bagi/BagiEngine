@@ -314,6 +314,19 @@ namespace BECore::Tests {
         EXPECT_TRUE(_fake->AddedDirectories().empty());
     }
 
+    TEST_F(FileWatcherTest, AWatchOfAPathThatMayLeaveItsLayerIsInactive) {
+        MountLower();
+
+        // The folders these name exist, so only the rule for virtual paths refuses them
+        EXPECT_FALSE(_watcher.WatchFile("fwtest/../a.xml", Record()).IsActive());
+        EXPECT_FALSE(_watcher.WatchFolder("fwtest/..", Record()).IsActive());
+        EXPECT_FALSE(_watcher.WatchFolder("fwtest//", Record()).IsActive());
+        EXPECT_FALSE(_watcher.WatchFile(Format("fwtest/{}/a.xml", _upper.View()), Record()).IsActive());
+        // Trimmed of its backslash this is "fwtest/..", where a backslash is a name character too
+        EXPECT_FALSE(_watcher.WatchFolder("fwtest/..\\", Record()).IsActive());
+        EXPECT_TRUE(_fake->AddedDirectories().empty());
+    }
+
     TEST_F(FileWatcherTest, StopEndsEveryWatchAndShutsTheBackendDown) {
         MountLower();
         FileWatchHandle handle = _watcher.WatchFile("fwtest/a.xml", Record());

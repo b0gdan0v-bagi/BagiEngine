@@ -23,7 +23,8 @@ namespace BECore {
     /**
      * @brief Rml::FileInterface over FileSystem: a path is a virtual path (`assets/ui/menu.rml`), layered like every other file of the engine.
      *
-     * A file is read whole into memory when it is opened. A path that FileSystem cannot resolve is tried as a real path, so a test can point at a temporary directory.
+     * A file is read whole into memory when it is opened. A path that FileSystem cannot resolve is tried as a real path, so a test can point at a temporary directory;
+     * only an absolute path or one that passes `IsConfinedVirtualPath` gets that second try.
      *
      * Between BeginRecording() and EndRecording() it notes the stamp of every file it opens (taken before the file is read, so a write that comes after is seen as a change):
      * these are the files a document is made of.
