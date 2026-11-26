@@ -1026,14 +1026,12 @@ namespace BECore {
         };
 
         // =================================================================
-        // Ser::Save / Ser::Load wrappers (with default-skipping support)
+        // Ser::Save / Ser::Load wrappers
         // =================================================================
 
         template <typename T>
         void Save(ISerializer& s, const T& value, eastl::string_view key) {
             static_assert(HasDataAccessor<T>, "The type has no Ser::DataAccessor: it is not a reflected type (see Reflection/DataAccessor.h)");
-            if (s.IsSkipDefaults() && !DefaultChecker<T>::AlwaysFalse && DefaultChecker<T>::IsDefault(value))
-                return;
             DataAccessor<T>::Save(s, value, key);
         }
 

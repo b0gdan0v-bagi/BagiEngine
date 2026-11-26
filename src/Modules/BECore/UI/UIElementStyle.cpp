@@ -7,8 +7,7 @@ namespace BECore {
 
     namespace {
 
-        /// Writes a plain value (number, bool, enum) when it differs from the style's default. Not Ser::Save: that one also drops a value equal to T{} when the
-        /// serializer skips defaults, and `visible` false is exactly that while the default of the style is true.
+        /// Writes a plain value (number, bool, enum) when it differs from the style's default
         template <typename T>
         void SaveIfChanged(ISerializer& s, const T& value, const T& defaultValue, StringView key) {
             if (!(value == defaultValue)) {

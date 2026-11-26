@@ -411,7 +411,6 @@ namespace BECore {
             if constexpr (std::is_void_v<Result>) {
                 call();
             } else {
-                // Not `Ser::Save`: a serializer that skips defaults would leave a default result out
                 Ser::DataAccessor<std::remove_cvref_t<Result>>::Save(result, call(), kMethodResultKey);
             }
             return true;

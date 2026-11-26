@@ -77,12 +77,10 @@ namespace BECore {
     public:
         virtual ~ISerializer() = default;
 
-        bool IsSkipDefaults() const {
-            return _skipDefaults;
+        [[deprecated("every field is written; remove the call")]] bool IsSkipDefaults() const {
+            return false;
         }
-        void SetSkipDefaults(bool skip) {
-            _skipDefaults = skip;
-        }
+        [[deprecated("every field is written; remove the call")]] void SetSkipDefaults(bool /*skip*/) {}
 
         // =================================================================
         // Primitive types serialization (as child elements)
@@ -131,9 +129,6 @@ namespace BECore {
         ISerializer& operator=(const ISerializer&) = default;
         ISerializer(ISerializer&&) = default;
         ISerializer& operator=(ISerializer&&) = default;
-
-    private:
-        bool _skipDefaults = false;
     };
 
 }  // namespace BECore
