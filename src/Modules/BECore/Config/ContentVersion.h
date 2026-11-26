@@ -21,7 +21,7 @@ namespace BECore {
      */
 
     /// Bumped by every change that needs a migration step (`tools/migrate/CLAUDE.md`)
-    inline constexpr uint32_t kContentVersion = 5;
+    inline constexpr uint32_t kContentVersion = 6;
 
     /// What a file without `contentVersion` is
     inline constexpr uint32_t kUnversionedContentVersion = 1;

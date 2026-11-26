@@ -166,7 +166,7 @@ def test_a_failed_file_stays_byte_for_byte_and_the_run_exits_2(before, tmp_path,
     assert "config/nodes/X.xml:" in captured.err
 
 
-def test_the_tool_runs_step_4_on_a_file_stamped_4_stamps_it_5_and_a_second_run_finds_nothing(tmp_path, capsys):
+def test_the_tool_runs_step_4_on_a_file_stamped_4_and_a_second_run_finds_nothing(tmp_path, capsys):
     game = tmp_path / "game"
     (game / "config").mkdir(parents=True)
     target = game / "config" / "SceneConfig.xml"
@@ -174,7 +174,8 @@ def test_the_tool_runs_step_4_on_a_file_stamped_4_stamps_it_5_and_a_second_run_f
     assert migrate.main([str(game)]) == 0
     out = capsys.readouterr().out
     assert "config/SceneConfig.xml: 4 to 5 (ui-text-image-dropdown-to-components): 3 elements" in out and "to 4 (" not in out
-    assert target.read_text(encoding="utf-8") == read("scene_config", "after").replace('contentVersion="4"', 'contentVersion="5"', 1)
+    latest = migrate.build_registry().latest(migrate.ENGINE_TRACK)
+    assert target.read_text(encoding="utf-8") == read("scene_config", "after").replace('contentVersion="4"', f'contentVersion="{latest}"', 1)
     assert migrate.main([str(game)]) == 0
     assert "SceneConfig.xml" not in capsys.readouterr().out
     assert migrate.main([str(game), "--check"]) == 0

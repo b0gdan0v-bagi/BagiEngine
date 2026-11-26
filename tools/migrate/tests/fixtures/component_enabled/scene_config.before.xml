@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<SceneManager contentVersion="5">
+  <scenes>
+    <scene type="Scene" name="Main" viewWidth="1280" viewHeight="720">
+      <nodes>
+        <node name="Box">
+          <components>
+            <component type="TransformComponent" x="10" y="20" width="64" height="64" enabled="false" />
+            <component type="QuadRendererComponent" enabled="0">
+              <color r="255" g="0" b="0" a="255" />
+            </component>
+            <component enabled="true" type="ClickableComponent" actionName="Open" />
+            <component type="ClipRectComponent" enabled="1" />
+          </components>
+          <children>
+            <node name="Label">
+              <components>
+                <component
+                  type="TextComponent"
+                  enabled="False"
+                  text="Hello" />
+              </components>
+            </node>
+          </children>
+        </node>
+        <node ref="nodes/Crate" name="SecondCrate">
+          <components>
+            <component type="QuadRendererComponent" enabled="no" />
+          </components>
+        </node>
+        <node name="Hud">
+          <components>
+            <component type="UICanvasComponent" enabled="false">
+              <canvas referenceWidth="1280" referenceHeight="720">
+                <elements>
+                  <element type="UIElement" name="Title" width="200" height="40">
+                    <components>
+                      <component type="UITextComponent" text="Title" enabled="false" />
+                    </components>
+                  </element>
+                </elements>
+              </canvas>
+            </component>
+          </components>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>
