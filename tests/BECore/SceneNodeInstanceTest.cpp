@@ -1,4 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Components/ClickableComponent.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
@@ -7,6 +8,7 @@
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodeInstance.h>
+#include <BECore/SceneEditorSaveTypes.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -14,6 +16,7 @@
 #include <Common/SceneTestSupport.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
+#include <Generated/SceneEditorSaveTypes.gen.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -332,6 +335,34 @@ namespace BECore::Tests {
         Require(node.GetComponent<TransformComponent>())._rotation = 45.0f;
 
         ExpectBuilt(node, R"(<node ref="nodes/Box"><components><component type="TransformComponent" rotation="45"/></components></node>)");
+    }
+
+    TEST_F(SceneNodeInstanceTest, AnInstanceWhoseOwnFieldCannotBeOverriddenIsRefused) {
+        WriteFile(_dir / "nodes" / "Tagged.xml", R"(<node type="TaggedTestNode" name="Tagged" tag="3"/>)");
+        SceneNode& node = LoadNode(R"(<node ref="nodes/Tagged"/>)");
+        ExpectBuilt(node, R"(<node ref="nodes/Tagged"/>)");
+
+        Require(node.Cast<TaggedTestNode>()).tag = 4;
+
+        String result;
+        String reason;
+        EXPECT_FALSE(Build(node, result, reason));
+        EXPECT_NE(reason.find("'tag'"), String::npos) << reason.c_str();
+        EXPECT_EQ(result, "<nodes/>");
+    }
+
+    TEST_F(SceneNodeInstanceTest, AnUnknownNodeTypeIsAnErrorAndAPlainNode) {
+        pugi::xml_document document;
+        ASSERT_TRUE(document.load_string(R"(<node type="NoSuchNode" name="N" layer="2"/>)"));
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromXmlNode(XmlNode{document.document_element()}));
+
+        const IntrusivePtr<SceneNode> node = DeserializeNode(deserializer, "unknown type");
+
+        EXPECT_TRUE(deserializer.HasErrors());
+        ASSERT_TRUE(node);
+        EXPECT_EQ(node->GetTypeMeta(), SceneNode::GetStaticTypeMeta());
+        EXPECT_EQ(node->GetLayer(), 2);
     }
 
     TEST_F(SceneNodeInstanceTest, TheResultIsAppendedAfterWhatIsThere) {

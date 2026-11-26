@@ -4,6 +4,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/SchemaHash.h>
+#include <BECore/Reflection/TypeInfo.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Values/ValueLinkScope.h>
@@ -28,6 +29,9 @@ namespace BECore {
      */
     using DescribeFunction = String(const ContentCooker& cooker, IDeserializer& reader);
 
+    /// A new object of a cooker's root type, in the state the cook reads a file into
+    using MakeRootFunction = OwnedObject();
+
     /**
      * @brief How one config file is cooked: the file of the stem @p stem is read as the reflected type @p rootType
      *
@@ -38,7 +42,8 @@ namespace BECore {
         StringView rootType;  ///< The type the file is stamped with: its layout hash is what a loader checks the file against
         CookFunction* cook = nullptr;
         DescribeFunction* describe = nullptr;
-        bool strictValues = false;  ///< The cook reads the XML with `SetStrictValues(true)`: a malformed number or boolean fails the cook, as the loader's own strict read would
+        bool strictValues = false;             ///< The cook reads the XML with `SetStrictValues(true)`: a malformed number or boolean fails the cook, as the loader's own strict read would
+        MakeRootFunction* makeRoot = nullptr;  ///< Null for a hand-written cooker: it names no reflected object that the file reads as
     };
 
     /**
@@ -87,6 +92,11 @@ namespace BECore {
             } else {
                 return MakeUnique<T>();
             }
+        }
+
+        template <typename T>
+        OwnedObject MakeRootObject() {
+            return OwnedObject::Adopt(MakeConfigObject<T>());
         }
 
         template <typename T>
@@ -139,7 +149,7 @@ namespace BECore {
     public:
         /// @p stem is a literal; @p strictValues as `ContentCooker::strictValues`
         explicit CookableConfig(StringView stem, bool strictValues = false, ContentCookRegistry& registry = ContentCookRegistry::GetInstance()) {
-            registry.Register({stem, T::GetStaticTypeName(), &CookDetail::CookReflected<T>, &CookDetail::DescribeReflected<T>, strictValues});
+            registry.Register({stem, T::GetStaticTypeName(), &CookDetail::CookReflected<T>, &CookDetail::DescribeReflected<T>, strictValues, &CookDetail::MakeRootObject<T>});
         }
     };
 

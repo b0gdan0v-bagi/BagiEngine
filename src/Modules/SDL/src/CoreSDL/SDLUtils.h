@@ -28,7 +28,7 @@ namespace BECore {
          */
         [[nodiscard]] static SDL_WindowFlags ApplyStartOptions(SDL_WindowFlags flags, const WindowStartOptions& options);
 
-        /// Every flag name `GetWindowFlagValue` knows, sorted: the one list the editor offers and the loader reads.
+        /// Every flag name `GetWindowFlagValue` knows, sorted.
         static Vector<String> GetWindowFlagNames();
     };
 

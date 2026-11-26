@@ -105,7 +105,7 @@ namespace BECore {
         sceneEl.append_attribute("type").set_value(scene.GetTypeMeta().typeName.data());
 
         // The attributes of the serialized scene and its other children (`viewVariants`) are taken. Its <nodes> child is left behind
-        // on purpose: Serialize writes every node with `enabled` and `type` and every layer, and the file keeps its shorter shape (AppendNodeElement)
+        // on purpose: Serialize writes every node with its `type` and every default, and the file keeps its shorter shape (AppendNodeElement)
         XmlSerializer s;
         scene.Serialize(s);
         const auto& srcRoot = s.GetRootNode();

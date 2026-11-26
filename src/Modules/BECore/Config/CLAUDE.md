@@ -69,7 +69,7 @@ A list of factory objects (widgets, runtime tests, log sinks, assert handlers) i
 
 1. Drop `config/<Name>.xml`; it is picked up by name at the next start.
 2. Consume it with `GetConfig("<Name>"_intern)` or `MakeFromConfig<T>("<Name>")`; the names the engine reads from more than one place are `ConfigNames` (`ConfigNames.h`).
-3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorPanelModel::Initialize` (`src/Widgets/ConfigEditor/`): `RegisterEnum<E>` for an enum, `RegisterFactoryTypes<Base>` for a `type` attribute resolved by `AbstractFactory<Base>`. The options must be the strings the loader accepts (for a factory, the class names), so take them from the factory or the enum, never from a copy.
+3. For typed editing in the Config Editor (enum combos, `type` lists, number fields), register the type the file reads as with `CookableConfig<T>` (`../Cook/CLAUDE.md`, "Registering a config"); without it the editor shows the file as text (`src/Widgets/ConfigEditor/CLAUDE.md`).
 
 ## Content version
 

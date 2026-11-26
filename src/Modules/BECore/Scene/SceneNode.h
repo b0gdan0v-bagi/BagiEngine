@@ -33,7 +33,7 @@ namespace BECore {
     }
 
     class SceneNode : public RefCounted {
-        BE_CLASS(SceneNode, FACTORY_BASE, ELEMENT = node)
+        BE_CLASS(SceneNode, FACTORY_BASE, ELEMENT = node, REGISTER_SELF)
     public:
         BE_POOLED_SINGLE_THREAD(SceneNode)
 

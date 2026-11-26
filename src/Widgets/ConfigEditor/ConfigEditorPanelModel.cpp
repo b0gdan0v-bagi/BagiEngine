@@ -1,13 +1,8 @@
 #include "ConfigEditorPanelModel.h"
 
 #include <BECore/Config/ConfigManager.h>
-#include <BECore/Config/ConfigNames.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Logger/ILogSink.h>
-#include <CoreSDL/SDLUtils.h>
 #include <Generated/ConfigEditorPanelModel.gen.hpp>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
-#include <Widgets/ConfigEditor/FieldInspectors.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorDocumentRows.h>
 
@@ -20,16 +15,10 @@ namespace BECore {
     }  // namespace
 
     void ConfigEditorPanelModel::Initialize() {
-        auto& schema = ConfigFieldSchema::GetInstance();
-
-        schema.RegisterFactoryTypes<ILogSink>(ConfigNames::logger, "sink/@type");
-        schema.RegisterEnum<LogLevel>(ConfigNames::logger, "sink/@minLevel");
-        schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags", SDLUtils::GetWindowFlagNames());
-
         Subscribe<ConfigEvents::ConfigChangedEvent, &ConfigEditorPanelModel::OnConfigChanged>(this);
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         // The closure keeps `this` only: it is called inside the frame and the handle ends with the model
-        _treeSlot = PanelSlots::GetInstance().Register(kTreeSlotName, [this] { DrawTree(); });
+        _treeSlot = PanelSlots::GetInstance().Register(kTreeSlotName, [this] { DrawConfig(); });
     }
 
     TypedRef ConfigEditorPanelModel::GetObject() {
@@ -40,9 +29,13 @@ namespace BECore {
         return _configManager != nullptr ? *_configManager : CoreManager::GetConfigManager();
     }
 
+    bool ConfigEditorPanelModel::HasUnsavedEdits() const {
+        return !_staged.IsEmpty() || _unwritten || (_document && _document->IsDirty());
+    }
+
     void ConfigEditorPanelModel::AppendDocuments(Vector<EditorDocumentState>& out) {
         if (!_selectedConfig.Empty()) {
-            out.push_back(MakeConfigDocument(Manager(), EditorDocumentKind::Config, _selectedConfig.ToStringView(), !_staged.IsEmpty(), _selectedConfig));
+            out.push_back(MakeConfigDocument(Manager(), EditorDocumentKind::Config, _selectedConfig.ToStringView(), HasUnsavedEdits(), _selectedConfig));
         }
     }
 
@@ -56,8 +49,8 @@ namespace BECore {
         if (changedConfig != _selectedConfig) {
             return false;
         }
-        const bool hadEdits = !_staged.IsEmpty();
-        ClearTransientState();  // the inspectors' state may point into the replaced document too
+        const bool hadEdits = HasUnsavedEdits();
+        ResetEdits();
         _showChangedOnDisk = _showChangedOnDisk || hadEdits;
         _viewDirty = true;
         return hadEdits;
@@ -66,7 +59,7 @@ namespace BECore {
     void ConfigEditorPanelModel::SelectConfig(PoolString name) {
         _selectedConfig = name;
         _showChangedOnDisk = false;
-        ClearTransientState();
+        ResetEdits();
         _viewDirty = true;
     }
 
@@ -75,14 +68,15 @@ namespace BECore {
         Manager().ReloadConfig(_selectedConfig);
         _ownWrite = false;
         _showChangedOnDisk = false;
-        ClearTransientState();
+        ResetEdits();
         _viewDirty = true;
     }
 
     void ConfigEditorPanelModel::SaveSelectedConfig() {
         ConfigManager& configManager = Manager();
-        const XmlNode rootNode = configManager.GetConfig(_selectedConfig);
-        if (rootNode) {
+        if (_document) {
+            _document->Apply();
+        } else if (const XmlNode rootNode = configManager.GetConfig(_selectedConfig)) {
             _staged.ApplyTo(rootNode.GetPugiNode());
         }
         _ownWrite = true;
@@ -90,20 +84,41 @@ namespace BECore {
         _ownWrite = false;
         if (saved) {
             _showChangedOnDisk = false;
-            ClearTransientState();
+            ResetEdits();
+        } else {
+            // Applying left the document clean, but the file does not hold its edits
+            _unwritten = _document.has_value();
         }
         _viewDirty = true;
     }
 
-    void ConfigEditorPanelModel::ClearTransientState() {
+    void ConfigEditorPanelModel::ResetEdits() {
         _staged.Clear();
-        ClearFieldInspectorState();
+        _tree.Clear();
+        _unwritten = false;
+        OpenDocument();
     }
 
-    void ConfigEditorPanelModel::DrawTree() {
-        const XmlNode root = Manager().GetConfig(_selectedConfig);
-        if (root) {
-            _tree.Draw(root, _selectedConfig);
+    void ConfigEditorPanelModel::OpenDocument() {
+        _document.reset();
+        _textModeNote.clear();
+        if (_selectedConfig.Empty()) {
+            return;
+        }
+        auto opened = ReflectedConfigDocument::Open(_selectedConfig.ToStringView(), Manager().GetConfig(_selectedConfig).GetPugiNode());
+        if (opened) {
+            _document.emplace(std::move(*opened));
+            _objects.Prepare(*_document);
+        } else {
+            _textModeNote = Format("Edited as text: {}", opened.error());
+        }
+    }
+
+    void ConfigEditorPanelModel::DrawConfig() {
+        if (_document) {
+            _objects.Draw(*_document);
+        } else if (const XmlNode root = Manager().GetConfig(_selectedConfig)) {
+            _tree.Draw(root);
         }
     }
 
@@ -114,7 +129,7 @@ namespace BECore {
                 continue;
             }
             if (config != _selectedConfig) {
-                if (_staged.IsEmpty()) {
+                if (!HasUnsavedEdits()) {
                     SelectConfig(config);
                 } else {
                     _pendingSwitchConfig = config;
@@ -130,7 +145,7 @@ namespace BECore {
         if (_selectedConfig.Empty()) {
             return;
         }
-        if (_staged.IsEmpty()) {
+        if (!HasUnsavedEdits()) {
             ReloadSelectedConfig();
         } else {
             _showReloadConfirm = true;
@@ -141,8 +156,8 @@ namespace BECore {
     bool ConfigEditorPanelModel::RunCommand(StringView id, StringView argument) {
         const auto is = [id](PoolString command) { return id == command.ToStringView(); };
         if (is(EditorCommandIds::kConfigSave)) {
-            // The rule of the Save button: a config is selected and has staged changes
-            if (!_selectedConfig.Empty() && !_staged.IsEmpty()) {
+            // The rule of the Save button: a config is selected and has unsaved edits
+            if (!_selectedConfig.Empty() && HasUnsavedEdits()) {
                 SaveSelectedConfig();
             }
         } else if (is(EditorCommandIds::kConfigEditorSelect)) {
@@ -174,11 +189,11 @@ namespace BECore {
     }
 
     void ConfigEditorPanelModel::Update() {
-        // The inspectors stage edits while the tree is drawn, and the document under the selection may be replaced: both are read each frame, cheaply
+        // The drawers edit while the slot is drawn, and the document under the selection may be replaced: both are read each frame, cheaply
         ConfigManager& configManager = Manager();
         const size_t configCount = configManager.GetConfigCount();
         const bool configPresent = !_selectedConfig.Empty() && static_cast<bool>(configManager.GetConfig(_selectedConfig));
-        if (_viewDirty || configCount != _builtConfigCount || configPresent != _builtConfigPresent || _staged.IsEmpty() == _view.hasStaged) {
+        if (_viewDirty || configCount != _builtConfigCount || configPresent != _builtConfigPresent || HasUnsavedEdits() != _view.hasStaged) {
             RebuildView();
         }
     }
@@ -208,10 +223,12 @@ namespace BECore {
             }
         }
         _view.hasPath = !_view.filePathText.empty();
-        _view.hasStaged = !_staged.IsEmpty();
+        _view.hasStaged = HasUnsavedEdits();
         _view.changedOnDisk = hasSelection && _showChangedOnDisk;
         _view.showTree = hasSelection && _builtConfigPresent;
         _view.configMissing = hasSelection && !_builtConfigPresent;
+        _view.textMode = _view.showTree && !_document;
+        _view.textModeNote = _textModeNote;
         _view.reloadConfirmOpen = hasSelection && _showReloadConfirm;
         _view.switchConfirmOpen = hasSelection && _showSwitchConfirm;
         _view.reloadMessage = Format("You have unsaved changes in '{}'.", _selectedConfig.ToStringView());

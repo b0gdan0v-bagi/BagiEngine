@@ -4,7 +4,7 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/Logger/FileSink.h>
 #include <BECore/Logger/LoggerManager.h>
-#include <BECore/Logger/OutputSink.h>
+#include <BECore/Reflection/TypeRegistry.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -13,18 +13,14 @@
 #include <Events/ConfigEvents.h>
 #include <Events/SubscriptionHolder.h>
 #include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
+#include <Widgets/ConfigEditor/ReflectedConfigDocument.h>
 #include <Widgets/ConfigEditor/StagedChanges.h>
 
 namespace BECore::Tests {
 
     namespace {
 
-        const PoolString kLoggerConfig = "LoggerConfig"_intern;
-        constexpr StringView kSinkTypePath = "sink/@type";
-
-        // The key the Config Editor gives the `type` attribute of the first sink: "<nodePath>@<attrName>"
-        constexpr StringView kFirstSinkTypeKey = "root/sinks/sink[0]@type";
+        constexpr StringView kLoggerStem = "LoggerConfig";
 
         constexpr int kOutputPriority = 7;
         constexpr int kFilePriority = 100;
@@ -52,10 +48,6 @@ namespace BECore::Tests {
             return count;
         }
 
-        bool Contains(const Vector<String>& options, StringView value) {
-            return eastl::find(options.begin(), options.end(), value) != options.end();
-        }
-
         String TypeNameOf(const ILogSink& sink) {
             const StringView name = sink.GetTypeMeta().typeName;
             return String{name.data(), name.size()};
@@ -64,9 +56,9 @@ namespace BECore::Tests {
     }  // namespace
 
     /**
-     * The save path of the Config Editor without ImGui: the edit goes into StagedChanges, ApplyTo writes it into the
-     * pugixml DOM, XmlDocument::SaveToFile writes the file. The test does that on its own copy of the logger config in
-     * a temporary directory. ConfigManager::SaveConfig is not used: it would overwrite config/LoggerConfig.xml.
+     * The save path of the Config Editor without ImGui, on its own copy of the logger config in a temporary directory: the
+     * edit goes into the config's ReflectedConfigDocument, Apply writes it into the pugixml DOM, XmlDocument::SaveToFile
+     * writes the file. ConfigManager::SaveConfig is not used: it would overwrite config/LoggerConfig.xml.
      */
     class ConfigEditorSaveTest : public ::testing::Test {
     protected:
@@ -81,8 +73,6 @@ namespace BECore::Tests {
         }
 
         void TearDown() override {
-            // The registry is a process-wide singleton: drop what a case registered
-            ConfigFieldSchema::DestroyInstance();
             RemoveDirectory(_dir);
         }
 
@@ -129,28 +119,33 @@ namespace BECore::Tests {
             return document.LoadFromString(StringView{xml.c_str(), xml.size()});
         }
 
-        /// Plays the Save button on a fresh copy of the config: stages @p type as the `type` of the first sink, applies it to
-        /// the DOM, saves the file and reads it back into @p saved. @p edited receives the document as it was saved.
-        bool SaveEditedType(StringView type, XmlDocument& edited, XmlDeserializer& saved) const {
-            if (!LoadTemplate(edited)) {
-                return false;
+        /// The types the editor offers for a sink
+        Vector<const TypeInfo*> OfferedSinkTypes() const {
+            XmlDocument dom;
+            if (!LoadTemplate(dom)) {
+                return {};
             }
-            const Vector<pugi::xml_node> sinks = SinkElements(edited);
-            if (sinks.empty()) {
-                return false;
+            const auto document = ReflectedConfigDocument::Open(kLoggerStem, dom.GetRoot().GetPugiNode());
+            if (!document || document->GetLists().size() != 1) {
+                return {};
             }
-
-            StagedChanges staged;
-            staged.Set(String{kFirstSinkTypeKey.data(), kFirstSinkTypeKey.size()}, sinks.front().attribute("type"), type);
-            staged.ApplyTo(edited.GetRoot().GetPugiNode());
-
-            return edited.SaveToFile(SavedPath()) && saved.LoadFromFile(SavedPath());
+            return document->GetLists().front().types;
         }
 
-        FieldHint OfferedSinkTypes() const {
-            ConfigFieldSchema& schema = ConfigFieldSchema::GetInstance();
-            schema.RegisterFactoryTypes<ILogSink>(kLoggerConfig, kSinkTypePath);
-            return schema.Resolve(kLoggerConfig, kSinkTypePath, "OutputSink");
+        /// Makes the first sink of @p dom a @p type the way the editor does, and applies it to the DOM
+        static bool ChangeFirstSink(XmlDocument& dom, const TypeInfo& type) {
+            auto document = ReflectedConfigDocument::Open(kLoggerStem, dom.GetRoot().GetPugiNode());
+            if (!document || !document->ChangeType(0, 0, type)) {
+                return false;
+            }
+            document->Apply();
+            return true;
+        }
+
+        /// Plays an edit and the Save button on a fresh copy of the config, then reads the saved file into @p saved
+        bool SaveEditedType(const TypeInfo& type, XmlDeserializer& saved) const {
+            XmlDocument edited;
+            return LoadTemplate(edited) && ChangeFirstSink(edited, type) && edited.SaveToFile(SavedPath()) && saved.LoadFromFile(SavedPath());
         }
 
     private:
@@ -158,21 +153,22 @@ namespace BECore::Tests {
     };
 
     TEST_F(ConfigEditorSaveTest, EveryOfferedSinkTypeSurvivesEditSaveReload) {
-        const FieldHint offered = OfferedSinkTypes();
-        ASSERT_EQ(offered.type, FieldType::Enum);
-        ASSERT_FALSE(offered.options.empty());
+        const Vector<const TypeInfo*> offered = OfferedSinkTypes();
+        for (const StringView engineSink : {StringView{"ConsoleSink"}, StringView{"FileSink"}, StringView{"LogHistorySink"}, StringView{"OutputSink"}}) {
+            EXPECT_TRUE(eastl::any_of(offered.begin(), offered.end(), [engineSink](const TypeInfo* type) { return type->Name() == engineSink; })) << String(engineSink).c_str();
+        }
 
         XmlDocument original;
         ASSERT_TRUE(LoadTemplate(original));
         const size_t enabledSinks = CountEnabledSinks(original);
         ASSERT_EQ(enabledSinks, 2u);
 
-        for (const String& option : offered.options) {
+        for (const TypeInfo* type : offered) {
+            const String option(type->Name());
             SCOPED_TRACE(option.c_str());
 
-            XmlDocument edited;
             XmlDeserializer saved;
-            ASSERT_TRUE(SaveEditedType(StringView{option.c_str(), option.size()}, edited, saved));
+            ASSERT_TRUE(SaveEditedType(*type, saved));
 
             // The manager goes out of scope with the iteration: its sinks subscribe to the global LogEvent
             const auto manager = New<LoggerManager>();
@@ -192,20 +188,20 @@ namespace BECore::Tests {
     }
 
     TEST_F(ConfigEditorSaveTest, TheSavedFileKeepsTheOtherAttributes) {
-        const FieldHint offered = OfferedSinkTypes();
-        ASSERT_FALSE(offered.options.empty());
+        const Vector<const TypeInfo*> offered = OfferedSinkTypes();
+        ASSERT_FALSE(offered.empty());
 
         XmlDocument original;
         ASSERT_TRUE(LoadTemplate(original));
         const Vector<pugi::xml_node> originalSinks = SinkElements(original);
         ASSERT_EQ(originalSinks.size(), 3u);
 
-        for (const String& option : offered.options) {
+        for (const TypeInfo* type : offered) {
+            const String option(type->Name());
             SCOPED_TRACE(option.c_str());
 
-            XmlDocument edited;
             XmlDeserializer saved;
-            ASSERT_TRUE(SaveEditedType(StringView{option.c_str(), option.size()}, edited, saved));
+            ASSERT_TRUE(SaveEditedType(*type, saved));
 
             XmlDocument reloaded;
             ASSERT_TRUE(reloaded.LoadFromFile(SavedPath()));
@@ -248,62 +244,20 @@ namespace BECore::Tests {
         }
     }
 
-    /// The shape of LoadTemplate in a DOM that keeps its comments, as a config document does once it is loaded with them
-    TEST_F(ConfigEditorSaveTest, AStagedEditOfACommentedDocumentKeepsEveryComment) {
-        pugi::xml_document document;
-        ASSERT_TRUE(document.load_string(R"(<root>
-    <!-- Logger Sinks Configuration -->
-    <sinks>
-        <!-- Output sink runs first -->
-        <sink type="OutputSink" priority="7" />
-        <!-- Console sink disabled -->
-        <sink type="ConsoleSink" enabled="false" />
-        <!-- File sink runs after Output -->
-        <sink type="FileSink" priority="100" />
-    </sinks>
-</root>)",
-                                         pugi::parse_full));
-
-        // The keys the editor gives the sinks count the elements only: a comment is no sink[0]
-        const XmlNode sinks = XmlNode(document.document_element()).GetChild("sinks");
-        Vector<String> keys;
-        Vector<pugi::xml_node> elements;
-        for (const XmlNode sink : sinks.Children()) {
-            keys.push_back(Format("root/sinks/sink[{}]@type", keys.size()));
-            elements.push_back(sink.GetPugiNode());
-        }
-        ASSERT_EQ(keys.size(), 3u);
-        EXPECT_EQ(keys[0], kFirstSinkTypeKey);
-
-        StagedChanges staged;
-        staged.Set(keys[0], elements[0].attribute("type"), "FileSink");
-        staged.ApplyTo(document.document_element());
-
-        EXPECT_STREQ(elements[0].attribute("type").value(), "FileSink");
-        size_t comments = 0;
-        for (const pugi::xml_node node : document.document_element().child("sinks").children()) {
-            comments += node.type() == pugi::node_comment ? 1u : 0u;
-        }
-        EXPECT_EQ(comments, 3u);
-        EXPECT_EQ(document.document_element().first_child().type(), pugi::node_comment);
-    }
-
     TEST_F(ConfigEditorSaveTest, SavingOverTheFileOfAPersonChangesTheEditedLineOnly) {
         const String original = TemplateText();
         WriteFile(SavedPath(), original);
 
         XmlDocument document;
         ASSERT_TRUE(document.LoadFromFile(SavedPath()));
-        const Vector<pugi::xml_node> sinks = SinkElements(document);
-        ASSERT_FALSE(sinks.empty());
-        StagedChanges staged;
-        staged.Set(String{kFirstSinkTypeKey.data(), kFirstSinkTypeKey.size()}, sinks.front().attribute("type"), "FileSink");
-        staged.ApplyTo(document.GetRoot().GetPugiNode());
+        const TypeInfo* fileSink = TypeRegistry::GetInstance().Find("FileSink");
+        ASSERT_NE(fileSink, nullptr);
+        ASSERT_TRUE(ChangeFirstSink(document, *fileSink));
         ASSERT_TRUE(document.SaveToFile(SavedPath()));
 
         const String saved = ReadFile(SavedPath());
 
-        // The comments, the four-space indent and the blank lines of the file are the ones it had: one line differs
+        // The comments, the disabled sink, the four-space indent and the blank lines of the file are the ones it had: one line differs
         String expected = original;
         const size_t at = expected.find("type=\"OutputSink\"");
         ASSERT_NE(at, String::npos);
@@ -337,28 +291,6 @@ namespace BECore::Tests {
         staged.ForEach([&](const String&, const String&) { ++entries; });
         EXPECT_EQ(entries, 1u);
         EXPECT_EQ(*staged.Get(key), "ConsoleSink");
-    }
-
-    TEST_F(ConfigEditorSaveTest, AValueOutsideTheDropdownIsReportedOnReload) {
-        const FieldHint offered = OfferedSinkTypes();
-        // A name that is not a class name: it is not offered, and the loader cannot resolve it
-        ASSERT_FALSE(Contains(offered.options, "Console"));
-
-        XmlDocument edited;
-        XmlDeserializer saved;
-        ASSERT_TRUE(SaveEditedType("Console", edited, saved));
-
-        const auto manager = New<LoggerManager>();
-        manager->Deserialize(saved);
-
-        ASSERT_TRUE(saved.HasErrors());
-        ASSERT_EQ(saved.GetErrors().size(), 1u);
-        EXPECT_EQ(saved.GetErrors()[0].path, "sinks[0].type");
-        EXPECT_EQ(saved.GetErrors()[0].errorMessage, "Unknown factory type: 'Console'");
-
-        EXPECT_EQ(manager->GetSink<OutputSink>(), nullptr);
-        ASSERT_EQ(manager->GetSinks().size(), 1u);
-        EXPECT_EQ(TypeNameOf(*manager->GetSinks()[0]), "FileSink");
     }
 
     namespace {
@@ -416,7 +348,6 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _model.Reset();
-            ConfigFieldSchema::DestroyInstance();
             RemoveDirectory(_dir);
         }
 

@@ -471,6 +471,15 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(report.ToText(), "reference")) << report.ToText().c_str();
     }
 
+    TEST_F(ContentCookTest, ANodeFileOfASceneNodeSubclassFailsTheCook) {
+        _tree.Write(0, "nodes/Tagged.xml", R"(<node contentVersion="5" type="TaggedTestNode" name="Tagged"/>)");
+
+        const CookReport report = Cook();
+        EXPECT_FALSE(report.Ok());
+        EXPECT_TRUE(Contains(report.ToText(), "TaggedTestNode")) << report.ToText().c_str();
+        EXPECT_FALSE(PathExists(_tree.OutConfig(0) / "nodes" / "Tagged.bin"));
+    }
+
     TEST_F(ContentCookTest, ANodeFileOfTheLowerLayerThatTheUpperOneShadowsIsCookedInItsOwnLayerOnly) {
         _tree.Write(0, "nodes/Hud.xml", HudNodeText("Low"));
         _tree.Write(1, "nodes/Hud.xml", HudNodeText("Up"));
@@ -497,6 +506,21 @@ namespace BECore::Tests {
         }
 
     }  // namespace
+
+    TEST(ContentCookRegistryTest, EveryReflectedCookerMakesItsRootObjectAndAHandWrittenOneNone) {
+        size_t made = 0;
+        for (const ContentCooker& cooker : ContentCookRegistry::GetInstance().All()) {
+            if (cooker.stem == "TextureLibrary") {
+                EXPECT_EQ(cooker.makeRoot, nullptr);
+                continue;
+            }
+            ASSERT_NE(cooker.makeRoot, nullptr) << String(cooker.stem).c_str();
+            const OwnedObject object = cooker.makeRoot();
+            EXPECT_TRUE(object) << String(cooker.stem).c_str();
+            ++made;
+        }
+        EXPECT_GT(made, 0u);
+    }
 
     TEST(CookCommandTest, NoCookFlagIsNoRequestAndForeignFlagsAreIgnored) {
         const auto none = Parse({"--control", "--cooked=1", "--cook-verifier"});

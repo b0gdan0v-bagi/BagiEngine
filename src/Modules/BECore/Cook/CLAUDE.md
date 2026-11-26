@@ -16,7 +16,7 @@ Every `.bin` starts with a content stamp: the root type and its **layout hash** 
 
 What a file becomes is decided by its root element, then by the registry:
 
-1. Root `SceneManager`: node references expanded as `LoadSceneManager` expands them (the node loader sees every layer), then stamped `SceneManager`. A node file, root `node`: stamped `SceneNode`; it keeps its relative path (`nodes/X.bin`) because `<node ref="nodes/X"/>` finds it there.
+1. Root `SceneManager`: node references expanded as `LoadSceneManager` expands them (the node loader sees every layer), then stamped `SceneManager`. A node file, root `node`: stamped `SceneNode` (a node of a subclass fails: the binary root carries no type); it keeps its relative path (`nodes/X.bin`) because `<node ref="nodes/X"/>` finds it there.
 2. A stem with a cooker in `ContentCookRegistry`: read under `DiagnosticsMode::Error`, written with the stamp of its root type.
 3. Anything else is **copied** byte for byte and listed `Copied`.
 
@@ -26,7 +26,7 @@ The engine's copied files, each with its reason (checked by `ContentCookEngineCo
 
 ## Registering a config
 
-A cooker is `{stem, rootType, cook, describe}`. A reflected type read as `MakeFromConfig<T>` reads it needs one line at namespace scope in a `.cpp` of its module: `CookableConfig<T> registrar{"Stem"};` (a plain struct is accepted too). `CookableConfigWith` takes the functions of a hand-written reader (`TextureLibrary`, root type `TextureLibraryFile`). The registry is a function-local static, so a namespace-scope registrar is safe; a second registration of a stem is an `ASSERT`. The engine's registrars are `EngineCookables.cpp` and `Games/GamesConfig.cpp`; a game registers its own beside its type. **A registration claims that the file reads the same from XML and from `.bin`**: register only when the verify below passes; a type whose `Serialize` is not the inverse of its read stays copied.
+A cooker is `{stem, rootType, cook, describe}` and, for a reflected type, `makeRoot` (an empty object of it, held by an `OwnedObject`): with it the Config Editor can edit the file as typed objects (`Widgets/ConfigEditor`), so the one registration gives both. A reflected type read as `MakeFromConfig<T>` reads it needs one line at namespace scope in a `.cpp` of its module: `CookableConfig<T> registrar{"Stem"};` (a plain struct is accepted too). `CookableConfigWith` takes the functions of a hand-written reader (`TextureLibrary`, root type `TextureLibraryFile`). The registry is a function-local static, so a namespace-scope registrar is safe; a second registration of a stem is an `ASSERT`. The engine's registrars are `EngineCookables.cpp` and `Games/GamesConfig.cpp`; a game registers its own beside its type. **A registration claims that the file reads the same from XML and from `.bin`**: register only when the verify below passes; a type whose `Serialize` is not the inverse of its read stays copied.
 
 ## VerifyCooked
 
