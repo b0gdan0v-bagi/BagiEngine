@@ -46,6 +46,17 @@ The names from below the scene root down to the node, joined by `/`: `Board/Cell
 - A component rebuilds what it keeps from a field there: the sprite renderer its texture (`spriteId`, `texturePath`; a `texturePath` written while `spriteId` is set is replaced by the sprite's, which the answer shows), the audio source its clip (`clip`), a canvas its layout (`elements`). A component of a game overrides it for what it caches.
 - **Only at the next load** (after a save): a canvas's `source` and `variants`, and anything a component reads in `Initialize()` or `OnAttached()` alone.
 
+## Who reports a touch
+
+Besides `scene_set`, a call of a client reports (`control-activity.md`):
+
+| Method | Node | Component, field |
+|--------|------|------------------|
+| `ui_click` that found its element | the canvas's | the canvas component, no field; also when something above took the press |
+| `artgen_accept` with `useOnSelected` that succeeded | the selected one | the sprite renderer's `spriteId`, or the audio source's `clip` |
+
+The Generate panel's own buttons record nothing, `artgen_accept_set` touches no node, and `click_at`, `wheel_at`, `imgui_input` and a game's `set_property` / `call_method` report none.
+
 ## Codes
 
 `no_scene`, `node_not_found`, `component_not_found`, `invalid_params` (a missing or mistyped param, a bad node path, `index` or `limit` out of range) and for `path` and `value` the codes of the by-name methods (`invalid_path`, `not_found`, `not_a_value`, `interning`, ...).

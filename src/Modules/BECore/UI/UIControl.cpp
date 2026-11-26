@@ -475,7 +475,7 @@ namespace BECore {
             static constexpr auto target = "target"_intern;
         };
 
-        void HandleUIClick(ControlCall& call) {
+        void HandleUIClick(ControlCall& call, ControlService& service) {
             const JsonView params = call.Params();
             const auto nameText = GetParamString(params, "name");
             if (!nameText || nameText->empty()) {
@@ -519,6 +519,7 @@ namespace BECore {
                 const float outputX = pressX * resolved.transform.scale + resolved.transform.offsetX;
                 const float outputY = pressY * resolved.transform.scale + resolved.transform.offsetY;
                 const PoolString canvasNode = target.canvasNode;
+                const uint64_t canvasNodeId = target.canvas->GetNode().GetRuntimeId();
                 // A composed button answers as a button; a disabled one emits nothing, so the answer carries nothing
                 const auto* clicker = target.element->GetComponent<UIInputClicker>();
                 const bool clickerEmits = clicker != nullptr && !target.element->IsDisabled();
@@ -547,6 +548,7 @@ namespace BECore {
                 const bool consumed = click.consumed;
                 // A handler above the element (a scene target, a modal canvas) that took the press left the element nothing to emit
                 const bool takenAbove = consumed && click.taker != canvasHandler;
+                service.ReportTouch(canvasNodeId, target.canvas->GetTypeMeta().typeName);
 
                 UIClickAnswer answer;
                 answer.clicked = TextView(StringView(nameText->c_str(), nameText->size()));
@@ -589,7 +591,7 @@ namespace BECore {
 
     void RegisterUIControl(ControlService& service) {
         service.RegisterHandler("ui_tree", HandleUITree);
-        service.RegisterHandler("ui_click", HandleUIClick);
+        service.RegisterHandler("ui_click", [&service](ControlCall& call) { HandleUIClick(call, service); });
 
         service.DescribeMethod("ui_tree", {"The canvases and elements of the active scene with their rects and the validator's findings", {}, /*quiet=*/true});
         service.DescribeMethod("ui_click", {"Clicks a visible button, toggle or slider by its name as a person would",
