@@ -18,6 +18,7 @@
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/AssetPanelWidget.h>
+#include <Widgets/RemoteEditor/RemoteSaveLine.h>
 #include <Widgets/RemoteEditor/RemoteSessionRegistry.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneEditorWidget.h>
@@ -34,6 +35,8 @@ namespace BECore::Tests {
         constexpr float kFrameSeconds = 1.0f / 60.0f;
         constexpr int kSettleFrames = 6;
         constexpr int kSteadyFrames = 10;
+        /// Frames enough for the session's first retry to fall due and to read the program again
+        constexpr int kReconnectFrames = 100;
         /// Long enough per frame for the session's reads to fall due within a few frames, short of its first retry
         constexpr std::chrono::milliseconds kFrameStep{100};
         constexpr StringView kToolbarAsset = "SceneEditorToolbarPanel";
@@ -329,7 +332,100 @@ namespace BECore::Tests {
 
         EXPECT_EQ(TextOf(LocalNode()), localText);
         EXPECT_EQ(LocalNode().GetLayer(), kLayer);
+        _session->Detach();
+        Settle();
+        EXPECT_FALSE(_editor->GetInspected().dirty) << "an edit of the attached program marked the local scene";
+    }
+
+    TEST_F(RemoteSceneEditorTest, SaveIsOfferedForAnEditAndWritesTheFileOfTheProgramAndNoneOfTheEditor) {
+        _endpoint->ServeSceneSave(_dir / "program");
+        const String loaded = _endpoint->SavedConfig();
+        const String local = ReadFile(_sceneFile);
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        ASSERT_NO_FATAL_FAILURE(SelectInHierarchy("Board"));
+
         EXPECT_FALSE(_editor->GetInspected().dirty);
+        ASSERT_NO_FATAL_FAILURE(ClickAt(FindText("Save")));
+        Run(EditorCommandIds::kSceneSave);
+        EXPECT_EQ(_session->GetSaveStatus().state, RemoteSaveState::None) << "a save with nothing to save";
+
+        ASSERT_NO_FATAL_FAILURE(ClickAt(Find("+")));
+        ASSERT_TRUE(_editor->GetInspected().dirty);
+        ASSERT_NO_FATAL_FAILURE(ClickAt(FindText("Save")));
+        ASSERT_EQ(_session->GetSaveStatus().state, RemoteSaveState::Saved) << _session->GetSaveStatus().error.message.c_str();
+        EXPECT_NE(_endpoint->SavedConfig(), loaded);
+        EXPECT_FALSE(_editor->GetInspected().dirty);
+
+        // The command of Ctrl+S, in the frame of the edit
+        const String saved = _endpoint->SavedConfig();
+        _editor->SetInspectedLayer(kLayer + 5);
+        Run(EditorCommandIds::kSceneSave);
+        EXPECT_NE(_endpoint->SavedConfig(), saved);
+        EXPECT_NE(_endpoint->SavedConfig().find(Format(R"(layer="{}")", kLayer + 5)), String::npos) << _endpoint->SavedConfig().c_str();
+        EXPECT_FALSE(_editor->GetInspected().dirty);
+        EXPECT_EQ(ReadFile(_sceneFile), local);
+    }
+
+    TEST_F(RemoteSceneEditorTest, ALostLinkOffersNoSaveAndTheEditIsUnsavedStillWhenItIsBack) {
+        _endpoint->ServeSceneSave(_dir / "program");
+        const String loaded = _endpoint->SavedConfig();
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        ASSERT_NO_FATAL_FAILURE(SelectInHierarchy("Board"));
+        ASSERT_NO_FATAL_FAILURE(ClickAt(Find("+")));
+
+        _endpoint->SetRefusing(true);
+        _endpoint->Drop();
+        Settle();
+        ASSERT_EQ(_session->GetState(), RemoteSessionState::Lost);
+        EXPECT_FALSE(_editor->GetInspected().dirty);
+        ASSERT_NO_FATAL_FAILURE(ClickAt(FindText("Save")));
+        Run(EditorCommandIds::kSceneSave);
+        EXPECT_EQ(_session->GetSaveStatus().state, RemoteSaveState::None);
+
+        _endpoint->SetRefusing(false);
+        for (int i = 0; i < kReconnectFrames && _session->GetState() != RemoteSessionState::Attached; ++i) {
+            Frame();
+        }
+        ASSERT_EQ(_session->GetState(), RemoteSessionState::Attached);
+        Settle();
+        EXPECT_TRUE(_editor->GetInspected().dirty);
+        EXPECT_EQ(_endpoint->SavedConfig(), loaded);
+    }
+
+    TEST(RemoteSaveLineTest, TheSentenceTellsWhereTheSceneWentAndWarnsWhenItIsNotKnownToBeSaved) {
+        RemoteSaveLine line;
+        RemoteSaveStatus status;
+        EXPECT_FALSE(line.Update(status));
+        EXPECT_TRUE(line.GetText().empty());
+
+        status.state = RemoteSaveState::Saved;
+        status.file = "/game/config/SceneConfig.xml";
+        ASSERT_TRUE(line.Update(status));
+        EXPECT_FALSE(line.Update(status));
+        EXPECT_FALSE(line.IsTroubled());
+        EXPECT_NE(line.GetText().find(status.file), String::npos);
+        EXPECT_EQ(line.GetText().find("lost on reload"), String::npos);
+        EXPECT_EQ(line.GetText().find("log"), String::npos);
+
+        status.persistent = false;
+        status.notes = 2;
+        ASSERT_TRUE(line.Update(status));
+        EXPECT_NE(line.GetText().find("lost on reload"), String::npos);
+        EXPECT_NE(line.GetText().find("2, see its log"), String::npos);
+
+        status = {};
+        status.state = RemoteSaveState::Refused;
+        status.error.code = "save_failed";
+        status.error.message = "the disk is full";
+        ASSERT_TRUE(line.Update(status));
+        EXPECT_TRUE(line.IsTroubled());
+        EXPECT_NE(line.GetText().find(status.error.message), String::npos);
+
+        status = {};
+        status.state = RemoteSaveState::Unconfirmed;
+        ASSERT_TRUE(line.Update(status));
+        EXPECT_TRUE(line.IsTroubled());
+        EXPECT_FALSE(line.GetText().empty());
     }
 
     TEST_F(RemoteSceneEditorTest, ALostLinkTakesNoEditAndKeepsWhatWasRead) {

@@ -22,6 +22,10 @@ namespace BECore {
             return selection ? session.GetTree().Find(*selection) : nullptr;
         }
 
+        bool HasUnsavedEdits(RemoteSession& session) {
+            return session.GetState() == RemoteSessionState::Attached && (session.HasUnsavedWrites() || session.GetWrites().HasUnanswered());
+        }
+
         /// The components of a node of the tree: the headers from the tree, the fields from what was last read
         class RemoteComponentList final : public IComponentListSource {
         public:
@@ -76,6 +80,7 @@ namespace BECore {
     void RemoteSceneView::Reset() {
         _hierarchy = HierarchyState{};
         _link.Reset();
+        _save.Reset();
         _announced.reset();
         _reveal.reset();
     }
@@ -98,6 +103,7 @@ namespace BECore {
     void RemoteSceneView::Draw(RemoteSession& session, StringView toolbarAsset, StringView inspectorAsset) {
         PanelBarsRegistry::Draw(toolbarAsset);
         DrawLink(session);
+        DrawSave(session);
 
         // A link that is not up takes no click, a selection included: the components of another node could not be read
         ImGui::BeginDisabled(session.GetState() != RemoteSessionState::Attached);
@@ -138,6 +144,7 @@ namespace BECore {
         inspected.nameReadOnly = true;
         inspected.layerReadOnly = session.GetState() != RemoteSessionState::Attached;
         inspected.structureReadOnly = true;
+        inspected.dirty = HasUnsavedEdits(session);
         if (const Optional<RemoteRefusal>& refusal = session.GetWrites().GetRefusal()) {
             inspected.refusalCode = refusal->code;
             inspected.refusalMessage = refusal->message;
@@ -156,6 +163,12 @@ namespace BECore {
         return inspected;
     }
 
+    void RemoteSceneView::Save(RemoteSession& session) {
+        if (HasUnsavedEdits(session)) {
+            session.RequestSave();
+        }
+    }
+
     void RemoteSceneView::SetLayer(RemoteSession& session, int32_t layer) {
         const RemoteTreeNode* const node = SelectedNode(session);
         if (node != nullptr && session.GetState() == RemoteSessionState::Attached) {
@@ -168,6 +181,17 @@ namespace BECore {
         const bool troubled = _link.IsTroubled();
         ImGui::PushStyleColor(ImGuiCol_Text, troubled ? GetImGuiPalette().warning : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::TextWrapped("%s %s", troubled ? ICON_LC_TRIANGLE_ALERT : ICON_LC_PLUG, _link.GetText().c_str());
+        ImGui::PopStyleColor();
+    }
+
+    void RemoteSceneView::DrawSave(const RemoteSession& session) {
+        _save.Update(session.GetSaveStatus());
+        if (_save.GetText().empty()) {
+            return;
+        }
+        const bool troubled = _save.IsTroubled();
+        ImGui::PushStyleColor(ImGuiCol_Text, troubled ? GetImGuiPalette().warning : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrapped("%s %s", troubled ? ICON_LC_TRIANGLE_ALERT : ICON_LC_SAVE, _save.GetText().c_str());
         ImGui::PopStyleColor();
     }
 

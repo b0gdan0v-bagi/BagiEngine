@@ -23,7 +23,7 @@ namespace BECore {
         int32_t layer = 0;
         /// The node file the node is an instance of; empty for a node written in the scene file
         PoolString sourceRef;
-        /// The active scene has unsaved changes
+        /// The scene shown has unsaved changes: the active one, or in remote mode the attached program's
         bool dirty = false;
         /// The code and the message of the last edit an attached program refused; empty when it refused none
         StringView refusalCode;

@@ -17,6 +17,7 @@ Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the co
 | `RemoteLinkStatus` | the state of the link in a sentence |
 | `RemoteSceneView` | the Scene Editor's content in remote mode ("The Scene Editor") |
 | `RemoteViewportView` | the Viewport's content in remote mode ("The Viewport") |
+| `RemoteSaveLine` | what became of the last save in a sentence |
 | `AttachPanelModel` | the Attach panel (`config/panels/AttachPanel.xml`) |
 | `RemoteHierarchySource` | the session's tree and selection as the hierarchy panel reads them: read-only, rows named to ImGui by path (`.claude/rules/widgets-module.md`, "Scene Editor Conventions") |
 
@@ -94,6 +95,7 @@ What remote mode does to the local editor: `.claude/rules/widgets-module.md`, "S
 - Typed texts are released once a frame while no ImGui item is active, also while the window is closed.
 - The bars ask `ISceneEditorHost`, which answers from `Inspect`: the name is the tree's (never interned), the layer the pending one while there is one, and the last refusal is shown under the inspector's title.
 - A component header comes from the tree and its fields from the last read, matched by type and namesake, since the tree may be the newer of the two.
+- Save (the toolbar's button and `scene.save`) is `RequestSave`, offered while `Attached` with an edit on its way or accepted and not saved, so a save right after an edit is not lost. A `RemoteSaveLine` under the link's line says where the program wrote, that a page's memory is lost on reload, or warns. The editor writes nothing, and `editor_state` still reports only its local documents.
 - A node picked in the Viewport is taken from the session also while the window is closed, which it opens; the next draw of the hierarchy opens the rows above it and scrolls to it once, and clears a filter that hides it.
 
 Tests: `RemoteSceneEditorTest` runs the widget and its shipped bars over the fake endpoint, beside a local scene that must not change.

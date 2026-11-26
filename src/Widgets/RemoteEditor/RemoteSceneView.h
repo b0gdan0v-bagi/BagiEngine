@@ -2,6 +2,7 @@
 
 #include <BECore/Types/Types.h>
 #include <Widgets/RemoteEditor/RemoteLinkStatus.h>
+#include <Widgets/RemoteEditor/RemoteSaveLine.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/ISceneEditorHost.h>
 #include <cstdint>
@@ -27,7 +28,7 @@ namespace BECore {
         static void ReleaseTypedText(RemoteSession& session);
 
         /**
-         * @brief The content of the Scene Editor's window: the toolbar bar, the link's line, the hierarchy and the inspector. Needs a frame in progress
+         * @brief The content of the Scene Editor's window: the toolbar bar, the lines on the link and on the last save, the hierarchy and the inspector. Needs a frame in progress
          *
          * A change of the selection sends `SceneNodeSelectedEvent` with no node, so that the bars ask their host again in the same frame.
          */
@@ -36,18 +37,24 @@ namespace BECore {
         /// The component list of the selected node, with no remove button; nothing without a selection
         static void DrawComponents(RemoteSession& session);
 
-        /// What `ISceneEditorHost::GetInspected` answers in remote mode: only the layer takes an edit, and only while `Attached`. Never unsaved
+        /// What `ISceneEditorHost::GetInspected` answers in remote mode: only the layer takes an edit, and only while `Attached`, the only state in which
+        /// it says unsaved: an edit of this session is on its way, or was accepted and no save is known to hold it
         [[nodiscard]] static SceneInspectedNode Inspect(RemoteSession& session);
+
+        /// `scene.save` in remote mode: asks the session to have the program save, when Inspect() says unsaved
+        static void Save(RemoteSession& session);
 
         /// Edits the layer of the selected node while `Attached`
         static void SetLayer(RemoteSession& session, int32_t layer);
 
     private:
         void DrawLink(const RemoteSession& session);
+        void DrawSave(const RemoteSession& session);
         void AnnounceSelection(const RemoteSession& session);
 
         HierarchyState _hierarchy;
         RemoteLinkStatus _link;
+        RemoteSaveLine _save;
         /// The selection last told by AnnounceSelection()
         Optional<String> _announced;
         /// The path the hierarchy has yet to show

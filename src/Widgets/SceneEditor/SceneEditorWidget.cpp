@@ -158,8 +158,12 @@ namespace BECore {
             _open = !_open;
         }
         // The same rule as the Save button: nothing to save while there are no unsaved changes
-        if (event.commandId == EditorCommandIds::kSceneSave && _isDirty && FindRemote() == nullptr) {
-            SaveScene();
+        if (event.commandId == EditorCommandIds::kSceneSave) {
+            if (RemoteSession* const remote = FindRemote()) {
+                RemoteSceneView::Save(*remote);
+            } else if (_isDirty) {
+                SaveScene();
+            }
         }
         if (event.commandId == EditorCommandIds::kSceneEditorAddComponent) {
             SceneNode* const node = FindInspected();

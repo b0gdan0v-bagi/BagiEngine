@@ -37,7 +37,7 @@ namespace BECore {
      * and its components on the right. Edits apply at once, without staging. It is the `ISceneEditorHost` of the models of its panel assets.
      *
      * In remote mode (`RemoteSessionRegistry::GetRemote`) it shows the attached program through `RemoteSceneView`, holds no node of the local scene,
-     * ignores what would edit or save it, and keeps its unsaved flag for the return.
+     * ignores what would edit or save it (`scene.save` saves the attached program's scene, by the program), and keeps its unsaved flag for the return.
      */
     class SceneEditorWidget : public IWidget, public ISceneEditorHost {
         BE_CLASS(SceneEditorWidget)
@@ -81,7 +81,7 @@ namespace BECore {
         void ResetUISelection();
 
         /**
-         * @brief Runs `scene.save` (only with unsaved changes, so the Save button's command does nothing while it is disabled) and `sceneEditor.addComponent`
+         * @brief Runs `scene.save` (only with unsaved changes, so the Save button's command does nothing while it is disabled; in remote mode the program's) and `sceneEditor.addComponent`
          * (asks for the Add Component dialog of the selected node, when it is alive and not locked)
          */
         void OnCommand(const EditorCommandEvent& event);
