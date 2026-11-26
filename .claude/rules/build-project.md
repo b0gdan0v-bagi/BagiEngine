@@ -9,7 +9,7 @@ paths:
 
 # Build, format and include facts of this repository
 
-Read by the skills `build`, `clang-format` and `strip-pch-includes` (they read it by path: it is not loaded into every session). The three skills are the same text in the engine repository and in a game that carries the engine as the submodule `engine/` (symlinks into `engine/.claude/skills/`); what differs between the repositories is here. A game has a file of the same name with the same headings and fields: this file is its template. The todo areas are in `todo-project.md`, not here.
+Read by the skills `build`, `clang-format` and `strip-pch-includes`, and for its section "Presets by purpose" by `qa` and `perf` (they read it by path: it is not loaded into every session). The first three skills are the same text in the engine repository and in a game that carries the engine as the submodule `engine/` (symlinks into `engine/.claude/skills/`); what differs between the repositories is here. A game has a file of the same name with the same headings and fields: this file is its template. The todo areas are in `todo-project.md`, not here.
 
 ## Terms
 
@@ -205,6 +205,19 @@ Engine, for explaining to the user. With the CMake Tools extension (`cmake.useCM
 - **CMake: Select Configure Preset** and **CMake: Select Build Preset** pick the preset (also in the status bar).
 - **CMake: Configure** / **CMake: Delete Cache and Reconfigure** are the configure step of the `build` skill. **Build** (F7) is the build step.
 - F5 runs a debug configuration; its `program` is `${command:cmake.launchTargetPath}` and it builds first via the `CMake: build` task.
+
+## Presets by purpose
+
+Read by the skills `build`, `qa` and `perf` when a request names what the build is for and not a preset. A game fills every row, `none` where it has no preset for it. The commands of the three diagnostic rows are in "Tests", the paragraphs "Sanitizers", "Thread sanitizer" and "Coverage".
+
+| Row | Purpose | When it is used | Engine value, macOS | Engine value, Windows |
+|-----|---------|-----------------|---------------------|-----------------------|
+| everyday | build, test and play a change | no purpose is named: the `build` skill's default, the loop, the reviewer, `/qa` | `macos-debug` | `windows-clang-debug` |
+| release measure | numbers that are compared with a baseline | `/perf` (the field `preset` of `perf-project.md`) | `macos-release` | `windows-clang-release` |
+| profile | where the time and the allocations go (a trace, the profiler) | a profile build, `/perf-investigate` (the field `profilePreset`) | `macos-profile` | `windows-clang-profile-editor` |
+| sanitizer | memory errors and undefined behaviour | "under the sanitizers", AddressSanitizer, UBSan | `macos-asan` | `windows-clang-asan` |
+| threads | data races | "under the thread sanitizer", a race | `macos-tsan` | none |
+| coverage | which code the tests or a session ran | "coverage" | `macos-coverage` | none |
 
 ## Format
 

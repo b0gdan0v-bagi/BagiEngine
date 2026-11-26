@@ -20,6 +20,7 @@ Read `.claude/rules/build-project.md` of the repository you run in before anythi
 | `configure` | Force a configure step. |
 | `tests` | Build only `<tests>` (`--target <tests>`) instead of everything. Run the tests afterwards only when asked: `ctest --preset <p>`. |
 | `<preset name>` | Use this preset as-is; skip auto-selection. |
+| a purpose ("under the thread sanitizer", "coverage", "profile build") | The preset of that row of "Presets by purpose" (step 1). |
 
 ## Presets
 
@@ -52,6 +53,7 @@ Run everything from the root of `<R>`.
 
 1. **Pick the preset.**
    - An explicit preset name wins.
+   - Otherwise a request by purpose ("under the thread sanitizer", "under the sanitizers", "coverage", "profile build"): the preset of that row for this OS in the section "Presets by purpose" of the rules file (such a request is enough where the table below says "only by explicit name"); a game whose file lacks the section takes the row from the engine's file (`<engine>/.claude/rules/build-project.md`). A row that says `none` for this OS: say so and stop.
    - Otherwise by host (`uname -s`): Darwin -> `macos-<type>`. Windows (`MINGW*`, `MSYS*`, `CYGWIN*`, or PowerShell) -> `windows-clang-<type>`. The MSVC presets (`windows-msvc-*`, `windows-vs2022-*`) are fallbacks, taken only by explicit name: MSVC's debug information (`/Zi`, one `mspdbsrv` for every build on the machine, a PCH shared by all modules) breaks parallel builds now and then with `LNK1103` / `LNK4020 ... pdb is corrupted` / `C1090`, and a second run passes; clang has no `cl` PDB and no `mspdbsrv`.
    - Check it against `cmake --list-presets=build`. If it is missing (for example on Linux, where no presets exist yet), stop and show the list. Do not invent a preset or fall back to `cmake -B build`.
    - **Windows Ninja presets (`windows-clang-*`, `windows-msvc-*`) need the x64 Visual Studio environment** for configure **and** build (the resource compiler `rc` and its SDK includes, the archiver `lib`, for MSVC `cl` and `link`). They do not load it (`vs-env` is the `external` strategy; CMake Tools loads it, a plain shell does not). Run every `cmake --preset` and `cmake --build --preset` of these presets through `<py> <engine>/CI/scripts/vs_env.py` (it finds Visual Studio with vswhere, runs `vcvarsall.bat x64`, extends `PATH` behind the caller's and runs the command; inside a developer prompt it just runs it): `python engine/CI/scripts/vs_env.py cmake --build --preset windows-clang-debug` in a game, `python CI/scripts/vs_env.py ...` in the engine. Without it configure stops with `No CMAKE_RC_COMPILER could be found` and the build with `CMAKE_AR-NOTFOUND`. `ctest` needs no environment. The `windows-vs2022-*` presets need none either.
