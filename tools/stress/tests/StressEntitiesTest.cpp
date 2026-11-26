@@ -1,4 +1,6 @@
 #include <BECore/Animation/TweenManager.h>
+#include <Common/AllocCheck.h>
+#include <Common/PoolCounters.h>
 #include <Stress/Components/StressEntitiesComponent.h>
 #include <Stress/StressNames.h>
 #include <gtest/gtest.h>
@@ -10,8 +12,10 @@ namespace BECore::Stress::Tests {
 
         constexpr uint32_t kCount = 200;
         constexpr float kStep = 1.0f / 32.0f;
-        /// A step that is longer than any orbit: every tween ends in it
+        /// A step that is longer than any orbit: every tween passes the end of a turn in it
         constexpr float kLongerThanAnOrbit = kOrbitMaxSeconds + 1.0f;
+        /// Frames of kStep in the longest turn
+        constexpr int kFramesOfALongestTurn = static_cast<int>(kOrbitMaxSeconds / kStep);
 
         TweenManager& Tweens() {
             return CoreManager::GetTweens();
@@ -43,6 +47,19 @@ namespace BECore::Stress::Tests {
 
         TransformComponent& Transform(size_t index) const {
             return *Field().GetChildren()[index]->GetComponent<TransformComponent>();
+        }
+
+        void ExpectOneStepToMoveEveryNode(size_t count) const {
+            Vector<Pair<float, float>> before;
+            for (size_t i = 0; i < count; ++i) {
+                before.emplace_back(Transform(i)._x, Transform(i)._y);
+            }
+
+            Tweens().Advance(kStep);
+
+            for (size_t i = 0; i < count; ++i) {
+                EXPECT_TRUE(Transform(i)._x != before[i].first || Transform(i)._y != before[i].second) << i;
+            }
         }
     };
 
@@ -101,16 +118,8 @@ namespace BECore::Stress::Tests {
         StartEntities(50);
         Update();
         Tweens().Advance(kStep);  // the first step writes the positions
-        Vector<Pair<float, float>> before;
-        for (size_t i = 0; i < 50; ++i) {
-            before.emplace_back(Transform(i)._x, Transform(i)._y);
-        }
 
-        Tweens().Advance(kStep);
-
-        for (size_t i = 0; i < 50; ++i) {
-            EXPECT_TRUE(Transform(i)._x != before[i].first || Transform(i)._y != before[i].second) << i;
-        }
+        ExpectOneStepToMoveEveryNode(50);
     }
 
     TEST_F(StressEntitiesTest, ANodeStaysOnItsOrbit) {
@@ -128,42 +137,34 @@ namespace BECore::Stress::Tests {
         }
     }
 
-    TEST_F(StressEntitiesTest, ATweenThatEndsStartsAgain) {
+    TEST_F(StressEntitiesTest, TheNodesKeepMovingAfterTheirTurnsEnd) {
         StartEntities(50);
         Update();
 
-        Tweens().Advance(kLongerThanAnOrbit);  // every tween completes; its onComplete starts the next one
-        EXPECT_EQ(Tweens().GetActiveCount(), 50u);
-
-        for (int frame = 0; frame < 400; ++frame) {  // many frames: every tween ends at least once more, one frame per link
+        Tweens().Advance(kLongerThanAnOrbit);
+        for (int frame = 0; frame < 2 * kFramesOfALongestTurn; ++frame) {
             Tweens().Advance(kStep);
-            ASSERT_EQ(Tweens().GetActiveCount(), 50u) << "frame " << frame;
         }
-        EXPECT_EQ(Field().GetChildren().size(), 50u);
+        ASSERT_EQ(Tweens().GetActiveCount(), 50u);
+        ExpectOneStepToMoveEveryNode(50);
     }
 
-    TEST_F(StressEntitiesTest, TheRestartsOfAFreshFieldAreSpreadFromItsFirstFrames) {
-        constexpr uint32_t kNodes = 2000;
-        constexpr uint32_t kFrames = 120;  // 2 s: the shortest orbit, so no node has yet ended a full first turn
-        StartEntities(kNodes);
-        Update();
-        ASSERT_EQ(Component().GetRestartCount(), 0u);
+    TEST_F(StressEntitiesTest, ASteadyFrameStartsNoTweenAndAllocatesNothing) {
+        StartEntities();
+        const auto frames = [this](int count) {
+            for (int frame = 0; frame < count; ++frame) {
+                Update();
+                Tweens().Advance(kStep);
+            }
+        };
+        frames(3 * kFramesOfALongestTurn);  // the field and every list of the frame have their size
+        const uint64_t handles = BECore::Tests::PoolAllocations("TweenHandle");
+        ASSERT_NE(handles, 0u);
 
-        uint64_t restarts = Component().GetRestartCount();
-        uint64_t mostInAFrame = 0;
-        uint64_t framesWithRestarts = 0;
-        for (uint32_t frame = 0; frame < kFrames; ++frame) {
-            Tweens().Advance(1.0f / 60.0f);
-            const uint64_t now = Component().GetRestartCount();
-            mostInAFrame = std::max(mostInAFrame, now - restarts);
-            framesWithRestarts += now > restarts ? 1u : 0u;
-            restarts = now;
-        }
+        const BECore::Tests::AllocCount allocated = BECore::Tests::CountAllocations([&] { frames(kFramesOfALongestTurn); });
 
-        const double perFrame = static_cast<double>(restarts) / kFrames;
-        EXPECT_GT(perFrame, 5.0) << "a full-duration first tween would restart nothing in these two seconds";
-        EXPECT_GE(framesWithRestarts, uint64_t{kFrames} * 9 / 10) << "nearly every frame restarts some: no stretch of quiet frames";
-        EXPECT_LT(static_cast<double>(mostInAFrame), 3.0 * perFrame) << "no frame is a burst";
+        EXPECT_EQ(BECore::Tests::PoolAllocations("TweenHandle"), handles) << "no tween was started again";
+        EXPECT_EQ(allocated.count, 0u) << allocated.bytes << " bytes";  // always zero without the tracker (macos-profile has it)
     }
 
     TEST_F(StressEntitiesTest, EveryKthNodeTurnsOnUpdate) {

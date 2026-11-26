@@ -21,10 +21,7 @@ namespace BECore::Stress {
         float centerY = 0.0f;
         float radius = 0.0f;
         float phase = 0.0f;    // radians: where on the circle the node is when the tween is at 0
-        float seconds = 0.0f;  // one turn, the duration of a full tween
-        /// Where in its turn (0..1) the node's first tween starts: hashed, so the first ends are spread over the first turn like the later ones,
-        /// not all after a full duration (every restart after the first is a full turn from 0)
-        float startTurn = 0.0f;
+        float seconds = 0.0f;  // one turn, the duration of the node's looping tween
     };
 
     /// The orbit of node @p index, the same on every machine (StressHash.h); the whole circle is inside @p view

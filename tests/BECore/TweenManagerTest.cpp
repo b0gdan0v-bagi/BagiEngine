@@ -1,9 +1,9 @@
 #include <BECore/Animation/ScopedTween.h>
 #include <BECore/Animation/TweenManager.h>
-#include <BECore/Memory/PoolStats.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Time/Time.h>
 #include <Common/DestroyTally.h>
+#include <Common/PoolCounters.h>
 #include <Common/Require.h>
 #include <TaskSystem/Task.h>
 #include <gtest/gtest.h>
@@ -54,16 +54,6 @@ namespace BECore::Tests {
 
         Task<void> AwaitResult(IntrusivePtr<TweenHandle> handle, Vector<TweenResult>& results) {
             results.push_back(co_await AwaitTween(std::move(handle)));
-        }
-
-        /// How many tween handles the process has ever made: a restart makes one, a turn of a loop does not
-        uint64_t HandlesEverMade() {
-            for (const PoolStatsEntry& entry : GetPoolStats()) {
-                if (StringView(entry.name) == "TweenHandle") {
-                    return entry.allocations;
-                }
-            }
-            return 0;
         }
 
         /// The three callables of a tween, each holding a move-only token that counts its end
@@ -1020,7 +1010,7 @@ namespace BECore::Tests {
             tweens.Loop<float>(0.0f, kTo, Settings(kQuarterSecond * static_cast<float>(1 + loop % kTurnLengths)), [&value](const float& next) { value = next; });
         }
         tweens.Advance(kOneSecond);
-        const uint64_t handles = HandlesEverMade();
+        const uint64_t handles = PoolAllocations("TweenHandle");  // a restart makes a handle, a turn of a loop does not
         ASSERT_NE(handles, 0u);
 
         const uint64_t allocations = AllocationsOf([&] {
@@ -1029,7 +1019,7 @@ namespace BECore::Tests {
             }
         });
 
-        EXPECT_EQ(HandlesEverMade(), handles);
+        EXPECT_EQ(PoolAllocations("TweenHandle"), handles);
         EXPECT_EQ(allocations, 0u);  // always zero without the tracker: the handle count above is the check there
     }
 
