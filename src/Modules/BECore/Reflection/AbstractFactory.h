@@ -43,11 +43,18 @@ namespace BECore {
         /**
          * @brief Register a derived type with its creator function.
          *
-         * Called from static initializers in generated .gen.hpp files. A second registration of the same type
-         * replaces the creator silently (last write wins), but its meta is listed again by GetRegisteredTypes().
+         * Called from static initializers in generated .gen.hpp files. Registering the same type again (an equal
+         * ClassMeta) silently replaces both its creator and its meta (last write wins); the type keeps the place of
+         * its first registration in GetRegisteredTypes().
          */
         void Register(const ClassMeta& meta, CreatorFunc creator) {
             _creators[meta.typeHash] = creator;
+            for (ClassMeta& registered : _metas) {
+                if (registered == meta) {
+                    registered = meta;
+                    return;
+                }
+            }
             _metas.push_back(meta);
         }
 
@@ -97,7 +104,7 @@ namespace BECore {
         }
 
         /**
-         * @brief All registered ClassMeta entries (e.g. to instantiate every resource loader at startup).
+         * @brief One ClassMeta per registered type (e.g. to instantiate every resource loader at startup).
          */
         [[nodiscard]] const Vector<ClassMeta>& GetRegisteredTypes() const {
             return _metas;
