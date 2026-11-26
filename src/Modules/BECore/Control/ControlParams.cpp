@@ -4,6 +4,13 @@
 
 namespace BECore {
 
+    namespace {
+
+        /// Bytes of a client's text that an error message quotes
+        constexpr size_t kMaxShownBytes = 64;
+
+    }  // namespace
+
     Optional<JsonView> FindParam(JsonView params, StringView key) {
         return params.Find(key);
     }
@@ -40,6 +47,23 @@ namespace BECore {
     Optional<bool> GetParamBool(JsonView params, StringView key) {
         const Optional<JsonView> member = FindParam(params, key);
         return member ? member->AsBool() : std::nullopt;
+    }
+
+    std::expected<String, ControlError> RequireParamString(JsonView params, StringView key) {
+        Optional<String> text = GetParamString(params, key);
+        if (!text.has_value()) {
+            return std::unexpected(MakeControlError(ControlErrors::kInvalidParams, Format("'{}' has to be a string", key)));
+        }
+        return std::move(*text);
+    }
+
+    String ShownClientText(StringView text) {
+        if (text.size() <= kMaxShownBytes) {
+            return String(text);
+        }
+        String shown(text.substr(0, kMaxShownBytes));
+        shown += "...";
+        return shown;
     }
 
 }  // namespace BECore
