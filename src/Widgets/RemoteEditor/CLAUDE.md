@@ -11,7 +11,7 @@ Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the co
 | `RemotePendingWrites` | edits not yet seen in read data |
 | `RemoteSession` | the link: connects, keeps the data above current, sends the writes |
 | `RemotePicture` | the last `screenshot` frame as RGBA ("The picture") |
-| `RemoteCallError` | why the program did not give what was asked |
+| `RemoteCallError` | why the program did not give what was asked, each of the peer's texts cut to one short line so that it pushes nothing out of a panel |
 | `RemoteSessionRegistry` | how a panel finds the editor's one session |
 | `RemoteSessionWidget` | owns that session ("The widget and the panel") |
 | `RemoteLinkStatus` | the state of the link in a sentence |
@@ -95,7 +95,7 @@ What remote mode does to the local editor: `.claude/rules/widgets-module.md`, "S
 - Typed texts are released once a frame while no ImGui item is active, also while the window is closed.
 - The bars ask `ISceneEditorHost`, which answers from `Inspect`: the name is the tree's (never interned), the layer the pending one while there is one, and the last refusal is shown under the inspector's title.
 - A component header comes from the tree and its fields from the last read, matched by type and namesake, since the tree may be the newer of the two.
-- Save (the toolbar's button and `scene.save`) is `RequestSave`, offered while `Attached` with an edit on its way or accepted and not saved, so a save right after an edit is not lost. A `RemoteSaveLine` under the link's line says where the program wrote, that a page's memory is lost on reload, or warns. The editor writes nothing, and `editor_state` still reports only its local documents.
+- Save (the toolbar's button and `scene.save`) is `RequestSave`, offered while `Attached` with an edit on its way or accepted and not saved, so a save right after an edit is not lost. A `RemoteSaveLine` under the link's line says where the program wrote, that a page's memory is lost on reload, or warns; the sentence of a save that worked is also an Info line of the log. The editor writes nothing, and `editor_state` still reports only its local documents.
 - A node picked in the Viewport is taken from the session also while the window is closed, which it opens; the next draw of the hierarchy opens the rows above it and scrolls to it once, and clears a filter that hides it.
 
 Tests: `RemoteSceneEditorTest` runs the widget and its shipped bars over the fake endpoint, beside a local scene that must not change.
@@ -110,11 +110,25 @@ Tests: `RemoteViewportTest`.
 
 ## Trying it by hand
 
-Start a game with its control API and an editor attached to it, two processes of any build with the editor:
+A game with its control API and an editor attached to it, two processes of any build with the editor:
 
 ```bash
-build/macos-debug/bin/BagiStress --control --stress-scene=entities &
+build/macos-debug/bin/BagiStress --control --backend=sdl-gpu --stress-scene=ui --stress-count=6 &
 build/macos-debug/bin/BagiStress --editor --attach=ws://127.0.0.1:8765
 ```
 
-ctest `BagiStressAttachSmoke` (`tools/control/tests/attach_smoke.py`) does the same headless: a layer step in the editor's UI reaches the game, and a quit of the game leaves the editor read-only.
+- **The picture needs a renderer that can read its output back:** `--backend=sdl-gpu`, `--headless` (no window to watch) or a browser page. A windowed desktop game on Vulkan, which the engine's `ApplicationConfig` asks for, answers `capture_failed`, so there is nothing to click; the editor itself shows the picture on either backend.
+- **A click selects** in a program in the Game run mode only. A `web-editor` page and a desktop editor answer `not_screen_view`.
+
+A game in a browser (a `web-debug` page), with the bridge between them (`.claude/rules/control-web-link.md`):
+
+```bash
+cmake --preset web-debug && cmake --build --preset web-debug --target BagiDemo
+python3 tools/web/package.py build/web-debug/bin build/web-control-dist/demo --game BagiDemo
+python3 tools/control/bagi_bridge.py &          # prints the query of the page
+python3 tools/web/serve.py --root build/web-control-dist/demo --host 127.0.0.1 &
+# open http://localhost:8080/?<the query>, then:
+build/macos-debug/bin/BagiDemo --editor --attach=ws://127.0.0.1:8765
+```
+
+ctest `BagiStressAttachSmoke` (`tools/control/tests/attach_smoke.py`) runs the desktop pair headless: a click on the picture, a layer step and Save in the editor's UI reach the game, whose content overlay gets the file, and a quit of the game leaves the editor read-only. By hand, `--game-exe tools/web/web_game.py` with `BAGI_WEB_DIST` runs it against a page.

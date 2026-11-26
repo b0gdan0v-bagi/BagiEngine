@@ -185,7 +185,10 @@ namespace BECore {
     }
 
     void RemoteSceneView::DrawSave(const RemoteSession& session) {
-        _save.Update(session.GetSaveStatus());
+        // The log keeps where the program wrote after the line has given way to the next save
+        if (_save.Update(session.GetSaveStatus()) && session.GetSaveStatus().state == RemoteSaveState::Saved) {
+            LOG_INFO("Remote editor: {}", _save.GetText());
+        }
         if (_save.GetText().empty()) {
             return;
         }

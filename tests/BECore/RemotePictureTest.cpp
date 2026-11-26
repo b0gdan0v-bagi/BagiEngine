@@ -130,4 +130,26 @@ namespace BECore::Tests {
         EXPECT_FALSE(picture.GetImage().pixels.empty()) << "the same text after Clear() is a frame again";
     }
 
+    TEST(RemotePictureTest, APeersLongRefusalIsKeptAsOneShortLine) {
+        // The two-byte characters start at an odd offset, so the limit falls inside one
+        String sent = "a\\nb";
+        for (size_t i = 0; i < RemoteCallError::kMaxTextBytes; ++i) {
+            sent += "\xD0\xB6";
+        }
+        String kept = "a b";
+        while (kept.size() + 2 <= RemoteCallError::kMaxTextBytes) {
+            kept += "\xD0\xB6";
+        }
+        kept += "...";
+        const String refusal = Format(R"({{"code":"capture_failed","message":"{}"}})", sent);
+        JsonTape tape;
+        ASSERT_TRUE(tape.Parse(refusal).has_value());
+        RemotePicture picture;
+
+        picture.Refuse(JsonView(tape, 0));
+
+        EXPECT_EQ(picture.GetError().code, "capture_failed");
+        EXPECT_EQ(picture.GetError().message, kept);
+    }
+
 }  // namespace BECore::Tests
