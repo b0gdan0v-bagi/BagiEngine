@@ -160,6 +160,11 @@ namespace BECore {
             if (!findings.empty()) {
                 return;
             }
+            // The binary form of the root node carries no type, so a subclass would load as a plain SceneNode
+            if (node->GetTypeMeta() != SceneNode::GetStaticTypeMeta()) {
+                findings.push_back(Format("the node is a '{}', and a node file cooks only as a SceneNode", node->GetTypeMeta().typeName));
+                return;
+            }
             if (!WriteContentStamp(writer, kNodeRootType)) {
                 findings.push_back(Format("the type '{}' is not reflected in this program", kNodeRootType));
                 return;

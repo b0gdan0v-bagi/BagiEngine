@@ -11,25 +11,73 @@ namespace BECore {
 
     namespace {
 
-        /// What a component serializes to, as text: the type and the XML of its fields in the compact form
-        struct SerializedComponent {
+        constexpr StringView kChildrenElementName = "children";
+        constexpr StringView kNodeTypeAttribute = "type";
+        constexpr StringView kNodeNameAttribute = "name";
+
+        /// What a node or a component serializes to: its type and the XML of its fields
+        struct SerializedFields {
             String type;
-            pugi::xml_document fields;  // the document element holds the attributes and child elements of the fields
+            pugi::xml_document document;
+
+            /// The element that holds the attributes and child elements of the fields
+            pugi::xml_node Root() const {
+                return document.document_element();
+            }
+
+            bool operator==(const SerializedFields& other) const {
+                return type == other.type && XmlFieldDiff::CompactText(Root()) == XmlFieldDiff::CompactText(other.Root());
+            }
         };
 
-        void SerializeComponent(const IComponent& component, SerializedComponent& out) {
+        /// Writes a node without its two tree lists, which AppendNodeElement writes in a shape of its own: no subtree is serialized once per node above it
+        class NodeFieldsSerializer final : public XmlSerializer {
+        public:
+            bool BeginArray(StringView name, StringView elementName, size_t& count) override {
+                if (IsAtRoot() && (name == kComponentsElementName || name == kChildrenElementName)) {
+                    return false;
+                }
+                return XmlSerializer::BeginArray(name, elementName, count);
+            }
+        };
+
+        void SerializeFields(const IComponent& component, SerializedFields& out) {
             out.type = component.GetTypeMeta().typeName.data();
             XmlSerializer serializer;
             component.Serialize(serializer);
-            out.fields.append_copy(serializer.GetRootNode());
+            out.document.append_copy(serializer.GetRootNode());
         }
 
-        Vector<SerializedComponent> SerializeComponents(const SceneNode& node) {
-            Vector<SerializedComponent> result(node.GetComponents().size());
+        /// The own fields of @p node: what its `Serialize` writes but the tree lists and `sourceRef` (a node file link is not part of the node's data)
+        void SerializeFields(const SceneNode& node, SerializedFields& out) {
+            out.type = node.GetTypeMeta().typeName.data();
+            NodeFieldsSerializer serializer;
+            node.Serialize(serializer);
+            out.document.append_copy(serializer.GetRootNode()).remove_attribute(kNodeSourceAttribute.data());
+        }
+
+        Vector<SerializedFields> SerializeComponents(const SceneNode& node) {
+            Vector<SerializedFields> result(node.GetComponents().size());
             for (size_t i = 0; i < result.size(); ++i) {
-                SerializeComponent(*node.GetComponents()[i], result[i]);
+                SerializeFields(*node.GetComponents()[i], result[i]);
             }
             return result;
+        }
+
+        /// False when @p live differs from the node file in what a reference cannot override: the type, or an own field outside kNodeOverrideAttributes
+        bool CanOverrideOwnFields(const SerializedFields& live, const SerializedFields& base, String& reason) {
+            if (live.type != base.type) {
+                reason = Format("its type '{}' is not the '{}' of the node file", live.type, base.type);
+                return false;
+            }
+            for (const String& name : XmlFieldDiff::FieldNames(live.Root(), base.Root())) {
+                const bool overridable = eastl::find(kNodeOverrideAttributes.begin(), kNodeOverrideAttributes.end(), StringView{name.c_str(), name.size()}) != kNodeOverrideAttributes.end();
+                if (!overridable && XmlFieldDiff::ReadField(live.Root(), name.c_str()) != XmlFieldDiff::ReadField(base.Root(), name.c_str())) {
+                    reason = Format("its field '{}' differs from the node file and a reference cannot override it", name);
+                    return false;
+                }
+            }
+            return true;
         }
 
         /// Writes the fields of @p live that differ from @p base into @p componentEl. False when a field is written in both spellings
@@ -57,45 +105,53 @@ namespace BECore {
             return true;
         }
 
-        /// True when @p other has the name, the layer and the serialized components of @p live (the round trip check)
-        bool SameAsLive(const SceneNode& live, const Vector<SerializedComponent>& liveComponents, const SceneNode& other) {
-            if (live.GetName() != other.GetName() || live.GetLayer() != other.GetLayer()) {
-                return false;
-            }
-            const Vector<SerializedComponent> otherComponents = SerializeComponents(other);
-            if (liveComponents.size() != otherComponents.size()) {
-                return false;
-            }
-            for (size_t i = 0; i < liveComponents.size(); ++i) {
-                if (liveComponents[i].type != otherComponents[i].type ||
-                    XmlFieldDiff::CompactText(liveComponents[i].fields.document_element()) != XmlFieldDiff::CompactText(otherComponents[i].fields.document_element())) {
-                    return false;
-                }
-            }
-            return true;
+        /// True when @p other has the type, the own fields and the components of the live node (the round trip check)
+        bool SameAsLive(const SerializedFields& liveNode, const Vector<SerializedFields>& liveComponents, const SceneNode& other) {
+            SerializedFields otherNode;
+            SerializeFields(other, otherNode);
+            return liveNode == otherNode && liveComponents == SerializeComponents(other);
         }
 
-        /// The serialized fields of a freshly created component per type name: the state the loader builds a component in before it reads its fields.
-        /// A null entry is a type the factory cannot create. One per AppendNodeElement call, not global, so a tree makes each default once
-        using DefaultFieldsCache = HashMap<String, UniquePtr<SerializedComponent>>;
+        /// The serialized fields of a freshly made object per type name: the state the loader builds it in before it reads its fields.
+        /// A null entry is a type the factory cannot create
+        using DefaultFieldsCache = HashMap<String, UniquePtr<SerializedFields>>;
 
-        const SerializedComponent* DefaultFieldsOf(const IComponent& component, DefaultFieldsCache& cache) {
-            const String type = component.GetTypeMeta().typeName.data();
-            if (const auto found = cache.find(type); found != cache.end()) {
-                return found->second.get();
+        /// One per AppendNodeElement call, not global, so a tree makes each default once
+        struct WriteDefaults {
+            DefaultFieldsCache nodes;
+            DefaultFieldsCache components;
+        };
+
+        /// The element with the default fields of the type of @p object, empty (so that every field differs from it) when there is none
+        template <typename Base>
+        pugi::xml_node DefaultFieldsOf(const Base& object, DefaultFieldsCache& cache) {
+            const String type = object.GetTypeMeta().typeName.data();
+            auto found = cache.find(type);
+            if (found == cache.end()) {
+                UniquePtr<SerializedFields> defaults;
+                if (const IntrusivePtr<Base> fresh = AbstractFactory<Base>::GetInstance().Create(StringView{type.c_str(), type.size()})) {
+                    defaults = MakeUnique<SerializedFields>();
+                    SerializeFields(*fresh, *defaults);
+                }
+                found = cache.emplace(type, eastl::move(defaults)).first;
             }
-            UniquePtr<SerializedComponent> defaults;
-            if (const IntrusivePtr<IComponent> fresh = AbstractFactory<IComponent>::GetInstance().Create(StringView{type.c_str(), type.size()})) {
-                defaults = MakeUnique<SerializedComponent>();
-                SerializeComponent(*fresh, *defaults);
-            }
-            return cache.emplace(type, eastl::move(defaults)).first->second.get();
+            return found->second ? found->second->Root() : pugi::xml_node{};
         }
 
     }  // namespace
 
     IntrusivePtr<SceneNode> DeserializeNode(IDeserializer& deserializer, StringView what) {
-        auto node = New<SceneNode>();
+        IntrusivePtr<SceneNode> node;
+        StringView type;
+        if (deserializer.ReadAttributeView(kNodeTypeAttribute, type)) {
+            node = AbstractFactory<SceneNode>::GetInstance().Create(type);
+            if (!node) {
+                deserializer.ReportError(kNodeTypeAttribute, Format("Unknown factory type: '{}'", type));
+            }
+        }
+        if (!node) {
+            node = New<SceneNode>();
+        }
         node->Deserialize(deserializer);
         if (deserializer.HasErrors()) {
             LogDeserializeErrors(what, deserializer);
@@ -113,12 +169,17 @@ namespace BECore {
 
     namespace {
 
-        void AppendNodeElementWith(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options, DefaultFieldsCache& defaults) {
+        void AppendNodeElementWith(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options, WriteDefaults& defaults) {
             pugi::xml_node nodeEl = parent.append_child(kNodeElementName.data());
-            nodeEl.append_attribute("name").set_value(node.GetName().CStr());
-            if (node.GetLayer() != 0) {
-                nodeEl.append_attribute("layer").set_value(node.GetLayer());
+            if (node.GetTypeMeta() != SceneNode::GetStaticTypeMeta()) {
+                nodeEl.append_attribute(kNodeTypeAttribute.data()).set_value(node.GetTypeMeta().typeName.data());
             }
+            // Apart from the other fields: it is written even when it is the default
+            nodeEl.append_attribute(kNodeNameAttribute.data()).set_value(node.GetName().CStr());
+            SerializedFields own;
+            SerializeFields(node, own);
+            own.Root().remove_attribute(kNodeNameAttribute.data());
+            XmlFieldDiff::AppendChangedFields(own.Root(), DefaultFieldsOf(node, defaults.nodes), nodeEl);
 
             if (!node.GetComponents().empty()) {
                 pugi::xml_node componentsEl = nodeEl.append_child(kComponentsElementName.data());
@@ -128,8 +189,8 @@ namespace BECore {
 
                     XmlSerializer serializer;
                     component->Serialize(serializer);
-                    const SerializedComponent* base = options.skipDefaults ? DefaultFieldsOf(*component, defaults) : nullptr;
-                    XmlFieldDiff::AppendChangedFields(serializer.GetRootNode(), base ? base->fields.document_element() : pugi::xml_node{}, componentEl);
+                    const pugi::xml_node base = options.skipDefaults ? DefaultFieldsOf(*component, defaults.components) : pugi::xml_node{};
+                    XmlFieldDiff::AppendChangedFields(serializer.GetRootNode(), base, componentEl);
                 }
             }
 
@@ -139,7 +200,7 @@ namespace BECore {
                     continue;
                 }
                 if (!childrenEl) {
-                    childrenEl = nodeEl.append_child("children");
+                    childrenEl = nodeEl.append_child(kChildrenElementName.data());
                 }
                 AppendNodeElementWith(childrenEl, *child, options, defaults);
             }
@@ -148,7 +209,7 @@ namespace BECore {
     }  // namespace
 
     void AppendNodeElement(pugi::xml_node parent, const SceneNode& node, const NodeWriteOptions& options) {
-        DefaultFieldsCache defaults;
+        WriteDefaults defaults;
         AppendNodeElementWith(parent, node, options, defaults);
     }
 
@@ -178,6 +239,14 @@ namespace BECore {
             return false;
         }
 
+        SerializedFields liveNode;
+        SerializeFields(live, liveNode);
+        SerializedFields baseNode;
+        SerializeFields(*baseline, baseNode);
+        if (!CanOverrideOwnFields(liveNode, baseNode, reason)) {
+            return false;
+        }
+
         // Built apart, so a refusal appends nothing
         pugi::xml_document candidate;
         pugi::xml_node refEl = candidate.append_child(kNodeElementName.data());
@@ -189,13 +258,13 @@ namespace BECore {
             refEl.append_attribute("layer").set_value(live.GetLayer());
         }
 
-        const Vector<SerializedComponent> liveComponents = SerializeComponents(live);
-        const Vector<SerializedComponent> baseComponents = SerializeComponents(*baseline);
+        const Vector<SerializedFields> liveComponents = SerializeComponents(live);
+        const Vector<SerializedFields> baseComponents = SerializeComponents(*baseline);
         pugi::xml_node componentsEl;
         for (size_t i = 0; i < liveComponents.size(); ++i) {
             pugi::xml_document overrides;
             pugi::xml_node componentEl = overrides.append_child(kComponentElementName.data());
-            if (!WriteFieldOverrides(liveComponents[i].fields.document_element(), baseComponents[i].fields.document_element(), componentEl, reason)) {
+            if (!WriteFieldOverrides(liveComponents[i].Root(), baseComponents[i].Root(), componentEl, reason)) {
                 reason = Format("component '{}': {}", liveComponents[i].type, reason);
                 return false;
             }
@@ -216,7 +285,7 @@ namespace BECore {
             reason = Format("the reference does not expand again: {}", error);
             return false;
         }
-        if (!SameAsLive(live, liveComponents, *DeserializeNode(reloaded.document_element(), ref))) {
+        if (!SameAsLive(liveNode, liveComponents, *DeserializeNode(reloaded.document_element(), ref))) {
             reason = "the instance cannot be written as a reference (it loads differently)";
             return false;
         }

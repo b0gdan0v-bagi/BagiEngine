@@ -39,8 +39,8 @@ namespace BECore {
     /// Attribute of `<node>` that makes it a reference
     inline constexpr StringView kNodeRefAttribute = "ref";
 
-    /// Attributes of a reference that replace the same attribute of the node file's `<node>`: the reflected fields of
-    /// SceneNode (`_name`, `_layer`). When SceneNode gets a field, extend this list.
+    /// Attributes of a reference that replace the same attribute of the node file's `<node>`. An instance that differs from its
+    /// file in another field of the node is saved inline (BuildNodeReference)
     inline constexpr Array<StringView, 2> kNodeOverrideAttributes = {"name", "layer"};
 
     /// Attribute that the expansion may set on the copy of a node file's `<node>`: the reference it came from. The live

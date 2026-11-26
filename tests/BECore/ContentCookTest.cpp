@@ -471,6 +471,15 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(report.ToText(), "reference")) << report.ToText().c_str();
     }
 
+    TEST_F(ContentCookTest, ANodeFileOfASceneNodeSubclassFailsTheCook) {
+        _tree.Write(0, "nodes/Tagged.xml", R"(<node contentVersion="5" type="TaggedTestNode" name="Tagged"/>)");
+
+        const CookReport report = Cook();
+        EXPECT_FALSE(report.Ok());
+        EXPECT_TRUE(Contains(report.ToText(), "TaggedTestNode")) << report.ToText().c_str();
+        EXPECT_FALSE(PathExists(_tree.OutConfig(0) / "nodes" / "Tagged.bin"));
+    }
+
     TEST_F(ContentCookTest, ANodeFileOfTheLowerLayerThatTheUpperOneShadowsIsCookedInItsOwnLayerOnly) {
         _tree.Write(0, "nodes/Hud.xml", HudNodeText("Low"));
         _tree.Write(1, "nodes/Hud.xml", HudNodeText("Up"));

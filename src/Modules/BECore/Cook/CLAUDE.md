@@ -16,7 +16,7 @@ Every `.bin` starts with a content stamp: the root type and its **layout hash** 
 
 What a file becomes is decided by its root element, then by the registry:
 
-1. Root `SceneManager`: node references expanded as `LoadSceneManager` expands them (the node loader sees every layer), then stamped `SceneManager`. A node file, root `node`: stamped `SceneNode`; it keeps its relative path (`nodes/X.bin`) because `<node ref="nodes/X"/>` finds it there.
+1. Root `SceneManager`: node references expanded as `LoadSceneManager` expands them (the node loader sees every layer), then stamped `SceneManager`. A node file, root `node`: stamped `SceneNode` (a node of a subclass fails: the binary root carries no type); it keeps its relative path (`nodes/X.bin`) because `<node ref="nodes/X"/>` finds it there.
 2. A stem with a cooker in `ContentCookRegistry`: read under `DiagnosticsMode::Error`, written with the stamp of its root type.
 3. Anything else is **copied** byte for byte and listed `Copied`.
 

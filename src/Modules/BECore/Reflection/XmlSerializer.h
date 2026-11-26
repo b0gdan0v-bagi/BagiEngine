@@ -81,6 +81,12 @@ namespace BECore {
             return _nodeStack.front();
         }
 
+    protected:
+        /// True outside every object, array and array element, where a write is a field of the serialized object itself
+        bool IsAtRoot() const {
+            return _nodeStack.size() == 1;
+        }
+
     private:
         pugi::xml_node GetOrCreateChild(StringView name);
 
