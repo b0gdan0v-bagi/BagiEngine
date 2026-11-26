@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Math/Rect.h>
+#include <BECore/Math/Vec2.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Renderer/ITexture.h>
@@ -24,7 +25,8 @@ namespace BECore::Stress {
      * The children are made when `StressState::Version()` moved: a bigger count appends nodes, a smaller one removes them from the tail, the
      * first nodes are kept. The atlases are made once with `IRenderer::CreateTexture` (the renderer may be missing at `OnAttached`, so at the
      * first update) from `SpriteField`'s pixels and shared by the sprites. A steady frame only turns each node by its spin through cached
-     * pointers: no lookup, no allocation. Does nothing while the game is not the active `StressGame`.
+     * pointers, and in a world larger than the view also moves it against the emulated camera (`SpriteField`'s CameraOffset): no lookup, no
+     * allocation. Does nothing while the game is not the active `StressGame`.
      */
     class StressSpritesComponent : public IComponent {
         BE_CLASS(StressSpritesComponent)
@@ -47,6 +49,7 @@ namespace BECore::Stress {
             IntrusivePtr<SceneNode> node;
             IntrusivePtr<TransformComponent> transform;
             IntrusivePtr<SpriteRendererComponent> renderer;
+            Vec2 position;      // in the field; the transform holds it minus the camera's offset
             float spin = 0.0f;  // degrees per second
         };
 
@@ -61,8 +64,9 @@ namespace BECore::Stress {
 
         Vector<Sprite> _sprites;
         Vector<IntrusivePtr<ITexture>> _atlases;
-        uint64_t _builtVersion = 0;  // the StressState version the nodes were last brought to; 0 is never a version
-        uint32_t _placedCount = 0;   // the count the atlas and blend mode of the nodes follow (the runs depend on it)
+        uint64_t _builtVersion = 0;   // the StressState version the nodes were last brought to; 0 is never a version
+        uint32_t _placedCount = 0;    // the count the atlas and blend mode of the nodes follow (the runs depend on it)
+        double _cameraSeconds = 0.0;  // how long the emulated camera has moved: a float sum would drift in a long run
         bool _atlasesFailed = false;
         bool _cleanedUp = false;
     };

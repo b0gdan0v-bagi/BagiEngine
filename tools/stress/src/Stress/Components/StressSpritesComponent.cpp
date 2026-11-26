@@ -40,7 +40,20 @@ namespace BECore::Stress {
             Rebuild(state.GetCount(), game->GetSettings());
         }
 
+        // After the rebuild, so that a new sprite is shifted before it is first drawn. A world of one view has no camera and writes no position
+        const uint32_t world = game->GetSettings().load.world;
+        const bool cameraMoves = world > 1;
+        Vec2 camera;
+        if (cameraMoves) {
+            _cameraSeconds += event.deltaTime;
+            camera = CameraOffset(_cameraSeconds, world, FieldView{GetScene().GetViewWidth(), GetScene().GetViewHeight()});
+        }
+
         for (Sprite& sprite : _sprites) {
+            if (cameraMoves) {
+                sprite.transform->_x = sprite.position.x - camera.x;
+                sprite.transform->_y = sprite.position.y - camera.y;
+            }
             float rotation = sprite.transform->_rotation + sprite.spin * event.deltaTime;
             if (rotation >= kFullTurn) {
                 rotation -= kFullTurn;
@@ -82,7 +95,8 @@ namespace BECore::Stress {
     }
 
     void StressSpritesComponent::Rebuild(uint32_t count, const StressSettings& settings) {
-        const FieldView view{GetScene().GetViewWidth(), GetScene().GetViewHeight()};
+        const float world = static_cast<float>(settings.load.world);
+        const FieldView field{GetScene().GetViewWidth() * world, GetScene().GetViewHeight() * world};
         const size_t target = count;
 
         // Shrink from the tail
@@ -94,7 +108,7 @@ namespace BECore::Stress {
         // The runs of atlas and blend mode depend on the count: the kept nodes follow them again when it moved
         if (count != _placedCount) {
             for (size_t i = 0; i < _sprites.size(); ++i) {
-                const SpritePlacement placement = Place(static_cast<uint32_t>(i), count, settings, view);
+                const SpritePlacement placement = Place(static_cast<uint32_t>(i), count, settings, field);
                 ApplyRun(_sprites[i], placement.atlas, placement.srcRect, placement.blend);
             }
             _placedCount = count;
@@ -103,7 +117,7 @@ namespace BECore::Stress {
         // Grow at the tail
         _sprites.reserve(target);
         while (_sprites.size() < target) {
-            const SpritePlacement placement = Place(static_cast<uint32_t>(_sprites.size()), count, settings, view);
+            const SpritePlacement placement = Place(static_cast<uint32_t>(_sprites.size()), count, settings, field);
             Sprite sprite;
             sprite.node = GetNode().AddChild(SpriteNodeName());
             sprite.transform = New<TransformComponent>();
@@ -114,6 +128,7 @@ namespace BECore::Stress {
             sprite.node->AddComponent(sprite.transform);
             sprite.renderer = New<SpriteRendererComponent>();
             sprite.node->AddComponent(sprite.renderer);
+            sprite.position = Vec2(placement.x, placement.y);
             sprite.spin = placement.spin;
             ApplyRun(sprite, placement.atlas, placement.srcRect, placement.blend);
             _sprites.push_back(std::move(sprite));

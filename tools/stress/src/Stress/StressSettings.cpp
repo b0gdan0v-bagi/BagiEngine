@@ -122,6 +122,7 @@ namespace BECore::Stress {
             ReadNumber(commandLine, StressFlags::kAtlases, kMinAtlases, kMaxAtlases, settings.atlases),
             ReadChoice(commandLine, StressFlags::kLanguage, kLanguageNames, settings.language),
             ReadNumber(commandLine, StressFlags::kSpriteSize, 1, kMaxSpriteSize, settings.load.spriteSize),
+            ReadNumber(commandLine, StressFlags::kWorld, 1, kMaxWorld, settings.load.world),
         };
         for (const auto& error : errors) {
             if (error) {

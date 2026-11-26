@@ -242,6 +242,7 @@ namespace BECore::Stress {
         AddNumber(line, "workMs", summary.workMs);
         AddNumber(line, "workMsP50", summary.workMsP50);
         AddNumber(line, "workMsP99", summary.workMsP99);
+        AddInteger(line, "world", context.load.world);
         line.insert(size_t{0}, 1, '{');
         line += '}';
         return line;

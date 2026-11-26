@@ -29,17 +29,31 @@ namespace BECore::Stress {
             return static_cast<uint8_t>(kLowest + mixed % (kFullColor - kLowest + 1));
         }
 
+        /// A coordinate that goes from 0 to @p range and back at @p speed for ever
+        float PingPong(double seconds, float speed, float range) {
+            if (range <= 0.0f) {
+                return 0.0f;
+            }
+            const double travelled = std::fmod(seconds * speed, 2.0 * range);
+            return static_cast<float>(travelled <= range ? travelled : 2.0 * range - travelled);
+        }
+
     }  // namespace
+
+    Vec2 CameraOffset(double seconds, uint32_t world, const FieldView& view) {
+        const float viewsToCross = static_cast<float>(std::max<uint32_t>(1, world) - 1);
+        return Vec2(PingPong(seconds, kCameraSpeedX, viewsToCross * view.width), PingPong(seconds, kCameraSpeedY, viewsToCross * view.height));
+    }
 
     uint32_t AtlasRunLength(uint32_t count, uint32_t atlases) {
         return std::max<uint32_t>(1, count / std::max<uint32_t>(1, atlases));
     }
 
-    SpritePlacement Place(uint32_t index, uint32_t count, const StressSettings& settings, const FieldView& view) {
+    SpritePlacement Place(uint32_t index, uint32_t count, const StressSettings& settings, const FieldView& field) {
         SpritePlacement placement;
         placement.size = settings.load.spriteSize != 0 ? static_cast<float>(settings.load.spriteSize) : std::floor(Between(kSpriteMinSize, kSpriteMaxSize + 1.0f, Unit(index, kSaltSize)));
-        placement.x = std::floor(Unit(index, kSaltX) * (view.width - placement.size));
-        placement.y = std::floor(Unit(index, kSaltY) * (view.height - placement.size));
+        placement.x = std::floor(Unit(index, kSaltX) * (field.width - placement.size));
+        placement.y = std::floor(Unit(index, kSaltY) * (field.height - placement.size));
         const float spinSpeed = Between(kSpriteMinSpin, kSpriteMaxSpin, Unit(index, kSaltSpin));
         placement.spin = (Hash(index, kSaltSpin) & 1) != 0 ? spinSpeed : -spinSpeed;
 

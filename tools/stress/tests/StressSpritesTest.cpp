@@ -1,4 +1,5 @@
 #include <Stress/Components/StressSpritesComponent.h>
+#include <Stress/SpriteField.h>
 #include <Stress/StressNames.h>
 #include <gtest/gtest.h>
 #include <tests/StressSceneFixture.h>
@@ -10,6 +11,7 @@ namespace BECore::Stress::Tests {
     namespace {
 
         constexpr uint32_t kCount = 2000;
+        constexpr float kShiftTolerance = 0.01f;  // positions of a few thousand units in float
 
         size_t TextureSwitches(const Vector<DrawCall>& calls) {
             size_t switches = 0;
@@ -36,6 +38,19 @@ namespace BECore::Stress::Tests {
             auto component = Field().GetComponent<StressSpritesComponent>();
             EXPECT_TRUE(component);
             return *component;
+        }
+
+        Vec2 PositionOf(size_t i) const {
+            const auto transform = Field().GetChildren()[i]->GetComponent<TransformComponent>();
+            return Vec2(transform->_x, transform->_y);
+        }
+
+        /// Where sprite @p i of @p count lies in the field of a world of @p world views
+        Vec2 PlaceInWorld(uint32_t i, uint32_t count, uint32_t world) const {
+            const Scene& scene = GetScene("StressSprites");
+            const FieldView field{scene.GetViewWidth() * world, scene.GetViewHeight() * world};
+            const SpritePlacement placement = Place(i, count, StressGame::GetActive()->GetSettings(), field);
+            return Vec2(placement.x, placement.y);
         }
     };
 
@@ -128,6 +143,57 @@ namespace BECore::Stress::Tests {
             const auto transform = node->GetComponent<TransformComponent>();
             EXPECT_EQ(transform->_width, 300.0f);
             EXPECT_EQ(transform->_height, 300.0f);
+        }
+    }
+
+    TEST_F(StressSpritesTest, AWorldSpreadsTheSpritesBeyondTheViewAndTheCameraMovesThemAllAlike) {
+        StartSprites({"--stress-world=4"});
+        SetCount(200);
+        Update();
+        Vector<Vec2> before;
+        bool beyondTheView = false;
+        for (size_t i = 0; i < 200; ++i) {
+            before.push_back(PositionOf(i));
+            beyondTheView |= before[i].x > GetScene("StressSprites").GetViewWidth() && before[i].y > GetScene("StressSprites").GetViewHeight();
+        }
+        EXPECT_TRUE(beyondTheView);
+
+        Update();
+
+        const Vec2 shift = PositionOf(0) - before[0];
+        EXPECT_LT(shift.x, 0.0f) << "the camera goes right, so the sprites go left";
+        EXPECT_LT(shift.y, 0.0f);
+        for (size_t i = 1; i < 200; ++i) {
+            ASSERT_NEAR(PositionOf(i).x - before[i].x, shift.x, kShiftTolerance) << i;
+            ASSERT_NEAR(PositionOf(i).y - before[i].y, shift.y, kShiftTolerance) << i;
+        }
+    }
+
+    TEST_F(StressSpritesTest, ANewSpriteOfAWorldIsShiftedInTheFrameThatMakesIt) {
+        StartSprites({"--stress-world=4"});
+        SetCount(10);
+        for (int frame = 0; frame < 20; ++frame) {
+            Update();
+        }
+        SetCount(30);
+        Update();
+
+        const Vec2 camera = PlaceInWorld(0, 30, 4) - PositionOf(0);
+        EXPECT_GT(camera.x, 0.0f);
+        for (uint32_t i = 10; i < 30; ++i) {
+            ASSERT_NEAR(PositionOf(i).x, PlaceInWorld(i, 30, 4).x - camera.x, kShiftTolerance) << i;
+            ASSERT_NEAR(PositionOf(i).y, PlaceInWorld(i, 30, 4).y - camera.y, kShiftTolerance) << i;
+        }
+    }
+
+    TEST_F(StressSpritesTest, AWorldOfOneViewLeavesThePositionsAlone) {
+        StartSprites({"--stress-world=1"});
+        SetCount(50);
+        for (int frame = 0; frame < 20; ++frame) {
+            Update();
+        }
+        for (uint32_t i = 0; i < 50; ++i) {
+            EXPECT_EQ(PositionOf(i), PlaceInWorld(i, 50, 1)) << i;
         }
     }
 

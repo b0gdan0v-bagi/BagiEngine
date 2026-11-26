@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Math/Rect.h>
+#include <BECore/Math/Vec2.h>
 #include <BECore/Renderer/BlendMode.h>
 #include <BECore/Types/Types.h>
 #include <Stress/StressSettings.h>
@@ -8,7 +9,7 @@
 
 namespace BECore::Stress {
 
-    /// The picture the sprites are placed in, in scene units (the view of the scene `StressSprites`)
+    /// A rectangle of scene units from the origin: the view of the scene `StressSprites`, or the field the sprites are placed in
     struct FieldView {
         float width = 1920.0f;
         float height = 1080.0f;
@@ -24,6 +25,9 @@ namespace BECore::Stress {
     inline constexpr uint32_t kAtlasCellSize = 32;
     /// Consecutive sprites that share a blend mode when the sprites are in runs (the way a game sorts by blend mode)
     inline constexpr uint32_t kBlendRunLength = 256;
+    /// How fast the emulated camera moves along each axis, in scene units per second
+    inline constexpr float kCameraSpeedX = 480.0f;
+    inline constexpr float kCameraSpeedY = 270.0f;
 
     /// Where and how one sprite is drawn. Everything but the atlas and the blend mode depends on the index alone, so growing the count keeps the first sprites in place.
     struct SpritePlacement {
@@ -41,11 +45,19 @@ namespace BECore::Stress {
      *        the same in every standard library).
      *
      * The side is `settings.load.spriteSize`, or without one a side of its own between kSpriteMinSize and kSpriteMaxSize.
-     * The position keeps the whole sprite inside @p view. The atlas and the blend mode follow what a batcher sees: by default the sprites are in
+     * The position keeps the whole sprite inside @p field. The atlas and the blend mode follow what a batcher sees: by default the sprites are in
      * runs, the way a game sorts by atlas: `count / atlases` consecutive sprites share an atlas and `kBlendRunLength` share a blend mode.
      * `settings.interleave` changes both on every sprite (the worst case).
      */
-    SpritePlacement Place(uint32_t index, uint32_t count, const StressSettings& settings, const FieldView& view);
+    SpritePlacement Place(uint32_t index, uint32_t count, const StressSettings& settings, const FieldView& field);
+
+    /**
+     * @brief Where the emulated camera is after @p seconds: the top-left corner of the view in a field of @p world x @p world views.
+     *
+     * Each axis goes to and fro between 0 and `world - 1` sides of @p view at its own speed, so the view never leaves the field;
+     * a world of one view leaves it no room.
+     */
+    Vec2 CameraOffset(double seconds, uint32_t world, const FieldView& view);
 
     /// How many consecutive sprites share an atlas when the sprites are in runs: `count / atlases`, at least 1
     uint32_t AtlasRunLength(uint32_t count, uint32_t atlases);

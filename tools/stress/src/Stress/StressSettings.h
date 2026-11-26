@@ -34,6 +34,8 @@ namespace BECore::Stress {
     inline constexpr double kMaxRampBudgetMs = 1000.0;
     /// The largest side `--stress-sprite-size` takes: the height of the view, so a sprite of any allowed side fits the field
     inline constexpr uint32_t kMaxSpriteSize = 1080;
+    /// The largest world `--stress-world` takes, in views per side
+    inline constexpr uint32_t kMaxWorld = 8;
 
     /// The names of the flags of the command line (the whole spelling, so a message and a test quote it as typed)
     namespace StressFlags {
@@ -49,11 +51,13 @@ namespace BECore::Stress {
         inline constexpr StringView kAtlases = "--stress-atlases";
         inline constexpr StringView kLanguage = "--stress-language";
         inline constexpr StringView kSpriteSize = "--stress-sprite-size";
+        inline constexpr StringView kWorld = "--stress-world";
     }  // namespace StressFlags
 
     /// What loads the `sprites` scene beyond its plain field; the loads combine, the defaults are the plain field, and the line of a run carries each
     struct StressLoad {
         uint32_t spriteSize = 0;  // the side of every sprite (1..kMaxSpriteSize); 0: each has its own, from the spread of SpriteField
+        uint32_t world = 1;       // the field is this many views wide and tall (1..kMaxWorld); above 1 an emulated camera moves over it
     };
 
     /// What a run is asked to do; the defaults are what a plain `BagiStress` shows
@@ -95,6 +99,7 @@ namespace BECore::Stress {
      * | --stress-atlases= | kMinAtlases..kMaxAtlases |
      * | --stress-language= | en, ru |
      * | --stress-sprite-size= | 1..kMaxSpriteSize |
+     * | --stress-world= | 1..kMaxWorld |
      *
      * A flag that is wrong (a bad or empty value, a value on a bare flag, no value on a valued one) is an error that names the flag;
      * the caller decides what to do with it, nothing is defaulted silently. Flags of other parts of the program are ignored.

@@ -171,6 +171,7 @@ namespace BECore::Stress {
         AddNumber(line, "updateMs", result.stages.updateMs);
         AddBool(line, "verified", result.verified);
         AddNumber(line, "waitMs", result.stages.waitMs);
+        AddInteger(line, "world", context.load.world);
         line.back() = '}';  // the comma of the last member
         line.insert(size_t{0}, 1, '{');
         return line;
