@@ -77,6 +77,16 @@ namespace BECore {
         _hierarchy = HierarchyState{};
         _link.Reset();
         _announced.reset();
+        _reveal.reset();
+    }
+
+    bool RemoteSceneView::TakeReveal(RemoteSession& session) {
+        Optional<String> reveal = session.TakeReveal();
+        if (!reveal) {
+            return false;
+        }
+        _reveal = std::move(reveal);
+        return true;
     }
 
     void RemoteSceneView::ReleaseTypedText(RemoteSession& session) {
@@ -94,6 +104,12 @@ namespace BECore {
 
         ImGui::BeginChild("##hierarchy", ImVec2(kHierarchyWidth, 0.0f), true);
         RemoteHierarchySource source(session);
+        if (_reveal) {
+            if (const Optional<HierarchyRow> row = source.Reveal(*_reveal)) {
+                HierarchyPanel::ClearHidingFilter(source, _hierarchy, *row);
+            }
+            _reveal.reset();
+        }
         HierarchyPanel::Draw(source, _hierarchy);
         ImGui::EndChild();
         AnnounceSelection(session);

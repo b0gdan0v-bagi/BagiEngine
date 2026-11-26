@@ -40,8 +40,20 @@ namespace BECore::Tests {
         constexpr StringView kInspectorAsset = "SceneInspectorPanel";
         constexpr StringView kAddress = "ws://127.0.0.1:8765";
         constexpr int32_t kLayer = 1;
-        /// The same node in both scenes, so that an edit that goes to the wrong one is seen
-        constexpr StringView kNodes = R"(<node name="Board" layer="1"><components><component type="TransformComponent" x="10"/><component type="TextComponent" text="Hi"/></components></node>)";
+        /// More rows than the hierarchy shows at once
+        constexpr int kRowsAboveCell = 40;
+        /// A fraction of the program's 800 by 600 screen inside "Cell"
+        constexpr double kOnCell = 0.05;
+
+        /// The same nodes in both scenes, so that an edit that goes to the wrong one is seen. "Cell" is the only one a pick hits
+        String Nodes() {
+            String nodes(R"(<node name="Board" layer="1"><components><component type="TransformComponent" x="10"/><component type="TextComponent" text="Hi"/></components><children>)");
+            for (int i = 0; i < kRowsAboveCell; ++i) {
+                nodes += Format(R"(<node name="Filler{}"/>)", i);
+            }
+            nodes += R"(<node name="Cell"><components><component type="TransformComponent" width="80" height="60"/><component type="QuadRendererComponent"/></components></node></children></node>)";
+            return nodes;
+        }
 
         /// What the other panels are told and asked for
         class SceneEventRecorder : public SubscriptionHolder {
@@ -73,7 +85,7 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            _endpoint = MakeUnique<FakeControlEndpoint>(kNodes);
+            _endpoint = MakeUnique<FakeControlEndpoint>(Nodes());
             _session = MakeUnique<RemoteSession>(_endpoint->Factory());
             _sessionHandle = RemoteSessionRegistry::GetInstance().Register(*_session);
 
@@ -84,7 +96,7 @@ namespace BECore::Tests {
             for (const StringView asset : {kToolbarAsset, kInspectorAsset}) {
                 WriteFile(_dir / Format("{}.xml", asset), ReadFile(panels / Format("{}.xml", asset)));
             }
-            const String sceneText = SceneConfigText(kNodes);
+            const String sceneText = SceneConfigText(Nodes());
             _sceneFile = _dir / "SceneConfig.xml";
             WriteFile(_sceneFile, sceneText);
             ASSERT_TRUE(_fileSystem.Mount(MountPoints::config, _dir));
@@ -370,6 +382,33 @@ namespace BECore::Tests {
                 frame();
             }
         });
+    }
+
+    TEST_F(RemoteSceneEditorTest, APickedNodeOpensTheClosedPanelAndItsRowIsBroughtIntoSightPastAFilter) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        _endpoint->DrawScreen();
+        ASSERT_NO_FATAL_FAILURE(ClickAt(FindText("##search")));
+        Type("Filler");
+        Run(EditorCommandIds::kViewSceneEditor);
+        ASSERT_EQ(FindText("Root"), nullptr) << "the panel did not close";
+
+        _session->RequestPick(kOnCell, kOnCell);
+        Settle();
+
+        ASSERT_EQ(_session->GetSelection(), Optional<String>("Board/Cell"));
+        EXPECT_NE(FindText("Cell"), nullptr) << "the row of the picked node is not on the screen";
+        EXPECT_EQ(_editor->GetInspected().name, StringView("Cell"));
+        EXPECT_EQ(_events.selected, 0u) << "a node of this process was selected";
+
+        // One walk scrolls to the row, so the user can scroll away from it
+        const ImGuiItemRecord* const row = FindText("Cell");
+        ASSERT_NE(row, nullptr);
+        ImGui::GetIO().AddMousePosEvent(row->CenterX(), row->CenterY());
+        Frame();
+        ImGui::GetIO().AddMouseWheelEvent(0.0f, 100.0f);
+        Settle();
+        EXPECT_NE(FindText("Root"), nullptr);
+        EXPECT_EQ(FindText("Cell"), nullptr);
     }
 
     TEST_F(RemoteSceneEditorTest, ARefusedWriteIsGivenToTheInspector) {

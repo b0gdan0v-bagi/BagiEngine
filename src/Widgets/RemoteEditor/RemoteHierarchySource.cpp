@@ -22,6 +22,28 @@ namespace BECore {
 
     }  // namespace
 
+    Optional<HierarchyRow> RemoteHierarchySource::Reveal(StringView path) {
+        _revealed = _session.GetTree().Find(path);
+        if (_revealed == nullptr) {
+            return {};
+        }
+        // A row only carries the pointer: nothing writes through it
+        return HierarchyRow{const_cast<RemoteTreeNode*>(_revealed)};
+    }
+
+    bool RemoteHierarchySource::IsOnRevealPath(HierarchyRow row) const {
+        if (_revealed == nullptr) {
+            return false;
+        }
+        const RemoteTreeNode* const node = NodeOf(row);
+        if (node == nullptr) {
+            return true;  // the root is above every node
+        }
+        // A `/` after the whole path of a node separates segments: one of a name follows an unpaired `\`, which no path ends in
+        const StringView target = _revealed->path;
+        return target.size() > node->path.size() && target.starts_with(StringView(node->path)) && target[node->path.size()] == '/';
+    }
+
     size_t RemoteHierarchySource::GetChildCount(HierarchyRow row) const {
         const RemoteTreeNode* const node = NodeOf(row);
         return node != nullptr ? node->children.size() : _session.GetTree().GetTopNodes().size();

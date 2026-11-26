@@ -1,6 +1,6 @@
 # Remote editor: the scene of another process
 
-Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the control API. All but `RemoteSceneView` is data and logic with no ImGui. The data classes know no transport: results of control methods go in as text, property visits and writes come out. Everything read is a peer's: a wrong shape is left out, every recursion is bounded, and nothing is interned (the editor's pool never frees).
+Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the control API. All but `RemoteSceneView` and `RemoteViewportView` is data and logic with no ImGui. The data classes know no transport: results of control methods go in as text, property visits and writes come out. Everything read is a peer's: a wrong shape is left out, every recursion is bounded, and nothing is interned (the editor's pool never frees).
 
 | File | Holds |
 |------|-------|
@@ -16,6 +16,7 @@ Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the co
 | `RemoteSessionWidget` | owns that session ("The widget and the panel") |
 | `RemoteLinkStatus` | the state of the link in a sentence |
 | `RemoteSceneView` | the Scene Editor's content in remote mode ("The Scene Editor") |
+| `RemoteViewportView` | the Viewport's content in remote mode ("The Viewport") |
 | `AttachPanelModel` | the Attach panel (`config/panels/AttachPanel.xml`) |
 | `RemoteHierarchySource` | the session's tree and selection as the hierarchy panel reads them: read-only, rows named to ImGui by path (`.claude/rules/widgets-module.md`, "Scene Editor Conventions") |
 
@@ -93,8 +94,17 @@ What remote mode does to the local editor: `.claude/rules/widgets-module.md`, "S
 - Typed texts are released once a frame while no ImGui item is active, also while the window is closed.
 - The bars ask `ISceneEditorHost`, which answers from `Inspect`: the name is the tree's (never interned), the layer the pending one while there is one, and the last refusal is shown under the inspector's title.
 - A component header comes from the tree and its fields from the last read, matched by type and namesake, since the tree may be the newer of the two.
+- A node picked in the Viewport is taken from the session also while the window is closed, which it opens; the next draw of the hierarchy opens the rows above it and scrolls to it once, and clears a filter that hides it.
 
 Tests: `RemoteSceneEditorTest` runs the widget and its shipped bars over the fake endpoint, beside a local scene that must not change.
+
+## The Viewport
+
+`ViewportWidget` hands its window to `RemoteViewportView`: the frame as large as fits with its aspect kept, greyed while the link is not `Attached`, over it a line for each of the link's trouble, the picture's error and the pick's refusal; before the first frame an empty state with the link's sentence. The picture is asked for only while the window is drawn, with the longer side of the room it has in framebuffer pixels. A left press on the frame is `RequestPick` with the point as fractions of the frame; a bar takes none, and nothing is forwarded to a game.
+
+The view owns the texture, one per revision of the picture, and waits for the GPU before it lets one go (a new frame, the end of remote mode, the widget's death).
+
+Tests: `RemoteViewportTest`.
 
 ## Trying it by hand
 

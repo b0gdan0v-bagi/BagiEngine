@@ -15,7 +15,6 @@
 #include <Generated/ViewportEvents.gen.hpp>
 #include <Generated/ViewportWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
-#include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelBars.h>
@@ -124,9 +123,11 @@ namespace BECore {
 
     void ViewportWidget::Update() {
         BE_PROFILE_SCOPE("ViewportWidget::Update");
-        const RemoteSession* const remote = RemoteSessionRegistry::GetInstance().GetRemote();
+        RemoteSession* const remote = RemoteSessionRegistry::GetInstance().GetRemote();
         if (remote != nullptr) {
             DropLocalInput();
+        } else {
+            _remoteView.Release();
         }
         if (!_open) {
             return;
@@ -154,11 +155,10 @@ namespace BECore {
         _frameRequested = false;
     }
 
-    void ViewportWidget::DrawRemoteWindow(const RemoteSession& session) {
+    void ViewportWidget::DrawRemoteWindow(RemoteSession& session) {
         ImGui::SetNextWindowSize({800.0f, 600.0f}, ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Viewport", &_open)) {
-            _remoteLink.Update(session);
-            EmptyState(_remoteLink.IsTroubled() ? ICON_LC_UNPLUG : ICON_LC_PLUG, _remoteLink.GetText().c_str());
+            _remoteView.Draw(session);
         }
         ImGui::End();
     }

@@ -187,7 +187,7 @@ namespace BECore {
             const bool dimmed = hidden || (filterOn && !HierarchyModel::NodeMatchesFilter(source, row, state.searchBuffer, state.componentType));
             // What the state asks of a node (reveal, scroll, rename) is asked of editable rows only: its pointers are null otherwise
             const bool revealed = node != nullptr && (state.revealNode == node || eastl::find(state.openNodes.begin(), state.openNodes.end(), node) != state.openNodes.end());
-            if (revealed || (filterOn && childCount > 0)) {
+            if (revealed || source.IsOnRevealPath(row) || (filterOn && childCount > 0)) {
                 ImGui::SetNextItemOpen(true);
             }
 
@@ -201,7 +201,7 @@ namespace BECore {
             if (dimmed) {
                 ImGui::PopStyleColor();
             }
-            if (node != nullptr && state.scrollTo == node) {
+            if ((node != nullptr && state.scrollTo == node) || source.IsRevealTarget(row)) {
                 ImGui::SetScrollHereY();
                 state.scrollTo = nullptr;
             }
@@ -366,11 +366,15 @@ namespace BECore {
             state.scrollTo = live;
             const SceneSelection none;
             const LocalHierarchySource source(active, state, none);
-            if (FilterIsOn(state) && !HierarchyModel::SubtreeMatchesFilter(source, LocalHierarchySource::RowOf(*live), state.searchBuffer, state.componentType)) {
+            ClearHidingFilter(source, state, LocalHierarchySource::RowOf(*live));
+            return true;
+        }
+
+        void ClearHidingFilter(const IHierarchySource& source, HierarchyState& state, HierarchyRow row) {
+            if (FilterIsOn(state) && !HierarchyModel::SubtreeMatchesFilter(source, row, state.searchBuffer, state.componentType)) {
                 state.searchBuffer[0] = '\0';
                 state.componentType.clear();
             }
-            return true;
         }
 
         void BeginRename(HierarchyState& state, SceneNode& node) {

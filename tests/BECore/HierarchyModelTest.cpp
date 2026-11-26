@@ -259,6 +259,32 @@ namespace BECore::Tests {
         EXPECT_FALSE(source.IsSelected(inner));
     }
 
+    TEST_F(HierarchyModelTest, OnlyTheRowsAboveTheRevealedNodeOfAnotherProgramAreOnItsPath) {
+        AttachedProgram program;
+        // A name that begins the name of a node on the path
+        program.endpoint.Node("A").SetName("Bran"_intern);
+        program.now += RemoteSessionTiming::kTreeInterval;
+        program.Exchange();
+        RemoteHierarchySource source(program.session);
+        const HierarchyRow root = source.GetRoot();
+        const HierarchyRow namesake = source.GetChild(root, 0);
+        const HierarchyRow branch = source.GetChild(root, 1);
+        const HierarchyRow inner = source.GetChild(branch, 0);
+        EXPECT_FALSE(source.IsOnRevealPath(root));
+        EXPECT_FALSE(source.Reveal("Branch/B1/Gone").has_value());
+
+        ASSERT_TRUE(source.Reveal("Branch/B1/Leaf").has_value());
+        EXPECT_TRUE(source.IsOnRevealPath(root));
+        EXPECT_TRUE(source.IsOnRevealPath(branch));
+        EXPECT_TRUE(source.IsOnRevealPath(inner));
+        EXPECT_FALSE(source.IsOnRevealPath(namesake));
+        EXPECT_FALSE(source.IsOnRevealPath(source.GetChild(root, 2)));
+        const HierarchyRow leaf = source.GetChild(inner, 0);
+        EXPECT_TRUE(source.IsRevealTarget(leaf));
+        EXPECT_FALSE(source.IsRevealTarget(inner));
+        EXPECT_FALSE(source.IsOnRevealPath(leaf));
+    }
+
     TEST_F(HierarchyModelTest, ARowOfAnotherProgramKeepsItsIdOverANewReadOfTheTree) {
         AttachedProgram program;
         const RemoteHierarchySource source(program.session);

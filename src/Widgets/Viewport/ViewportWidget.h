@@ -12,7 +12,7 @@
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
-#include <Widgets/RemoteEditor/RemoteLinkStatus.h>
+#include <Widgets/RemoteEditor/RemoteViewportView.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportInput.h>
@@ -46,7 +46,7 @@ namespace BECore {
     // image has an editor camera (ViewportCamera), a drag on empty ground draws a rubber band, and the gizmo
     // (ViewportGizmos) moves, turns and scales the selected nodes; its keys are read here and handed to the toolbar's model, which runs its commands.
     // The selected canvas element (UIElementSelectedEvent) gets eight handles and an anchor widget (ViewportUIGizmos): a drag writes its style.rect and tells UIRectDragEvent.
-    // In remote mode (RemoteSessionRegistry::GetRemote) the window holds no image: no scene pass, no input to the game, no drag, only the state of the link.
+    // In remote mode (RemoteSessionRegistry::GetRemote) the window is RemoteViewportView's: the attached program's picture, on which a click selects; no scene pass, no input to a game, no drag.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -69,7 +69,7 @@ namespace BECore {
         void DropLocalInput();
 
         /// The "Viewport" window in remote mode
-        void DrawRemoteWindow(const RemoteSession& session);
+        void DrawRemoteWindow(RemoteSession& session);
 
         // The grid preference of the editor (EditorLayoutWidget sends it on its first frame and on every change)
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
@@ -143,7 +143,7 @@ namespace BECore {
         bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)
         ViewportBoxSelect _boxSelect;
         ViewportPointer _pointer;  // the held presses and where each goes
-        RemoteLinkStatus _remoteLink;
+        RemoteViewportView _remoteView;
     };
 
 }  // namespace BECore

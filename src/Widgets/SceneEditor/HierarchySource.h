@@ -43,6 +43,16 @@ namespace BECore {
         /// The node the panel may change (rename, drag, the context menu, the eye and the lock); null for a row that cannot be changed here
         [[nodiscard]] virtual SceneNode* EditableNode(HierarchyRow row) const = 0;
 
+        /// The row is above the one the source asks to be shown: this walk opens it
+        [[nodiscard]] virtual bool IsOnRevealPath(HierarchyRow /*row*/) const {
+            return false;
+        }
+
+        /// The row this walk scrolls into view. A source says so for one walk
+        [[nodiscard]] virtual bool IsRevealTarget(HierarchyRow /*row*/) const {
+            return false;
+        }
+
         /// The tree lacks nodes of the scene it shows
         [[nodiscard]] virtual bool IsTruncated() const {
             return false;

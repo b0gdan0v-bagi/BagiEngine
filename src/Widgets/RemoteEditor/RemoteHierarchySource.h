@@ -5,6 +5,7 @@
 namespace BECore {
 
     class RemoteSession;
+    struct RemoteTreeNode;
 
     /**
      * @brief The tree of the program a RemoteSession is attached to, for the hierarchy panel: read-only, its selection the session's
@@ -16,6 +17,10 @@ namespace BECore {
     class RemoteHierarchySource final : public IHierarchySource {
     public:
         explicit RemoteHierarchySource(RemoteSession& session) : _session(session) {}
+
+        /// Asks the walk to open the rows above the node at @p path and to scroll to its row; that row, or nothing when the tree does not list the node.
+        /// The tree must not be read anew while the source is used
+        Optional<HierarchyRow> Reveal(StringView path);
 
         [[nodiscard]] HierarchyRow GetRoot() const override {
             return {};
@@ -40,10 +45,17 @@ namespace BECore {
             return nullptr;
         }
 
+        [[nodiscard]] bool IsOnRevealPath(HierarchyRow row) const override;
+
+        [[nodiscard]] bool IsRevealTarget(HierarchyRow row) const override {
+            return _revealed != nullptr && row.handle == _revealed;
+        }
+
         [[nodiscard]] bool IsTruncated() const override;
 
     private:
         RemoteSession& _session;
+        const RemoteTreeNode* _revealed = nullptr;
     };
 
 }  // namespace BECore

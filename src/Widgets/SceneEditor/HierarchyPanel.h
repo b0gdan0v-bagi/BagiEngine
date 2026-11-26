@@ -64,6 +64,9 @@ namespace BECore {
          */
         bool Reveal(Scene& active, HierarchyState& state, const Scene* scene, const SceneNode* node);
 
+        /// Clears the filter of @p state when it hides @p row of @p source
+        void ClearHidingFilter(const IHierarchySource& source, HierarchyState& state, HierarchyRow row);
+
         /// Starts renaming @p node: its row shows a text field with the current name. A locked node (EditorFlags::Locked) is not renamed
         void BeginRename(HierarchyState& state, SceneNode& node);
 

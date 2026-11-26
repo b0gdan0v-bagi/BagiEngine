@@ -20,6 +20,9 @@ namespace BECore {
         /// Forgets what the view kept of an earlier link: the search, the filter, the selection it told of
         void Reset();
 
+        /// Takes the node a pick has selected in the session, if any, for the next Draw() to open the hierarchy at; true when there is one
+        [[nodiscard]] bool TakeReveal(RemoteSession& session);
+
         /// Lets the typed texts be sent when no field is being edited. Once a frame, also while the window is closed. Needs a frame in progress
         static void ReleaseTypedText(RemoteSession& session);
 
@@ -47,6 +50,8 @@ namespace BECore {
         RemoteLinkStatus _link;
         /// The selection last told by AnnounceSelection()
         Optional<String> _announced;
+        /// The path the hierarchy has yet to show
+        Optional<String> _reveal;
     };
 
 }  // namespace BECore

@@ -374,6 +374,10 @@ namespace BECore {
                 _remoteView.Reset();
             }
             RemoteSceneView::ReleaseTypedText(*remote);
+            // A pick in the viewport opens a closed panel, as a local one does
+            if (_remoteView.TakeReveal(*remote)) {
+                _focusRequested = true;
+            }
         }
         _showsRemote = remote != nullptr;
 
