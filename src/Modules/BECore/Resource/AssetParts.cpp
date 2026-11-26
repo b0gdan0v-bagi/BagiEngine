@@ -45,16 +45,8 @@ namespace BECore {
         constexpr AssetPurpose kParts[] = {AssetPurpose::Sim, AssetPurpose::Visual, AssetPurpose::Editor};
         constexpr pugi::xml_encoding kEncoding = pugi::encoding_utf8;
 
-        Optional<AssetPurpose> FindPart(StringView name) {
-            for (const AssetPurpose part : kParts) {
-                if (PartName(part) == name) {
-                    return part;
-                }
-            }
-            return {};
-        }
-
-        Optional<String>& Slot(AssetPartTexts& texts, AssetPurpose part) {
+        template <typename TTexts>
+        auto& SelectPart(TTexts& texts, AssetPurpose part) {
             return part == AssetPurpose::Sim ? texts.sim : part == AssetPurpose::Visual ? texts.visual : texts.editor;
         }
 
@@ -76,11 +68,11 @@ namespace BECore {
                 if (child.type() != pugi::node_element) {
                     continue;
                 }
-                const Optional<AssetPurpose> part = FindPart(child.name());
+                const Optional<AssetPurpose> part = TryParsePurpose(child.name());
                 if (!part) {
                     return std::unexpected(Format("'{}' in the asset is no part (expected sim, visual or editor)", child.name()));
                 }
-                Optional<String>& slot = Slot(texts, *part);
+                Optional<String>& slot = texts.Get(*part);
                 if (slot) {
                     return std::unexpected(Format("The part '{}' appears twice in the asset", child.name()));
                 }
@@ -92,24 +84,15 @@ namespace BECore {
             return texts;
         }
 
-        /// The real folder for the split files: an existing virtual folder, else the folder inside its mount point
+        /// The real folder for the split files: an existing virtual folder, else one made in the top layer of its mount point
         Path ResolveOutputFolder(StringView virtualFolder) {
             const FileSystem& fileSystem = CoreManager::GetFileSystem();
             Path folder = fileSystem.ResolvePath(virtualFolder);
             if (!folder.Empty()) {
                 return folder;
             }
-            const size_t slash = virtualFolder.find('/');
-            const StringView mountPoint = virtualFolder.substr(0, slash);
-            const Path mounted = fileSystem.GetMountedPath(PoolString::Intern(mountPoint));
-            if (mounted.Empty()) {
-                return {};
-            }
-            folder = mounted;
-            if (slash != StringView::npos) {
-                folder /= virtualFolder.substr(slash + 1);
-            }
-            return CreateDirectories(folder) ? folder : Path{};
+            folder = fileSystem.PathInTopLayer(virtualFolder);
+            return !folder.Empty() && CreateDirectories(folder) ? folder : Path{};
         }
 
         bool WriteText(const Path& file, const String& text) {
@@ -120,8 +103,12 @@ namespace BECore {
 
     }  // namespace
 
+    Optional<String>& AssetPartTexts::Get(AssetPurpose part) {
+        return SelectPart(*this, part);
+    }
+
     const Optional<String>& AssetPartTexts::Get(AssetPurpose part) const {
-        return part == AssetPurpose::Sim ? sim : part == AssetPurpose::Visual ? visual : editor;
+        return SelectPart(*this, part);
     }
 
     String SplitPartPath(StringView assetPath, AssetPurpose part) {
@@ -198,19 +185,24 @@ namespace BECore {
             return false;
         }
 
-        bool written = true;
+        bool mirrored = true;
         for (const AssetPurpose part : kParts) {
             const String splitPath = SplitPartPath(virtualAssetPath, part);
             const Path file = folder / PathFilename(splitPath);
             const Optional<String>& text = texts->Get(part);
             if (!text) {
-                static_cast<void>(RemoveFile(file));  // a part that never was there is not an error
+                // The removal fails for a part that never was there too: only what is still under the name is an error
+                const std::expected<void, String> removed = RemoveFile(file);
+                if (!removed && (GetFileInfo(file) || IsSymbolicLink(file))) {
+                    LOG_ERROR("SplitAssetFile: {}", removed.error());
+                    mirrored = false;
+                }
             } else if (!WriteText(file, *text)) {
                 LOG_ERROR("SplitAssetFile: cannot write '{}'", file.View());
-                written = false;
+                mirrored = false;
             }
         }
-        return written;
+        return mirrored;
     }
 
 }  // namespace BECore

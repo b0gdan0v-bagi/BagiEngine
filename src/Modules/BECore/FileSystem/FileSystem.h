@@ -73,6 +73,14 @@ namespace BECore {
 
         bool Exists(StringView virtualPath) const;
 
+        /**
+         * @brief Where @p virtualPath lies in the top layer of its mount point, whether anything is there or not
+         *
+         * For a writer that is about to make it; reads and makes nothing. Empty when the first segment is no mount point (an
+         * absolute path too) or what follows it starts at a root (`config//x`) and so leaves the layer.
+         */
+        [[nodiscard]] Path PathInTopLayer(StringView virtualPath) const;
+
         /// Content root with the highest priority (the game's, when one is added)
         const Path& GetRootPath() const {
             return _rootPath;

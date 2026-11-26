@@ -4,6 +4,7 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/AssetParts.h>
 #include <BECore/Resource/ResourceManager.h>
+#include <Common/LogRecorder.h>
 #include <Common/MountedFolderTest.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
@@ -419,6 +420,22 @@ namespace BECore::Tests {
         EXPECT_TRUE(FileExists("gem.sim.xml"));
         EXPECT_TRUE(FileExists("gem.visual.xml"));
         EXPECT_FALSE(FileExists("gem.editor.xml"));
+        // Nothing left to remove is no failure
+        EXPECT_TRUE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+    }
+
+    TEST_F(AssetPartsTest, AGonePartWhoseOldFileCannotBeRemovedFailsTheSplitAndTheOtherPartsAreWritten) {
+        WriteFile("gem.asset.xml", R"(<asset><visual><PartVisualProbe value="2"/></visual><editor><PartEditorProbe value="3"/></editor></asset>)");
+        // A folder under the name of the first part the split handles
+        MakeDirectory(_dir / "gem.sim.xml");
+        LogRecorder log;
+
+        EXPECT_FALSE(SplitAssetFile(VirtualPath("gem.asset.xml")));
+
+        LogEvent::Flush();
+        EXPECT_NE(log.Find(LogLevel::Error, {"SplitAssetFile", "gem.sim.xml"}), nullptr);
+        EXPECT_TRUE(FileExists("gem.visual.xml"));
+        EXPECT_TRUE(FileExists("gem.editor.xml"));
     }
 
     TEST_F(AssetPartsTest, TheOutputFolderTakesTheFilesAndTheSourceFolderNone) {

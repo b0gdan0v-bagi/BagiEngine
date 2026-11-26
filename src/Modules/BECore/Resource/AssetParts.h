@@ -39,6 +39,8 @@ namespace BECore {
         Optional<String> visual;
         Optional<String> editor;
 
+        /// The text of @p part, which must not be `Common`
+        Optional<String>& Get(AssetPurpose part);
         const Optional<String>& Get(AssetPurpose part) const;
     };
 
@@ -62,7 +64,8 @@ namespace BECore {
      * not split. `OpenAssetPart` prefers the files only beside the source and with a later write time; files in another
      * output folder serve only where no whole file resolves.
      *
-     * @return false (and an error in the log) when the source does not read or split or a file cannot be written.
+     * @return false (and an error in the log) when the source does not read or split, a file cannot be written or the
+     *         old file of a gone part cannot be removed; a failed part does not stop the others.
      */
     bool SplitAssetFile(StringView virtualAssetPath, StringView outputVirtualFolder = {});
 
