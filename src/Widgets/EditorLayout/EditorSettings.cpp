@@ -4,8 +4,8 @@
 #include <BECore/Control/JsonTape.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/JsonWriter.h>
-#include <BECore/File/File.h>
 #include <SDL3/SDL_filesystem.h>
+#include <Widgets/EditorLayout/EditorUserFile.h>
 
 namespace BECore {
 
@@ -14,8 +14,6 @@ namespace BECore {
         constexpr int kFileVersion = 1;
         constexpr const char* kEditorOrganization = "BagiEngine";
         constexpr const char* kEditorApplication = "Editor";
-        constexpr int kJsonIndent = 2;
-        constexpr StringView kBadFileSuffix = ".bad";
 
         constexpr StringView kVersionKey = "version";
         constexpr StringView kFontScaleKey = "fontScale";
@@ -48,35 +46,6 @@ namespace BECore {
         constexpr StringView kOverlayAnchorsKey = "overlayAnchors";
         constexpr StringView kOverlayDesignRectKey = "overlayDesignRect";
         constexpr StringView kOverlayFindingsKey = "overlayFindings";
-
-        // A UTF-8 byte order mark that Notepad writes: the tape refuses it, and a file the user edited by hand must not be moved to `.bad` for it
-        constexpr StringView kUtf8Bom = "\xEF\xBB\xBF";
-
-        // Reads the file at @p path into @p text and tapes it into @p tape (the tape borrows @p text, so both stay with the caller). Missing file:
-        // false, no warning. A file that cannot be read or parsed, or whose root is not an object: false, one warning, @p unreadable set.
-        bool ReadJsonObject(const Path& path, String& text, JsonTape& tape, bool& unreadable) {
-            unreadable = false;
-            if (!GetFileInfo(path)) {
-                return false;
-            }
-            unreadable = true;
-            std::expected<String, String> read = ReadTextFile(path);
-            if (!read) {
-                LOG_WARNING("Editor settings: {}; using the defaults", read.error());
-                return false;
-            }
-            text = std::move(*read);
-            StringView body(text.data(), text.size());
-            if (body.starts_with(kUtf8Bom)) {
-                body.remove_prefix(kUtf8Bom.size());
-            }
-            if (!tape.Parse(body) || !JsonView(tape, 0).IsObject()) {
-                LOG_WARNING("Editor settings: '{}' is not a JSON object; using the defaults", path.View());
-                return false;
-            }
-            unreadable = false;
-            return true;
-        }
 
         void WarnWrongType(StringView file, StringView key, StringView expected) {
             LOG_WARNING("Editor settings: '{}' in {} is not {}; using the default", key, file, expected);
@@ -345,7 +314,7 @@ namespace BECore {
 
         String fileText;
         JsonTape tape;
-        if (!ReadJsonObject(_directory / kPreferencesFileName, fileText, tape, _preferencesUnreadable)) {
+        if (!ReadEditorJsonFile(_directory / kPreferencesFileName, fileText, tape, _preferencesUnreadable)) {
             return;
         }
         const JsonView content(tape, 0);
@@ -387,7 +356,7 @@ namespace BECore {
 
         String fileText;
         JsonTape tape;
-        if (!ReadJsonObject(_directory / kHotkeysFileName, fileText, tape, _hotkeysUnreadable)) {
+        if (!ReadEditorJsonFile(_directory / kHotkeysFileName, fileText, tape, _hotkeysUnreadable)) {
             return;
         }
         const JsonView content(tape, 0);
@@ -473,20 +442,7 @@ namespace BECore {
             return false;
         }
 
-        // A file that did not parse is moved aside once, so the user's old text is not lost to the first change
-        if (unreadable) {
-            const Path backup(Format("{}{}", path.View(), kBadFileSuffix));
-            if (GetFileInfo(path) && RenameFile(path, backup)) {
-                LOG_WARNING("Editor settings: the unreadable '{}' was kept as '{}'", path.View(), backup.View());
-            }
-            unreadable = false;
-        }
-
-        String text;
-        JsonWriter writer(text, kJsonIndent);
-        content.Write(writer);
-        text.push_back('\n');
-        const std::expected<void, String> written = WriteFileAtomically(path, text);
+        const std::expected<void, String> written = WriteEditorJsonFile(path, content, unreadable);
         if (!written) {
             _lastSaveError = written.error();
             LOG_ERROR("Editor settings: {}", _lastSaveError);
