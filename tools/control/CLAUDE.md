@@ -17,7 +17,7 @@ Python 3.10+ tools that drive a game through the control API (`src/Modules/Remot
 | `bagi_image.py` | `run_image_diff` (the `image_diff` tool without MCP), `ImageError`; the comparison is `tools/shots/png_diff.py` |
 | `bagi_mcp.py` | The MCP server (stdio), one line per tool over `GameSession`; the only file that needs `mcp` |
 | `bagi_bridge.py` | The bridge for a game in a browser page: the page dials it, and while the page is linked it offers the control endpoint; `Bridge` runs it in a thread |
-| `tests/` | pytest and `smoke.py`, the game-neutral smoke (common methods, screenshot, UI tree, `set_window`) behind `be_add_game_control_tests`; a game with rules writes its own `SCRIPT` calling `run_smoke()`. `BagiStress`: `tools/stress/tests/stress_smoke.py` |
+| `tests/` | pytest and `smoke.py`, the game-neutral smoke (common methods, screenshot, UI tree, `set_window`) behind `be_add_game_control_tests`; a game with rules writes its own `SCRIPT` calling `run_smoke()`. `BagiStress`: `tools/stress/tests/stress_smoke.py`; `attach_smoke.py` is `BagiStressAttachSmoke`: a game and an editor attached to it, two processes |
 
 **A game in a browser page** cannot listen, so it dials `bagi_bridge.py`, and the tools here connect to the bridge as to a desktop game.
 The link protocol, its security rules and the command line: `.claude/rules/control-web-link.md`; its tests play the page with `tests/fake_page.py`.

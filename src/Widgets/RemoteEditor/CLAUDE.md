@@ -76,3 +76,13 @@ What remote mode does to the local editor: `.claude/rules/widgets-module.md`, "S
 
 Tests: `RemoteSceneEditorTest` runs the widget and its shipped bars over the fake endpoint, beside a local scene that must not change.
 
+## Trying it by hand
+
+Start a game with its control API and an editor attached to it, two processes of any build with the editor:
+
+```bash
+build/macos-debug/bin/BagiStress --control --stress-scene=entities &
+build/macos-debug/bin/BagiStress --editor --attach=ws://127.0.0.1:8765
+```
+
+ctest `BagiStressAttachSmoke` (`tools/control/tests/attach_smoke.py`) does the same headless: a layer step in the editor's UI reaches the game, and a quit of the game leaves the editor read-only.
