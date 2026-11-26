@@ -12,6 +12,32 @@
 
 namespace BECore {
 
+    /// pugixml's `parent.child(name)` for a name that needs no NUL; an empty name finds nothing
+    inline pugi::xml_node FindXmlChild(pugi::xml_node parent, StringView name) {
+        if (name.empty()) {
+            return pugi::xml_node();
+        }
+        for (pugi::xml_node child = parent.first_child(); child; child = child.next_sibling()) {
+            if (StringView(child.name()) == name) {
+                return child;
+            }
+        }
+        return pugi::xml_node();
+    }
+
+    /// pugixml's `node.attribute(name)` for a name that needs no NUL; an empty name finds nothing
+    inline pugi::xml_attribute FindXmlAttribute(pugi::xml_node node, StringView name) {
+        if (name.empty()) {
+            return pugi::xml_attribute();
+        }
+        for (pugi::xml_attribute attribute = node.first_attribute(); attribute; attribute = attribute.next_attribute()) {
+            if (StringView(attribute.name()) == name) {
+                return attribute;
+            }
+        }
+        return pugi::xml_attribute();
+    }
+
     /**
      * @brief A copyable handle over a pugi::xml_node
      *
@@ -24,7 +50,7 @@ namespace BECore {
 
         /// An empty node when there is no such child
         XmlNode GetChild(StringView name) const {
-            return XmlNode{_node.child(name.data())};
+            return XmlNode{FindXmlChild(_node, name)};
         }
 
         bool IsEmpty() const {
@@ -97,7 +123,7 @@ namespace BECore {
 
         /// nullopt when the attribute is missing
         Optional<StringView> GetAttribute(StringView name) const {
-            auto attr = _node.attribute(name.data());
+            auto attr = FindXmlAttribute(_node, name);
             if (!attr) {
                 return std::nullopt;
             }
