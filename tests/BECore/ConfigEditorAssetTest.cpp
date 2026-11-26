@@ -10,7 +10,6 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Generated/ConfigEditorTestModel.gen.hpp>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/AssetPanelWidget.h>
@@ -93,7 +92,6 @@ namespace BECore::Tests {
             ImGui::DestroyContext();
             SetActiveImGuiFonts({});
             ConfigEditorTestModel::manager = nullptr;
-            ConfigFieldSchema::DestroyInstance();
             RemoveDirectory(_dir);
         }
 

@@ -1,13 +1,8 @@
 #include "ConfigEditorPanelModel.h"
 
 #include <BECore/Config/ConfigManager.h>
-#include <BECore/Config/ConfigNames.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Logger/ILogSink.h>
-#include <CoreSDL/SDLUtils.h>
 #include <Generated/ConfigEditorPanelModel.gen.hpp>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
-#include <Widgets/ConfigEditor/FieldInspectors.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorDocumentRows.h>
 
@@ -20,12 +15,6 @@ namespace BECore {
     }  // namespace
 
     void ConfigEditorPanelModel::Initialize() {
-        auto& schema = ConfigFieldSchema::GetInstance();
-
-        schema.RegisterFactoryTypes<ILogSink>(ConfigNames::logger, "sink/@type");
-        schema.RegisterEnum<LogLevel>(ConfigNames::logger, "sink/@minLevel");
-        schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags", SDLUtils::GetWindowFlagNames());
-
         Subscribe<ConfigEvents::ConfigChangedEvent, &ConfigEditorPanelModel::OnConfigChanged>(this);
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         // The closure keeps `this` only: it is called inside the frame and the handle ends with the model
@@ -105,7 +94,7 @@ namespace BECore {
 
     void ConfigEditorPanelModel::ResetEdits() {
         _staged.Clear();
-        ClearFieldInspectorState();
+        _tree.Clear();
         _unwritten = false;
         OpenDocument();
     }
@@ -129,7 +118,7 @@ namespace BECore {
         if (_document) {
             _objects.Draw(*_document);
         } else if (const XmlNode root = Manager().GetConfig(_selectedConfig)) {
-            _tree.Draw(root, _selectedConfig);
+            _tree.Draw(root);
         }
     }
 

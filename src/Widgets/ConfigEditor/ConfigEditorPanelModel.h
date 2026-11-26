@@ -72,7 +72,7 @@ namespace BECore {
     public:
         ConfigEditorPanelModel() = default;
 
-        /// Registers the field schema entries, the subscription, the `editor_state` source and the slot; called once by the widget that hosts the model
+        /// Subscribes and registers the `editor_state` source and the slot; called once by the widget that hosts the model
         void Initialize() override;
         [[nodiscard]] TypedRef GetObject() override;
         void Update() override;
@@ -104,7 +104,7 @@ namespace BECore {
         /// Writes the edits into the selected config and saves its file; the one path of the Save button and the command
         void SaveSelectedConfig();
 
-        /// The unsaved edits of a config edited as text: the inspectors stage into it, a test stages through it
+        /// The unsaved edits of a config edited as text: the tree stages into it, a test stages through it
         StagedChanges& GetStagedChanges() {
             return _staged;
         }

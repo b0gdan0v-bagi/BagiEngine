@@ -1,109 +1,26 @@
 #pragma once
 
 #include <BECore/PoolString/PoolString.h>
-#include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Types/Types.h>
-#include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/Singleton.h>
-#include <EASTL/sort.h>
-#include <EASTL/unordered_map.h>
-#include <cstdint>
-#include <utility>
 
 namespace BECore {
 
-    CORE_ENUM(FieldType, uint8_t, String, Bool, Int, Float, Enum, Flags)
-
-    struct FieldHint {
-        FieldType type = FieldType::String;
-        Vector<String> options;  // enum values or flag names (owned)
-    };
-
     /**
-     * @brief Singleton registry mapping (configName, attrPath) to a FieldHint
+     * @brief Registrations that do nothing, so that a game which registers its config fields still builds
      *
-     * Supports explicit registration for enum, factory type and flags fields.
-     * Falls back to heuristic resolution for unregistered fields.
-     *
-     * Registration paths use the format "elementName/@attributeName" (e.g. "sink/@type").
+     * The Config Editor takes the fields of a config and their controls from the type registered for it with `CookableConfig<T>`; a
+     * config with no such type is edited as text.
      */
     class ConfigFieldSchema : public Singleton<ConfigFieldSchema> {
     public:
-        /**
-         * @brief Register an attribute as an enum field
-         * @tparam EnumT Enum type registered via CORE_ENUM
-         * @param configName Config file name (without extension)
-         * @param attrPath Path in format "elementName/@attrName"
-         */
         template <typename EnumT>
-        void RegisterEnum(PoolString configName, StringView attrPath) {
-            const String key = MakeKey(configName, attrPath);
-            FieldHint hint;
-            hint.type = FieldType::Enum;
-            const auto& names = EnumUtils<EnumT>::Names();
-            hint.options.reserve(names.size());
-            for (const auto& name : names) {
-                hint.options.emplace_back(name.data(), name.size());
-            }
-            _hints[key] = std::move(hint);
-        }
+        [[deprecated("register the config's type with CookableConfig")]] void RegisterEnum(PoolString /*configName*/, StringView /*attrPath*/) {}
 
-        /**
-         * @brief Register an attribute as an enum field whose values are the class names of an AbstractFactory
-         *
-         * The options are the type names of every type registered in AbstractFactory<BaseT>, sorted
-         * alphabetically (the registration order depends on static initializers). They are exactly the strings
-         * AbstractFactory<BaseT>::Create(eastl::string_view) resolves, which is how the loader reads the
-         * "type" attribute of a factory element.
-         *
-         * @tparam BaseT Factory base type (e.g. ILogSink)
-         * @param configName Config file name (without extension)
-         * @param attrPath Path in format "elementName/@attrName"
-         */
         template <typename BaseT>
-        void RegisterFactoryTypes(PoolString configName, StringView attrPath) {
-            const String key = MakeKey(configName, attrPath);
-            FieldHint hint;
-            hint.type = FieldType::Enum;
-            const auto& metas = AbstractFactory<BaseT>::GetInstance().GetRegisteredTypes();
-            hint.options.reserve(metas.size());
-            for (const auto& meta : metas) {
-                hint.options.emplace_back(meta.typeName.data(), meta.typeName.size());
-            }
-            eastl::sort(hint.options.begin(), hint.options.end());
-            _hints[key] = std::move(hint);
-        }
+        [[deprecated("register the config's type with CookableConfig")]] void RegisterFactoryTypes(PoolString /*configName*/, StringView /*attrPath*/) {}
 
-        /**
-         * @brief Register an attribute as a flags field (multi-checkbox)
-         * @param configName Config file name (without extension)
-         * @param attrPath Path in format "elementName/@attrName"
-         * @param flagNames List of all possible flag names
-         */
-        void RegisterFlags(PoolString configName, StringView attrPath, Vector<String> flagNames);
-
-        /**
-         * @brief Resolve a FieldHint for the given attribute
-         *
-         * Checks the registry first, then falls back to heuristics:
-         * - "true" / "false" -> Bool
-         * - Parseable as int -> Int
-         * - Parseable as float -> Float
-         * - Default          -> String (also a value with '|': only a registered field is Flags, since the
-         *   options guessed from one value would hide every other flag)
-         *
-         * @param configName Config file name (without extension)
-         * @param attrPath Path in format "elementName/@attrName"
-         * @param currentValue Current attribute value for heuristic fallback
-         * @return A reference into the registry or to a shared default, valid until the next Register*; it allocates nothing, so the
-         *         editor can ask for every attribute every frame. Copy it to keep it.
-         */
-        const FieldHint& Resolve(PoolString configName, StringView attrPath, StringView currentValue) const;
-
-    private:
-        static String MakeKey(PoolString configName, StringView attrPath);
-
-        HashMap<String, FieldHint> _hints;
+        [[deprecated("register the config's type with CookableConfig")]] void RegisterFlags(PoolString /*configName*/, StringView /*attrPath*/, const Vector<String>& /*flagNames*/) {}
     };
 
 }  // namespace BECore

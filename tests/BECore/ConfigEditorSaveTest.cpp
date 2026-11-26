@@ -13,7 +13,6 @@
 #include <Events/ConfigEvents.h>
 #include <Events/SubscriptionHolder.h>
 #include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/ConfigEditor/ReflectedConfigDocument.h>
 #include <Widgets/ConfigEditor/StagedChanges.h>
 
@@ -349,7 +348,6 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _model.Reset();
-            ConfigFieldSchema::DestroyInstance();
             RemoveDirectory(_dir);
         }
 

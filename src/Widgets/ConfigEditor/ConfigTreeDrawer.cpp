@@ -1,9 +1,8 @@
 #include "ConfigTreeDrawer.h"
 
 #include <BECore/Memory/ArenaAllocator.h>
+#include <EASTL/algorithm.h>
 #include <EASTL/iterator.h>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
-#include <Widgets/ConfigEditor/FieldInspectors.h>
 #include <Widgets/ConfigEditor/StagedChanges.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
@@ -25,15 +24,29 @@ namespace BECore {
         }
     }  // namespace
 
-    void ConfigTreeDrawer::Draw(const XmlNode& root, PoolString config) {
+    const char* ConfigTreeDrawer::InputValue(StringView key, StringView value) {
+        auto it = _textBuffers.find(key);
+        if (it == _textBuffers.end()) {
+            it = _textBuffers.emplace(String(key), TextBuffer{}).first;
+            eastl::copy_n(value.data(), eastl::min(value.size(), kTextBufferSize - 1), it->second.data());
+        }
+        // The key scopes the fixed label, so no label is formatted per frame
+        ImGui::PushID(key.data(), key.data() + key.size());
+        ImGui::SetNextItemWidth(-1.0f);
+        const bool entered = ImGui::InputText("##value", it->second.data(), it->second.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::PopID();
+        return entered ? it->second.data() : nullptr;
+    }
+
+    void ConfigTreeDrawer::Draw(const XmlNode& root) {
         const ScratchScope scratch;
         ArenaString rootPath;
         rootPath.reserve(kPathReserve);
         rootPath.append(root.Name().data(), root.Name().size());
-        RenderXmlNode(root.GetPugiNode(), rootPath, config);
+        RenderXmlNode(root.GetPugiNode(), rootPath);
     }
 
-    void ConfigTreeDrawer::RenderXmlNode(pugi::xml_node node, const ArenaString& nodePath, PoolString config) {
+    void ConfigTreeDrawer::RenderXmlNode(pugi::xml_node node, const ArenaString& nodePath) {
         if (node.type() != pugi::node_element) {
             return;
         }
@@ -50,8 +63,6 @@ namespace BECore {
         const bool nodeOpen = ImGui::TreeNodeEx(nodePath.c_str(), flags, "%s", node.name());
 
         if (nodeOpen) {
-            auto& schema = ConfigFieldSchema::GetInstance();
-
             if (hasAttributes) {
                 ImGui::Indent(8.0f);
                 if (ImGui::BeginTable("##attrs", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings)) {
@@ -77,18 +88,10 @@ namespace BECore {
 
                         ImGui::TableSetColumnIndex(1);
 
-                        const StringView domValue{attr.value()};
                         const String* stagedPtr = _staged.Get(attrKeyView);
-                        const StringView currentValue = stagedPtr ? StringView{*stagedPtr} : domValue;
-
-                        ArenaString schemaPath;
-                        schemaPath.reserve(kPathReserve);
-                        FormatTo(eastl::back_inserter(schemaPath), "{}/@{}", node.name(), attr.name());
-                        const FieldHint& hint = schema.Resolve(config, StringView(schemaPath.data(), schemaPath.size()), currentValue);
-
-                        const auto result = RenderFieldInspector(attrKeyView, currentValue, hint);
-                        if (result.changed) {
-                            _staged.Set(attrKeyView, attr, result.newValue);
+                        const StringView currentValue = stagedPtr ? StringView{*stagedPtr} : StringView{attr.value()};
+                        if (const char* entered = InputValue(attrKeyView, currentValue)) {
+                            _staged.Set(attrKeyView, attr, entered);
                         }
                     }
                     ImGui::EndTable();
@@ -103,7 +106,7 @@ namespace BECore {
                     ArenaString childPath;
                     childPath.reserve(kPathReserve);
                     FormatTo(eastl::back_inserter(childPath), "{}/{}[{}]", path, child.name(), childIndex);
-                    RenderXmlNode(child, childPath, config);
+                    RenderXmlNode(child, childPath);
                     ++childIndex;
                 } else if (child.type() == pugi::node_pcdata) {
                     const ScratchScope textScope;
@@ -113,11 +116,8 @@ namespace BECore {
                     const StringView textKey(textKeyString.data(), textKeyString.size());
                     const String* stagedPtr = _staged.Get(textKey);
                     const StringView currentValue = stagedPtr ? StringView{*stagedPtr} : StringView{child.value()};
-
-                    const FieldHint stringHint{FieldType::String};
-                    const auto result = RenderFieldInspector(textKey, currentValue, stringHint);
-                    if (result.changed) {
-                        _staged.SetText(textKey, child, result.newValue);
+                    if (const char* entered = InputValue(textKey, currentValue)) {
+                        _staged.SetText(textKey, child, entered);
                     }
                 }
             }

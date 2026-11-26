@@ -10,7 +10,6 @@
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Widgets/ConfigEditor/ConfigEditorPanelModel.h>
-#include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <gtest/gtest.h>
 
@@ -54,7 +53,6 @@ namespace BECore::Tests {
 
         void TearDown() override {
             _model.Reset();
-            ConfigFieldSchema::DestroyInstance();
             RemoveDirectory(_dir);
         }
 
