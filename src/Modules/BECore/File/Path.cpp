@@ -8,7 +8,7 @@ namespace BECore {
         constexpr StringView kRootDirectory = "/";
         constexpr StringView kDot = ".";
         constexpr StringView kDotDot = "..";
-        /// The inline names of a path that LexicallyNormal keeps without a heap block
+        /// The folded names of a path that are kept without a heap block
         constexpr size_t kInlineNames = 16;
         /// The odd constant of the hash combine of boost (the golden ratio in 32 bits)
         constexpr size_t kHashCombine = 0x9e3779b9;
@@ -84,6 +84,34 @@ namespace BECore {
             size_t _pos = 0;
             bool _emitTrailing = false;
         };
+
+        /**
+         * The names of @p relative (what follows the root) with `.`, `..` and runs of separators folded into @p kept; a `..` stays only
+         * where it has no name to cancel and no root directory to stop at. True when the folded path ends in a separator.
+         */
+        bool FoldNames(StringView relative, bool hasRootDirectory, SmallVector<StringView, kInlineNames>& kept) {
+            // After a "." or a ".." that cancelled a name, and after a final empty name, the result ends in a separator (std: "a/b/.." is "a/")
+            bool trailingSeparator = false;
+            NameCursor names(relative);
+            StringView name;
+            while (names.Next(name)) {
+                if (name.empty() || name == kDot) {
+                    trailingSeparator = true;
+                } else if (name == kDotDot) {
+                    if (!kept.empty() && kept.back() != kDotDot) {
+                        kept.pop_back();
+                        trailingSeparator = true;
+                    } else if (!hasRootDirectory) {
+                        kept.push_back(name);
+                        trailingSeparator = false;
+                    }  // else: ".." above the root has nothing to cancel and goes away
+                } else {
+                    kept.push_back(name);
+                    trailingSeparator = false;
+                }
+            }
+            return trailingSeparator;
+        }
 
         int CompareBytes(StringView left, StringView right) {
             const size_t common = eastl::min(left.size(), right.size());
@@ -198,7 +226,7 @@ namespace BECore {
     }
 
     bool PathIsUnder(StringView path, StringView root) {
-        if (root.empty()) {
+        if (path.empty() || root.empty()) {
             return false;
         }
         const Parts pathParts = Split(path);
@@ -206,17 +234,15 @@ namespace BECore {
         if (CompareBytes(path.substr(0, pathParts.rootNameEnd), root.substr(0, rootParts.rootNameEnd)) != 0 || pathParts.hasRootDirectory != rootParts.hasRootDirectory) {
             return false;
         }
-        NameCursor pathNames(path.substr(pathParts.relativeBegin));
-        NameCursor rootNames(root.substr(rootParts.relativeBegin));
-        StringView rootName;
-        StringView pathName;
-        // The empty name a trailing separator adds is the root's last: it ends the walk like running out of names does
-        while (rootNames.Next(rootName) && !rootName.empty()) {
-            if (!pathNames.Next(pathName) || CompareBytes(pathName, rootName) != 0) {
-                return false;
-            }
+        SmallVector<StringView, kInlineNames> pathNames;
+        SmallVector<StringView, kInlineNames> rootNames;
+        FoldNames(path.substr(pathParts.relativeBegin), pathParts.hasRootDirectory, pathNames);
+        FoldNames(root.substr(rootParts.relativeBegin), rootParts.hasRootDirectory, rootNames);
+        if (pathNames.size() < rootNames.size() || !eastl::equal(rootNames.begin(), rootNames.end(), pathNames.begin())) {
+            return false;
         }
-        return true;
+        // A ".." that is left right after the root's names climbs above the root: "../x" is not under "."
+        return pathNames.size() == rootNames.size() || pathNames[rootNames.size()] != kDotDot;
     }
 
     int PathCompare(StringView left, StringView right) {
@@ -305,26 +331,7 @@ namespace BECore {
         const StringView text = View();
         const Parts parts = Split(text);
         SmallVector<StringView, kInlineNames> kept;
-        // After a "." or a ".." that cancelled a name, and after a final empty name, the result ends in a separator (std: "a/b/.." is "a/")
-        bool trailingSeparator = false;
-        NameCursor names(text.substr(parts.relativeBegin));
-        StringView name;
-        while (names.Next(name)) {
-            if (name.empty() || name == kDot) {
-                trailingSeparator = true;
-            } else if (name == kDotDot) {
-                if (!kept.empty() && kept.back() != kDotDot) {
-                    kept.pop_back();
-                    trailingSeparator = true;
-                } else if (!parts.hasRootDirectory) {
-                    kept.push_back(name);
-                    trailingSeparator = false;
-                }  // else: ".." above the root has nothing to cancel and goes away
-            } else {
-                kept.push_back(name);
-                trailingSeparator = false;
-            }
-        }
+        const bool trailingSeparator = FoldNames(text.substr(parts.relativeBegin), parts.hasRootDirectory, kept);
 
         Path result;
         result._text.assign(text.data(), parts.rootNameEnd);
