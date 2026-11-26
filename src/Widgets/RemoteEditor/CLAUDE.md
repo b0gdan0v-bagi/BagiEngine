@@ -10,6 +10,8 @@ Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the co
 | `RemoteFieldWalker` | the visit itself |
 | `RemotePendingWrites` | edits not yet seen in read data |
 | `RemoteSession` | the link: connects, keeps the data above current, sends the writes |
+| `RemotePicture` | the last `screenshot` frame as RGBA ("The picture") |
+| `RemoteCallError` | why the program did not give what was asked |
 | `RemoteSessionRegistry` | how a panel finds the editor's one session |
 | `RemoteSessionWidget` | owns that session ("The widget and the panel") |
 | `RemoteLinkStatus` | the state of the link in a sentence |
@@ -57,7 +59,17 @@ One unsent write per target, a newer value replacing it, and at most one in flig
 - **Stalled** (`IsStalled`) is not a loss: requests wait and nothing is answered, as with a hidden browser tab or another client's deferred call holding the program's queue.
 - A poll with nothing due, or with answers that repeat the last ones, allocates nothing in the session (the desktop transport allocates per message).
 
-Tests drive it over `tests/BECore/FakeControlEndpoint.h`: the real methods over a scene, behind a transport in memory that answers on `Serve()`.
+Tests drive it over `tests/BECore/FakeControlEndpoint.h`: the real methods over a scene (`screenshot` alone is a stand-in), behind a transport in memory that answers on `Serve()`.
+
+## The picture
+
+Whoever shows the program's screen calls `RequestPicture` in each frame it does, so a hidden panel costs the program nothing: a poll sends `screenshot` only while `Attached`, when asked since the poll before, with one unanswered and the next one `kPictureInterval` after the answer.
+
+- The longer side asked for stops at `kMaxRemotePictureSide`: the frame is decoded on the main thread.
+- `RemotePicture` decodes only a `png_base64` that differs from the one of the frame; its revision is the key of a texture.
+- The frame stays through `Lost` and a reconnect; `Detach` and a new `Attach` drop it.
+- A refusal (`capture_failed`: a renderer that cannot read its output back) is the picture's error, retried after `kPictureRetry`; `unknown_method` is not asked again on that connection. Neither ends the session.
+- On a program with the manual clock each `screenshot` runs a frame of zero seconds, so a watched game draws while nobody steps it; its state does not move.
 
 ## The widget and the panel
 

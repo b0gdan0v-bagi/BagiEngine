@@ -17,7 +17,7 @@ On the web (Emscripten) there is no Vulkan: the window config and the renderer c
 | `SDLScreenshot` | `EncodePng()` (scale down, PNG in memory) and `RegisterScreenshotControl()`: the `screenshot` method of the control API |
 | `SDLRenderTarget` | `IRenderTarget` over a `SDL_TEXTUREACCESS_TARGET` texture (the ImGui texture id is the `SDL_Texture*`); the renderer lists the live ones and releases their texture in `Destroy()`, so a target may outlive it |
 | `SDLTexture` / `SDLTextureLoader` | `ITexture` implementation and its `IResourceLoader` |
-| `ImageFile` | `ReadImageFile()`: straight RGBA for the texture loaders and the editor. A PNG goes through `stb_image`: SDL_image on Apple uses ImageIO, which premultiplies the alpha |
+| `ImageFile` | `ReadImageFile()`, `DecodePngImage()` (a peer's bytes, memory bounded by the sides): straight RGBA. A PNG goes through `stb_image`: Apple's SDL_image premultiplies alpha |
 | `SDLWindowConfig` | Window settings (`config/SDLWindowConfig.xml`: size, `windowFlags`, an optional `title`; the shipped file asks for `SDL_WINDOW_HIGH_PIXEL_DENSITY`) |
 | `SDLWebCanvas` | `FitWindowSize()` and `SafeAreaFromInsets()` (pure, every platform: the window size for a browser window; the safe area from the four CSS insets) and, Emscripten only, `InstallWebCanvasResize()` and `GetWebSafeArea()`; see "Web build" |
 | `SDLAudioBackend` | `BECore/Audio/CLAUDE.md` |

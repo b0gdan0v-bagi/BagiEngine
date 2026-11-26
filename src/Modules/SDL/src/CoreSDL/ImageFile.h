@@ -30,4 +30,12 @@ namespace BECore {
      */
     [[nodiscard]] std::expected<RgbaImage, String> ReadImageFile(const Path& file, uint32_t maxSide = kNoImageSideLimit);
 
+    /**
+     * @brief Decodes a PNG held in memory as straight RGBA; @p bytes may be a peer's.
+     *
+     * Another format is refused. A side above @p maxSide is refused before the pixels are allocated, and so is data that inflates far past what the
+     * sides of the header can hold. The error is a line for a log or a status text.
+     */
+    [[nodiscard]] std::expected<RgbaImage, String> DecodePngImage(Span<const uint8_t> bytes, uint32_t maxSide);
+
 }  // namespace BECore

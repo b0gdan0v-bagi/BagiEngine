@@ -6,6 +6,7 @@
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneControl.h>
+#include <CoreSDL/SDLScreenshot.h>
 #include <EASTL/algorithm.h>
 
 #if BE_WITH_REMOTE_CONTROL
@@ -24,6 +25,7 @@ namespace BECore {
         constexpr StringView kSceneGet = "scene_get";
         constexpr StringView kSceneSet = "scene_set";
         constexpr StringView kSceneSetNode = "scene_set_node";
+        constexpr StringView kScreenshot = "screenshot";
 
         [[nodiscard]] bool IsDue(const Optional<RemoteSessionTime>& dueAt, RemoteSessionTime now) {
             return !dueAt || now >= *dueAt;
@@ -68,6 +70,8 @@ namespace BECore {
         _tree.Clear();
         ClearSelection();
         _writes.Clear();
+        _picture.Clear();
+        _askedPictureSide.reset();
     }
 
     void RemoteSession::Poll(RemoteSessionTime now) {
@@ -86,7 +90,7 @@ namespace BECore {
                     HandleOpened();
                     break;
                 case RoomTransportEventKind::Text:
-                    HandleText(_event.text);
+                    HandleText(_event.text, now);
                     break;
                 case RoomTransportEventKind::Closed:
                     Lose(Format("{} {}", _event.closeCode, _event.reason), now);
@@ -94,12 +98,17 @@ namespace BECore {
             }
         }
         SendDue(now);
+        _askedPictureSide.reset();
         if (!IsWaiting()) {
             _waitingSince.reset();
         } else if (!_waitingSince) {
             _waitingSince = now;
         }
         _stalled = _waitingSince && now - *_waitingSince >= RemoteSessionTiming::kStallAfter;
+    }
+
+    void RemoteSession::RequestPicture(uint32_t longerSide) {
+        _askedPictureSide = eastl::clamp(longerSide, kMinScreenshotSize, kMaxRemotePictureSide);
     }
 
     void RemoteSession::Select(StringView path) {
@@ -142,10 +151,13 @@ namespace BECore {
         _schemaRequest = 0;
         _treeRequest = 0;
         _componentRequest = 0;
+        _pictureRequest = 0;
         _sentWrites.clear();
         _schemaDueAt.reset();
         _treeDueAt.reset();
         _componentsDueAt.reset();
+        _pictureDueAt.reset();
+        _noPictureMethod = false;
         _waitingSince.reset();
         _stalled = false;
     }
@@ -175,10 +187,11 @@ namespace BECore {
         _open = true;
         // The edits made for the last connection are not for what answers now
         _writes.Clear();
+        _picture.ClearError();
         _statusRequest = SendRequest(kStatus, [](JsonWriter&) {});
     }
 
-    void RemoteSession::HandleText(StringView text) {
+    void RemoteSession::HandleText(StringView text, RemoteSessionTime now) {
         if (!_envelope.Parse(text)) {
             return;
         }
@@ -200,6 +213,9 @@ namespace BECore {
         } else if (id == _componentRequest) {
             _componentRequest = 0;
             HandleComponents(id, answer);
+        } else if (id == _pictureRequest) {
+            _pictureRequest = 0;
+            HandlePicture(answer, now);
         } else if (!HandleWrite(id, answer)) {
             return;
         }
@@ -280,6 +296,18 @@ namespace BECore {
         }
     }
 
+    void RemoteSession::HandlePicture(const Answer& answer, RemoteSessionTime now) {
+        if (answer.ok) {
+            _picture.Load(answer.result);
+            _pictureDueAt = now + RemoteSessionTiming::kPictureInterval;
+            return;
+        }
+        // A program with no picture is still one to edit
+        _picture.Refuse(answer.error);
+        _noPictureMethod = answer.Failed(ControlErrors::kUnknownMethod);
+        _pictureDueAt = now + RemoteSessionTiming::kPictureRetry;
+    }
+
     bool RemoteSession::HandleWrite(uint64_t requestId, const Answer& answer) {
         const auto sent = eastl::find_if(_sentWrites.begin(), _sentWrites.end(), [requestId](const SentWrite& write) { return write.requestId == requestId; });
         if (sent == _sentWrites.end()) {
@@ -322,6 +350,13 @@ namespace BECore {
             SendComponents();
             _componentsDueAt = now + RemoteSessionTiming::kComponentInterval;
         }
+        if (_open && _state == RemoteSessionState::Attached && _askedPictureSide && !_noPictureMethod && _pictureRequest == 0 && IsDue(_pictureDueAt, now)) {
+            SendPicture();
+        }
+    }
+
+    void RemoteSession::SendPicture() {
+        _pictureRequest = SendRequest(kScreenshot, [this](JsonWriter& writer) { writer.Member("maxSize", *_askedPictureSide); });
     }
 
     void RemoteSession::SendWrites() {
@@ -403,7 +438,7 @@ namespace BECore {
     }
 
     bool RemoteSession::IsWaiting() const {
-        return _statusRequest != 0 || _schemaRequest != 0 || _treeRequest != 0 || _componentRequest != 0 || !_sentWrites.empty();
+        return _statusRequest != 0 || _schemaRequest != 0 || _treeRequest != 0 || _componentRequest != 0 || _pictureRequest != 0 || !_sentWrites.empty();
     }
 
 }  // namespace BECore

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -11,11 +12,13 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodeControl.h>
 #include <BECore/Scene/SceneNodePath.h>
+#include <BECore/Utils/Base64.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Common/SharedPtr.h>
+#include <CoreSDL/SDLScreenshot.h>
 #include <RoomClient/RoomTransport.h>
 #include <gtest/gtest.h>
 
@@ -122,7 +125,7 @@ namespace BECore::Tests {
 
     /**
      * @brief The program an editor attaches to: a real ControlService with the builtin and the scene methods over a scene of its own, reached
-     * through transports in memory. Nothing runs until Serve().
+     * through transports in memory. Nothing runs until Serve(). Its `screenshot` is a stand-in that answers what SetScreen() made.
      *
      * Needs the core services; sets a RecordingRenderer and takes it back. Outlives the clients that use its factory.
      */
@@ -145,6 +148,8 @@ namespace BECore::Tests {
             if (methods == Methods::All) {
                 RegisterSceneControl(_service, [this] { return _active; });
                 RegisterSceneNodeControl(_service, [this] { return _active; });
+                SetScreen(4, 3, 0);
+                _service.RegisterHandler("screenshot", [this](ControlCall& call) { HandleScreenshot(call); });
             }
         }
 
@@ -182,6 +187,20 @@ namespace BECore::Tests {
             Require(Latest()).PushClosed(code, reason);
         }
 
+        /// The picture `screenshot` answers from now on: @p width by @p height pixels of the grey @p shade
+        void SetScreen(uint32_t width, uint32_t height, uint8_t shade) {
+            const auto png = EncodePng(PixelBuffer{width, height, Vector<uint8_t>(size_t{width} * height * 4, shade)}, 0);
+            ASSERT_TRUE(png.has_value()) << png.error().c_str();
+            _screen.width = png->width;
+            _screen.height = png->height;
+            _screen.png_base64 = Base64Encode(Span<const uint8_t>(png->bytes.data(), png->bytes.size()));
+        }
+
+        /// `screenshot` is refused with @p code from now on; an empty code ends that
+        void SetScreenshotFailure(StringView code) {
+            _screenshotFailure = String(code);
+        }
+
         /// The connections made from now on are refused
         void SetRefusing(bool refusing) {
             _refusing = refusing;
@@ -211,6 +230,14 @@ namespace BECore::Tests {
         }
 
     private:
+        void HandleScreenshot(ControlCall& call) {
+            if (!_screenshotFailure.empty()) {
+                call.Fail(_screenshotFailure, "no picture");
+                return;
+            }
+            call.ReplyObject(_screen);
+        }
+
         [[nodiscard]] FakeControlConnection* Latest() {
             return _connections.empty() ? nullptr : _connections.back().get();
         }
@@ -220,6 +247,8 @@ namespace BECore::Tests {
         Scene* _scene = nullptr;
         Scene* _active = nullptr;  // what the scene methods see
         Vector<SharedPtr<FakeControlConnection>> _connections;
+        ScreenshotAnswer _screen;
+        String _screenshotFailure;
         bool _refusing = false;
     };
 

@@ -9,6 +9,7 @@
 #include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
 #include <Common/Wait.h>
+#include <CoreSDL/SDLScreenshot.h>
 #include <Widgets/RemoteEditor/RemoteSession.h>
 #include <gtest/gtest.h>
 
@@ -34,6 +35,7 @@ namespace BECore::Tests {
 </components></node>)";
 
         constexpr StringView kAddress = "ws://127.0.0.1:8765";
+        constexpr uint32_t kShownSide = 640;
 
         /// The field `x` a walk shows
         class XReader final : public NullPropertyVisitor {
@@ -161,6 +163,12 @@ namespace BECore::Tests {
                 }
                 EXPECT_TRUE(reader.x.has_value()) << "component " << index << " shows no x";
                 return reader.x.value_or(0.0f);
+            }
+
+            /// A frame that shows the picture, @p time later: the session sends what is due and takes what the program answers
+            void ShowPictureAfter(milliseconds time) {
+                _session->RequestPicture(kShownSide);
+                ExchangeAfter(time);
             }
 
             UniquePtr<FakeControlEndpoint> _endpoint;
@@ -485,6 +493,154 @@ namespace BECore::Tests {
             Poll();  // nothing has come and nothing is due
         });
         EXPECT_EQ(Connection().nextEvent, Connection().inbox.size());
+    }
+
+    TEST_F(RemoteSessionTest, ThePictureIsReadOnlyWhileItIsAskedForOfAnAttachedLink) {
+        ASSERT_TRUE(_session->Attach(kAddress).has_value());
+        _session->RequestPicture(kShownSide);
+        Poll();
+        EXPECT_EQ(CountSent("screenshot"), 0u) << "asked of a link that is not attached";
+        _endpoint->Serve();
+        Poll();
+        ASSERT_EQ(_session->GetState(), RemoteSessionState::Attached);
+        ExchangeAfter(Timing::kPictureRetry);
+        EXPECT_EQ(CountSent("screenshot"), 0u) << "an ask lasts one poll";
+        EXPECT_TRUE(_session->GetPicture().GetImage().pixels.empty());
+
+        ShowPictureAfter(milliseconds(1));
+        EXPECT_EQ(CountSent("screenshot"), 1u);
+        EXPECT_NE(String(Connection().requests.back()).find(R"("maxSize":640)"), String::npos);
+        EXPECT_EQ(_session->GetPicture().GetImage().width, 4u);
+        EXPECT_EQ(_session->GetPicture().GetImage().height, 3u);
+        EXPECT_FALSE(_session->GetPicture().GetError().IsSet());
+    }
+
+    TEST_F(RemoteSessionTest, OneScreenshotIsUnansweredAndTheNextWaitsAfterItsAnswer) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        _session->RequestPicture(100000);
+        Poll();
+        EXPECT_NE(String(Connection().requests.back()).find(Format(R"("maxSize":{})", kMaxRemotePictureSide).c_str()), String::npos);
+        _session->RequestPicture(kShownSide);
+        PollAfter(Timing::kPictureInterval * 4);
+        EXPECT_EQ(CountSent("screenshot"), 1u);
+
+        _endpoint->Serve();
+        Poll();
+        ShowPictureAfter(Timing::kPictureInterval - milliseconds(1));
+        EXPECT_EQ(CountSent("screenshot"), 1u);
+        _session->RequestPicture(1);
+        PollAfter(milliseconds(1));
+        EXPECT_EQ(CountSent("screenshot"), 2u);
+        EXPECT_NE(String(Connection().requests.back()).find(Format(R"("maxSize":{})", kMinScreenshotSize).c_str()), String::npos);
+    }
+
+    TEST_F(RemoteSessionTest, TheRevisionOfThePictureMovesOnlyWithTheFrame) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        ShowPictureAfter(Timing::kPictureInterval);
+        const uint64_t first = _session->GetPicture().GetRevision();
+        ShowPictureAfter(Timing::kPictureInterval);
+        EXPECT_EQ(_session->GetPicture().GetRevision(), first);
+
+        _endpoint->SetScreen(5, 2, 200);
+        ShowPictureAfter(Timing::kPictureInterval);
+
+        EXPECT_NE(_session->GetPicture().GetRevision(), first);
+        EXPECT_EQ(_session->GetPicture().GetImage().width, 5u);
+        EXPECT_EQ(_session->GetPicture().GetImage().pixels.front(), 200);
+    }
+
+    TEST_F(RemoteSessionTest, TheFrameOutlivesALostLinkAndGoesWithDetach) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        ShowPictureAfter(milliseconds(1));
+        const uint64_t revision = _session->GetPicture().GetRevision();
+        _session->RequestPicture(kShownSide);
+        PollAfter(Timing::kPictureInterval);
+
+        _endpoint->Drop();
+        _session->RequestPicture(kShownSide);
+        Poll();
+        ASSERT_EQ(_session->GetState(), RemoteSessionState::Lost);
+        EXPECT_EQ(_session->GetPicture().GetRevision(), revision);
+        EXPECT_EQ(_session->GetPicture().GetImage().width, 4u);
+
+        // The request the lost connection did not answer holds nothing up
+        PollAfter(Timing::kFirstRetry);
+        _endpoint->Serve();
+        Poll();
+        ASSERT_EQ(_session->GetState(), RemoteSessionState::Attached);
+        ShowPictureAfter(milliseconds(1));
+        EXPECT_EQ(CountSent("screenshot"), 1u);
+        EXPECT_EQ(_session->GetPicture().GetRevision(), revision);
+
+        _session->Detach();
+        EXPECT_TRUE(_session->GetPicture().GetImage().pixels.empty());
+        EXPECT_NE(_session->GetPicture().GetRevision(), revision);
+    }
+
+    TEST_F(RemoteSessionTest, ARefusedScreenshotKeepsTheFrameAndIsRetriedSlowly) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        ShowPictureAfter(milliseconds(1));
+        const uint64_t revision = _session->GetPicture().GetRevision();
+
+        _endpoint->SetScreenshotFailure(ScreenshotErrors::kCaptureFailed);
+        ShowPictureAfter(Timing::kPictureInterval);
+
+        EXPECT_EQ(_session->GetState(), RemoteSessionState::Attached);
+        EXPECT_EQ(_session->GetPicture().GetError().code, "capture_failed");
+        EXPECT_EQ(_session->GetPicture().GetError().message, "no picture");
+        EXPECT_EQ(_session->GetPicture().GetRevision(), revision);
+        const size_t asked = CountSent("screenshot");
+        ShowPictureAfter(Timing::kPictureRetry - milliseconds(1));
+        EXPECT_EQ(CountSent("screenshot"), asked);
+
+        _endpoint->SetScreenshotFailure({});
+        ShowPictureAfter(milliseconds(1));
+        EXPECT_EQ(CountSent("screenshot"), asked + 1);
+        EXPECT_FALSE(_session->GetPicture().GetError().IsSet());
+        EXPECT_EQ(_session->GetPicture().GetRevision(), revision);
+    }
+
+    TEST_F(RemoteSessionTest, AProgramWithoutScreenshotIsAskedOncePerConnectionAndStaysAttached) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        _endpoint->SetScreenshotFailure(ControlErrors::kUnknownMethod);
+        ShowPictureAfter(milliseconds(1));
+
+        EXPECT_EQ(_session->GetState(), RemoteSessionState::Attached);
+        EXPECT_EQ(_session->GetPicture().GetError().code, "unknown_method");
+        ShowPictureAfter(Timing::kPictureRetry * 10);
+        EXPECT_EQ(CountSent("screenshot"), 1u);
+
+        _endpoint->SetScreenshotFailure({});
+        _endpoint->Drop();
+        Poll();
+        PollAfter(Timing::kFirstRetry);
+        _endpoint->Serve();
+        Poll();
+        EXPECT_FALSE(_session->GetPicture().GetError().IsSet()) << "the error was the other connection's";
+        ShowPictureAfter(milliseconds(1));
+        EXPECT_EQ(_session->GetPicture().GetImage().width, 4u);
+    }
+
+    TEST_F(RemoteSessionTest, APollThatBringsTheSamePictureAllocatesNothing) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        for (int round = 0; round < 4; ++round) {
+            ShowPictureAfter(Timing::kPictureInterval);
+        }
+        _session->RequestPicture(kShownSide);
+        PollAfter(Timing::kPictureInterval);
+        _endpoint->Serve();
+        ASSERT_GT(Connection().inbox.size(), Connection().nextEvent);
+        const uint64_t revision = _session->GetPicture().GetRevision();
+
+        ExpectNoAllocations([this] {
+            _session->RequestPicture(kShownSide);
+            Poll();
+            _session->RequestPicture(kShownSide);
+            Poll();  // the next one is not due yet
+        });
+
+        EXPECT_EQ(Connection().nextEvent, Connection().inbox.size());
+        EXPECT_EQ(_session->GetPicture().GetRevision(), revision);
     }
 
 #if BE_WITH_REMOTE_CONTROL

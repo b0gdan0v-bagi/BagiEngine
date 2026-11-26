@@ -8,6 +8,7 @@
 #include <RoomClient/RoomTransport.h>
 #include <Widgets/RemoteEditor/RemoteComponent.h>
 #include <Widgets/RemoteEditor/RemotePendingWrites.h>
+#include <Widgets/RemoteEditor/RemotePicture.h>
 #include <Widgets/RemoteEditor/RemoteSchema.h>
 #include <Widgets/RemoteEditor/RemoteTree.h>
 #include <chrono>
@@ -35,7 +36,14 @@ namespace BECore {
         inline constexpr std::chrono::milliseconds kMaxRetry{10000};
         /// How long requests may wait with nothing answered before the session is stalled
         inline constexpr std::chrono::milliseconds kStallAfter{3000};
+        /// From an answered `screenshot` to the next one
+        inline constexpr std::chrono::milliseconds kPictureInterval{500};
+        /// From a refused `screenshot` to the next try
+        inline constexpr std::chrono::milliseconds kPictureRetry{5000};
     }  // namespace RemoteSessionTiming
+
+    /// The longest side of the picture a RemoteSession asks for, however large the place that shows it is
+    inline constexpr uint32_t kMaxRemotePictureSide = 1600;
 
     /// The transport of a link of the editor, which takes an answer as long as a control server may send; null where the build has no sockets
     [[nodiscard]] UniquePtr<IRoomTransport> MakeRemoteTransport();
@@ -64,6 +72,15 @@ namespace BECore {
         void Detach();
 
         void Poll(RemoteSessionTime now);
+
+        /// Asks for the program's picture with a longer side of @p longerSide pixels, within what `screenshot` takes and kMaxRemotePictureSide.
+        /// Called in each frame that shows the picture: a poll reads it only when it was asked for since the poll before
+        void RequestPicture(uint32_t longerSide);
+
+        /// The last frame read, kept while the link is `Lost` and reconnects
+        [[nodiscard]] const RemotePicture& GetPicture() const {
+            return _picture;
+        }
 
         [[nodiscard]] RemoteSessionState GetState() const {
             return _state;
@@ -135,11 +152,12 @@ namespace BECore {
         void GiveUpWithout(StringView method);
 
         void HandleOpened();
-        void HandleText(StringView text);
+        void HandleText(StringView text, RemoteSessionTime now);
         [[nodiscard]] static Answer ReadAnswer(JsonView response);
         void HandleSchema(const Answer& answer);
         void HandleTree(uint64_t requestId, const Answer& answer);
         void HandleComponents(uint64_t requestId, const Answer& answer);
+        void HandlePicture(const Answer& answer, RemoteSessionTime now);
         /// False when no write waits for @p requestId
         bool HandleWrite(uint64_t requestId, const Answer& answer);
         /// `Attached` once this connection has read the schema and the tree
@@ -148,6 +166,7 @@ namespace BECore {
         void SendDue(RemoteSessionTime now);
         void SendWrites();
         void SendComponents();
+        void SendPicture();
         /// Sends a request whose params @p writeParams writes the members of; its id, or 0 when the transport refused it, which ends the connection
         uint64_t SendRequest(StringView method, FunctionRef<void(JsonWriter&)> writeParams);
         [[nodiscard]] bool IsWaiting() const;
@@ -166,10 +185,14 @@ namespace BECore {
         uint64_t _schemaRequest = 0;
         uint64_t _treeRequest = 0;
         uint64_t _componentRequest = 0;
+        uint64_t _pictureRequest = 0;
         Vector<SentWrite> _sentWrites;
         Optional<RemoteSessionTime> _schemaDueAt;  // nullopt: due at once
         Optional<RemoteSessionTime> _treeDueAt;
         Optional<RemoteSessionTime> _componentsDueAt;
+        Optional<RemoteSessionTime> _pictureDueAt;
+        /// The program has no `screenshot`
+        bool _noPictureMethod = false;
         /// Since when requests have waited with nothing answered
         Optional<RemoteSessionTime> _waitingSince;
         bool _stalled = false;
@@ -188,6 +211,9 @@ namespace BECore {
         Optional<String> _selection;
         Vector<RemoteComponent> _components;
         RemotePendingWrites _writes;
+        RemotePicture _picture;
+        /// The longer side asked for since the last poll
+        Optional<uint32_t> _askedPictureSide;
 
         /// Grows when the selection changes: an answer about an earlier one is dropped
         uint64_t _selectionVersion = 0;

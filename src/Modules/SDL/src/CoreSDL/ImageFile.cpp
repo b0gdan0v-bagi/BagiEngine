@@ -6,6 +6,22 @@
 #include <SDL3_image/SDL_image.h>
 #include <climits>
 
+namespace {
+
+    /// The largest block stb_image may ask for on this thread. Its allocator takes no context, and its inflate otherwise grows a buffer up to
+    /// gigabytes for a small file that lies about its size
+    thread_local size_t gStbBlockLimit = std::numeric_limits<size_t>::max();
+
+    void* StbMalloc(size_t size) {
+        return size <= gStbBlockLimit ? BECore::AllocRouting::Malloc(BECore::AllocSource::Stb, size) : nullptr;
+    }
+
+    void* StbRealloc(void* block, size_t size) {
+        return size <= gStbBlockLimit ? BECore::AllocRouting::Realloc(BECore::AllocSource::Stb, block, size) : nullptr;
+    }
+
+}  // namespace
+
 // The one translation unit that holds stb_image (src/Modules/stb/README.md). Every function is static, so the copy inside SDL_image links beside it
 #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
@@ -14,8 +30,8 @@
 #define STBI_NO_LINEAR
 #define STBI_NO_HDR
 #define STBI_FAILURE_USERMSG
-#define STBI_MALLOC(size) ::BECore::AllocRouting::Malloc(::BECore::AllocSource::Stb, (size))
-#define STBI_REALLOC(ptr, size) ::BECore::AllocRouting::Realloc(::BECore::AllocSource::Stb, (ptr), (size))
+#define STBI_MALLOC(size) ::StbMalloc(size)
+#define STBI_REALLOC(ptr, size) ::StbRealloc((ptr), (size))
 #define STBI_FREE(ptr) ::BECore::AllocRouting::Free(::BECore::AllocSource::Stb, (ptr))
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -37,6 +53,10 @@ namespace BECore {
         constexpr Array<uint8_t, 8> kPngSignature = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
         constexpr int kGreyAlphaChannels = 2;
         constexpr int kRgbaChannels = 4;
+        /// Of a decoded pixel before it is cut to RGBA8: four channels of 16 bits
+        constexpr size_t kMaxRawPixelBytes = 8;
+        /// What a small image may need beyond its pixels: an interlaced one has more rows, and the compressed data is gathered in blocks
+        constexpr size_t kStbSlackBytes = 64 * 1024;
 
         std::expected<void, String> CheckSides(int width, int height, uint32_t maxSide) {
             if (width <= 0 || height <= 0) {
@@ -68,6 +88,11 @@ namespace BECore {
             if (auto sides = CheckSides(width, height, maxSide); !sides) {
                 return std::unexpected(std::move(sides.error()));
             }
+
+            // Twice, for the buffers stb grows by doubling
+            const size_t rawBytes = static_cast<size_t>(height) * (static_cast<size_t>(width) * kMaxRawPixelBytes + 1);
+            gStbBlockLimit = 2 * std::max(rawBytes, size) + kStbSlackBytes;
+            ScopeGuard limitGuard([]() { gStbBlockLimit = std::numeric_limits<size_t>::max(); });
 
             int decodedChannels = 0;
             stbi_uc* decoded = stbi_load_from_memory(bytes, length, &width, &height, &decodedChannels, static_cast<int>(kBytesPerPixel));
@@ -136,6 +161,13 @@ namespace BECore {
 
         const auto* data = static_cast<const uint8_t*>(bytes);
         return IsPng(data, size) ? DecodePng(data, size, maxSide) : DecodeThroughSdlImage(path, maxSide);
+    }
+
+    std::expected<RgbaImage, String> DecodePngImage(Span<const uint8_t> bytes, uint32_t maxSide) {
+        if (!IsPng(bytes.data(), bytes.size())) {
+            return std::unexpected(String("the data is no PNG"));
+        }
+        return DecodePng(bytes.data(), bytes.size(), maxSide);
     }
 
 }  // namespace BECore
