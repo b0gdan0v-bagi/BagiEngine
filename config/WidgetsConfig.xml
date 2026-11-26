@@ -50,6 +50,9 @@
       asset="ProfilerPanel" />
     <widget
       type="AssetPanelWidget"
+      asset="PoolStringsPanel" />
+    <widget
+      type="AssetPanelWidget"
       asset="ConsolePanel" />
     <widget
       type="AssetPanelWidget"

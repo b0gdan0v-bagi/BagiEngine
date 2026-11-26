@@ -1,0 +1,10 @@
+# Pool Strings panel
+
+The editor's view of the `PoolString` pool: the asset `config/panels/PoolStringsPanel.xml` (window `Pool Strings###PoolStrings`, hidden at start, `AssetPanelWidget` hosts it; format and interpreter: `src/Widgets/PanelAssets/CLAUDE.md`) over `PoolStringsPanelModel` and its slots. What the numbers mean (blocks, sources, dead entries, the checks): `src/Modules/BECore/PoolString/CLAUDE.md`. Editor only: the folder is in the `BE_WITH_EDITOR` regex of `src/CMakeLists.txt` (`.claude/rules/widgets-module.md`).
+
+- **One snapshot.** `PoolStringsPanelModel` (no ImGui; the asset's source `pool`) holds one `PoolStringSnapshot` of the pool of its monitor (`CoreManager::GetPoolStringMonitor()`; `SetMonitor` is the test's seam). It is taken in the first `Update` after the panel opens and by `poolStrings.refresh`, **never by a frame itself**: `TakeSnapshot` walks the whole table. Summary, checks and blocks all come from it, so they agree; every text, row and check result is made when it is taken, and a later frame formats nothing.
+- **The model never interns:** showing the pool must not grow it. Texts of the view are `String` copies.
+- **Checks** list the hash collisions, then the texts held twice, up to `PoolStringsPanelLimits::kMaxCheckRows`; the rest are counted in a line. A pooled string may hold anything, so a text of a row goes through `PoolStringLine` (one line, a bounded number of bytes, no cut inside a character).
+- **Slots** (`PoolStringsSlots`, a member of the model, registered in its `Initialize`) draw what the format cannot say, only the visible rows: `poolStringBlocks`, the blocks with their fill bars (a block names its file; the tooltip holds the whole source name).
+- **Commands:** `view.poolStrings` (the asset's `command`, no chord) and `poolStrings.refresh` (run only while the panel is open).
+- **Tests:** `PoolStringsPanelModelTest` (the model over an `IsolatedPool`), `PoolStringsPanelAssetTest` (the shipped file drawn in an ImGui context with no backend, and the View menu item). Not covered: the look; check it by hand.
