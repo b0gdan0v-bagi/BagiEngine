@@ -38,3 +38,10 @@ A number of the generic inspector and of the sprite's source rect is drawn by `D
 
 - A step (`sceneEditor.selectionBack`, `sceneEditor.selectionForward`) finds the node with `FindNodeByRuntimeId`, makes it the whole selection, reveals it and brings the window to the front like a select request. It is not a new selection, so what is ahead stays.
 - The chords are ordinary rows of the command table. While a text field has the keyboard ImGui keeps the arrows for it (Option+arrows move by word on macOS), so the widget needs no guard; `SelectionChordTest` holds that.
+
+## Breadcrumbs
+
+`DrawBreadcrumbs` (`Breadcrumbs.h`) is the path of the primary node, from the scene's root, at the top of `##inspector`. The widget draws it itself, above the inspector bar, so a game without that asset has it too; nothing without a selection.
+
+- An ancestor is a link that selects and reveals it. The widget applies the click after the row and announces the selection in the same frame, like a click in the hierarchy.
+- A link's item label ends with `##crumb<i>`, so a QA helper's lookup by a node's name does not take it for a hierarchy row or a control.

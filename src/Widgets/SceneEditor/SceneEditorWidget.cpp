@@ -20,6 +20,7 @@
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/PanelAssets/PanelBars.h>
+#include <Widgets/SceneEditor/Breadcrumbs.h>
 #include <Widgets/SceneEditor/ComponentCard.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
@@ -444,6 +445,7 @@ namespace BECore {
         ImGui::SameLine();
         ImGui::BeginChild("##inspector", ImVec2(0.0f, 0.0f), true);
 
+        DrawSelectionPath(*scene);
         if (_hierarchy.selected != nullptr && _uiSelectionNode != _hierarchy.selected) {
             ResetUISelection();
             _uiSelectionNode = _hierarchy.selected;
@@ -455,6 +457,18 @@ namespace BECore {
         ImGui::EndChild();
 
         ImGui::End();
+    }
+
+    void SceneEditorWidget::DrawSelectionPath(Scene& scene) {
+        if (_hierarchy.selected == nullptr) {
+            return;
+        }
+        if (const SceneNode* const ancestor = DrawBreadcrumbs(*_hierarchy.selected, _pathAncestors)) {
+            SelectRevealed(scene, ancestor);
+            // Told in the frame of the click, like a click in the hierarchy, so a model drops the edit of the node that was left
+            AnnounceSelection(&scene);
+            AnnounceUIElement(&scene);
+        }
     }
 
     void SceneEditorWidget::Draw() {

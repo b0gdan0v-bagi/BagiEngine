@@ -130,6 +130,9 @@ namespace BECore {
         /// Sends UIElementSelectedEvent when the (node, element) pair of the "UI elements" selection, or its scene, differs from the last one announced
         void AnnounceUIElement(const Scene* scene);
 
+        /// The breadcrumbs of the primary node at the top of the inspector, nothing without a selection; a click on an ancestor selects and reveals it
+        void DrawSelectionPath(Scene& scene);
+
         /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" dialog (asked of
         /// `SceneDialogsModel` by SceneAddNodeRequestEvent)
         void ApplyHierarchyAnswers(Scene& scene);
@@ -154,6 +157,7 @@ namespace BECore {
         SelectionHistory _selectionHistory;
         ComponentDefaults _componentDefaults;
         Vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
+        Vector<SceneNode*> _pathAncestors;   // the same for the breadcrumbs
         Vector<SceneNode*> _announcedNodes;  // what SceneSelectionChangedEvent last told
         const Scene* _announcedNodesScene = nullptr;
         HierarchyModel::SelectionTracker _announcedSelection;  // what SceneNodeSelectedEvent last told
