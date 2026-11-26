@@ -27,6 +27,8 @@ namespace BECore {
                     return "Use Ctrl or Alt with a key, or an F key";
                 case AssignRefusal::Reserved:
                     return "The editor keeps this shortcut for itself";
+                case AssignRefusal::Browser:
+                    return "The browser keeps this shortcut for itself";
                 case AssignRefusal::None:
                     break;
             }

@@ -1,3 +1,4 @@
+#include <BECore/ScopedEditorHost.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -212,6 +213,29 @@ namespace BECore::Tests {
         for (const EditorCommand& command : GetEditorCommands()) {
             EXPECT_EQ(map.GetChord(command.id), command.defaultChord) << command.id.CStr();
         }
+    }
+
+    TEST(HotkeyMapTest, ABrowserRefusesTheChordsItActsOnItselfAndADesktopTakesThem) {
+        constexpr KeyChord kCtrlW{ImGuiKey_W, kChordModCtrl};
+        constexpr KeyChord kCtrlShiftT{ImGuiKey_T, kChordModCtrl | kChordModShift};
+        constexpr KeyChord kCtrlAltN{ImGuiKey_N, kChordModCtrl | kChordModAlt};
+        {
+            const ScopedEditorHost host(EditorHostKind::Browser);
+            HotkeyMap map;
+            for (const ImGuiKey key : {ImGuiKey_W, ImGuiKey_T, ImGuiKey_N, ImGuiKey_Q}) {
+                EXPECT_EQ(map.Assign(kSceneSave, KeyChord{key, kChordModCtrl}).refusal, AssignRefusal::Browser);
+            }
+            EXPECT_EQ(map.AssignSwapping(kSceneSave, kCtrlShiftT).status, AssignStatus::NotAllowed);
+            EXPECT_EQ(map.GetChord(kSceneSave), kCtrlS);
+            EXPECT_EQ(map.Assign(kSceneSave, kCtrlAltN).status, AssignStatus::Assigned);
+            // No default is one of them, so a browser keeps every default
+            for (const EditorCommand& command : GetEditorCommands()) {
+                EXPECT_FALSE(command.defaultChord && IsBrowserKeptChord(*command.defaultChord)) << command.id.CStr();
+            }
+        }
+        const ScopedEditorHost host(EditorHostKind::Desktop);
+        HotkeyMap map;
+        EXPECT_EQ(map.Assign(kSceneSave, kCtrlW).status, AssignStatus::Assigned);
     }
 
     TEST(HotkeyMapTest, TheRevisionMovesWithEveryChangeOfAChordAndNotWithARefusal) {

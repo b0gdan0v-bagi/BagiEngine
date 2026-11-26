@@ -5,6 +5,7 @@
 #include <BECore/Types/Types.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/CommandPalette.h>
+#include <Widgets/EditorLayout/EditorBrowserInput.h>
 #include <Widgets/EditorLayout/EditorChordText.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorPlayModel.h>
@@ -91,6 +92,7 @@ namespace BECore {
         StatusBar _statusBar;
 
         CommandPalette _palette;
+        Optional<EditorBrowserInput> _browserInput;  // only in the browser host
 
         String _pendingLayoutText;  // a named layout waiting for the next frame start
 

@@ -65,6 +65,9 @@ namespace BECore {
         ApplyPreferences(_settings->GetPreferences());
         _statusBar.SetBranch(ReadGitBranch(BranchSearchStart()));
         _statusBar.StartHardwareMonitor();
+        if (GetEditorHost() == EditorHostKind::Browser) {
+            _browserInput.emplace(CoreManager::GetClipboard(), IsMacBrowserPage());
+        }
         _reloadNoticePending = GetReloadNotice().Take(GetEditorHost());
         if (_reloadNoticePending) {
             LOG_INFO("Editor: {}", kReloadNoticeText);

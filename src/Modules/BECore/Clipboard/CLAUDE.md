@@ -1,6 +1,6 @@
 # Clipboard Guidelines
 
-The text clipboard of the game: `CoreManager::GetClipboard()` (`Clipboard`), with a pluggable backend (`IClipboardBackend`). Plain text only; no images, files, rich text or primary selection. ImGui's own clipboard in the editor is separate (it keeps using the SDL backend of ImGui). Main thread only.
+The text clipboard of the game: `CoreManager::GetClipboard()` (`Clipboard`), with a pluggable backend (`IClipboardBackend`). Plain text only; no images, files, rich text or primary selection. ImGui's own clipboard in the editor is separate (it keeps using the SDL backend of ImGui), except in a browser, where it goes through this one (`src/Widgets/EditorLayout/CLAUDE.md`, "Input"). Main thread only.
 
 | File | Purpose |
 |------|---------|
