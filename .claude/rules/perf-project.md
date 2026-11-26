@@ -86,6 +86,25 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "stress-sprites-world-vulkan",
+      "about": "What culling of off-screen quads and sprites gains: the run of stress-sprites-vulkan-500k with --world 4, a field of 4 x 4 views under a moving emulated camera, so about one sprite in 14 is sent (tools/stress/src/Stress/CLAUDE.md, Loads); skipped where the backend or a display is missing. primitives is what the renderer was asked to draw; update_ms_p50 includes the camera shift of every sprite, draw_ms_p50 the walk and the cull test of all 500000 entries. On a Mac16,7 (M4 Pro), macos-release, medians of five runs alternated at load average 4 to 8, before culling against after it. With --world 4: work_ms_p50 23.4 against 12.2, draw 17.5 against 8.5, submit 3.4 against 1.25, update 2.5 against 2.4, gpu_ms_p50 1.36 against 1.15, primitives 500000 against 34783, 1957 draw calls both ways (a batch ends with each run of one blend mode, and every run keeps a visible sprite). The all-visible run (stress-sprites-vulkan-500k), where the test removes nothing: work_ms_p50 23.6 against 23.5, draw 17.8 against 17.7, submit 3.4 both, gpu 14.4 both. gate false until a baseline shows the noise",
+      "fast": false,
+      "repetitions": 3,
+      "timeoutSeconds": 180,
+      "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "500000", "--frames", "200", "--warmup", "30", "--backend", "vulkan", "--world", "4"],
+      "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "500000", "--frames", "200", "--warmup", "30", "--backend", "vulkan", "--world", "4", "--trace", "{trace}"],
+      "metrics": {
+        "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "gpu_ms_p50": {"source": "json", "key": "gpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "update_ms_p50": {"source": "json", "key": "updateMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "draw_ms_p50": {"source": "json", "key": "drawMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "submit_ms_p50": {"source": "json", "key": "submitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "gate": false},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "stress-entities",
       "about": "BagiStress entities without a window: 30000 nodes with a transform and a looping tween each, nothing drawn, 3000 frames after 120 of warm-up. On a Mac16,7 (M4 Pro), macos-release, three runs on a machine loaded by other loops: work_ms_p50 0.49 to 0.50 ms, p99 0.52 to 0.55 (with every tween restarted from onComplete, runs alternated with these: 0.51 to 0.53, p99 0.70 to 0.72)",
       "fast": true,

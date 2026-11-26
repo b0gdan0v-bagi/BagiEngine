@@ -57,6 +57,7 @@ paths:
 - Keep texture lifetime and ownership behind `ITexture`. Do not expose backend handles in scene/component public APIs (`GetNativeHandle()` is for backend code).
 - Named sprites come from `TextureLibrary` (`config/TextureLibrary.xml`): name → texture path + source rect.
 - The aspect of a sprite is the scene's business, not the backends': `SceneDrawSystem` fits the node's rect with `FitSpriteRect()` (`fit="Contain"`, in scene units, before the view transform) from the fields of the node's components and passes the result to `DrawTexture()` (or `DrawTransformedTexture()` for a rotated or flipped node, about the node's pivot), so a backend only ever sees a destination rect and a source rect. `SpriteRendererComponent::SetTexture()` gives a sprite a texture from pixels (`CreateTexture()`), which is how a test makes one draw.
+- **Culling is the scene's too:** `SceneDrawSystem` makes no call for a quad or a sprite whose node rect (with a rotation: a square about the pivot that holds every turn of it) lies wholly outside `GetOutputWidth()` x `GetOutputHeight()` grown by a pixel, so such a draw is not counted. It tests the output, not the view (the letterbox bars are drawn), culls nothing while the output has no size, and never culls an `OnDraw()`: a component that draws itself drops its own off-screen work.
 
 ## Serialization and Components
 

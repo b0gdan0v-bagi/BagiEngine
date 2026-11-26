@@ -197,6 +197,46 @@ namespace BECore::Stress::Tests {
         }
     }
 
+    TEST_F(StressSpritesTest, OnlyTheSpritesNearTheOutputOfAWorldAreDrawn) {
+        constexpr uint32_t kWorldCount = 8000;
+        constexpr uint32_t kVisible = kWorldCount / 16;  // a view is a sixteenth of a world of 4 views per side
+        constexpr int kToTheMiddle = 192;                // six seconds of frames: the camera is away from the edges of the field
+        StartSprites({"--stress-world=4"});
+        _renderer->width = GetScene("StressSprites").GetViewWidth();
+        _renderer->height = GetScene("StressSprites").GetViewHeight();
+        SetCount(kWorldCount);
+        for (int frame = 0; frame < kToTheMiddle; ++frame) {
+            Update();
+        }
+        Draw();
+
+        EXPECT_GT(_renderer->calls.size(), size_t{kVisible * 3 / 4});
+        EXPECT_LT(_renderer->calls.size(), size_t{kVisible * 5 / 4});
+        for (const DrawCall& call : _renderer->calls) {
+            ASSERT_GE(call.rect.x + call.rect.w, -kSpriteMaxSize);
+            ASSERT_LE(call.rect.x, _renderer->width + kSpriteMaxSize);
+            ASSERT_GE(call.rect.y + call.rect.h, -kSpriteMaxSize);
+            ASSERT_LE(call.rect.y, _renderer->height + kSpriteMaxSize);
+        }
+        size_t centred = 0;
+        for (uint32_t i = 0; i < kWorldCount; ++i) {
+            const Vec2 position = PositionOf(i);
+            centred += position.x >= 0.0f && position.x <= _renderer->width - kSpriteMaxSize && position.y >= 0.0f && position.y <= _renderer->height - kSpriteMaxSize;
+        }
+        EXPECT_GE(_renderer->calls.size(), centred) << "no sprite on screen is left out";
+    }
+
+    TEST_F(StressSpritesTest, AWorldOfOneViewDrawsEverySprite) {
+        StartSprites();
+        _renderer->width = GetScene("StressSprites").GetViewWidth();
+        _renderer->height = GetScene("StressSprites").GetViewHeight();
+        SetCount(kCount);
+        Update();
+        Draw();
+
+        EXPECT_EQ(_renderer->calls.size(), kCount);
+    }
+
     TEST_F(StressSpritesTest, CountZeroDrawsNothingAndComesBack) {
         StartSprites();
         SetCount(40);
