@@ -20,6 +20,14 @@ namespace BECore {
         BE_REFLECT_FIELD int32_t protocol = 0;
     };
 
+    /// `client_hello`: `name` is a view of the client's own, which the call holds while the answer is written
+    struct ControlHelloAnswer {
+        BE_CLASS(ControlHelloAnswer)
+
+        BE_REFLECT_FIELD uint64_t id = 0;
+        BE_REFLECT_FIELD TextView name;
+    };
+
     /// The totals of warnings and errors logged since the start, the `log` member of `status`
     struct ControlLogTotals {
         BE_CLASS(ControlLogTotals)

@@ -72,6 +72,7 @@ namespace BECore {
         JsonView params = EmptyParamsView();
         Optional<ControlError> error;  // found while parsing; answered when the request's turn comes
         ControlReplyFn reply;
+        IntrusivePtr<ControlClient> client;  // null for the engine's own request
     };
 
     ControlService::ControlService() : _roots(MakeUnique<ControlRoots>()), _log(MakeUnique<ControlLog>()) {
@@ -162,9 +163,44 @@ namespace BECore {
         request.params = *params;
     }
 
-    void ControlService::Post(StringView requestText, ControlReplyFn reply) {
+    IntrusivePtr<ControlClient> ControlService::OpenConnectionClient() {
+        LockGuard lock(_mutex);
+        auto client = New<ControlClient>(PassKey<ControlService>{}, ++_lastClientId, false, StringView());
+        if (!_stopped) {
+            _queuedNotices.push_back(ClientNotice{client, true});
+            _posted.notify_one();
+        }
+        return client;
+    }
+
+    void ControlService::CloseConnectionClient(IntrusivePtr<ControlClient> client) {
+        LockGuard lock(_mutex);
+        if (client && !_stopped) {
+            _queuedNotices.push_back(ClientNotice{std::move(client), false});
+            _posted.notify_one();
+        }
+    }
+
+    IntrusivePtr<ControlClient> ControlService::OpenLocalClient(StringView name) {
+        LockGuard lock(_mutex);
+        return New<ControlClient>(PassKey<ControlService>{}, ++_lastClientId, true, name);
+    }
+
+    void ControlService::RenameClient(ControlClient& client, StringView name) {
+        client._name.assign(name.data(), name.size());
+    }
+
+    void ControlService::DeliverClientNotices() {
+        for (const ClientNotice& notice : _notices) {
+            notice.client->_connected = notice.connected;
+        }
+        _notices.clear();
+    }
+
+    void ControlService::Post(StringView requestText, ControlReplyFn reply, IntrusivePtr<ControlClient> client) {
         auto request = MakeUnique<Request>();
         request->reply = std::move(reply);
+        request->client = std::move(client);
         ParseRequest(requestText, *request);
 
         {
@@ -341,11 +377,13 @@ namespace BECore {
     void ControlService::Drain() {
         {
             LockGuard lock(_mutex);
+            _notices.swap(_queuedNotices);  // under the same lock as the requests: a request is never seen before the connect of its client
             while (!_queue.empty()) {
                 _inbox.push_back(std::move(_queue.front()));
                 _queue.pop_front();
             }
         }
+        DeliverClientNotices();
 
         // One pass over what was waiting when it began: a held request goes to the back, so after the pass the held ones are in their old order. A request
         // that Process() makes wait (a deferred call sets _pending) is checked against the barrier like the others behind it
@@ -374,7 +412,8 @@ namespace BECore {
             return;
         }
 
-        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, std::move(request.method), std::move(request.buffers), request.id, request.params, std::move(request.reply));
+        auto call = MakeUnique<ControlCall>(PassKey<ControlService>{}, *this, std::move(request.method), std::move(request.buffers), request.id, request.params, std::move(request.reply),
+                                            std::move(request.client));
         InvokeHandler(entry->second, *call);
         Settle(std::move(call));
     }
@@ -408,7 +447,7 @@ namespace BECore {
             return std::unexpected(MakeControlError(ControlErrors::kInternalError, Format("'{}' cannot run inside itself", entry->first)));
         }
 
-        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), params);
+        auto nested = MakeUnique<ControlCall>(PassKey<ControlService>{}, String(method), params, outer._client);
         InvokeHandler(entry->second, *nested);
         return AwaitNested(outer, nested, onAnswer);
     }
@@ -475,7 +514,7 @@ namespace BECore {
 
     void ControlService::WaitForRequests(std::chrono::milliseconds timeout) {
         UniqueLock lock(_mutex);
-        _posted.wait_for(lock, timeout, [this] { return !_queue.empty(); });
+        _posted.wait_for(lock, timeout, [this] { return !_queue.empty() || !_queuedNotices.empty(); });
     }
 
     void ControlService::EndFrame() {
@@ -516,6 +555,7 @@ namespace BECore {
         {
             LockGuard lock(_mutex);
             _stopped = true;
+            _queuedNotices.clear();
             while (!_queue.empty()) {
                 _inbox.push_back(std::move(_queue.front()));
                 _queue.pop_front();

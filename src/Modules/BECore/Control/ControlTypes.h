@@ -74,6 +74,7 @@ namespace BECore {
         inline constexpr StringView kInternalError = "internal_error";
         inline constexpr StringView kShuttingDown = "shutting_down";
         inline constexpr StringView kManualClock = "manual_clock";
+        inline constexpr StringView kNoClient = "no_client";
     }  // namespace ControlErrors
 
     [[nodiscard]] inline ControlError MakeControlError(StringView code, String message) {

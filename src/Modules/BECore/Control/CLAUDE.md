@@ -8,13 +8,14 @@ The core of the external control API: a program or a model sends commands, the e
 |------|---------|
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()` (a `JsonView`), `Reply()`, `Fail()`, `DeferFrames()`; it owns its text and tape (`RequestBuffers`) |
+| `ControlClient` | Who posts a request: a connection or a named part of the program (`Post()`, `call.GetClient()`, `client_hello`; `.claude/rules/control-activity.md`) |
 | `ControlParams` | Checked readers of a call's params: `FindParam`, `GetParamString` / `Int` / `Number` / `Bool`; a wrong type or an absent key is nothing, a number is finite |
 | `ControlLog` | Totals of warnings and errors and the last `kLogCapacity` lines of Warning and above, from `LogEvent` (`service.Log()`; `log_*` methods) |
 | `ControlRoots` | The roots of a service: named providers of a `TypedRef` (`game` is the active game) that the by-name methods reach; names are `String`s, never interned; `allowInterning` (default off) lets a write intern client text |
 | `ReflectionControl` | `RegisterReflectionControl()`: the by-name methods, called by `RegisterControlBuiltins` |
 | `SchemaExport` | The type registry as JSON; pure over a `TypeRegistry`; its rules: `Reflection/CLAUDE.md`, "Schema export" |
-| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `list_methods`, `log_mark`, `log_since`, `log_subscribe`, `batch`, `quit` |
-| `ControlBuiltinAnswers.h` | The reflected answers of `ControlBuiltins` (`ControlStatusAnswer : ControlClock`, `ControlBatchAnswer`, ...); `ControlListedParam` mirrors `ControlParamInfo`, which stays an aggregate (`BE_CLASS` adds a virtual) |
+| `ControlBuiltins` | `RegisterControlBuiltins()`: `client_hello`, `ping`, `status`, `step`, `pause`, `resume`, `list_methods`, `log_mark`, `log_since`, `log_subscribe`, `batch`, `quit` |
+| `ControlBuiltinAnswers.h` | The reflected answers of `ControlBuiltins` (`ControlStatusAnswer : ControlClock`, `ControlBatchAnswer`, ...) |
 | `ControlClock` | Reflected clock (`frame`, `totalTime`, `deltaTime`, `fixedDeltaTime`, `Read()`); the parent of every answer that carries the clock |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the reflected `ApplicationConfig`, the manual clock included, and the per-run flags `--backend` / `--hidden-window` (`ControlFlags`, no attribute; `Application/RenderBackendChoice.h`); pure |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients), `ControlParamInfo` / `ControlMethodInfo` (what a module says about a method) and `ControlMethodListing` (what `GetMethods()` returns) |
@@ -45,7 +46,7 @@ Error codes are strings and part of the protocol (`ControlErrors`): `parse_error
 
 ## Frame and threads
 
-- `Post()` is the only thread-safe call. It tapes the text on the posting thread (`JsonTape`, no DOM) and queues the request; everything else (`RegisterHandler`, `Drain`, `EndFrame`, `Publish`, `Shutdown`, the handlers, the reply and the event sink) belongs to the main thread.
+- Only `Post()` and the opening and closing of clients are thread-safe. `Post()` tapes the text on the posting thread (`JsonTape`, no DOM) and queues the request; everything else (`RegisterHandler`, `Drain`, `EndFrame`, `Publish`, `Shutdown`, the handlers, the reply and the event sink) belongs to the main thread.
 - `CoreManager::OnGameCycle` calls `Drain()` as stage **1b**: after input, before `TaskManager::Update`. A command therefore sees this frame's input and what it changes is seen by this frame's logic and render. `Application::RunFrame` calls `EndFrame()` after the present.
 - A `Request` and a `ControlCall` are `BE_POOLED` (made on the posting thread, freed on the main one: the concurrent pool). `id` is the raw text of the request's own id (echoed as written) and `params` a `JsonView`, both into the request's `RequestBuffers` (the text copy and its tape, recycled through a free list of the service); the two queues are `Fifo`s that keep their capacity; `Drain()` walks the inbox once and sends a request held by the barrier to the back, which keeps the held ones in order.
 - Requests run in the order they were posted (per posting thread). Do not use `TaskManager` for commands: its main-thread queue is a priority queue and does not keep the order of equal priorities.
@@ -55,7 +56,7 @@ Error codes are strings and part of the protocol (`ControlErrors`): `parse_error
 - `SetFrameEndHook(name, hook)` runs `hook` at every `EndFrame()`, before a deferred call completes (the state-change push uses it). Setting a name again replaces its hook, so a module that registers twice (`GameManager::Initialize()` does, once per test) adds nothing. A hook that sets another one is fine: the new one runs in the same frame.
 - `Shutdown()` (from `OnApplicationDeinit`) answers everything queued or deferred with `shutting_down`; a request posted later is answered at once on the posting thread. Stop the transport before it.
 - No `ASSERT` / `EXPECT` / `FATALERROR` on client data: a bad request is an error response, not an engine bug.
-- Method names live in a `HashMap<String, ...>`, not in `PoolString`: a client must not be able to grow the pool (`ControlServiceTest` checks it).
+- Method names live in a `HashMap<String, ...>`, not in `PoolString`: a client must not be able to grow the pool.
 
 ## JSON rules
 
@@ -82,7 +83,7 @@ The two clocks differ in who runs the frames:
 
 While a step runs it is the barrier too. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (`screenshot` asks for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down.
 
-**The manual clock is a pause** (`CoreManager::GetPause()`, `Time/GamePause.h`; there is no second mechanism): `--manual-clock` starts with the pause set, and `Application::RunFrame` asks the pause for the kind of the frame. With the manual clock, which is always paused, `pause` is a no-op and `resume` fails with `manual_clock`. How a deferred call requests its frames, a `step` on a paused real clock (`N + 1` frames), the `pause` / `resume` answers and what a **held** frame runs: `.claude/rules/control-clock.md`.
+**The manual clock is a pause** (`CoreManager::GetPause()`, `Time/GamePause.h`; there is no second mechanism). How a deferred call requests its frames, a `step` on a paused real clock (`N + 1` frames), the `pause` / `resume` answers and what a **held** frame runs: `.claude/rules/control-clock.md`.
 
 What the manual clock means for a client:
 
@@ -99,7 +100,7 @@ Off by default (`--control`, `control="true"`); the command line beats the attri
 
 | Where | Methods |
 |-------|---------|
-| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`, `log` totals, `runMode`: `Editor` or `Game`, the mode that runs, `window`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `list_methods` (to `{methods: [{name, summary, params: [{name, type, required, description}]}]}`, sorted; a method without a description has `""` and `[]`), `log_mark`, `log_since`, `log_subscribe`, `batch` (shapes, limits and traps: `.claude/rules/control-qa-api.md`), `quit` |
+| `BECore/Control/ControlBuiltins` | `client_hello` (`{name}` to `{id, name}`; `no_client`), `ping`, `status` (the clock, `manualClock`, `paused`, `log` totals, `runMode`: `Editor` or `Game`, the mode that runs, `window`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `list_methods` (to `{methods: [{name, summary, params: [{name, type, required, description}]}]}`, sorted; a method without a description has `""` and `[]`), `log_mark`, `log_since`, `log_subscribe`, `batch` (shapes, limits and traps: `.claude/rules/control-qa-api.md`), `quit` |
 | `BECore/Control/ControlWindow` | `set_window` (`{width, height, density?, userScale?, safeArea?}` on a headless window, answered after a frame; `not_headless` on a real one) and the `window` object of `status`; `.claude/rules/control-window-api.md` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `BECore/UI/UIControl` | answers are the reflected structs of `UIControlAnswers.h`; `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real click on a visible button, toggle or slider, `at` 0..1 also sets a slider; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `.claude/rules/ui-control-api.md`) |

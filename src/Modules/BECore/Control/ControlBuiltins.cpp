@@ -52,6 +52,44 @@ namespace BECore {
 
     namespace {
 
+        /// 1 to kMaxControlClientNameBytes bytes with no control character, the ones of U+0080 to U+009F (`C2 80` to `C2 9F` in UTF-8) included
+        bool IsClientName(StringView name) {
+            if (name.empty() || name.size() > kMaxControlClientNameBytes) {
+                return false;
+            }
+            constexpr uint8_t kFirstPrintable = 0x20;
+            constexpr uint8_t kDelete = 0x7F;
+            constexpr uint8_t kC1Lead = 0xC2;
+            constexpr uint8_t kC1Last = 0x9F;
+            uint8_t previous = 0;
+            for (const char symbol : name) {
+                const auto byte = static_cast<uint8_t>(symbol);
+                if (byte < kFirstPrintable || byte == kDelete || (previous == kC1Lead && byte <= kC1Last)) {
+                    return false;
+                }
+                previous = byte;
+            }
+            return true;
+        }
+
+        void HandleClientHello(ControlCall& call, ControlService& service) {
+            ControlClient* client = call.GetClient();
+            if (client == nullptr) {
+                call.Fail(ControlErrors::kNoClient, "this call has no client to name");
+                return;
+            }
+            const auto name = GetParamString(call.Params(), "name");
+            if (!name || !IsClientName(*name)) {
+                call.Fail(ControlErrors::kInvalidParams, Format("'name' has to be a string of 1 to {} bytes without control characters", kMaxControlClientNameBytes));
+                return;
+            }
+            service.RenameClient(*client, *name);
+            ControlHelloAnswer answer;
+            answer.id = client->GetId();
+            answer.name = TextView(client->GetName());
+            call.ReplyObject(answer);
+        }
+
         void HandlePing(ControlCall& call) {
             ControlPingAnswer answer;
             answer.protocol = ControlService::kProtocolVersion;
@@ -416,6 +454,7 @@ namespace BECore {
     }  // namespace
 
     void RegisterControlBuiltins(ControlService& service) {
+        service.RegisterHandler("client_hello", [&service](ControlCall& call) { HandleClientHello(call, service); });
         service.RegisterHandler("ping", HandlePing);
         service.RegisterHandler("status", [&service](ControlCall& call) { HandleStatus(call, service); });
         service.RegisterHandler("step", [&service](ControlCall& call) { HandleStep(call, service); });
@@ -433,6 +472,8 @@ namespace BECore {
         RegisterValueExplainControl(service);
         RegisterWindowControl(service);
 
+        service.DescribeMethod("client_hello", {"Names the client that asks, for people who watch what it does; asking again renames it. Answers its id and name",
+                                                {{"name", "string", true, Format("1 to {} bytes without control characters", kMaxControlClientNameBytes)}}});
         service.DescribeMethod("ping", {"Answers pong and the protocol version", {}});
         service.DescribeMethod("status", {"The frame clock, whether the clock is manual, whether the game is paused, the totals of warnings and errors logged since the start, the window (size, "
                                           "density, safe area, output, user scale) and the run mode that runs (Editor or Game)",

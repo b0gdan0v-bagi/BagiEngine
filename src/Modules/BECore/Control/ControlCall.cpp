@@ -61,10 +61,12 @@ namespace BECore {
         return JsonView(tape, 0);
     }
 
-    ControlCall::ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply)
-        : _service(&service), _buffers(std::move(buffers)), _method(std::move(method)), _id(id), _params(params), _reply(std::move(reply)) {}
+    ControlCall::ControlCall(PassKey<ControlService>, ControlService& service, String method, RequestBuffersPtr buffers, StringView id, JsonView params, ControlReplyFn reply,
+                             IntrusivePtr<ControlClient> client)
+        : _service(&service), _buffers(std::move(buffers)), _method(std::move(method)), _id(id), _params(params), _reply(std::move(reply)), _client(std::move(client)) {}
 
-    ControlCall::ControlCall(PassKey<ControlService>, String method, JsonView params) : _method(std::move(method)), _params(params), _capturing(true) {}
+    ControlCall::ControlCall(PassKey<ControlService>, String method, JsonView params, IntrusivePtr<ControlClient> client)
+        : _method(std::move(method)), _params(params), _client(std::move(client)), _capturing(true) {}
 
     void ControlCall::ReplyEmpty() {
         Reply([](JsonWriter& writer) {
