@@ -8,6 +8,7 @@
     <element type="PanelEmptyState" id="nothing" icon="activity" text="No control API client has connected or changed anything yet" visible="!activity.hasRows"/>
     <element type="PanelTable" id="entries" source="activity.rows" scrollRows="16" visible="activity.hasRows">
       <columns>
+        <item type="Button" id="select" icon="mouse-pointer-click" tooltip="Select the node this call touched in the Scene Editor" command="activity.selectNode" argument="node" enableField="hasNode"/>
         <item type="Text" id="time" title="Time" field="time"/>
         <item type="Text" id="client" title="Client" field="client"/>
         <item type="Text" id="method" title="Method" field="method"/>

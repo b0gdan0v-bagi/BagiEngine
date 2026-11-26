@@ -19,6 +19,9 @@ namespace BECore {
         BE_REFLECT_FIELD String method;
         BE_REFLECT_FIELD String params;
         BE_REFLECT_FIELD String error;
+        /// The runtime id of the node the call touched first, empty for none: what the row's button passes to `activity.selectNode`
+        BE_REFLECT_FIELD String node;
+        BE_REFLECT_FIELD bool hasNode = false;
         /// A table colours a cell only through a field of its row
         BE_REFLECT_FIELD PanelTextStyle errorStyle = PanelTextStyle::Error;
     };
@@ -35,8 +38,9 @@ namespace BECore {
     /**
      * @brief The model of the Activity panel asset: the journal of the control API, who did what.
      *
-     * Command: `activity.clear` empties the journal. The rows are made again only when the journal's version moved, so a frame with nothing new
-     * allocates nothing.
+     * Commands: `activity.clear` empties the journal; `activity.selectNode` asks the scene editor (SelectSceneNodeRequestEvent) to select the node of the
+     * active scene whose runtime id is the argument, and does nothing for a node that is gone, an argument that is no id or no scene. The rows are made
+     * again only when the journal's version moved, so a frame with nothing new allocates nothing.
      */
     class ActivityPanelModel : public IPanelModel {
         BE_CLASS(ActivityPanelModel)
@@ -57,6 +61,7 @@ namespace BECore {
     private:
         [[nodiscard]] ControlService& Service() const;
         void RebuildView();
+        static void SelectNode(StringView argument);
 
         ActivityPanelView _view;
         ControlService* _service = nullptr;

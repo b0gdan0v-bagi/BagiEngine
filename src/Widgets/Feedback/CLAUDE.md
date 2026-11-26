@@ -41,6 +41,7 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 ## Activity panel
 
 - "Who did what": the control journal (`.claude/rules/control-activity.md`) newest first, hidden until `view.activity`. `activity.clear` empties the journal itself, so every reader of it loses the old entries.
+- A row whose call touched a node has a button (`activity.selectNode`, the node's runtime id as its argument) that selects and reveals the node in the Scene Editor (`SelectSceneNodeRequestEvent`). It shows the first node of the call; a node that is gone, or of a scene that is no longer active, is ignored.
 - A client is shown by the name it has **now** (also in rows older than its `client_hello`), an unnamed one as `client N`, a call with no client as `engine`. Names and params are client text: the table draws them unformatted.
 - A game with its own `config/WidgetsConfig.xml` adds the `AssetPanelWidget` line of `ActivityPanel`, or has no panel behind the menu item.
 - Tests: `ActivityPanelModelTest`, `ActivityAssetTest` (over a service of its own, `ActivityTestModel.h`).
