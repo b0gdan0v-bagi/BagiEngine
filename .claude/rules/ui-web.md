@@ -10,7 +10,7 @@ paths:
 
 # UI: screens in HTML and CSS
 
-A source-to-source compiler: `UIWebCompiler::Compile(html, loadStylesheet, report)` turns HTML-like markup and CSS-like styles into the text of a `.ui.xml`; everything after that is the XML front-end (`src/Modules/BECore/UI/CLAUDE.md`). `UIWebDocumentLoader` takes `.ui.html` (`source="ui/menu.ui.html"` on a canvas), reads the `<link rel="stylesheet" href>` files beside it and logs what it left out with file and line. **A subset on purpose, not a browser:** whatever falls outside is an issue in `UIWebReport`, never silent.
+A source-to-source compiler: `UIWebCompiler::Compile(html, loadStylesheet, report)` turns HTML-like markup and CSS-like styles into the text of a `.ui.xml`; everything after that is the XML front-end (`src/Modules/BECore/UI/CLAUDE.md`). `UIWebDocumentLoader` takes `.ui.html` (`source="ui/menu.ui.html"` on a canvas), reads the `<link rel="stylesheet" href>` files beside it and logs what it left out with file and line. An `href` is relative to the HTML file and may climb with `..`: the joined path is folded before the lookup, so one that climbs above the first name of the document's path is not read, and an absolute one never names a real file. **A subset on purpose, not a browser:** whatever falls outside is an issue in `UIWebReport`, never silent.
 
 ```html
 <link rel="stylesheet" href="hud.css">

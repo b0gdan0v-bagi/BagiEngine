@@ -13,10 +13,12 @@
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
+#include <RmlUiHost/RmlUiFileInterface.h>
 #include <RmlUiHost/RmlUiRenderInterface.h>
 #include <RmlUiHost/RmlUiRuntime.h>
 #include <RmlUiHost/RmlUiScreens.h>
@@ -857,6 +859,23 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_NEAR(box.x, 12.0f, kTolerance) << "the stylesheet next to the document was found";
         EXPECT_NEAR(box.w, 56.0f, kTolerance);
         EXPECT_NEAR(box.h, 78.0f, kTolerance);
+    }
+
+    TEST_F(RmlUiHostTest, TheFileInterfaceOpensNoRelativePathThatClimbs) {
+        const auto directory = MakeTestDirectory();
+        MakeDirectory(directory / "below");
+        Write(directory / "outside.rcss", "body {}");
+        Write(directory / "below" / "inside.rcss", "body {}");
+        const ScopedCurrentDirectory enter(directory / "below");
+        RmlUiFileInterface files;
+        files.BeginRecording();
+
+        EXPECT_EQ(files.Open("../outside.rcss"), 0u);
+        const Rml::FileHandle inside = files.Open("inside.rcss");
+        EXPECT_NE(inside, 0u);
+        files.Close(inside);
+
+        EXPECT_EQ(files.EndRecording().size(), 1u) << "a refused path is not watched";
     }
 
     // ---- hot reload ---------------------------------------------------------------------------------------------------------------

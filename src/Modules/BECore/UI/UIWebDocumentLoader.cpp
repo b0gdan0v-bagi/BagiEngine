@@ -13,7 +13,6 @@ namespace BECore {
     namespace {
 
         constexpr StringView HtmlExtension = ".ui.html";
-        constexpr StringView CurrentDirectoryPrefix = "./";
 
         Optional<String> ReadVirtualFile(StringView virtualPath) {
             const Path resolved = CoreManager::GetFileSystem().ResolvePath(virtualPath);
@@ -27,16 +26,18 @@ namespace BECore {
             return std::move(*text);
         }
 
-        /// The path of @p href next to the document at @p documentPath
+        /**
+         * The path of @p href next to the document at @p documentPath, lexically normal: `FileSystem` refuses a `..` in a virtual path, so
+         * only one that climbs above the first name is left for it. Empty for an absolute @p href that no folder of the document precedes:
+         * a reference of a document never names a real file.
+         */
         String SiblingPath(StringView documentPath, StringView href) {
-            while (href.substr(0, CurrentDirectoryPrefix.size()) == CurrentDirectoryPrefix) {
-                href.remove_prefix(CurrentDirectoryPrefix.size());
-            }
             const size_t slash = documentPath.rfind('/');
-            if (slash == StringView::npos) {
-                return String(href);
+            if (slash == StringView::npos && PathIsAbsolute(href)) {
+                return {};
             }
-            return Format("{}/{}", String(documentPath.substr(0, slash)).c_str(), String(href).c_str());
+            const String joined = slash == StringView::npos ? String(href) : Format("{}/{}", documentPath.substr(0, slash), href);
+            return String(Path(joined).LexicallyNormal().View());
         }
 
     }  // namespace

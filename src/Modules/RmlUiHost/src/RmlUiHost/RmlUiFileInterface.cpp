@@ -41,6 +41,10 @@ namespace BECore {
         Path realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
         const Optional<FileInfo> info = realPath.Empty() ? Optional<FileInfo>() : GetFileInfo(realPath);
         if (!info || info->kind != FileKind::File) {
+            // A relative path that FileSystem refused must not reach the disk by the way round
+            if (!PathIsAbsolute(virtualPath) && !IsConfinedVirtualPath(virtualPath)) {
+                return 0;
+            }
             realPath = Path(virtualPath);
         }
         if (_isRecording) {
