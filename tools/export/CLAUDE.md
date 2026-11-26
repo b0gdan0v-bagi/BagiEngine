@@ -1,6 +1,34 @@
 # tools/export
 
-Turns a game into a desktop package: a folder that runs without the sources or the build. Python, standard library only.
+Turns a game into a desktop package: a folder that runs without the sources or the build. Python, standard library only. `export.py` is the command, `package_desktop.py` the packaging.
+
+## Command
+
+```bash
+export.py build (--exe <path> | --project <dir> --target <name>) --config debug|release
+                [--out <dir>] [--preset <p>] [--cancel-on-stdin-close] [--dry-run]
+export.py run --dir <package>
+```
+
+- `--exe` takes the executable of a build (what a running editor knows of itself): the first `CMakeCache.txt` above it names the project, its file name the target. A packaged executable has none and cannot export.
+- **Build folder** `<project>/build/export/<preset>`, tests off, never the preset's own `build/<preset>`: building there would overwrite the editor that runs the export. So the first export is a full build. The preset is the host's Ninja preset of `--config` (macOS, or Windows through `CI/scripts/vs_env.py`); another host needs `--preset`.
+- **Output** `--out`, by default `<project>/dist/<target>-<config>`.
+- `run` starts the executable the marker names with `--game`, the package as its working folder, detached and with no standard streams.
+
+## Output
+
+The editor parses it, so a change here changes `src/Widgets/Export/` too. Stdout, UTF-8, flushed before each child (which writes to the same place):
+
+- `== step <k>/<n>: <name>` per step (`configure`, `build`, `package`), and `$ <command>` before each command;
+- the last line is one of `== export ok: <absolute folder>`, `== export failed: <reason on one line>`, `== export cancelled`.
+
+Exit codes: 0 ok, 1 failed, 2 a wrong command line (no result line), 3 cancelled.
+
+## Cancel
+
+- With `--cancel-on-stdin-close`, a line `cancel` on stdin or its end gives the export up, so a caller that dies does not leave a build running. Without the flag stdin is not read: a run by hand with no input goes on. SIGTERM and Ctrl+C always cancel.
+- Children take no input. On POSIX each runs in a process group of its own, and a cancel signals the group (ninja then ends its compilers, which have groups of their own), waits `KILL_GRACE_SECONDS`, then kills the group and every descendant listed before the signal. On Windows it is `taskkill /T /F`. A caller that kills the script on a timeout must give it longer than that grace.
+- `<out>.partial` is removed and the old package stays.
 
 ## Package layout
 
@@ -32,4 +60,4 @@ The checks compare the folders themselves, not their spelling, so a link or anot
 
 ## Tests
 
-`.venv/bin/python -m pytest tools/export/tests`: a fake built game in a temp folder and a fake runner for the cook; no build is made.
+`.venv/bin/python -m pytest tools/export/tests`: a fake built game in a temp folder and a fake runner for the commands; no build is made. The cancel cases start real processes.

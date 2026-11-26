@@ -17,7 +17,7 @@ def no_runner(command, cwd):
 
 
 class FakeCook:
-    """Writes what a cook of `layers` layers writes, one file per layer, and remembers how it was started."""
+    """Writes what a cook of `layers` layers writes, a file and one in a folder per layer, and remembers how it was started."""
 
     def __init__(self, layers: int, code: int = 0):
         self.layers = layers
@@ -29,6 +29,7 @@ class FakeCook:
         output = Path(next(argument for argument in command if argument.startswith("--cook=")).removeprefix("--cook="))
         for layer in range(self.layers):
             write(output / f"layer{layer}" / "config" / "App.bin", f"cooked {layer}")
+            write(output / f"layer{layer}" / "config" / "nodes" / "Node.bin", f"node {layer}")
         return self.code
 
 
@@ -74,8 +75,9 @@ def test_a_release_package_ships_the_cooked_config_of_each_layer(tmp_path):
 
     out = make(game, tmp_path / "out", release=True, runner=cook)
 
-    assert tree(out / "content" / "engine" / "config") == {"App.bin": b"cooked 0"}
-    assert tree(out / "content" / "game" / "config") == {"App.bin": b"cooked 1"}
+    for layer, root in enumerate(("engine", "game")):
+        assert tree(out / "content" / root / "config") == {
+            "App.bin": f"cooked {layer}".encode(), "nodes": None, "nodes/Node.bin": f"node {layer}".encode()}
     (command, cwd), = cook.calls
     # The packaged executable cooks, so what it reads is what it will read as a package; what it leaves where it runs is no part of it
     assert Path(command[0]).parent.name == "out.partial"
@@ -90,7 +92,7 @@ def test_a_root_without_config_is_no_layer_of_the_cook(tmp_path):
 
     out = make(game, tmp_path / "out", release=True, runner=FakeCook(layers=1))
 
-    assert tree(out / "content" / "game" / "config") == {"App.bin": b"cooked 0"}
+    assert (out / "content" / "game" / "config" / "App.bin").read_bytes() == b"cooked 0"
     assert not (out / "content" / "engine" / "config").exists()
 
 

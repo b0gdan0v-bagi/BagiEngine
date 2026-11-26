@@ -159,7 +159,12 @@ def _cook(manifest: Manifest, folder: Path, runner: Runner) -> None:
             if not cooked.is_dir():
                 raise PackageError(f"the cook wrote no {cooked}")
             shutil.rmtree(config)
-            shutil.move(cooked, config)
+            config.mkdir()
+            # Copied, not moved: the folders the engine makes are closed to other users of the machine, a package's are not
+            for file in sorted(path for path in cooked.rglob("*") if path.is_file()):
+                target = config / file.relative_to(cooked)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(file, target)
 
 
 def _replace(partial: Path, out: Path) -> None:
