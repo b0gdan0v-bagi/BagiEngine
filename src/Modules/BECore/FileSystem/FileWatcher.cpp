@@ -105,16 +105,20 @@ namespace BECore {
     }
 
     FileWatchHandle FileWatcher::MakeWatch(StringView virtualPath, bool folder, FileWatchCallback callback, StringView consumer) {
-        if (_backend == nullptr || callback == nullptr) {
+        if (_backend == nullptr || callback == nullptr || !IsConfinedVirtualPath(virtualPath)) {
             return {};
         }
         while (!virtualPath.empty() && (virtualPath.back() == '/' || virtualPath.back() == '\\')) {
             virtualPath.remove_suffix(1);
         }
+        // Again: where a backslash is a name character, trimming the name `..\` leaves ".."
+        if (!IsConfinedVirtualPath(virtualPath)) {
+            return {};
+        }
         const size_t firstSlash = virtualPath.find_first_of("/\\");
         const StringView mountPoint = virtualPath.substr(0, firstSlash);
         const StringView remaining = firstSlash == StringView::npos ? StringView{} : virtualPath.substr(firstSlash + 1);
-        if (mountPoint.empty() || (!folder && remaining.empty())) {
+        if (!folder && remaining.empty()) {
             return {};
         }
 
