@@ -65,6 +65,14 @@ namespace BECore::Tests {
                 return names;
             }
 
+            /// A succeeded web export whose server was started
+            void ServeWebResult() {
+                View().platform = ExportPlatform::Web;
+                Succeed("/pkg");
+                Run(EditorCommandIds::kExportRun);
+                ASSERT_EQ(_fixture.launcher.serverStarts, 1);
+            }
+
             ExportFixture _fixture{"export_model"};
             UniquePtr<ExportPanelModel> _model;
         };
@@ -348,6 +356,105 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(View().checkSummary, Format("({} more not shown)", kExtra))) << View().checkSummary.c_str();
         EXPECT_TRUE(Contains(View().checkSummary, "config/Wide.xml")) << View().checkSummary.c_str();
         EXPECT_TRUE(Contains(View().checkSummary, "built in code")) << View().checkSummary.c_str();
+    }
+
+    TEST_F(ExportPanelModelTest, RunOfAWebResultStartsOneServerAndShowsItsAddress) {
+        View().platform = ExportPlatform::Web;
+        Succeed("/pkg");
+        EXPECT_TRUE(View().canRun);
+        // The result is a web package whatever is chosen for the next export
+        View().platform = ExportPlatform::Desktop;
+
+        Run(EditorCommandIds::kExportRun);
+        Run(EditorCommandIds::kExportRun);
+
+        EXPECT_EQ(_fixture.launcher.serverStarts, 1);
+        EXPECT_EQ(_fixture.launcher.detachedStarts, 0);
+        const Vector<String> expected{_fixture.launcher.started.at(0), _fixture.script, "serve", "--dir", "/pkg", "--open", "--cancel-on-stdin-close"};
+        EXPECT_EQ(_fixture.launcher.served, expected);
+        EXPECT_NE(_fixture.launcher.serveLogPath, _fixture.launcher.logPath);
+        EXPECT_TRUE(View().serving);
+        EXPECT_TRUE(View().canStop);
+        EXPECT_FALSE(View().canRun);
+        EXPECT_TRUE(View().serveUrl.empty());
+
+        _fixture.launcher.WriteServer("== serve: http://127.0.0.1:5000/\n");
+        _model->Update();
+        EXPECT_EQ(View().serveUrl, "http://127.0.0.1:5000/");
+        EXPECT_EQ(_model->GetState(), ExportState::Succeeded);
+
+        // Closing the panel leaves the server alone
+        _model->OnOpenChanged(false);
+        EXPECT_FALSE(_fixture.launcher.server.cancelled);
+    }
+
+    TEST_F(ExportPanelModelTest, StopAsksTheServerAndWaitsForItsEnd) {
+        ServeWebResult();
+
+        Run(EditorCommandIds::kExportStop);
+        _model->Update();
+        EXPECT_TRUE(_fixture.launcher.server.cancelled);
+        EXPECT_TRUE(_fixture.launcher.server.alive) << "only a polled process is killed when it does not end";
+        EXPECT_TRUE(View().serving);
+        EXPECT_FALSE(View().canStop);
+        Run(EditorCommandIds::kExportRun);
+        EXPECT_EQ(_fixture.launcher.serverStarts, 1);
+
+        _fixture.launcher.server.exitCode = kExportExitCancelled;
+        _model->Update();
+        EXPECT_FALSE(_fixture.launcher.server.alive);
+        EXPECT_FALSE(View().serving);
+        EXPECT_TRUE(View().serveUrl.empty());
+        EXPECT_TRUE(View().canRun);
+        EXPECT_EQ(View().statusStyle, PanelTextStyle::Success) << View().status.c_str();
+    }
+
+    TEST_F(ExportPanelModelTest, AServerThatEndsByItselfOrCannotStartSaysWhy) {
+        ServeWebResult();
+        _fixture.launcher.WriteServer("== export failed: the port is taken\n");
+        _fixture.launcher.server.exitCode = 1;
+        _model->Update();
+        EXPECT_FALSE(View().serving);
+        EXPECT_EQ(View().statusStyle, PanelTextStyle::Error);
+        EXPECT_TRUE(Contains(View().status, "the port is taken")) << View().status.c_str();
+        EXPECT_TRUE(View().canRun);
+
+        _fixture.launcher.refusal = "no python";
+        Run(EditorCommandIds::kExportRun);
+        EXPECT_FALSE(View().serving);
+        EXPECT_TRUE(Contains(View().status, "no python")) << View().status.c_str();
+    }
+
+    TEST_F(ExportPanelModelTest, ANewExportAndTheEndOfTheModelStopTheServer) {
+        ServeWebResult();
+        View().platform = ExportPlatform::Web;
+        Run(EditorCommandIds::kExportStart);
+        EXPECT_TRUE(_fixture.launcher.server.cancelled);
+        EXPECT_EQ(_fixture.launcher.starts, 2);
+        EXPECT_FALSE(_fixture.launcher.run.cancelled);
+
+        _fixture.launcher.server.exitCode = kExportExitCancelled;
+        _fixture.launcher.End(0, "== export ok: /pkg\n");
+        _model->Update();
+        Run(EditorCommandIds::kExportRun);
+        ASSERT_EQ(_fixture.launcher.serverStarts, 2);
+        EXPECT_FALSE(_fixture.launcher.server.cancelled);
+
+        _model.reset();
+        EXPECT_TRUE(_fixture.launcher.server.cancelled);
+        EXPECT_FALSE(_fixture.launcher.server.alive);
+    }
+
+    TEST_F(ExportPanelModelTest, AnUpdateOfAServerWithNoNewOutputAllocatesNothing) {
+        ServeWebResult();
+        _fixture.launcher.WriteServer("== serve: http://127.0.0.1:5000/\n");
+        _model->Update();
+        _model->Update();
+        ExpectNoAllocations([&] {
+            for (int frame = 0; frame < 8; ++frame) {
+                _model->Update();
+            }
+        });
     }
 
     TEST_F(ExportPanelModelTest, AnUpdateWithNoNewOutputAllocatesNothing) {

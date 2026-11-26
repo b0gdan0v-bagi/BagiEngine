@@ -81,6 +81,17 @@ namespace BECore::Tests {
         EXPECT_EQ(log.GetLineCount(), 2u);
     }
 
+    TEST_F(ExportLogTest, TheLineOfAServerGivesItsAddress) {
+        ExportLog log;
+        log.Follow(_path);
+        Append("== serve: http://127.0.0.1:5000/\r\nno browser opened: open http://127.0.0.1:5000/ yourself\n");
+        log.Read();
+        EXPECT_EQ(log.GetServeUrl(), "http://127.0.0.1:5000/");
+
+        log.Follow(_path);
+        EXPECT_TRUE(log.GetServeUrl().empty());
+    }
+
     TEST_F(ExportLogTest, TheResultLinesGiveTheFolderAndTheReason) {
         ExportLog log;
         log.Follow(_path);

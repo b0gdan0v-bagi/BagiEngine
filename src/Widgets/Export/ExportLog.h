@@ -31,7 +31,7 @@ namespace BECore {
      * @brief The output of an export as classified lines, read from the log file while the process writes it. No ImGui.
      *
      * `Read` takes what was appended since the last call; a read that finds nothing allocates nothing. A line is there once its end has been
-     * read; `Finish` takes the rest. The result lines of the script (`tools/export/CLAUDE.md`, "Output") give the folder and the reason.
+     * read; `Finish` takes the rest. The script's own lines (`tools/export/CLAUDE.md`, "Output") give the folder, the reason and a server's address.
      */
     class ExportLog {
     public:
@@ -79,6 +79,11 @@ namespace BECore {
             return _failure;
         }
 
+        /// The address of a server's line; empty until there is one
+        [[nodiscard]] StringView GetServeUrl() const {
+            return _serveUrl;
+        }
+
         /// Moves when the lines change, and only then
         [[nodiscard]] uint32_t GetRevision() const {
             return _revision;
@@ -96,6 +101,7 @@ namespace BECore {
         String _partial;
         String _resultFolder;
         String _failure;
+        String _serveUrl;
         size_t _maxLines = 0;
         size_t _oldest = 0;
         size_t _dropped = 0;

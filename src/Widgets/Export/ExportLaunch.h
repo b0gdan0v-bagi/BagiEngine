@@ -19,11 +19,14 @@ namespace BECore {
 
     CORE_ENUM(ExportConfig, uint8_t, Debug, Release)
 
+    CORE_ENUM(ExportPlatform, uint8_t, Desktop, Web)
+
     /// What one export is asked for
     struct ExportRequest {
         /// The running program, which names the game to export
         StringView executable;
         ExportConfig config = ExportConfig::Debug;
+        ExportPlatform platform = ExportPlatform::Desktop;
         /// Empty leaves the script's default
         StringView outputDirectory;
         /// The scenes the package goes without
@@ -32,14 +35,17 @@ namespace BECore {
 
     [[nodiscard]] Vector<String> BuildExportLaunch(StringView python, StringView script, const ExportRequest& request);
 
-    /// The arguments that start the game of an exported package
+    /// The arguments that start the game of an exported desktop package
     [[nodiscard]] Vector<String> BuildPackageRunLaunch(StringView python, StringView script, StringView packageDirectory);
+
+    /// The arguments that serve an exported web package and open its page in the browser. The process lives until it is cancelled
+    [[nodiscard]] Vector<String> BuildPackageServeLaunch(StringView python, StringView script, StringView packageDirectory);
 
     /// @p programPath (`CommandLine::GetProgramPath`) made absolute, for the script's `--exe`. An error sentence when no file is there: a program
     /// started by a bare name from PATH cannot say where it is
     [[nodiscard]] std::expected<String, String> ResolveExportExecutable(StringView programPath);
 
-    /// An export that was started. Destroying a running one cancels it and does not wait for it
+    /// A process of the script that was started: an export or a server. Destroying a running one cancels it and does not wait for it
     class IExportProcess {
     public:
         virtual ~IExportProcess() = default;

@@ -21,6 +21,9 @@ namespace BECore {
 
     CORE_ENUM(ExportState, uint8_t, Idle, Running, Succeeded, Failed, Cancelled)
 
+    /// The lines of a server's output the model keeps: it needs the address and the reason of an end
+    inline constexpr size_t kMaxExportServeLogLines = 100;
+
     /// The rows of findings the panel lists at most; the summary counts the others
     inline constexpr size_t kMaxExportCheckRows = 200;
 
@@ -55,13 +58,14 @@ namespace BECore {
     /**
      * @brief What the Export window's asset binds to
      *
-     * `config`, `outputDirectory`, `errorsOnly` and the `included` of a scene are written by the controls of the panel; the rest is written by the model.
-     * The choices are read when an export starts. A condition of an asset is one bool or one comparison, so every state the panel shows is a field of
-     * its own.
+     * `platform`, `config`, `outputDirectory`, `errorsOnly` and the `included` of a scene are written by the controls of the panel; the rest is written
+     * by the model. The choices are read when an export starts. A condition of an asset is one bool or one comparison, so every state the panel shows
+     * is a field of its own.
      */
     struct ExportPanelView {
         BE_CLASS(ExportPanelView)
 
+        BE_REFLECT_FIELD ExportPlatform platform = ExportPlatform::Desktop;
         BE_REFLECT_FIELD ExportConfig config = ExportConfig::Debug;
         /// The folder of the package; empty is the script's default
         BE_REFLECT_FIELD String outputDirectory;
@@ -73,6 +77,13 @@ namespace BECore {
         /// The last export succeeded, so there is a package to open and to run
         BE_REFLECT_FIELD bool hasResult = false;
         BE_REFLECT_FIELD String resultFolder;
+        /// There is a result that can be run now: a web one cannot while a server runs
+        BE_REFLECT_FIELD bool canRun = false;
+        /// A server of a web package runs, one that was told to stop too
+        BE_REFLECT_FIELD bool serving = false;
+        BE_REFLECT_FIELD bool canStop = false;
+        /// The address the server listens on; empty until it says it
+        BE_REFLECT_FIELD String serveUrl;
         BE_REFLECT_FIELD bool errorsOnly = false;
         BE_REFLECT_FIELD uint32_t errorCount = 0;
         BE_REFLECT_FIELD uint32_t warningCount = 0;
@@ -99,8 +110,11 @@ namespace BECore {
      * The documents are asked for unsaved changes and the scenes are listed when the panel opens, when the pointer comes back to it and when an export
      * starts. The assets are checked on command and at each start; a finding never stops an export.
      *
-     * Commands (`EditorCommandIds`, run only while the panel is open): `export.start`, `export.cancel`, `export.openFolder`, `export.run` and
-     * `export.check`.
+     * Running a web result starts a server, a second process with a log of its own: `export.stop`, a new export and the model's end stop it, closing
+     * the panel does not.
+     *
+     * Commands (`EditorCommandIds`, run only while the panel is open): `export.start`, `export.cancel`, `export.openFolder`, `export.run`,
+     * `export.stop` and `export.check`.
      */
     class ExportPanelModel : public IPanelModel {
         BE_CLASS(ExportPanelModel)
@@ -124,7 +138,7 @@ namespace BECore {
             _launcher = &launcher;
         }
 
-        /// Writes the output to @p path instead of `export.log` in the editor's user folder
+        /// Writes the output to @p path instead of `export.log` in the editor's user folder; a server's output goes beside it
         void SetLogPath(StringView path) {
             _logPath.assign(path.data(), path.size());
         }
@@ -182,12 +196,20 @@ namespace BECore {
         void Cancel();
         void OpenFolder();
         void RunPackage();
+        /// Starts the server of the web result
+        void Serve();
+        /// Asks the server to end; `Update` takes the end
+        void StopServer();
+        void FinishServer(int exitCode);
         void Finish(int exitCode);
         void SetState(ExportState state);
         /// A problem with the result, shown in the status line until the state changes
         void ShowProblem(String problem);
         /// Makes the strings and the counts again when the output or the state moved
         void SyncView();
+        void SyncServerView();
+        /// The file the export writes its output to; an error when there is no folder for it
+        [[nodiscard]] std::expected<String, String> ExportLogPath() const;
         /// Reads again what the user may have changed elsewhere in the editor: the unsaved documents and the scenes
         void RefreshFromEditor();
         void RefreshUnsaved();
@@ -201,6 +223,7 @@ namespace BECore {
 
         ExportPanelView _view;
         ExportLog _log;
+        ExportLog _serveLog{kMaxExportServeLogLines};
         ExportSlots _slots{*this};
         String _logPath;
         /// The export script the last export was started with
@@ -214,10 +237,14 @@ namespace BECore {
         IExportLauncher* _launcher = nullptr;
         UniquePtr<IExportLauncher> _ownLauncher;
         UniquePtr<IExportProcess> _process;  // after the launchers: it dies first
+        UniquePtr<IExportProcess> _server;   // after the launchers too
         const CommandLine* _commandLine = nullptr;
         const FileSystem* _fileSystem = nullptr;
         const EditorDocuments* _documents = nullptr;
         ExportState _state = ExportState::Idle;
+        /// What the last export was started for; the choice of the view may have moved since
+        ExportPlatform _startedPlatform = ExportPlatform::Desktop;
+        bool _stopRequested = false;
         uint32_t _shownRevision = 0;
         bool _viewStale = true;
         bool _cancelRequested = false;

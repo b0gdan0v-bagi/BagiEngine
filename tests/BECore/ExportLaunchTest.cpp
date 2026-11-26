@@ -69,9 +69,16 @@ namespace BECore::Tests {
         EXPECT_EQ(arguments, expected);
     }
 
-    TEST(ExportLaunchTest, RunNamesThePackageFolder) {
+    TEST(ExportLaunchTest, RunAndServeNameThePackageFolderAndAWebExportItsPlatform) {
         const Vector<String> expected{"python3", "/e/export.py", "run", "--dir", "/my game/dist"};
         EXPECT_EQ(BuildPackageRunLaunch("python3", "/e/export.py", "/my game/dist"), expected);
+
+        const Vector<String> serve{"python3", "/e/export.py", "serve", "--dir", "/my game/dist", "--open", "--cancel-on-stdin-close"};
+        EXPECT_EQ(BuildPackageServeLaunch("python3", "/e/export.py", "/my game/dist"), serve);
+
+        const Vector<String> web = BuildExportLaunch("python3", "/e/export.py", {.executable = "/g/Game", .platform = ExportPlatform::Web});
+        const Vector<String> expectedWeb{"python3", "/e/export.py", "build", "--exe", "/g/Game", "--config", "debug", "--platform", "web", "--cancel-on-stdin-close"};
+        EXPECT_EQ(web, expectedWeb);
     }
 
     TEST(ExportLaunchTest, TheExecutableIsMadeAbsoluteAndAPathThatIsNoFileIsRefused) {

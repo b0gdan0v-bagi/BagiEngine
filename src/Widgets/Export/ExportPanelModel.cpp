@@ -23,6 +23,7 @@ namespace BECore {
     namespace {
 
         constexpr StringView kLogName = "export.log";
+        constexpr StringView kServeLogName = "export-serve.log";
         constexpr StringView kBlanks = " \t";
 
         std::expected<void, String> OpenWithSystem(StringView url) {
@@ -111,6 +112,14 @@ namespace BECore {
                 _log.Read();
             }
         }
+        if (_server) {
+            if (const Optional<int> code = _server->Poll()) {
+                _serveLog.Finish();
+                FinishServer(*code);
+            } else {
+                _serveLog.Read();
+            }
+        }
         SyncView();
     }
 
@@ -132,6 +141,8 @@ namespace BECore {
             OpenFolder();
         } else if (is(EditorCommandIds::kExportRun)) {
             RunPackage();
+        } else if (is(EditorCommandIds::kExportStop)) {
+            StopServer();
         } else if (is(EditorCommandIds::kExportCheck)) {
             CheckAssets();
         } else {
@@ -145,6 +156,8 @@ namespace BECore {
         if (_process) {
             return;
         }
+        // The new package replaces the folder a server may be reading
+        StopServer();
         _cancelRequested = false;
         _view.resultFolder.clear();
         _log.Follow({});
@@ -170,18 +183,14 @@ namespace BECore {
         if (!executable) {
             return std::unexpected(executable.error());
         }
-        String logPath = _logPath;
-        if (logPath.empty()) {
-            const Path userDirectory = EditorUserDirectory();
-            if (userDirectory.View().empty()) {
-                return std::unexpected(String("there is no editor user folder to write the log to"));
-            }
-            logPath = String((userDirectory / kLogName).View());
+        const auto logPath = ExportLogPath();
+        if (!logPath) {
+            return std::unexpected(logPath.error());
         }
-        if (auto emptied = MakeEmptyLog(logPath); !emptied) {
+        if (auto emptied = MakeEmptyLog(*logPath); !emptied) {
             return emptied;
         }
-        _log.Follow(logPath);
+        _log.Follow(*logPath);
 
         Vector<String> excluded;
         for (const ExportSceneRow& scene : _view.scenes) {
@@ -189,9 +198,11 @@ namespace BECore {
                 excluded.push_back(scene.name);
             }
         }
-        const ExportRequest request{.executable = *executable, .config = _view.config, .outputDirectory = Trimmed(_view.outputDirectory), .excludedScenes = {excluded.data(), excluded.size()}};
+        _startedPlatform = _view.platform;
+        const ExportRequest request{
+            .executable = *executable, .config = _view.config, .platform = _startedPlatform, .outputDirectory = Trimmed(_view.outputDirectory), .excludedScenes = {excluded.data(), excluded.size()}};
         const Vector<String> arguments = BuildExportLaunch(EnginePython(), _script, request);
-        auto process = Launcher().Start({arguments.data(), arguments.size()}, logPath);
+        auto process = Launcher().Start({arguments.data(), arguments.size()}, *logPath);
         if (!process) {
             return std::unexpected(std::move(process.error()));
         }
@@ -237,12 +248,61 @@ namespace BECore {
         if (!_view.hasResult) {
             return;
         }
+        if (_startedPlatform == ExportPlatform::Web) {
+            Serve();
+            return;
+        }
         const Vector<String> arguments = BuildPackageRunLaunch(EnginePython(), _script, _view.resultFolder);
         if (const auto started = Launcher().StartDetached({arguments.data(), arguments.size()}); !started) {
             ShowProblem(Format("Could not run the game: {}", started.error()));
         } else {
             _viewStale = true;
         }
+    }
+
+    void ExportPanelModel::Serve() {
+        if (_server) {
+            return;
+        }
+        const auto exportLog = ExportLogPath();
+        if (!exportLog) {
+            ShowProblem(Format("Could not serve the page: {}", exportLog.error()));
+            return;
+        }
+        const String logPath((Path(*exportLog).Parent() / kServeLogName).View());
+        if (const auto emptied = MakeEmptyLog(logPath); !emptied) {
+            ShowProblem(Format("Could not serve the page: {}", emptied.error()));
+            return;
+        }
+        _serveLog.Follow(logPath);
+        const Vector<String> arguments = BuildPackageServeLaunch(EnginePython(), _script, _view.resultFolder);
+        auto server = Launcher().Start({arguments.data(), arguments.size()}, logPath);
+        if (!server) {
+            ShowProblem(Format("Could not serve the page: {}", server.error()));
+            return;
+        }
+        _server = std::move(*server);
+        _stopRequested = false;
+        _viewStale = true;
+    }
+
+    void ExportPanelModel::StopServer() {
+        if (!_server || _stopRequested) {
+            return;
+        }
+        _stopRequested = true;
+        // The process is kept and polled until it ends: only `Poll` kills one that does not
+        _server->Cancel();
+    }
+
+    void ExportPanelModel::FinishServer(int exitCode) {
+        _server.reset();
+        if (_stopRequested) {
+            _stopRequested = false;
+            return;
+        }
+        const StringView failure = _serveLog.GetFailure();
+        ShowProblem(failure.empty() ? Format("The server ended with exit code {}", exitCode) : Format("The server stopped: {}", failure));
     }
 
     void ExportPanelModel::SetState(ExportState state) {
@@ -267,6 +327,7 @@ namespace BECore {
         }
         _shownRevision = _log.GetRevision();
         if (!_viewStale) {
+            SyncServerView();
             return;
         }
         _viewStale = false;
@@ -298,6 +359,28 @@ namespace BECore {
                 _view.statusStyle = PanelTextStyle::Disabled;
                 break;
         }
+        SyncServerView();
+    }
+
+    void ExportPanelModel::SyncServerView() {
+        _view.serving = _server != nullptr;
+        _view.canStop = _view.serving && !_stopRequested;
+        _view.canRun = _view.hasResult && (_startedPlatform == ExportPlatform::Desktop || !_view.serving);
+        const StringView url = _view.serving ? _serveLog.GetServeUrl() : StringView{};
+        if (StringView(_view.serveUrl) != url) {
+            _view.serveUrl.assign(url.data(), url.size());
+        }
+    }
+
+    std::expected<String, String> ExportPanelModel::ExportLogPath() const {
+        if (!_logPath.empty()) {
+            return _logPath;
+        }
+        const Path userDirectory = EditorUserDirectory();
+        if (userDirectory.View().empty()) {
+            return std::unexpected(String("there is no editor user folder to write the log to"));
+        }
+        return String((userDirectory / kLogName).View());
     }
 
     void ExportPanelModel::RefreshFromEditor() {

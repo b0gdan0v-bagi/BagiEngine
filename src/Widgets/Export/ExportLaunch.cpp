@@ -149,6 +149,10 @@ namespace BECore {
         arguments.emplace_back(request.executable.data(), request.executable.size());
         arguments.emplace_back("--config");
         arguments.emplace_back(request.config == ExportConfig::Release ? "release" : "debug");
+        if (request.platform == ExportPlatform::Web) {
+            arguments.emplace_back("--platform");
+            arguments.emplace_back("web");
+        }
         if (!request.outputDirectory.empty()) {
             arguments.emplace_back("--out");
             arguments.emplace_back(request.outputDirectory.data(), request.outputDirectory.size());
@@ -165,6 +169,15 @@ namespace BECore {
         Vector<String> arguments = ScriptCommand(python, script, "run");
         arguments.emplace_back("--dir");
         arguments.emplace_back(packageDirectory.data(), packageDirectory.size());
+        return arguments;
+    }
+
+    Vector<String> BuildPackageServeLaunch(StringView python, StringView script, StringView packageDirectory) {
+        Vector<String> arguments = ScriptCommand(python, script, "serve");
+        arguments.emplace_back("--dir");
+        arguments.emplace_back(packageDirectory.data(), packageDirectory.size());
+        arguments.emplace_back("--open");
+        arguments.emplace_back("--cancel-on-stdin-close");
         return arguments;
     }
 

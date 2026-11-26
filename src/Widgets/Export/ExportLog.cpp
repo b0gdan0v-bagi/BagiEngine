@@ -7,6 +7,7 @@ namespace BECore {
         constexpr StringView kStepPrefix = "== ";
         constexpr StringView kResultOkPrefix = "== export ok: ";
         constexpr StringView kResultFailedPrefix = "== export failed: ";
+        constexpr StringView kServePrefix = "== serve: ";
         constexpr StringView kErrorMarks[] = {"error:", "error C", "error LNK", "fatal error", "FAILED:", "CMake Error"};
         constexpr StringView kWarningMarks[] = {"warning:", "warning C", "warning LNK", "CMake Warning"};
 
@@ -42,6 +43,7 @@ namespace BECore {
         _partial.clear();
         _resultFolder.clear();
         _failure.clear();
+        _serveUrl.clear();
         _oldest = 0;
         _dropped = 0;
         _errors = 0;
@@ -109,6 +111,9 @@ namespace BECore {
         } else if (text.starts_with(kResultFailedPrefix)) {
             const StringView reason = text.substr(kResultFailedPrefix.size());
             _failure.assign(reason.data(), reason.size());
+        } else if (text.starts_with(kServePrefix)) {
+            const StringView url = text.substr(kServePrefix.size());
+            _serveUrl.assign(url.data(), url.size());
         }
 
         ExportLine* line = nullptr;

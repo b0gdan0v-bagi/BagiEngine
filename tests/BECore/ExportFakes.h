@@ -42,12 +42,19 @@ namespace BECore::Tests {
         FakeExportRun& _run;
     };
 
-    /// Starts nothing: keeps what it was asked to start, and one run at a time
+    /// Starts nothing: keeps what it was asked to start, and one export and one server at a time
     class FakeExportLauncher final : public IExportLauncher {
     public:
         std::expected<UniquePtr<IExportProcess>, String> Start(Span<const String> arguments, StringView log) override {
             if (!refusal.empty()) {
                 return std::unexpected(refusal);
+            }
+            if (arguments.size() > 2 && arguments[2] == "serve") {
+                ++serverStarts;
+                served.assign(arguments.begin(), arguments.end());
+                serveLogPath.assign(log.data(), log.size());
+                server = {};
+                return UniquePtr<IExportProcess>(MakeUnique<FakeExportProcess>(server));
             }
             ++starts;
             started.assign(arguments.begin(), arguments.end());
@@ -65,11 +72,14 @@ namespace BECore::Tests {
             return {};
         }
 
-        /// Appends @p text to the log, as the running process would
+        /// Appends @p text to the export's log, as the running process would
         void Write(StringView text) const {
-            auto file = File::Open(logPath, FileMode::Append);
-            ASSERT_TRUE(file.has_value()) << file.error().c_str();
-            ASSERT_TRUE(file->Write(text).has_value());
+            Append(logPath, text);
+        }
+
+        /// The same for the server and its log
+        void WriteServer(StringView text) const {
+            Append(serveLogPath, text);
         }
 
         /// The process wrote @p text and ended with @p exitCode
@@ -81,10 +91,21 @@ namespace BECore::Tests {
         String refusal;
         Vector<String> started;
         Vector<String> detached;
+        Vector<String> served;
         String logPath;
+        String serveLogPath;
         FakeExportRun run;
+        FakeExportRun server;
         int starts = 0;
         int detachedStarts = 0;
+        int serverStarts = 0;
+
+    private:
+        static void Append(StringView path, StringView text) {
+            auto file = File::Open(path, FileMode::Append);
+            ASSERT_TRUE(file.has_value()) << file.error().c_str();
+            ASSERT_TRUE(file->Write(text).has_value());
+        }
     };
 
     /// Everything the Export window's model takes from outside: a program, a content root that holds the script, a log of its own, fakes and the scenes
