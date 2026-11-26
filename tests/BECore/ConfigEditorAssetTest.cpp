@@ -32,6 +32,8 @@ namespace BECore::Tests {
         const PoolString kBeta = "BetaConfig"_intern;
         constexpr StringView kAlphaText = "<AlphaConfig value=\"one\"/>\n";
         constexpr StringView kBetaText = "<BetaConfig value=\"other\"/>\n";
+        /// A config with a registered reflected type, so it is drawn as objects
+        constexpr StringView kTypedText = "<root>\n    <sinks>\n        <sink type=\"ConsoleSink\" priority=\"1\"/>\n    </sinks>\n</root>\n";
 
         Path ShippedAssetFile() {
             return Path(__FILE__).Parent().Parent().Parent() / "config" / "panels" / "ConfigEditorPanel.xml";
@@ -61,6 +63,7 @@ namespace BECore::Tests {
             WriteFile(_dir / "ConfigEditorPanel.xml", asset);
             WriteFile(_dir / "AlphaConfig.xml", kAlphaText);
             WriteFile(_dir / "BetaConfig.xml", kBetaText);
+            WriteFile(_dir / "LoggerConfig.xml", kTypedText);
             ASSERT_TRUE(_fileSystem.Mount(MountPoints::config, _dir));
             _manager.Initialize();
             ConfigEditorTestModel::manager = &_manager;
@@ -143,6 +146,16 @@ namespace BECore::Tests {
                 }
             }
             return nullptr;
+        }
+
+        /// A click on the item drawn right after the first one whose label holds @p part: ImGui reports a combo with no label
+        void ClickNextTo(StringView part) {
+            const ImGuiItemRecord* item = Find(part);
+            ASSERT_NE(item, nullptr) << String(part).c_str();
+            const size_t next = static_cast<size_t>(item - _index.Items().data()) + 1;
+            ASSERT_LT(next, _index.Items().size());
+            const ImGuiItemRecord& record = _index.Items()[next];
+            ClickAt(ImVec2(record.minX + record.maxY - record.minY, record.CenterY()));
         }
 
         /// Clicks into the input, types @p text after what it holds and confirms with Enter
@@ -272,6 +285,54 @@ namespace BECore::Tests {
         ASSERT_TRUE(row.has_value()) << "the model that runs was dropped by the reload of its own asset";
         EXPECT_FALSE(row->dirty);
         EXPECT_NE(Find("Save"), nullptr);
+    }
+
+    TEST_F(ConfigEditorAssetTest, AConfigOfARegisteredTypeIsDrawnAsItsObjects) {
+        ASSERT_NO_FATAL_FAILURE(Click("LoggerConfig##"));
+
+        EXPECT_NE(Find("sinks[0]: ConsoleSink"), nullptr);
+        EXPECT_NE(Find("colorEnabled##"), nullptr);
+        EXPECT_EQ(Find("##value"), nullptr) << "no XML tree beside the objects";
+        EXPECT_FALSE(IsDirty("LoggerConfig"));
+    }
+
+    TEST_F(ConfigEditorAssetTest, AFieldAndTheEnabledBoxOfAnObjectAreEditedAndSaved) {
+        ASSERT_NO_FATAL_FAILURE(Click("LoggerConfig##"));
+
+        ASSERT_NO_FATAL_FAILURE(Click("colorEnabled##"));
+
+        EXPECT_TRUE(IsDirty("LoggerConfig"));
+        ASSERT_NO_FATAL_FAILURE(Click("colorEnabled##"));
+        EXPECT_FALSE(IsDirty("LoggerConfig")) << "an edit undone is no edit";
+
+        ASSERT_NO_FATAL_FAILURE(Click("colorEnabled##"));
+        ASSERT_NO_FATAL_FAILURE(Click("enabled"));
+        EXPECT_EQ(ReadFile(_dir / "LoggerConfig.xml"), kTypedText) << "nothing is written before Save";
+        ASSERT_NO_FATAL_FAILURE(Click("Save"));
+
+        const String saved = ReadFile(_dir / "LoggerConfig.xml");
+        EXPECT_TRUE(Contains(saved, "colorEnabled=\"false\""));
+        EXPECT_TRUE(Contains(saved, " enabled=\"false\""));
+        EXPECT_FALSE(IsDirty("LoggerConfig"));
+        EXPECT_NE(Find("sinks[0]: ConsoleSink"), nullptr) << "the saved config is open again";
+    }
+
+    TEST_F(ConfigEditorAssetTest, TheTypeComboMakesTheElementAnotherTypeAndReloadDiscardsIt) {
+        ASSERT_NO_FATAL_FAILURE(Click("LoggerConfig##"));
+
+        ASSERT_NO_FATAL_FAILURE(ClickNextTo("sinks[0]: ConsoleSink"));
+        ASSERT_NO_FATAL_FAILURE(Click("OutputSink"));
+
+        EXPECT_NE(Find("sinks[0]: OutputSink"), nullptr);
+        EXPECT_EQ(Find("colorEnabled##"), nullptr) << "the fields are those of the new type";
+        EXPECT_TRUE(IsDirty("LoggerConfig"));
+
+        ASSERT_NO_FATAL_FAILURE(Click("Reload"));
+        ASSERT_NO_FATAL_FAILURE(Click("Discard & Reload"));
+
+        EXPECT_NE(Find("sinks[0]: ConsoleSink"), nullptr);
+        EXPECT_FALSE(IsDirty("LoggerConfig"));
+        EXPECT_EQ(ReadFile(_dir / "LoggerConfig.xml"), kTypedText);
     }
 
 }  // namespace BECore::Tests

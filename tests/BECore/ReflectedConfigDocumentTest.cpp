@@ -1,6 +1,7 @@
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/Input/ImGuiItemIndex.h>
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Logger/LogHistorySink.h>
 #include <BECore/ReflectedConfigDocumentTypes.h>
@@ -13,6 +14,8 @@
 #include <Common/TestFiles.h>
 #include <Generated/ReflectedConfigDocumentTypes.gen.hpp>
 #include <Widgets/ConfigEditor/ReflectedConfigDocument.h>
+#include <Widgets/ConfigEditor/ReflectedConfigDrawer.h>
+#include <imgui.h>
 
 namespace BECore::Tests {
 
@@ -257,6 +260,44 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(Refusal("SceneConfig", "<root/>").empty());
         EXPECT_FALSE(Refusal("TextureLibrary", "<root/>").empty());
+    }
+
+    TEST(ReflectedConfigDocumentTest, TheDrawerLeavesTheListsOfTheRootToTheElements) {
+        ContentCookRegistry registry;
+        const CookableConfig<ProbeDocumentRoot> cookable{"ProbeDocument", false, registry};
+        ConfigDom dom(R"(<root limit="5"><items><item type="ProbeDocumentLeaf" weight="2"/></items></root>)");
+        auto document = ReflectedConfigDocument::Open("ProbeDocument", dom.Root(), registry);
+        ASSERT_TRUE(document.has_value()) << document.error().c_str();
+
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.DisplaySize = ImVec2(800.0f, 600.0f);
+        io.IniFilename = nullptr;
+        io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+        {
+            ImGuiItemIndex index;
+            index.Arm(*ImGui::GetCurrentContext());
+            ReflectedConfigDrawer drawer;
+            drawer.Prepare(*document);
+            for (int frame = 0; frame < 2; ++frame) {
+                ImGui::NewFrame();
+                ImGui::SetNextWindowSize(io.DisplaySize);
+                ImGui::Begin("config");
+                drawer.Draw(*document);
+                ImGui::End();
+                ImGui::Render();
+            }
+            const auto drawn = [&index](StringView part) {
+                return eastl::count_if(index.Items().begin(), index.Items().end(), [part](const ImGuiItemRecord& item) { return item.label.find(part.data(), 0, part.size()) != String::npos; });
+            };
+            // A number has a hidden label of its place among the fields of its object: the first of the root and of the element
+            EXPECT_EQ(drawn("##0"), 2);
+            EXPECT_EQ(drawn("items##"), 0) << "the root's list is not a node among its fields";
+            EXPECT_EQ(drawn("items[0]: ProbeDocumentLeaf"), 1);
+            index.Disarm();
+        }
+        ImGui::DestroyContext();
+        EXPECT_FALSE(document->IsDirty());
     }
 
     TEST(ReflectedConfigDocumentTest, TheOwnFieldsOfARootStandBesideItsList) {
