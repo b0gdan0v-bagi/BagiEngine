@@ -53,7 +53,7 @@ description: Investigates why the rendering of one benchmark or scenario is slow
    | a shadow map redrawn although nothing in it moves | - | a static shadow map: **not there yet** (3D, entry `gpu-backend-first` and after) | - |
    | full frames although nothing changes | the counts and times of an idle scene | render on demand: **not available yet** (entry `render-on-demand`) | - |
 
-9. **Entry and report:** steps 6 and 7 of `<engine>/.claude/skills/perf-investigate/SKILL.md`, with the backend and the numbers of the line beside the machine, the build and the commit. Add **not measured yet**: pipeline binds, instances per draw, GPU time per pass or zone, an overdraw counter, GPU time outside Vulkan, and the batch breaks and upload bytes in `frame_stats` and the line of `headless_frames.py`.
+9. **Entry and report:** steps 6 and 7 of `<engine>/.claude/skills/perf-investigate/SKILL.md`, with the backend and the numbers of the line beside the machine, the build and the commit (without a store the entry draft goes to the scratchpad and the report names it, as step 6 says). Add **not measured yet**: pipeline binds, instances per draw, GPU time per pass or zone, an overdraw counter, GPU time outside Vulkan, and the batch breaks and upload bytes in `frame_stats` and the line of `headless_frames.py`.
 
 ## Rules
 

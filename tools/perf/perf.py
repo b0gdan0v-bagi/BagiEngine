@@ -6,7 +6,9 @@
 Run from the root of a repository whose `.claude/rules/perf-project.md` holds the benchmark set (a fenced JSON block under
 "## Benchmark set"; the format is in `tools/perf/CLAUDE.md`). It builds the set's preset and targets (and the own preset of a benchmark that names one), runs each benchmark N times after
 its warm-up runs, reads the metrics each run prints, and compares the means with the baseline of this machine in the todo store
-(`perf-baseline-<area>-<machine>.md`). Exit code: 0 no regression, 3 a regression, 1 an error (a failed build or run, a bad set). A benchmark whose command exits with
+(`perf-baseline-<area>-<machine>.md`). A store that cannot be read leaves a plain run with no baseline (said on stderr, in the header and
+as `baselineError` of `--json`): every metric is new. Exit code: 0 no regression (also when nothing was compared), 3 a regression, 1 an error
+(a failed build or run, a bad set; with --update-baseline, a store that cannot be read or written). A benchmark whose command exits with
 77 and prints a `skip: <reason>` line (a backend this machine lacks) is skipped: reported, never measured, compared or recorded.
 """
 
@@ -267,9 +269,14 @@ def results_of_report(path: Path, bench_set: dict, fingerprint: dict, allow_dirt
     return data["results"], data["preset"]
 
 
+def plan_name(bench_set: dict, fingerprint: dict) -> str:
+    return perf_baseline.baseline_name(bench_set["area"], perf_baseline.machine_slug(fingerprint))
+
+
 def read_baseline(bench_set: dict, fingerprint: dict, args) -> tuple[str, str | None, dict | None]:
-    """The plan name, its text (None when there is none yet) and its newest record."""
-    name = perf_baseline.baseline_name(bench_set["area"], perf_baseline.machine_slug(fingerprint))
+    """The plan name, its text (None when there is none yet) and its newest record. Raises StoreError when the store cannot be read: an
+    update must never take that for a plan that does not exist and write over its history."""
+    name = plan_name(bench_set, fingerprint)
     if args.baseline_file:
         path = Path(args.baseline_file)
         content = path.read_text(encoding="utf-8") if path.is_file() else None
@@ -373,7 +380,14 @@ def main() -> int:
         if args.update_baseline and not args.baseline_file:
             perf_baseline.require_area(bench_set["area"], args.env_file)
         fingerprint = perf_baseline.machine_fingerprint()
-        name, content, baseline = read_baseline(bench_set, fingerprint, args)
+        unavailable = ""
+        try:
+            name, content, baseline = read_baseline(bench_set, fingerprint, args)
+        except perf_baseline.StoreError as error:
+            if args.update_baseline:
+                raise
+            name, content, baseline, unavailable = plan_name(bench_set, fingerprint), None, None, str(error)
+            print(f"perf: baseline unavailable, nothing is compared: {unavailable}", file=sys.stderr)
 
         if not args.no_build:
             for built, targets in build_plan(benches, bench_set).items():
@@ -395,16 +409,16 @@ def main() -> int:
                 "metrics": {metric: {**perf_stats.summarize(values).to_json(), "samples": values} for metric, values in samples.items()},
             }
         report = compare_with(results, baseline, bench_set, bench_set.get("thresholdPercent", DEFAULT_THRESHOLD_PERCENT))
-        print(f"{bench_set['area']} on {perf_baseline.machine_slug(fingerprint)}, {preset}, commit {commit}, {repetitions} runs each, baseline {name}"
-              f"{'' if baseline else ' (none yet)'}")
+        state = " (unavailable: nothing compared)" if unavailable else "" if baseline else " (none yet)"
+        print(f"{bench_set['area']} on {perf_baseline.machine_slug(fingerprint)}, {preset}, commit {commit}, {repetitions} runs each, baseline {name}{state}")
         print(format_report(report))
         for skipped_name, reason in skipped.items():
             print(f"{skipped_name}: SKIPPED ({reason})")
         if args.json:
-            Path(args.json).write_text(
-                json.dumps({"area": bench_set["area"], "commit": commit, "preset": preset, "machine": fingerprint, "baseline": name, "report": report, "results": results, "skipped": skipped}, indent=2),
-                encoding="utf-8",
-            )
+            data = {"area": bench_set["area"], "commit": commit, "preset": preset, "machine": fingerprint, "baseline": name, "report": report, "results": results, "skipped": skipped}
+            if unavailable:
+                data["baselineError"] = unavailable
+            Path(args.json).write_text(json.dumps(data, indent=2), encoding="utf-8")
         if args.update_baseline and results:
             write_baseline(content, baseline, results, preset, fingerprint, bench_set, name, args)
         regressed = [name for name, bench in report.items() if bench["verdict"] == perf_stats.REGRESSION]

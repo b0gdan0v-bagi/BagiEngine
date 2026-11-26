@@ -3,6 +3,7 @@ store, no network. Run: .venv/bin/python -m pytest tools/alltests/tests"""
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -32,7 +33,7 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setenv("FAKE_STORE", str(tmp_path / "store.json"))
     monkeypatch.setenv("FAKE_TESTS", TESTS)
     monkeypatch.setenv("FAKE_SMOKE", "BagiStressControlSmoke")
-    for name in ("FAKE_FAILING", "FAKE_FLAKY", "FAKE_FAIL_STEP", "FAKE_SKIPPED"):
+    for name in ("FAKE_FAILING", "FAKE_FLAKY", "FAKE_FAIL_STEP", "FAKE_SKIPPED", "FAKE_TODO_DOWN", "FAKE_TODO_REFUSED"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -56,10 +57,15 @@ class Rig:
         git(self.repo, "init", "-q", "-b", "main")
         self.first = commit(self.repo, "first")
 
-    def run(self, *argv: str) -> int:
+    def run(self, *argv: str, fake_todo: bool = True) -> int:
         fake = f"{sys.executable} {FAKES}"
+        todo = ["--todo", f"{fake} todo"] if fake_todo else []
         return alltests.run(["--repo", str(self.repo), "--work-dir", str(self.work), "--preset", "macos-debug",
-                             "--cmake", f"{fake} cmake", "--ctest", f"{fake} ctest", "--todo", f"{fake} todo", *argv])
+                             "--cmake", f"{fake} cmake", "--ctest", f"{fake} ctest", *todo, *argv])
+
+    def drafts(self) -> list[str]:
+        folder = self.work / "logs" / alltests.DRAFTS_FOLDER
+        return sorted(path.name for path in folder.iterdir()) if folder.is_dir() else []
 
     def calls(self, tool: str) -> list[list[str]]:
         path = self.tmp / "calls.jsonl"
@@ -376,3 +382,69 @@ class TestGate:
         git(rig.repo, "worktree", "add", "-q", "--detach", str(rig.tmp / "w1"))
         assert alltests_results.default_results_file(rig.tmp / "w1") == rig.tmp / "home" / "Game" / "results.json"
         assert alltests_results.default_results_file(rig.repo) == rig.tmp / "home" / "Game" / "results.json"
+
+
+def test_a_red_run_without_the_store_records_its_result_and_drafts_the_entries(rig, monkeypatch, capsys):
+    monkeypatch.setenv("FAKE_TODO_DOWN", "1")
+    monkeypatch.setenv("FAKE_FAILING", "Core.Adds,Core.Sorts")
+    assert rig.run() == alltests.EXIT_RED
+    data = rig.results()
+    result = data["results"][rig.first]
+    assert (result["status"], result["entries"]) == ("red", ["alltests-Core-Adds (not filed)", "alltests-Core-Sorts (not filed)"])
+    assert data["failing"]["Core.Sorts"] == {"since": rig.first, "entry": "alltests-Core-Sorts"}
+    assert len(rig.calls("todo")) == 1
+    assert rig.drafts() == ["alltests-Core-Adds.md", "alltests-Core-Sorts.md"]
+    draft = (rig.work / "logs" / alltests.DRAFTS_FOLDER / "alltests-Core-Sorts.md").read_text(encoding="utf-8")
+    assert draft.startswith("# alltests: Core.Sorts fails\n\n**What is wrong:**") and "(rerun)" in draft
+    said = [line for line in capsys.readouterr().out.splitlines() if "drafts in" in line]
+    assert len(said) == 1 and said[0].startswith("alltests: ")
+    assert "todo: the todo service does not answer" in said[0] and "running the last copy" not in said[0]
+    assert str(rig.work / "logs" / alltests.DRAFTS_FOLDER) in said[0] and "/todo-add" in said[0]
+
+
+def test_a_refused_write_drafts_that_entry_and_files_the_others(rig, monkeypatch, capsys):
+    monkeypatch.setenv("FAKE_TODO_REFUSED", "alltests-Core-Adds")
+    monkeypatch.setenv("FAKE_FAILING", "Core.Adds,Core.Sorts")
+    assert rig.run() == alltests.EXIT_RED
+    assert rig.results()["results"][rig.first]["entries"] == ["alltests-Core-Adds (not filed)", "alltests-Core-Sorts (filed)"]
+    assert list(rig.store()) == ["alltests-Core-Sorts"] and rig.drafts() == ["alltests-Core-Adds.md"]
+    assert "HTTP 409: refused" in capsys.readouterr().out
+
+
+def test_a_dry_run_without_the_store_drafts_and_records_nothing(rig, monkeypatch):
+    monkeypatch.setenv("FAKE_TODO_DOWN", "1")
+    monkeypatch.setenv("FAKE_FAILING", "Core.Sorts")
+    assert rig.run("--dry-run") == alltests.EXIT_RED
+    assert not (rig.work / alltests_results.RESULTS_FILE_NAME).exists()
+    assert rig.drafts() == ["alltests-Core-Sorts.md"]
+
+
+def test_a_later_run_with_the_store_files_the_entry_with_the_first_failing_commit(rig, monkeypatch):
+    monkeypatch.setenv("FAKE_TODO_DOWN", "1")
+    monkeypatch.setenv("FAKE_FAILING", "Core.Sorts")
+    rig.run()
+    second = commit(rig.repo, "second")
+    monkeypatch.delenv("FAKE_TODO_DOWN")
+    rig.run()
+    assert f"First seen failing at `{rig.first[:12]}`; last at `{second[:12]}`" in rig.store()["alltests-Core-Sorts"]["body"]
+    assert rig.drafts() == []
+
+
+def test_a_todo_cli_that_hangs_does_not_hold_the_run(rig, monkeypatch, capsys):
+    monkeypatch.setattr(alltests, "STORE_TIMEOUT_S", 0.2)
+    monkeypatch.setenv("FAKE_FAILING", "Core.Sorts")
+    assert rig.run("--todo", shlex.join([sys.executable, "-c", "import time; time.sleep(60)"])) == alltests.EXIT_RED
+    assert rig.drafts() == ["alltests-Core-Sorts.md"] and "no answer within" in capsys.readouterr().out
+
+
+def test_the_real_todo_cli_of_a_clone_without_a_store_leaves_a_recorded_run_and_a_draft(rig, monkeypatch, capsys):
+    for name in ("TODO_API_URL", "TODO_API_TOKEN", "BAGITODO_CLI_PIN"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HOME", str(rig.tmp / "home"))
+    monkeypatch.setenv("BAGITODO_CACHE", str(rig.tmp / "cli-cache"))
+    monkeypatch.setenv("TODO_LOGIN_FILE", str(rig.tmp / "login.json"))
+    monkeypatch.setenv("FAKE_FAILING", "Core.Sorts")
+    assert rig.run(fake_todo=False) == alltests.EXIT_RED
+    assert rig.results()["results"][rig.first]["entries"] == ["alltests-Core-Sorts (not filed)"]
+    assert rig.drafts() == ["alltests-Core-Sorts.md"]
+    assert "TODO_API_URL" in capsys.readouterr().out
