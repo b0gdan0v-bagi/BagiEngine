@@ -321,6 +321,15 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_NE(menu->GetContext(), nullptr);
     }
 
+    TEST_F(RmlUiHostTest, ARemovedDocumentStillLaysOut) {
+        const auto doc = Doc("Fit");
+        ASSERT_TRUE(doc);
+        doc->GetNode().RemoveComponent("RmlUiDocumentComponent"_intern);
+        ASSERT_EQ(doc->TryGetNode(), nullptr);
+
+        doc->UpdateLayout(_renderer->GetOutputWidth(), _renderer->GetOutputHeight());
+    }
+
     TEST_F(RmlUiHostTest, ABoxIsDrawnAsGeometryInOutputPixels) {
         auto doc = Doc("Main");
         ASSERT_TRUE(doc->SetMarkup(Document(R"(<div id="box"></div>)", "#box { position: absolute; left: 20dp; top: 30dp; width: 40dp; height: 50dp; background-color: #ff0000; }")));

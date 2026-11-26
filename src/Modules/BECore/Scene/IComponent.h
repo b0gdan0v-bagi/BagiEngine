@@ -25,7 +25,7 @@ namespace BECore {
         virtual void Initialize() {}
 
         /**
-         * @brief Called when the component is attached to a node, with `_node` and `_scene` set: by WireToScene (after deserialization) and AddComponent (runtime).
+         * @brief Called when the component is attached to a node, with GetNode() and GetScene() ready: by WireToScene (after deserialization) and AddComponent (runtime).
          *
          * Use Initialize() for reflection hooks (it runs even when there is no node), OnAttached() for node-dependent setup (event subscriptions, resource lookups).
          * A component that updates registers in the update list of its scene from here (SubscribeInScene of SceneUpdateEvent or SceneFixedUpdateEvent); it
@@ -61,10 +61,25 @@ namespace BECore {
             return true;
         }
 
+        /**
+         * @brief The node and the scene of an attached component. Both assert where the matching TryGet is null.
+         *
+         * A component is detached before it is attached, after SceneNode::RemoveComponent (also the replacement inside AddComponent) and once its node
+         * died; code that may run on a detached one (a public method somebody who still holds it calls, a handler after it removed itself or its node)
+         * asks TryGetNode() / TryGetScene(). A destructor runs detached.
+         */
         Scene& GetScene() const;
         SceneNode& GetNode() const;
 
-        /// True while this component's scene is the active one (see Scene::IsActive()). False before the component is attached.
+        /// The node, or null while the component is detached
+        [[nodiscard]] SceneNode* TryGetNode() const {
+            return _node;
+        }
+
+        /// The scene of the node, or null while the component is detached and once the scene died. A node taken out by SceneNode::RemoveChild keeps its scene
+        [[nodiscard]] Scene* TryGetScene() const;
+
+        /// True while this component's scene is the active one (see Scene::IsActive()). False without a scene (TryGetScene()).
         bool IsSceneActive() const;
 
     protected:
@@ -77,8 +92,8 @@ namespace BECore {
          *
          * SceneEvents::SceneUpdateEvent and SceneFixedUpdateEvent are not delivered through the global channel: the component joins the
          * update list of its scene, which Scene::Update() runs while the scene is active, the last registered first. That needs the scene,
-         * so call it from OnAttached(); before that (Initialize()) the event goes through the channel with the per-call filter below, and
-         * a hand SceneEvents::SceneUpdateEvent::Emit() reaches only that kind of subscriber. The component leaves the list when it leaves
+         * so call it from OnAttached(); without one (Initialize(), a removed component) the event goes through the channel with the per-call
+         * filter below, and a hand SceneEvents::SceneUpdateEvent::Emit() reaches only that kind of subscriber. The component leaves the list when it leaves
          * its node (SceneNode::RemoveComponent, RemoveChild); a node that only moves stays. For every other event the connection is
          * permanent and only the call is filtered, so switching the active scene never connects or disconnects anything.
          *
@@ -90,7 +105,7 @@ namespace BECore {
             constexpr bool isFrame = std::is_same_v<Event, SceneEvents::SceneUpdateEvent>;
             constexpr bool isFixed = std::is_same_v<Event, SceneEvents::SceneFixedUpdateEvent>;
             if constexpr (isFrame || isFixed) {
-                if (_scene != nullptr) {
+                if (TryGetScene() != nullptr) {
                     ASSERT(static_cast<IComponent*>(instance) == this);
                     RegisterSceneUpdate(isFrame ? SceneUpdateKind::Frame : SceneUpdateKind::Fixed, &InvokeSceneUpdate<Event, Handler, T>);
                     return;
@@ -116,10 +131,8 @@ namespace BECore {
             (static_cast<T*>(self)->*Handler)(*static_cast<const Event*>(event));
         }
 
-        /// Adds this component to the update list of its scene (SubscribeInScene only); needs `_scene`
+        /// Adds this component to the update list of its scene (SubscribeInScene only); needs a scene
         void RegisterSceneUpdate(SceneUpdateKind kind, SceneUpdateInvoker invoke);
-
-        Scene* _scene = nullptr;
     };
 
 }  // namespace BECore

@@ -26,6 +26,8 @@ namespace BECore {
      * OnAttached() and OnDraw() are final so a derived class cannot forget the base's work and lose its input silently; it overrides
      * OnTargetAttached() and OnTargetDraw(). A callback may destroy the component (a scene switch): the base touches no member after a
      * callback that could be followed by another call, and a derived class copies what it needs before the call that may destroy it.
+     * A target without a scene (removed and still held, IComponent::TryGetScene()) stays registered and gets no callback, also not the
+     * exit or the release of what it had begun.
      *
      * The base is concrete (the generator registers every reflected class of a factory in AbstractFactory, which needs one). A bare
      * PointerTargetComponent in a scene file takes the motion over its shape and no press or wheel; a derived class says what else.
@@ -109,6 +111,8 @@ namespace BECore {
         };
 
         void RefreshInputOrder();
+        /// @return true for a target without a scene, which forgets the pointers over it and calls nothing
+        [[nodiscard]] bool ForgetIfDetached();
         [[nodiscard]] Optional<Rect> GetNodeRect() const;
         [[nodiscard]] PointerEvent MakeEvent(uint32_t which, uint8_t button, uint8_t clicks, float outputX, float outputY) const;
         /// @return true when the pointer was not over the target before

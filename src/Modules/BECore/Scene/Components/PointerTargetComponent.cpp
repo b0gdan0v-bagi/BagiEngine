@@ -146,12 +146,26 @@ namespace BECore {
         _over.erase(eastl::remove_if(_over.begin(), _over.end(), [&](const OverPointer& over) { return over.which == which; }), _over.end());
     }
 
+    bool PointerTargetComponent::ForgetIfDetached() {
+        if (TryGetScene() != nullptr) {
+            return false;
+        }
+        _over.clear();
+        return true;
+    }
+
     bool PointerTargetComponent::OnMouseButtonDown(const SDL_MouseButtonEvent& event) {
+        if (ForgetIfDetached()) {
+            return false;
+        }
         const PointerEvent pointer = MakeEvent(event.which, event.button, event.clicks, event.x, event.y);
         return OnPointerPress(pointer);
     }
 
     bool PointerTargetComponent::OnMouseButtonUp(const SDL_MouseButtonEvent& event) {
+        if (ForgetIfDetached()) {
+            return false;
+        }
         // A release that reached this target by the walk belongs to a press of the game, or of another button or pointer: not ours to take
         if (!CoreManager::GetUIInput().IsDeliveringCapture(*this)) {
             return false;
@@ -162,6 +176,9 @@ namespace BECore {
     }
 
     bool PointerTargetComponent::OnMouseMotion(const SDL_MouseMotionEvent& event) {
+        if (ForgetIfDetached()) {
+            return false;
+        }
         const bool holdsPress = CoreManager::GetUIInput().HoldsPress(*this, event.which);
         // A button is held and this target did not take its press: a drag of the game, which passing over the shape does not interrupt
         if (!holdsPress && event.state != 0) {
@@ -178,7 +195,7 @@ namespace BECore {
         const bool entered = ContainsPoint(event.x, event.y) && NoteOver(pointer);
         if (entered) {
             OnPointerEnter(pointer);
-            if (guard.Destroyed()) {
+            if (guard.Destroyed() || ForgetIfDetached()) {
                 return true;
             }
         }
@@ -189,7 +206,7 @@ namespace BECore {
         if (OnPointerMove(pointer)) {
             return true;
         }
-        if (entered && !guard.Destroyed()) {
+        if (entered && !guard.Destroyed() && !ForgetIfDetached()) {
             // Not taken: UIInput records no hover for this target, so it will send no leave for this entry
             ForgetOver(pointer.which);
             OnPointerExit(pointer);
@@ -198,6 +215,9 @@ namespace BECore {
     }
 
     bool PointerTargetComponent::OnMouseWheel(const SDL_MouseWheelEvent& event) {
+        if (ForgetIfDetached()) {
+            return false;
+        }
         PointerEvent pointer = MakeEvent(event.which, 0, 0, event.mouse_x, event.mouse_y);
         pointer.wheelX = event.x;
         pointer.wheelY = event.y;
@@ -205,6 +225,9 @@ namespace BECore {
     }
 
     void PointerTargetComponent::OnPointerLeave(uint32_t which) {
+        if (ForgetIfDetached()) {
+            return;
+        }
         const auto it = eastl::find_if(_over.begin(), _over.end(), [&](const OverPointer& over) { return over.which == which; });
         if (it == _over.end()) {
             return;

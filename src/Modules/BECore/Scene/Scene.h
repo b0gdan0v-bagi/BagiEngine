@@ -26,6 +26,9 @@ namespace BECore {
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
     public:
+        /// The nodes of the tree forget the scene: one that somebody still holds outlives it
+        ~Scene() override;
+
         void Initialize();
 
         /**

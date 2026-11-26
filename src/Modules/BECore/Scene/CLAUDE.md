@@ -7,9 +7,9 @@ Scene graph: `SceneManager` → `Scene` → `SceneNode` → `IComponent`. Everyt
 | Class | Role |
 |-------|------|
 | `SceneManager` | Built by `LoadSceneManagerFromConfig()` (`SceneLoader.h`: `SceneConfig` with its node references expanded, see "Node files") in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
-| `Scene` | `FACTORY_BASE`. Owns a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()` runs the fixed update list once per step due, then the frame list ("Gotchas"), and emits both events for plain subscribers; `Draw()` runs `SceneDrawSystem` ("Draw order"). `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes`, leaving generated top-level nodes out (`SceneConfigWriter.h`) |
+| `Scene` | `FACTORY_BASE`. Owns a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` and `viewVariants` (see "View size"). `Update()`: "Gotchas"; `Draw()` runs `SceneDrawSystem` ("Draw order"). `InstantiateNode()` adds a node file at runtime. `PrepareForSave()` copies the live hierarchy back into `_nodes`, leaving generated top-level nodes out (`SceneConfigWriter.h`) |
 | `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children. `_components` / `_children` are `SmallVector`s (`ComponentList` / `ChildList`, the same saved text). `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. `_children` is reflected, so a node holds nested `<children>`. **`IsGenerated()`** (a plain member, never in a file): true for a node made at run time (`AddChild`, `CreateNode`, `InstantiateNode`), false for one read from a file or made by `DuplicateNode`; the code that made it makes it again at the next load, so Save and `DuplicateNode` skip it with its subtree and the editor's "Add node" clears it (`SetGenerated(false)`) |
-| `IComponent` | `FACTORY_BASE` and `SubscriptionHolder` (128 bytes, `Events/CLAUDE.md`); gets its `Scene&` / `SceneNode&` through `GetScene()` / `GetNode()` |
+| `IComponent` | `FACTORY_BASE` and `SubscriptionHolder` (128 bytes, `Events/CLAUDE.md`); `GetNode()`, and `GetScene()`, which is the node's scene ("Component lifecycle") |
 | `SceneNodeFiles` / `SceneLoader` | `SceneNodeFiles`: the expansion of `<node ref>` (`ExpandNodeReference(s)`, `ApplyNodeOverrides`, the node loaders, `LoadSceneDocument`). `SceneLoader`: `LoadSceneManager(configRoot, loader)` builds the `SceneManager` from the expanded copy. `SceneNodeInstance`: `DeserializeNode`, `BuildNodeReference`, `AppendNodeElement` |
 
 ## XML shape
@@ -69,15 +69,17 @@ A game can split its one `SceneConfig.xml`: a node kept in a file of its own is 
 ## Component lifecycle
 
 1. Deserialization creates the component through `AbstractFactory<IComponent>` and calls `Initialize()` (the reflection hook: runs even when there is no node yet).
-2. `Scene::Initialize()` → `SceneNode::WireToScene()` sets `_scene` / `_node` and calls `OnAttached()`. `AddComponent` does the same at runtime.
+2. `Scene::Initialize()` → `SceneNode::WireToScene()` sets the node and calls `OnAttached()`. `AddComponent` does the same at runtime.
 3. Do node-dependent setup in `OnAttached()`: event subscriptions, resource lookups, sibling components via `GetNode().GetComponent<T>()`. This runs for the components of **every** loaded scene, active or not, so subscribe with `SubscribeInScene` (Gotchas).
+
+**Detached** (before step 2, after `RemoveComponent` or a replacement by `AddComponent`, once the node died): `TryGetNode()` / `TryGetScene()` are null, `GetNode()` / `GetScene()` assert and `SubscribeInScene` joins no update list. What can run then (a destructor, a held component's public method or `UIInput` handler, a handler after it removed itself) asks the `Try` pair. A dying scene leaves the nodes of its tree, but a node `RemoveChild()` took out still names it: do not hold one longer than the scene.
 
 ## Draw order
 
 Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a loop over the scene's `SceneDrawList` (`SceneDrawList.h`): one entry per drawing component of a visible node, sorted by (`GetLayer()`, scene order, the component's index in its node). It is rebuilt only when `IsDrawListValid()` is false (a node added, removed, moved or re-layered, a component added or removed, the editor flags changed); a steady frame only loops. The system draws the quad and the sprite from their fields, read at draw time; every other component draws through `IComponent::OnDraw()`. `HasOnDraw()` is asked once per rebuild: false leaves a component out (default true). The pass ends with `IRenderer::Flush()` after the last clip is popped, inside the zone `SceneDrawSystem::Run`; a custom `OnDraw()` needs no flush (a clip change, `DrawGeometry` and a texture or blend change submit first).
 
 - A lower layer is drawn first (default 0, negative = background). On one layer: scene order, parent before children, later siblings on top. **Give a background a lower `layer`**; the order never depends on subscriptions. A child does not inherit its parent's layer.
-- Only the active scene draws, so `OnDraw()` needs no `IsSceneActive()` check. `RemoveChild()` takes the removed subtree out of the update lists and makes the draw order stale.
+- Only the active scene draws, so `OnDraw()` needs no `IsSceneActive()` check. `RemoveChild()` makes the draw order stale.
 - **Override `OnDraw()`, never subscribe to draw.** `OnDraw()` only reads state and issues renderer calls: it must not add or remove nodes or components, call `SetLayer()` or change the editor flags: the list holds raw pointers and is stale after such a change (Debug asserts).
 - **A node's layer changes only through `SceneNode::SetLayer()`**, which makes the list and the ranks stale: a direct write to the reflected `_layer` (reflection, a field visitor) shows in the order only after the next rebuild, which nothing triggers.
 - `Scene::GetDrawRank(node)` is a node's position in this order (its `SceneDrawItem` is in `SceneDrawList::items`, sorted; the index is written into the node with the list, so O(1) after any pass); `GetInputOrder(component)` = rank times `kMaxComponentsPerNode` plus the component's index, the key of every `UIInput` handler; `GetDrawPass()` counts the `Draw()` calls, so a target takes input only for a node that drew; a `ClipRectComponent`'s clip is pushed around the entries that name its node as clip owner.
@@ -90,7 +92,7 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a 
 The components are the truth: reflection, the XML and the inspector build on `SceneNode` + `IComponent`. Each subsystem keeps a dense list derived from them and rebuilt only when its key moved (`SceneUpdateList`, `SceneDrawList`, the particle pools).
 
 - It is **not** a pure ECS: component fields have no setter hooks, so a stored copy would be refreshed every frame, which costs the read it was meant to save.
-- The system still makes one `IRenderer` call per quad or sprite; the renderer batches them (`.claude/rules/rendering-module.md`). `SceneDrawList` keeps no copy of the draw data: with no setter hooks it would be rewritten every frame.
+- The system still makes one `IRenderer` call per quad or sprite; the renderer batches them (`.claude/rules/rendering-module.md`).
 
 ## View size
 
@@ -118,14 +120,14 @@ A scene says how big its picture is in scene units: `<scene type="Scene" name="G
 
 | Component | Fields | Behavior |
 |-----------|--------|----------|
-| `TransformComponent` | `_x`, `_y`, `_width`, `_height`, `_rotation`, `_pivotX`, `_pivotY` | Position/size in scene units (pixels when the scene has no view size); others read it. `_rotation` (degrees, clockwise) turns the node's quad or sprite about the pivot ("Rotation, flip and blend"); hit tests, text and UI ignore it |
+| `TransformComponent` | `_x`, `_y`, `_width`, `_height`, `_rotation`, `_pivotX`, `_pivotY` | Position/size in scene units (pixels when the scene has no view size); others read it. Rotation: "Rotation, flip and blend" |
 | `QuadRendererComponent` | `_color`, `_blend` | `_blend` is `Alpha` (default), `Add` or `Multiply` for this quad's draw only. `HasOnDraw()` is false: `SceneDrawSystem` draws a filled rect at the node's transform; one quad per node counts |
 | `SpriteRendererComponent` | `_spriteId`, `_texturePath`, `_srcRect`, `_fit`, `_blend`, `_flipX`, `_flipY` | `HasOnDraw()` is false: `SceneDrawSystem` draws it; one sprite per node counts, none without a texture. `_fit` (`SpriteFit`): `Stretch` (default, covers the node's rect) or `Contain` (keeps the aspect of `_srcRect` or the texture, centered; `FitSpriteRect()`). |
 | `PointerTargetComponent` | none (base) | The base of a scene object that takes the pointer at its place in the draw order: shape, press / drag / release / enter / exit / move / wheel callbacks (`Input/CLAUDE.md`) |
 | `ClickableComponent` | `_actionName`, `_shape`, `_blocksInput` | A `PointerTargetComponent`: a press in the rect (or ellipse) emits `InputEvents::ActionEvent` |
 | `ClipRectComponent` | none | The node's transform rect clips the node and its subtree, what they draw and what they hit (`Input/CLAUDE.md`) |
 | `TextComponent` | `_text`, `_fontPath`, `_fontSize`, `_color`, `_align`, `_overflow`, `_wrap`, `_lineSpacing`, `_minFontSize` | Draws text in the node's transform box in `OnDraw()` (`Text/CLAUDE.md`) |
-| `UICanvasComponent` | `_space`, `_scaleMode`, `_referenceWidth`, `_referenceHeight`, `_match`, `_minScale`, `_maxScale`, `_useSafeArea`, `_modal`, `_visible`, `_inputEnabled`, `_elements`, `_variants` | A canvas of in-game UI: owns an element tree, lays it out for the output, draws it with its own view transform and takes mouse input through `UIInput` (`UI/CLAUDE.md`) |
+| `UICanvasComponent` | `_space`, `_scaleMode`, `_modal`, `_visible`, `_inputEnabled`, `_elements`, ... | A canvas of in-game UI: owns an element tree, lays it out for the output, draws it with its own view transform and takes mouse input through `UIInput` (`UI/CLAUDE.md`) |
 | `ParticleEmitterComponent` | `_effect`, `_playOnStart`, `_burstAction` | Plays a `ParticleEffect` at the node, one `DrawGeometry` batch (`Particles/CLAUDE.md`) |
 | `RenderProbeComponent` | none | Debug: a row of cells that show the renderer primitives, to look at both backends |
 | `ChangeToRandomColorDebugComponent` | `_actionFilter` | Debug: recolors the node's quad on a matching action |
@@ -134,7 +136,7 @@ A scene says how big its picture is in scene units: `<scene type="Scene" name="G
 
 1. Class in `Components/` (or a game module's `Components/`) deriving `IComponent` with `BE_CLASS(Name)`; fields get `BE_REFLECT_FIELD`.
 2. Include `<Generated/Name.gen.hpp>` in its `.cpp`; the directory must be in `reflection_targets.json`; re-run `cmake --preset ...`.
-3. Subscribe in `OnAttached()` through `SubscribeInScene<Event, &Name::Handler>(this)`. Plain `Subscribe` is only for a handler that must run whichever scene is active; `SubscribeInScene` in `Initialize()` joins the list when added at runtime but takes the channel path when read from a file. A component that draws overrides `OnDraw()` instead of subscribing (see "Draw order"); `HasOnDraw()` returns false only for one that never draws.
+3. Subscribe in `OnAttached()` through `SubscribeInScene<Event, &Name::Handler>(this)`. Plain `Subscribe` is only for a handler that must run whichever scene is active; `SubscribeInScene` in `Initialize()` joins the list when added at runtime but takes the channel path when read from a file. Drawing is no subscription ("Draw order").
 4. Use it from `config/SceneConfig.xml` with `type="Name"`. The inspector shows its reflected fields automatically.
 
 ## Gotchas

@@ -180,10 +180,13 @@ namespace BECore {
 
     UILayoutContext UICanvasComponent::MakeContext(float outputWidth, float outputHeight) const {
         UILayoutContext context = CoreManager::GetUIEnvironment().MakeContext(CoreManager::GetMainWindow().Get(), outputWidth, outputHeight);
-        context.sceneViewWidth = GetScene().GetViewWidth();
-        context.sceneViewHeight = GetScene().GetViewHeight();
-        if (_space == CanvasSpace::World) {
-            if (auto transform = GetNode().GetComponent<TransformComponent>()) {
+        // A removed canvas that somebody still holds can be laid out: it has no view size, and no world box without a node
+        if (const Scene* scene = TryGetScene()) {
+            context.sceneViewWidth = scene->GetViewWidth();
+            context.sceneViewHeight = scene->GetViewHeight();
+        }
+        if (const SceneNode* node = TryGetNode(); node != nullptr && _space == CanvasSpace::World) {
+            if (auto transform = node->GetComponent<TransformComponent>()) {
                 context.worldBox = {transform->_x, transform->_y, transform->_width, transform->_height};
             }
         }
