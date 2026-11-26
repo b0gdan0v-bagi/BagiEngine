@@ -379,6 +379,11 @@ import os, sys
 args = sys.argv[1:]
 with open(os.environ["FAKE_TODO_LOG"], "a", encoding="utf-8") as log:
     log.write(" ".join(args) + "\\n")
+down = os.environ.get("FAKE_TODO_DOWN", "")  # "all", or the one command that fails
+if down == "all" or (down and down in args):
+    print("todo loader: the service did not answer; running the last copy", file=sys.stderr)
+    print("todo: the todo service does not answer", file=sys.stderr)
+    sys.exit(1)
 if "ping" in args:
     print("ok: http://store, areas " + os.environ["FAKE_TODO_AREAS"] + ", live updates on")
 elif "get" in args:
@@ -403,6 +408,7 @@ def fake_store(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_TODO_LOG", str(log))
     monkeypatch.setenv("FAKE_TODO_AREAS", "engine, inbox, owner")
     monkeypatch.delenv("FAKE_TODO_PUT_ERROR", raising=False)
+    monkeypatch.delenv("FAKE_TODO_DOWN", raising=False)
     return log
 
 
@@ -466,7 +472,7 @@ def test_another_failure_of_the_write_stays_as_it_is(tmp_path, monkeypatch, caps
     monkeypatch.setenv("FAKE_TODO_PUT_ERROR", "error: the service does not answer")
     code, _ = run_update(tmp_path, monkeypatch)
     err = capsys.readouterr().err
-    assert code == 1 and "the service does not answer" in err and "missing right" not in err
+    assert code == 1 and "the service does not answer" in err and "--baseline-file" in err and "missing right" not in err
 
 
 def measure_report(tmp_path, monkeypatch, value: str = "5") -> tuple[Path, Path, Path]:
@@ -546,6 +552,57 @@ def test_a_report_is_recorded_whole(tmp_path, monkeypatch, capsys, fake_store):
     rules, report, _ = measure_report(tmp_path, monkeypatch)
     assert record_report(monkeypatch, rules, report, "--only", "fake") == 1
     assert "--update-baseline alone" in capsys.readouterr().err
+
+
+def test_a_plain_run_without_the_store_measures_and_compares_nothing(tmp_path, monkeypatch, capsys, fake_store):
+    monkeypatch.setenv("FAKE_TODO_DOWN", "all")
+    marker = tmp_path / "measured.txt"
+    rules, report, _ = measure_report(tmp_path, monkeypatch)
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", ["perf.py", "--rules", str(rules), "--no-build", "--json", str(report)])
+    assert perf.main() == 0 and marker.exists()
+    out, err = capsys.readouterr()
+    said = [line for line in err.splitlines() if "unavailable" in line]
+    assert len(said) == 1 and "the todo service does not answer" in said[0] and "--baseline-file" in said[0]
+    assert "running the last copy" not in err
+    assert "(unavailable" in out and "(none yet)" not in out
+    data = json.loads(report.read_text(encoding="utf-8"))
+    assert "does not answer" in data["baselineError"] and data["report"]["fake"]["metrics"]["ms"]["verdict"] == "new"
+    assert "put" not in fake_store.read_text(encoding="utf-8")
+
+
+def test_an_update_without_the_store_stops_before_measuring(tmp_path, monkeypatch, capsys, fake_store):
+    monkeypatch.setenv("FAKE_TODO_DOWN", "all")
+    code, marker = run_update(tmp_path, monkeypatch)
+    err = capsys.readouterr().err.strip().splitlines()
+    assert code == 1 and not marker.exists()
+    assert len(err) == 1 and "the todo service does not answer" in err[0] and "--baseline-file" in err[0]
+
+
+def test_recording_a_report_without_the_store_writes_nothing(tmp_path, monkeypatch, capsys, fake_store):
+    rules, report, marker = measure_report(tmp_path, monkeypatch)
+    capsys.readouterr()
+    monkeypatch.setenv("FAKE_TODO_DOWN", "all")
+    assert record_report(monkeypatch, rules, report) == 1 and not marker.exists()
+    assert "--baseline-file" in capsys.readouterr().err
+    assert "put" not in fake_store.read_text(encoding="utf-8")
+
+
+def test_a_baseline_that_cannot_be_read_is_never_written_over(tmp_path, monkeypatch, capsys, fake_store):
+    monkeypatch.setenv("FAKE_TODO_DOWN", "get")
+    code, marker = run_update(tmp_path, monkeypatch)
+    assert code == 1 and not marker.exists()
+    assert "--baseline-file" in capsys.readouterr().err
+    assert "put" not in fake_store.read_text(encoding="utf-8")
+
+
+def test_a_store_that_hangs_is_unavailable(tmp_path, monkeypatch):
+    script = tmp_path / "hangs.py"
+    script.write_text("import time; time.sleep(60)", encoding="utf-8")
+    monkeypatch.setattr(perf_baseline, "TODO_CLI", script)
+    monkeypatch.setattr(perf_baseline, "STORE_TIMEOUT_S", 0.2)
+    with pytest.raises(perf_baseline.StoreError, match="no answer"):
+        perf_baseline.read_store("perf-baseline-engine-x.md")
 
 
 def test_a_failed_run_keeps_the_end_of_stdout_and_writes_the_whole_output(tmp_path):
