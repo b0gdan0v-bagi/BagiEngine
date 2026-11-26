@@ -2,6 +2,7 @@
 #include <BECore/Application/CommandLine.h>
 #include <BECore/Cook/CookCommand.h>
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/FileSystem/PackagedContent.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <cstdio>
 
@@ -26,8 +27,14 @@ int RunApplication(int argc, const char* const* argv) {
     BECore::CoreManager::GetFileSystem().AddContentRoot(BAGI_GAME_ROOT);
     BECore::CoreManager::GetFileSystem().AddContentRoot(BAGI_WEB_ROOT);
 #else
-    BECore::CoreManager::GetFileSystem().AddContentRoot(BagiContentRoots::kEngine);
-    BECore::CoreManager::GetFileSystem().AddContentRoot(BagiContentRoots::kGame);
+    // An exported package runs without the checkouts: its own content replaces the compiled-in paths, never adds to them
+    if (const auto packaged = BECore::FindPackagedContentRoots(BECore::ExecutableDirectory())) {
+        BECore::CoreManager::GetFileSystem().AddContentRoot(packaged->engine);
+        BECore::CoreManager::GetFileSystem().AddContentRoot(packaged->game);
+    } else {
+        BECore::CoreManager::GetFileSystem().AddContentRoot(BagiContentRoots::kEngine);
+        BECore::CoreManager::GetFileSystem().AddContentRoot(BagiContentRoots::kGame);
+    }
 #endif
 
     BECore::Application::GetInstance().SetArguments(argc, argv);

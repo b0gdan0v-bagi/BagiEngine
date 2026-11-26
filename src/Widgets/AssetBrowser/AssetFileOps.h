@@ -40,6 +40,16 @@ namespace BECore {
     /// The part of the file's name a rename replaces: all but the extension, which is `.ui.xml` or `.ui.html` for such a file; a view into @p virtualPath
     [[nodiscard]] StringView AssetRenameStem(StringView virtualPath);
 
+    /// Whether a file of this kind may be deleted or renamed
+    [[nodiscard]] bool IsChangeableAssetKind(AssetKind kind);
+
+    /**
+     * @brief The real file of the asset when it is a file of the content root itself, the only files that are the root's to change
+     *
+     * Its top layer is the mount folder of `GetRootPath()` and no symbolic link leads there; else the sentence that says why not.
+     */
+    [[nodiscard]] std::expected<Path, String> ResolveContentRootFile(const FileSystem& fileSystem, StringView path);
+
     /// Whether the asset of the virtual path @p path may be deleted or renamed at all
     [[nodiscard]] std::expected<AssetFileTarget, String> CheckAssetChange(const FileSystem& fileSystem, StringView path);
 

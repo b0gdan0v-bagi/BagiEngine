@@ -21,6 +21,7 @@ Each tool has its own `CLAUDE.md`; Python tools have pytest suites outside ctest
 | `dev` | `dev.py`: a game's products from its `dev.json` |
 | `artgen` | AI art and sounds: ComfyUI, presets (skill `artgen`) |
 | `ccache` | shared cache hits |
+| `export` | a package of a game that runs by itself, desktop or web |
 | `web` | the browser build |
 | `fuzz` | `run_fuzzers.py`, the long libFuzzer runs (`tests/Fuzz/CLAUDE.md`) |
 | `natvis` | debugger views of EASTL |

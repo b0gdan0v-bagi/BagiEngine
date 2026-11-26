@@ -119,6 +119,16 @@ namespace BECore {
         inline constexpr auto kAssetBrowserRename = "assetBrowser.rename"_intern;
         inline constexpr auto kAssetBrowserConfirm = "assetBrowser.confirm"_intern;
         inline constexpr auto kAssetBrowserCancel = "assetBrowser.cancel"_intern;
+        /// Show and hide the Export window (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewExport = "view.export"_intern;
+        /// The Export window's buttons. ExportPanelModel owns them and runs them only while its panel is open; none takes an argument. openFolder and run do
+        /// nothing before an export succeeded; run of a web package serves it until stop; check lists the missing and unused assets
+        inline constexpr auto kExportStart = "export.start"_intern;
+        inline constexpr auto kExportCancel = "export.cancel"_intern;
+        inline constexpr auto kExportOpenFolder = "export.openFolder"_intern;
+        inline constexpr auto kExportRun = "export.run"_intern;
+        inline constexpr auto kExportStop = "export.stop"_intern;
+        inline constexpr auto kExportCheck = "export.check"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

@@ -50,11 +50,19 @@ The window is an asset, `config/panels/AssetBrowserPanel.xml` (`Asset Browser###
 - **Could not be checked** (`unchecked`, never "unused"): a file that cannot be read or holds a zero byte (UTF-16), a folder that cannot be listed, and a linked folder, which no listing of content enters.
 - **Never seen:** names written or built in C++, cooked `.bin` content, files outside these roots, and a sprite id or a font family, which use the library's or `TextConfig`'s entry (that entry is the use of the file).
 
+## The content check
+
+`CheckContentAssets` (`AssetReferences.{h,cpp}`; `AssetReferencesTest`) reads each source once and answers `missing`, `unused` and `unchecked` (as above; a `SceneConfig.xml` that does not parse is one too). Here the doubt goes the other way: a name the check cannot be sure of is not reported as missing.
+
+- **Missing, a path.** In the mount sources (not `artgen/`: its paths start at the content root and are not shipped), a path that starts with `assets/` or `config/`, ends in a listed extension and that no layer has, ASCII case ignored; `config/X.xml` is there when `X.bin` is. A name with a space is read only when it is a whole quoted, bracketed or element text. Not judged: comments (those of an embedded `<style>` too), a piece of a longer path or of a URL, folders, unlisted extensions, patterns (`*`, `%`, `$`, `<name>`), relative links and links that start with `/`. A text that shows an example path therefore writes it as a pattern.
+- **Missing, a node.** A `ref` of a `<node>` element of a scene or node file that is no valid reference or has no `config/<ref>.xml` or `.bin`; the line is the element's.
+- **Unused.** A listed file of a kind that may be deleted ("Delete and rename"), a file of the content root itself by the same rule (`ResolveContentRootFile`), that no source uses by "Who uses a file". So the engine's files are never a game's unused ones, and a file only code names is listed.
+
 ## Delete and rename
 
 `AssetFileOps.{h,cpp}` (no ImGui; `AssetFileOpsTest`) is the one place that decides and does it. It destroys and moves the owner's files, so a case it cannot be sure of is refused, with a sentence for the user and the disk unchanged. A delete is permanent.
 
-- **Which file.** An asset of a mount point whose top file lies in that mount folder of `GetRootPath()` itself: a game never changes the engine's file, although the engine's checkout lies below the game's root. No symbolic link between the root and the file. Never with a content overlay, which cannot express a removal.
+- **Which file** (`ResolveContentRootFile`). An asset of a mount point whose top file lies in that mount folder of `GetRootPath()` itself: a game never changes the engine's file, although the engine's checkout lies below the game's root. No symbolic link between the root and the file. Never with a content overlay, which cannot express a removal.
 - **Which kinds.** `Texture`, `Font`, `Sound`, `UiDocument`, `Node` and `Other`. A config and a scene file stay: code reads them by name, which no reference check sees.
 - **A new name** replaces the stem; the folder and the extension (`.ui.xml` and `.ui.html` whole, `AssetRenameStem`) stay. `A-Z a-z 0-9 _ -`, single inner dots too except for a node file, whose reference must stay valid. Refused: a name any layer has (ASCII case ignored, so content stays portable), one that differs from the old only by case, one that makes another kind of file, and a node name some layer holds cooked.
 - **The lower layer.** The answer says when the old path still leads somewhere (`lowerLayerShows`): the engine's file, or a node's cooked form.

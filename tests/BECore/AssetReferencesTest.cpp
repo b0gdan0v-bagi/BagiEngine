@@ -1,6 +1,7 @@
 #include <BECore/File/File.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Format/Format.h>
+#include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
@@ -38,6 +39,23 @@ namespace BECore::Tests {
             fileSystem.AddContentRoot(_dir / "game");
             fileSystem.Initialize();
             return FindAssetReferences(fileSystem, asset);
+        }
+
+        [[nodiscard]] ContentAssetCheck Check() {
+            FileSystem fileSystem;
+            fileSystem.AddContentRoot(_dir / "engine");
+            fileSystem.AddContentRoot(_dir / "game");
+            fileSystem.Initialize();
+            return CheckContentAssets(fileSystem);
+        }
+
+        /// The missing names as "file:line name"
+        [[nodiscard]] Vector<String> Missing() {
+            Vector<String> missing;
+            for (const MissingAsset& asset : Check().missing) {
+                missing.push_back(Format("{}:{} {}", asset.use.file, asset.use.line, asset.name));
+            }
+            return missing;
         }
 
         /// The uses of @p asset as "file:line"
@@ -211,6 +229,115 @@ namespace BECore::Tests {
         const AssetReferences references = Find("assets/icon.png");
 
         EXPECT_EQ(references.unchecked, (Vector<String>{"config/linked/"}));
+    }
+
+    TEST_F(AssetReferencesTest, APathThatNoLayerHasIsMissingAtItsLine) {
+        Game("config/A.xml", "<a x=\"assets/gone.png\"\n"
+                             "   y='Assets\\Gone Too.ttf'>\n"
+                             "  <font> assets/fonts/a b.otf </font>\n"
+                             "  <b tooltip=\"Plays assets/gone.wav. Then config/gone.xml!\"/>\n"
+                             "</a>\n");
+        Game("assets/ui/a.css", "a { background: url(assets/gone.jpg?v=2); }\n");
+        Game("assets/ui/b.html", "<img src=\"assets/gone.bmp#top\">\n");
+        Engine("assets/a.json", "{\n  \"x\": \"assets\\/gone.ogg\",\n  \"y\": \"assets/gone.ogg\" }\n");
+
+        EXPECT_EQ(Missing(), (Vector<String>{"assets/a.json:2 assets/gone.ogg", "assets/a.json:3 assets/gone.ogg", "assets/ui/a.css:1 assets/gone.jpg", "assets/ui/b.html:1 assets/gone.bmp",
+                                             "config/A.xml:1 assets/gone.png", "config/A.xml:2 Assets/Gone Too.ttf", "config/A.xml:3 assets/fonts/a b.otf", "config/A.xml:4 assets/gone.wav",
+                                             "config/A.xml:4 config/gone.xml"}));
+    }
+
+    TEST_F(AssetReferencesTest, APathThatSomeLayerHasIsNotMissing) {
+        Engine("assets/engine.png", "");
+        Game("assets/Big Star.png", "");
+        Game("assets/icon copy.png", "");
+        Game("assets/c#.png", "");
+        Game("config/nodes/Cooked.bin", "");
+        WriteFile(_dir / "elsewhere" / "linked.png", "");
+        CreateSymlink(_dir / "game" / "assets" / "linked", _dir / "elsewhere");
+        Game("config/A.xml", "<a b=\"assets/engine.png\" c=\"ASSETS/Engine.PNG\" d=\"assets/./engine.png\"\n"
+                             "   e=\"assets/Big Star.png\" f=\"assets/icon copy.png\" g=\"assets/c#.png\"\n"
+                             "   h=\"config/nodes/Cooked.xml\" i=\"assets/linked/linked.png\"/>\n");
+
+        EXPECT_EQ(Missing(), Vector<String>{});
+    }
+
+    TEST_F(AssetReferencesTest, OnlyAWholeListedPathInAMountedFileCanBeMissing) {
+        Game("config/A.xml", "<!-- assets/comment.png -->\n"
+                             "<a longer=\"old/assets/a.png\" rooted=\"/assets/a.png\" relative=\"../assets/a.png\" up=\"assets/../../a.png\"\n"
+                             "   url=\"https://example.com/assets/a.png\" scheme=\"res:assets/a.png\" word=\"myassets/a.png\"\n"
+                             "   folder=\"assets/icons\" slash=\"config/panels/\" ini=\"config/imgui.ini\" backup=\"assets/a.png.bak\"\n"
+                             "   pattern=\"assets/*.png\" format=\"assets/%s.png\" template=\"assets/&lt;name&gt;.wav\"\n"
+                             "   prose=\"assets/ holds what config/ names, as a.png\" record=\"assets/a.artgen.json\" link=\"icons/a.png\"/>\n");
+        Game("assets/ui/a.css", "/* url(assets/comment.png) */\n");
+        Game("assets/ui/b.rml", "<rml><style>\n  /* url(assets/comment.png) */\n</style></rml>\n");
+        Game("artgen/presets/a.json", "{\"image\": \"assets/a.png\"}\n");
+
+        EXPECT_EQ(Missing(), Vector<String>{});
+    }
+
+    TEST_F(AssetReferencesTest, ANodeReferenceOfASceneOrANodeFileNeedsItsFile) {
+        Engine("config/nodes/Engine.xml", "<node/>\n");
+        Game("config/nodes/Cooked.bin", "");
+        Game("config/SceneConfig.xml", "\xEF\xBB\xBF<SceneManager><scenes><scene><nodes>\n"
+                                       "  <node ref=\"nodes/Engine\"/>\n"
+                                       "  <node ref=\"nodes/Cooked\"/>\n"
+                                       "  <!-- <node ref=\"nodes/Commented\"/> -->\n"
+                                       "  <node ref=\"nodes/Gone\"/>\n"
+                                       "  <node ref=\"../Bad\"/>\n"
+                                       "</nodes></scene></scenes></SceneManager>\n");
+        Game("config/nodes/Broken.xml", "<node>\n  <children><node ref=\"nodes/Inner\"/></children>\n</node>\n");
+        // In any other config a `ref` is that format's own
+        Game("config/Other.xml", "<a><node ref=\"nodes/NoFile\"/></a>\n");
+
+        EXPECT_EQ(Missing(), (Vector<String>{"config/SceneConfig.xml:5 nodes/Gone", "config/SceneConfig.xml:6 ../Bad", "config/nodes/Broken.xml:2 nodes/Inner"}));
+    }
+
+    TEST_F(AssetReferencesTest, AFileOfTheContentRootThatNothingNamesIsUnused) {
+        Game("assets/by_xml.png", "");
+        Game("assets/ui/by_css.png", "");
+        Game("assets/by_artgen.png", "");
+        Game("config/nodes/ByRef.xml", "<node/>\n");
+        Game("config/nodes/Lost.xml", "<node name=\"nodes/Lost\"/>\n");
+        Game("assets/lost.png", "");
+        Game("assets/ui/lost.css", "a { background: url(by_css.png); }\n");
+        Game("config/SceneConfig.xml", "<nodes><node ref=\"nodes/ByRef\"/></nodes>\n");
+        Game("config/Settings.xml", "<a icon=\"assets/by_xml.png\"/>\n");
+        Game("artgen/presets/a.json", "{\"image\": \"assets/by_artgen.png\"}\n");
+        Game("assets/readme.txt", "");
+
+        EXPECT_EQ(Check().unused, (Vector<String>{"assets/lost.png", "assets/ui/lost.css", "config/nodes/Lost.xml"}));
+    }
+
+    TEST_F(AssetReferencesTest, AFileOfALowerLayerIsNeverUnused) {
+        Engine("assets/engine.png", "");
+        Engine("assets/replaced.png", "");
+        Game("assets/replaced.png", "");
+
+        EXPECT_EQ(Check().unused, Vector<String>{"assets/replaced.png"});
+    }
+
+    TEST_F(AssetReferencesTest, TheCheckSaysWhatItCouldNotRead) {
+        Game("config/Wide.xml", StringView("\xff\xfe<\0a\0/\0>\0", 10));
+        Game("config/SceneConfig.xml", "<SceneManager><scenes>\n");
+
+        EXPECT_EQ(Check().unchecked, (Vector<String>{"config/SceneConfig.xml", "config/Wide.xml"}));
+    }
+
+    TEST(AssetReferencesShippedTest, TheContentOfTheEngineAndOfItsStressGameHasNoMissingFile) {
+        const Path engine = StringView(BagiContentRoots::kEngine);
+        for (const bool withGame : {false, true}) {
+            FileSystem fileSystem;
+            fileSystem.AddContentRoot(engine);
+            if (withGame) {
+                fileSystem.AddContentRoot(engine / "tools" / "stress");
+            }
+            fileSystem.Initialize();
+            const ContentAssetCheck check = CheckContentAssets(fileSystem);
+            for (const MissingAsset& asset : check.missing) {
+                ADD_FAILURE() << asset.use.file.c_str() << ":" << asset.use.line << " names " << asset.name.c_str();
+            }
+            EXPECT_EQ(check.unchecked, Vector<String>{});
+        }
     }
 
 }  // namespace BECore::Tests

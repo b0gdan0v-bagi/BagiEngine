@@ -31,6 +31,7 @@
         <element type="PanelMenuItem" id="console" text="Console" command="view.console"/>
         <element type="PanelMenuItem" id="generate" text="Generate Art" command="view.generate"/>
         <element type="PanelMenuItem" id="profiler" text="Profiler" command="view.profiler"/>
+        <element type="PanelMenuItem" id="export" text="Export" command="view.export"/>
         <element type="PanelSeparator" id="layoutsLine"/>
         <element type="PanelMenu" id="layouts" title="Layouts" enableWhen="menu.hasStore" openCommand="layouts.menuOpened">
           <elements>

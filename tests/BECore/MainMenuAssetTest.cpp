@@ -225,7 +225,7 @@ namespace BECore::Tests {
 
         float previous = -1.0f;
         for (const StringView id : {"commandPalette", "preferences", "viewport", "sceneEditor", "configEditor", "fileChanges", "spriteLibrary", "assetBrowser", "gamePanel", "console", "generate",
-                                    "profiler", "layouts", "saveLayout", "deleteLayout", "resetLayout"}) {
+                                    "profiler", "export", "layouts", "saveLayout", "deleteLayout", "resetLayout"}) {
             const ImGuiItemRecord* item = Find(id);
             ASSERT_NE(item, nullptr) << String(id.data(), id.size()).c_str();
             EXPECT_GT(item->minY, previous) << String(id.data(), id.size()).c_str();

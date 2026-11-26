@@ -38,6 +38,7 @@ The engine's own file layer over SDL3 (`SDL_IOStream`, `SDL_GetPathInfo`, `SDL_R
 ## Traps
 
 - On macOS and Linux `SDL_IOFromFile` is `fopen`: libc's `FILE` and its buffer are invisible to the tracker; only the layer's own allocations are counted (the tests pin the whole-file reads to under twice the file size, not an allocation count).
+- libc's end-of-file mark is sticky, so `File::Read` seeks to its own position after a short read: a reader of a file that grows (the Export panel's log) goes on. Code that reads an `SDL_IOStream` itself has to do the same.
 - SDL opens regular files only (a folder or a pipe fails); there is **no exclusive-create mode**, so `FileMode::CreateNew` is "`GetFileInfo` says missing, then open for write": two processes can both pass the check.
 - Windows opens for writing with share mode 0 (nobody reads the file meanwhile) and for reading with `FILE_SHARE_READ` only (it fails while another handle writes). `RenameFile` is `MoveFileExW(MOVEFILE_REPLACE_EXISTING)` there and `rename` elsewhere: it replaces a file and fails when the target is a folder.
 - `SDL_CreateDirectory` makes the parents and succeeds when the folder exists. On POSIX it is `mkdir(0770)`, not `0777 & ~umask` like `std::filesystem`: a folder made through it is closed to others whatever the umask.

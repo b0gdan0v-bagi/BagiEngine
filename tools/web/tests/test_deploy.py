@@ -752,6 +752,19 @@ class RunTest(DeployTestCase):
         staged = self.source / "build" / "web-deploy" / "dist"
         self.assertEqual(sorted(path.name for path in staged.iterdir()), ["new.js"])
 
+    def test_an_export_package_inside_dist_is_not_staged(self):
+        self.make_dist()
+        dist = self.source / "dist"
+        # The default output of tools/export, a desktop one too, and the left-over of a killed export
+        for package in ("Game-web-release", "Game-release", "Game-web-release.partial", "nested/Game-debug"):
+            (dist / package).mkdir(parents=True)
+            (dist / package / "bagi-package.txt").write_text("index.html\n", encoding="utf-8")
+        (dist / "icons").mkdir()
+        code, _, err, _ = self.run_script("--deploy", which=have_railway)
+        self.assertEqual(code, 0, err)
+        staged = self.source / "build" / "web-deploy" / "dist"
+        self.assertEqual(sorted(path.relative_to(staged).as_posix() for path in staged.rglob("*")), ["icons", "index.html", "nested"])
+
     def test_a_file_of_an_earlier_run_is_gone_after_the_next_staging(self):
         self.make_dist()
         staged = self.source / "build" / "web-deploy"

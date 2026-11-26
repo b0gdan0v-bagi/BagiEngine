@@ -33,10 +33,6 @@ namespace BECore {
             return std::nullopt;
         }
 
-        bool CanChange(AssetKind kind) {
-            return kind == AssetKind::Texture || kind == AssetKind::Font || kind == AssetKind::Sound || kind == AssetKind::UiDocument || kind == AssetKind::Node || kind == AssetKind::Other;
-        }
-
         /// A link on the way from the content root to the file leads a change to wherever it points: another repository's file, for one
         bool IsReachedThroughLink(const Path& file, const Path& root) {
             for (Path step = file; step != root && !step.Empty(); step = step.Parent()) {
@@ -114,13 +110,14 @@ namespace BECore {
         return name.substr(0, name.size() - PathExtension(name).size());
     }
 
-    std::expected<AssetFileTarget, String> CheckAssetChange(const FileSystem& fileSystem, StringView path) {
+    bool IsChangeableAssetKind(AssetKind kind) {
+        return kind == AssetKind::Texture || kind == AssetKind::Font || kind == AssetKind::Sound || kind == AssetKind::UiDocument || kind == AssetKind::Node || kind == AssetKind::Other;
+    }
+
+    std::expected<Path, String> ResolveContentRootFile(const FileSystem& fileSystem, StringView path) {
         const Optional<ContentPath> content = SplitContentPath(path);
         if (!content) {
             return std::unexpected(Format("'{}' is not a content file", path));
-        }
-        if (!fileSystem.GetContentOverlay().Empty()) {
-            return std::unexpected(String("A content overlay is on (--content-overlay), and it cannot express a removal"));
         }
         const Path file = fileSystem.ResolvePath(path);
         const Optional<FileInfo> info = file.Empty() ? Optional<FileInfo>() : GetFileInfo(file.View());
@@ -135,11 +132,23 @@ namespace BECore {
         if (IsReachedThroughLink(file, root)) {
             return std::unexpected(Format("'{}' is reached through a symbolic link: change it on disk", path));
         }
+        return file;
+    }
+
+    std::expected<AssetFileTarget, String> CheckAssetChange(const FileSystem& fileSystem, StringView path) {
+        const Optional<ContentPath> content = SplitContentPath(path);
+        if (content && !fileSystem.GetContentOverlay().Empty()) {
+            return std::unexpected(String("A content overlay is on (--content-overlay), and it cannot express a removal"));
+        }
+        auto file = ResolveContentRootFile(fileSystem, path);
+        if (!file) {
+            return std::unexpected(std::move(file.error()));
+        }
         const AssetKind kind = AssetKindOfFile(fileSystem, path);
-        if (!CanChange(kind)) {
+        if (!IsChangeableAssetKind(kind)) {
             return std::unexpected(kind == AssetKind::None ? Format("'{}' is not an asset", path) : String("A config and a scene file stay as they are: code reads them by name"));
         }
-        return AssetFileTarget{file, kind, IsInALowerLayer(fileSystem, *content, kind)};
+        return AssetFileTarget{std::move(*file), kind, IsInALowerLayer(fileSystem, *content, kind)};
     }
 
     std::expected<AssetRename, String> CheckAssetRename(const FileSystem& fileSystem, StringView path, StringView newStem) {
