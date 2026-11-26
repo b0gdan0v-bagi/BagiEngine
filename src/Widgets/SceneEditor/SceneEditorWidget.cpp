@@ -151,6 +151,36 @@ namespace BECore {
                 SceneAddComponentRequestEvent::Emit(_lastScene, node);
             }
         }
+        if (event.commandId == EditorCommandIds::kSceneEditorSelectionBack) {
+            StepSelectionHistory(false);
+        }
+        if (event.commandId == EditorCommandIds::kSceneEditorSelectionForward) {
+            StepSelectionHistory(true);
+        }
+    }
+
+    void SceneEditorWidget::StepSelectionHistory(bool forward) {
+        SceneManager* const sceneManager = CoreManager::FindSceneManager();
+        Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
+        // The history of a replaced scene is cleared only by the next Update
+        if (scene == nullptr || scene != _lastScene) {
+            return;
+        }
+        SceneNode& root = scene->GetRootNode();
+        const SceneNode* const current = FindInspected();
+        const uint64_t selected = current != nullptr ? current->GetRuntimeId() : 0;
+        const auto isAlive = [&root](uint64_t id) { return FindNodeByRuntimeId(root, id) != nullptr; };
+        const uint64_t target = forward ? _selectionHistory.Forward(selected, isAlive) : _selectionHistory.Back(selected, isAlive);
+        if (const SceneNode* const node = FindNodeByRuntimeId(root, target)) {
+            _focusRequested = true;
+            SelectRevealed(*scene, node);
+        }
+    }
+
+    void SceneEditorWidget::SelectRevealed(Scene& scene, const SceneNode* node) {
+        if (HierarchyPanel::Reveal(scene, _hierarchy, &scene, node)) {
+            _selection.Set(_hierarchy.selected);
+        }
     }
 
     void SceneEditorWidget::OnSelectRequest(const SelectSceneNodeRequestEvent& event) {
@@ -383,6 +413,7 @@ namespace BECore {
             // A replaced scene frees its nodes: the selection would dangle
             _hierarchy.Reset();
             _selection.Clear();
+            _selectionHistory.Clear();
             ResetUISelection();
             _uiFileSession.Clear();
             _lastScene = scene;
@@ -406,6 +437,7 @@ namespace BECore {
         ImGui::EndChild();
         SyncSelection(*scene);
         ApplyHierarchyAnswers(*scene);
+        _selectionHistory.Record(_hierarchy.selected != nullptr ? _hierarchy.selected->GetRuntimeId() : 0);
         AnnounceSelection(scene);
         AnnounceUIElement(scene);
 

@@ -15,6 +15,7 @@
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
+#include <Widgets/SceneEditor/SelectionHistory.h>
 #include <Widgets/SceneEditor/UINodeFileSession.h>
 #include <Widgets/Viewport/ViewportEvents.h>
 
@@ -71,10 +72,16 @@ namespace BECore {
         void ResetUISelection();
 
         /**
-         * @brief Runs `scene.save` (only with unsaved changes, so the Save button's command does nothing while it is disabled) and `sceneEditor.addComponent`
-         * (asks for the Add Component dialog of the selected node, when it is alive and not locked)
+         * @brief Runs `scene.save` (only with unsaved changes, so the Save button's command does nothing while it is disabled), `sceneEditor.addComponent`
+         * (asks for the Add Component dialog of the selected node, when it is alive and not locked) and the two steps through the selection history
          */
         void OnCommand(const EditorCommandEvent& event);
+
+        /// Selects and reveals the node of the previous, or with @p forward the next, entry of `_selectionHistory`; nothing without such a live node
+        void StepSelectionHistory(bool forward);
+
+        /// Selects @p node alone and reveals it in the hierarchy, when it is alive in @p scene; else does nothing
+        void SelectRevealed(Scene& scene, const SceneNode* node);
 
         /// Answers SelectSceneNodeRequestEvent: selects and reveals the node when it is alive in the active scene, else does nothing
         void OnSelectRequest(const SelectSceneNodeRequestEvent& event);
@@ -144,6 +151,7 @@ namespace BECore {
 
         HierarchyState _hierarchy;  // the primary node, the rename and the pending tree edit of the hierarchy panel
         SceneSelection _selection;  // every selected node; its primary is `_hierarchy.selected`
+        SelectionHistory _selectionHistory;
         ComponentDefaults _componentDefaults;
         Vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
         Vector<SceneNode*> _announcedNodes;  // what SceneSelectionChangedEvent last told

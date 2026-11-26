@@ -17,6 +17,8 @@ namespace BECore {
         constexpr KeyChord kF6{ImGuiKey_F6, 0};
         constexpr KeyChord kF7{ImGuiKey_F7, 0};
         constexpr KeyChord kF8{ImGuiKey_F8, 0};
+        constexpr KeyChord kAltLeft{ImGuiKey_LeftArrow, kChordModAlt};
+        constexpr KeyChord kAltRight{ImGuiKey_RightArrow, kChordModAlt};
 
         const Vector<EditorCommand>& CommandTable() {
             using namespace EditorCommandIds;
@@ -28,6 +30,8 @@ namespace BECore {
                 {kViewSaveLayout, "Save Layout As", std::nullopt, true},
                 {kSceneSave, "Save Scene", kCtrlS, true},
                 {kSceneEditorAddComponent, "Add Component", std::nullopt, false},
+                {kSceneEditorSelectionBack, "Selection Back", kAltLeft, true},
+                {kSceneEditorSelectionForward, "Selection Forward", kAltRight, true},
                 {kConfigSave, "Save Config", kCtrlShiftS, true},
                 {kTextureSave, "Save Texture", std::nullopt, true},
                 {kGamePlay, "Play / Stop Game", std::nullopt, true},

@@ -45,6 +45,9 @@ namespace BECore {
         inline constexpr auto kSceneSave = "scene.save"_intern;
         /// The inspector's Add Component button: `SceneEditorWidget` asks for the Add Component dialog of the selected node (a locked one gets none)
         inline constexpr auto kSceneEditorAddComponent = "sceneEditor.addComponent"_intern;
+        /// Steps through the primary selections of the Scene Editor: `SceneEditorWidget` selects and reveals the node (SelectionHistory)
+        inline constexpr auto kSceneEditorSelectionBack = "sceneEditor.selectionBack"_intern;
+        inline constexpr auto kSceneEditorSelectionForward = "sceneEditor.selectionForward"_intern;
         inline constexpr auto kConfigSave = "config.save"_intern;
         inline constexpr auto kTextureSave = "texture.save"_intern;
         /// Play / Stop of the main toolbar: `EditorPlayModel::PressPlay`, then the pause of the model is written to the engine (state only until `editor-play-in-editor`)
