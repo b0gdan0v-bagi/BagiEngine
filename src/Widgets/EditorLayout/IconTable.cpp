@@ -10,6 +10,7 @@ namespace BECore {
     namespace {
 
         constexpr IconEntry kIcons[] = {
+            {"activity", ICON_LC_ACTIVITY},
             {"arrow-down", ICON_LC_ARROW_DOWN},
             {"arrow-up", ICON_LC_ARROW_UP},
             {"box", ICON_LC_BOX},

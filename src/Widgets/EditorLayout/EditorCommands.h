@@ -129,6 +129,10 @@ namespace BECore {
         inline constexpr auto kExportRun = "export.run"_intern;
         inline constexpr auto kExportStop = "export.stop"_intern;
         inline constexpr auto kExportCheck = "export.check"_intern;
+        /// Show and hide the Activity panel (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewActivity = "view.activity"_intern;
+        /// The Activity panel's Clear button: ActivityPanelModel empties the control journal, only while its panel is open
+        inline constexpr auto kActivityClear = "activity.clear"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

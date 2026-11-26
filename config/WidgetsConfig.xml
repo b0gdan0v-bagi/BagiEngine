@@ -66,5 +66,8 @@
     <widget
       type="AssetPanelWidget"
       asset="ExportPanel" />
+    <widget
+      type="AssetPanelWidget"
+      asset="ActivityPanel" />
   </widgets>
 </root>

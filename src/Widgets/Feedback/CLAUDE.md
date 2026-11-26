@@ -9,6 +9,7 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 | `ToastFeed.{h,cpp}` | what fills the list from events and the control journal; no ImGui |
 | `ToastOverlay.{h,cpp}` | the toasts on screen; ImGui |
 | `EditorProgress.{h,cpp}` | `EditorProgressRegistry`: the sources of the status bar's progress strip; no ImGui |
+| `ActivityPanelModel.{h,cpp}` | the model of the Activity panel (`config/panels/ActivityPanel.xml`): the control journal as rows; no ImGui |
 
 ## Toasts
 
@@ -33,3 +34,9 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 - Sources: `ExportPanelModel` (no fraction: the build's output has no reliable total) and `ArtGenPanelModel` (a setup action, else a run; nothing while no service is connected). Their tests are with the models' own.
 - A load that blocks inside one frame has no source, since nothing can be drawn meanwhile; an asynchronous one registers its own.
 
+## Activity panel
+
+- "Who did what": the control journal (`.claude/rules/control-activity.md`) newest first, hidden until `view.activity`. `activity.clear` empties the journal itself, so every reader of it loses the old entries.
+- A client is shown by the name it has **now** (also in rows older than its `client_hello`), an unnamed one as `client N`, a call with no client as `engine`. Names and params are client text: the table draws them unformatted.
+- A game with its own `config/WidgetsConfig.xml` adds the `AssetPanelWidget` line of `ActivityPanel`, or has no panel behind the menu item.
+- Tests: `ActivityPanelModelTest`, `ActivityAssetTest` (over a service of its own, `ActivityTestModel.h`).
