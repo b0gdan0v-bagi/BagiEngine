@@ -13,7 +13,7 @@ Do not guess any of these. Ask, write the answers down and repeat them back befo
 | `<Name>`, `<area>`, `<repo>` | the names of everything below |
 | the remote URL of the new repository | the owner creates the empty repository on GitHub; the agent creates no remote repository |
 | **the git email and the name for the commits** | see step 2: the global git identity of the machine may be a different one (a work account), and these repositories must not get it |
-| the todo token (`TODO_API_TOKEN`) | the `.env` of the new repository; never committed, never printed |
+| the todo token (`TODO_API_TOKEN`) | the `.env` of the new repository, for the todo entries only (step 5); never committed, never printed |
 | whether the owner has created the todo area and the game's token | it is a setting of the shared store (step 5) |
 
 **The email:** never take it from `git config --global`, from the environment, or from another repository's config or history without asking. Ask: "Which email and name should the commits of `<repo>` and of its `engine/` submodule use?" Use exactly the answer.
@@ -112,6 +112,8 @@ The skill texts give `games/chess` as an example of the engine's base branch. Fo
 
 The entries, plans and reviews of every area live in the todo store, the service of the owner's BagiTodo; `engine/tools/todo/` holds only the loader of its CLI ([tools/todo/CLAUDE.md](tools/todo/CLAUDE.md)). Nothing of it is in git. The game gets an area of its own.
 
+The store holds only the todo entries, their plans and reviews. A game made from a clone configures, builds, tests and measures with no store, so the token of section 0 and this section may come later ([tools/todo/CLAUDE.md](tools/todo/CLAUDE.md), "Without the store").
+
 1. `.env.example` (committed):
    ```
    TODO_API_URL=
@@ -140,7 +142,7 @@ ctest --preset macos-debug
 - Release path: the sources stay XML; build the release preset, run `<Name>Cook` (`engine/src/Modules/BECore/Cook/CLAUDE.md`) and ship `cooked/<Name>/layer*/config` in place of `config/`. `be_add_game_cook_test(Bagi<Name>)` puts the check into `ctest`.
 - A game with a control API adds `be_add_game_control_tests(Bagi<Name> ...)`. ctest skips it (77) when the executable is not built.
 - `ctest --preset <p>` runs 8 tests at once (`execution.jobs` of `test-base` in the included presets; `-j1` switches it off), so the game's own tests must be safe side by side: temp names from `<Common/TempPath.h>` (`engine/tests/Common/TempPath.h`), port 0, polling instead of fixed sleeps, or `RUN_SERIAL` / `RESOURCE_LOCK` on the one that cannot (`.claude/rules/tests-module.md`).
-- `python3 engine/tools/todo/todo.py list --area <area>` works (empty at first).
+- `python3 engine/tools/todo/todo.py list --area <area>` works (empty at first). This check alone needs the store.
 
 ## 7. Commits, and what the agent does not do
 
