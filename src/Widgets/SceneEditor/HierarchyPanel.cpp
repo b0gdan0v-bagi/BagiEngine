@@ -4,6 +4,8 @@
 #include <BECore/Scene/IComponent.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/IconTable.h>
+#include <Widgets/Feedback/TouchFlashDraw.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
@@ -196,6 +198,7 @@ namespace BECore {
             if (dimmed) {
                 ImGui::PopStyleColor();
             }
+            FillItemWithTouchFlash(TouchHighlights::GetInstance().NodeAlpha(node.GetRuntimeId()));
             if (state.scrollTo == &node) {
                 ImGui::SetScrollHereY();
                 state.scrollTo = nullptr;

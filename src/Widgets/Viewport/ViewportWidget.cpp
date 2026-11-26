@@ -15,6 +15,7 @@
 #include <Generated/ViewportWidget.gen.hpp>
 #include <Widgets/AssetBrowser/AssetDrag.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelBars.h>
@@ -61,6 +62,7 @@ namespace BECore {
         constexpr float kSameRectTolerance = 0.5f;
         // The viewport pass runs at density 1: a window unit is an output pixel, what UISettings::minTouchSize is measured in
         constexpr float kViewportPixelDensity = 1.0f;
+        constexpr float kTouchOutlineThickness = 3.0f;  // wider than the selection's, so a touched node that is selected shows
         constexpr const char* kImageHitArea = "##ViewportImage";
 
         // The device of a shape for the Device safe area; none for a custom or an aspect shape and for an index this build lacks
@@ -74,6 +76,28 @@ namespace BECore {
 
         bool SameRect(const Rect& a, const Rect& b) {
             return std::abs(a.x - b.x) < kSameRectTolerance && std::abs(a.y - b.y) < kSameRectTolerance && std::abs(a.w - b.w) < kSameRectTolerance && std::abs(a.h - b.h) < kSameRectTolerance;
+        }
+
+        void DrawNodeOutlines(ImDrawList& drawList, const ViewportFrame& frame, const ScenePick::Outlines& outlines, ImU32 color, float thickness) {
+            for (size_t i = 0; i < outlines.count; ++i) {
+                Array<ImVec2, 4> corners;
+                for (size_t corner = 0; corner < corners.size(); ++corner) {
+                    corners[corner] = frame.ToScreen(outlines.quads[i][corner]);
+                }
+                drawList.AddPolyline(corners.data(), static_cast<int>(corners.size()), color, ImDrawFlags_Closed, thickness);
+            }
+        }
+
+        // @p node and its descendants that flash, each as strong as its flash
+        void DrawTouchedSubtree(ImDrawList& drawList, const ViewportFrame& frame, const Scene& scene, const SceneNode& node) {
+            if (const float alpha = TouchHighlights::GetInstance().NodeAlpha(node.GetRuntimeId()); alpha > 0.0f) {
+                ImVec4 color = GetImGuiPalette().accent;
+                color.w *= alpha;
+                DrawNodeOutlines(drawList, frame, ScenePick::SelectionOutlines(scene, node), ImGui::GetColorU32(color), kTouchOutlineThickness);
+            }
+            for (const auto& child : node.GetChildren()) {
+                DrawTouchedSubtree(drawList, frame, scene, *child);
+            }
         }
 
     }  // namespace
@@ -247,6 +271,7 @@ namespace BECore {
                 DrawSafeAreaOutline(frame, safeArea);
             }
             DrawSelectionOutlines(activeScene, frame);
+            DrawTouchOutlines(activeScene, frame);
 
             if (droppedAsset) {
                 const Vec2 at = frame.ToTarget(ImGui::GetIO().MousePos);
@@ -454,15 +479,19 @@ namespace BECore {
         const SceneNode* const primary = _selectedNodes.back();
         for (const SceneNode* const node : _liveSelection) {
             const ImU32 color = node == primary ? primaryColor : otherColor;
-            const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(*scene, *node);
-            for (size_t i = 0; i < outlines.count; ++i) {
-                Array<ImVec2, 4> corners;
-                for (size_t corner = 0; corner < corners.size(); ++corner) {
-                    corners[corner] = frame.ToScreen(outlines.quads[i][corner]);
-                }
-                drawList->AddPolyline(corners.data(), static_cast<int>(corners.size()), color, ImDrawFlags_Closed, kSelectionOutlineThickness);
-            }
+            DrawNodeOutlines(*drawList, frame, ScenePick::SelectionOutlines(*scene, *node), color, kSelectionOutlineThickness);
         }
+        drawList->PopClipRect();
+    }
+
+    void ViewportWidget::DrawTouchOutlines(Scene* scene, const ViewportFrame& frame) const {
+        // The walk of the tree is paid only while something flashes
+        if (!scene || !TouchHighlights::GetInstance().HasFlashes()) {
+            return;
+        }
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
+        DrawTouchedSubtree(*drawList, frame, *scene, scene->GetRootNode());
         drawList->PopClipRect();
     }
 

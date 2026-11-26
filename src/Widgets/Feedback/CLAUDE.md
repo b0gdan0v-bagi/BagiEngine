@@ -11,6 +11,8 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 | `EditorProgress.{h,cpp}` | `EditorProgressRegistry`: the sources of the status bar's progress strip; no ImGui |
 | `ActivityPanelModel.{h,cpp}` | the model of the Activity panel (`config/panels/ActivityPanel.xml`): the control journal as rows; no ImGui |
 | `UIMotion.{h,cpp}` | what moves by the frame's time: `Fade`, `HoverBlendTable`, the durations; no ImGui |
+| `TouchHighlights.{h,cpp}` | the flashes and the "who changed it" marks of what control API clients touched; no ImGui |
+| `TouchFlashDraw.{h,cpp}` | the fill of a flash over an item or a rect; ImGui |
 
 ## Toasts
 
@@ -42,9 +44,16 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 - A game with its own `config/WidgetsConfig.xml` adds the `AssetPanelWidget` line of `ActivityPanel`, or has no panel behind the menu item.
 - Tests: `ActivityPanelModelTest`, `ActivityAssetTest` (over a service of its own, `ActivityTestModel.h`).
 
+## Touched nodes
+
+- `TouchHighlights` (a `Singleton`, so a panel needs no widget line) reads the touch record (`.claude/rules/control-activity.md`). `EditorLayoutWidget` connects it, advances it by `io.DeltaTime` before the panels are drawn and resets it when it dies, so without that widget nothing flashes or is marked. What the record held at the connect is old news.
+- A **flash** belongs to a report and fades; a **mark** (the client who touched a field) belongs to the field and stays until it is dismissed or newer marks push it out; Activity's Clear keeps it. A report that names no field (`ui_click`) flashes and marks nothing. Calls of the Console and of a replay count like any client's.
+- Shown on the hierarchy row of the node, only when the row is shown (nothing is opened or scrolled), and as an outline in the viewport, in both input modes, for a node with a rect or a canvas. The viewport walks the tree only while a flash lives.
+- Tests: `TouchHighlightsTest`; the look is not covered.
+
 ## Motion
 
-- Three things move: a docked or floating asset panel fades in and out (`src/Widgets/PanelAssets/CLAUDE.md`), the command palette fades in, and the hover colour of a button blends (`IconButton`, `IconTextButton` and the asset panels' buttons, all through `BlendedButton` of `EditorLayout/EditorControls.h`). A new button of a panel goes through one of them.
+- Besides the flashes above, three things move: a docked or floating asset panel fades in and out (`src/Widgets/PanelAssets/CLAUDE.md`), the command palette fades in, and the hover colour of a button blends (`IconButton`, `IconTextButton` and the asset panels' buttons, all through `BlendedButton` of `EditorLayout/EditorControls.h`). A new button of a panel goes through one of them.
 - A disabled button and a filled one (`ScopedHoverSnap`: a `fill`, a toggle that is on) keep ImGui's colours, which change at once.
 - The blend follows the hover one frame late, and an item that is not drawn for a frame starts from rest.
 - Time is `io.DeltaTime`: on the manual clock only a `step` moves them, so a closed panel's window stays drawn and a hovered button unlit until the clock goes on.

@@ -12,6 +12,7 @@
 #include <Events/RenderEvents.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
 #include <Widgets/EditorLayout/GitBranch.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/ImGuiLayoutText.h>
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/PanelAssets/PanelBars.h>
@@ -43,6 +44,7 @@ namespace BECore {
     }  // namespace
 
     EditorLayoutWidget::~EditorLayoutWidget() {
+        TouchHighlights::GetInstance().Reset();
         GamePause& pause = CoreManager::GetPause();
         if (pause.IsPaused() && !CoreManager::GetControlService().IsManualClock()) {
             pause.SetPaused(false);
@@ -64,6 +66,7 @@ namespace BECore {
 
         _hostHandle = EditorLayoutHostRegistry::GetInstance().Register(*this);
         _toasts.Connect(CoreManager::GetControlService().Activity());
+        TouchHighlights::GetInstance().Connect(CoreManager::GetControlService().Touches());
 
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
         Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);
@@ -155,6 +158,8 @@ namespace BECore {
     void EditorLayoutWidget::Update() {
         // The control API and the manual clock can pause too
         _playModel.SetPaused(CoreManager::GetPause().IsPaused());
+        // Before the panels that draw them, which come after this widget
+        TouchHighlights::GetInstance().Update(ImGui::GetIO().DeltaTime);
 
         // Cover the entire OS window work-area with a borderless, decoration-less host.
         ImGuiViewport* mainViewport = ImGui::GetMainViewport();

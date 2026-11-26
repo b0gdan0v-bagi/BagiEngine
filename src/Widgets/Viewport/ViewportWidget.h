@@ -95,6 +95,10 @@ namespace BECore {
         // others in its muted one, clipped to the panel. Nothing for no selection, another scene, or a node that is no longer in the tree of @p scene; a node hidden by the editor flag is outlined too
         void DrawSelectionOutlines(Scene* scene, const ViewportFrame& frame) const;
 
+        // A fading outline in the accent colour round every node of @p scene that a client of the control API touched a moment ago (TouchHighlights), in
+        // both input modes, clipped to the panel
+        void DrawTouchOutlines(Scene* scene, const ViewportFrame& frame) const;
+
         // F and viewport.frameSelected: frame the selection, or reset the camera when nothing is selected
         void FrameSelection(Scene* scene, const ImVec2& panelSize, float baseZoom);
 

@@ -14,6 +14,8 @@ namespace BECore {
     inline constexpr float kPaletteFadeSeconds = 0.1f;
     /// How long a button takes to blend into its hover colour, and back
     inline constexpr float kHoverBlendSeconds = 0.12f;
+    /// How long what a client of the control API touched flashes
+    inline constexpr float kTouchFlashSeconds = 1.0f;
 
     /// @p value moved toward @p target by the share that @p seconds are of @p duration (above 0), never past it
     [[nodiscard]] float Approach(float value, float target, float seconds, float duration);
