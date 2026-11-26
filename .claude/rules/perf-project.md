@@ -105,6 +105,63 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
       }
     },
     {
+      "name": "stress-sprites-fill-vulkan",
+      "about": "Overdraw: 2000 spinning sprites of 512 x 512 over 4 atlases (--sprite-size, tools/stress/src/Stress/CLAUDE.md, Loads), about 250 views of pixels blended a frame, 300 frames after 30 of warm-up in a hidden window with the present uncapped, a run of about 3 s; skipped where the backend or a display is missing. gpu_ms_p50 is the number to read: the CPU does next to nothing (work_ms_p50) and waits for the GPU. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: gpu_ms_p50 7.53 to 7.54, cpu_ms_p50 and frame_ms_p50 7.64 to 7.66, wait 7.48 to 7.53, work_ms_p50 0.10 to 0.13 ms, 11 draw calls; the plain run of stress-sprites-vulkan, alternated with these, had gpu_ms_p50 0.20 to 0.22 ms. gate false until a baseline shows the noise",
+      "fast": false,
+      "repetitions": 3,
+      "timeoutSeconds": 180,
+      "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "2000", "--sprite-size", "512", "--frames", "300", "--warmup", "30", "--backend", "vulkan"],
+      "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "2000", "--sprite-size", "512", "--frames", "300", "--warmup", "30", "--backend", "vulkan", "--trace", "{trace}"],
+      "metrics": {
+        "gpu_ms_p50": {"source": "json", "key": "gpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "frame_ms_p50": {"source": "json", "key": "frameMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "wait_ms_p50": {"source": "json", "key": "waitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "gate": false},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+      }
+    },
+    {
+      "name": "stress-sprites-churn-vulkan",
+      "about": "Despawn and spawn: 20000 spinning sprites of which the 100 oldest are replaced every frame (--churn, tools/stress/src/Stress/CLAUDE.md, Loads), 300 frames after 30 of warm-up in a hidden window with the present uncapped, a run of about 4 s; skipped where the backend or a display is missing. update_ms_p50 holds the removals, the spawns and the update of every sprite's Life, draw_ms_p50 the full draw list rebuild and the walk. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: work_ms_p50 6.97 to 7.40, update 5.06 to 5.25, draw 1.75 to 1.98, submit 0.16, gpu_ms_p50 0.64 ms, 83 draw calls. Alternated with these, the same count with --churn 1: work 2.06 to 2.18, update 0.15 to 0.17, draw 1.74 to 1.84; without churn: work 0.78 to 0.82, update 0.02 to 0.03, draw 0.61 to 0.64 ms. A Release build counts no allocations: read those of a churn frame with `perf.py --trace stress-sprites-churn-vulkan` (a macos-profile build) or by the allocation cases of StressSpritesTest there. gate false until a baseline shows the noise",
+      "fast": false,
+      "repetitions": 3,
+      "timeoutSeconds": 180,
+      "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "20000", "--churn", "100", "--frames", "300", "--warmup", "30", "--backend", "vulkan"],
+      "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "20000", "--churn", "100", "--frames", "300", "--warmup", "30", "--backend", "vulkan", "--trace", "{trace}"],
+      "metrics": {
+        "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "update_ms_p50": {"source": "json", "key": "updateMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "draw_ms_p50": {"source": "json", "key": "drawMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "submit_ms_p50": {"source": "json", "key": "submitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "gpu_ms_p50": {"source": "json", "key": "gpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "gate": false},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+      }
+    },
+    {
+      "name": "stress-sprites-mix-vulkan",
+      "about": "A field that breaks batches: 20000 objects of which about 13 in 16 are sprites and the rest texts, hexagons and particle emitters, over 4 node layers (--mix, tools/stress/src/Stress/CLAUDE.md, Loads), 300 frames after 90 of warm-up (the emitters fill their pools in the first second of game time) in a hidden window with the present uncapped, a run of about 4 s; skipped where the backend or a display is missing. On a Mac16,7 (M4 Pro), macos-release, three runs at load average 4 to 6: work_ms_p50 6.00 to 6.40, cpu_ms_p50 6.55 to 6.96, update 0.25 to 0.35, draw 3.32 to 3.60, submit 2.33 to 2.56, present 0.49 to 0.52, gpu_ms_p50 1.30 to 1.31 ms, 6882 draw calls and 21236 primitives (the plain 20000 sprites: work 0.78 to 0.82 ms, 82 draw calls). gate false until a baseline shows the noise",
+      "fast": false,
+      "repetitions": 3,
+      "timeoutSeconds": 180,
+      "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "20000", "--mix", "--frames", "300", "--warmup", "90", "--backend", "vulkan"],
+      "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "sprites", "--count", "20000", "--mix", "--frames", "300", "--warmup", "90", "--backend", "vulkan", "--trace", "{trace}"],
+      "metrics": {
+        "work_ms_p50": {"source": "json", "key": "workMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "update_ms_p50": {"source": "json", "key": "updateMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "draw_ms_p50": {"source": "json", "key": "drawMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "submit_ms_p50": {"source": "json", "key": "submitMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "present_ms_p50": {"source": "json", "key": "presentMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "gpu_ms_p50": {"source": "json", "key": "gpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
+        "primitives": {"source": "json", "key": "primitives", "unit": "per frame", "better": "lower", "gate": false},
+        "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false}
+      }
+    },
+    {
       "name": "stress-entities",
       "about": "BagiStress entities without a window: 30000 nodes with a transform and a looping tween each, nothing drawn, 3000 frames after 120 of warm-up. On a Mac16,7 (M4 Pro), macos-release, three runs on a machine loaded by other loops: work_ms_p50 0.49 to 0.50 ms, p99 0.52 to 0.55 (with every tween restarted from onComplete, runs alternated with these: 0.51 to 0.53, p99 0.70 to 0.72)",
       "fast": true,
@@ -363,7 +420,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
 ## Notes
 
 - Headless, the present of the SDL software renderer is most of a frame whatever the scene draws; `work_ms` (the frame without the present) is the number that moves with scene and UI code.
-- The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). The stress scenes are the engine's frame benchmarks; the engine has no game of its own. Their baseline is the owner's word, like every other. `stress-sprites-gpu` and `stress-sprites-vulkan` run the same scene on a GPU backend in a hidden window (`--backend`, `--hidden-window`: `tools/stress/CLAUDE.md`), `stress-sprites-vulkan-500k` at a count where the frame is long enough to read its stages and GPU time (informing only); all three skip where the backend is missing (`tools/perf/CLAUDE.md`, exit codes); a machine under load of other workers moves their cpu and frame numbers, not draw_calls.
+- The `stress-*` benchmarks run `BagiStress` (`tools/stress/CLAUDE.md`) through `tools/perf/stress_frames.py`; the game measures itself (`work_ms` is the CPU time of a frame without the present, nearest-rank percentiles) and the ramp is a number per scene and machine (the scenes do not compare with one another). The stress scenes are the engine's frame benchmarks; the engine has no game of its own. Their baseline is the owner's word, like every other. `stress-sprites-gpu` and `stress-sprites-vulkan` run the same scene on a GPU backend in a hidden window (`--backend`, `--hidden-window`: `tools/stress/CLAUDE.md`), `stress-sprites-vulkan-500k` at a count where the frame is long enough to read its stages and GPU time (informing only), and the loads of the `sprites` scene have one each, informing only too: `stress-sprites-world-vulkan` (culling), `-fill-vulkan` (overdraw), `-churn-vulkan` (despawn and spawn) and `-mix-vulkan` (broken batches); all of these skip where the backend is missing (`tools/perf/CLAUDE.md`, exit codes); a machine under load of other workers moves their cpu and frame numbers, not draw_calls.
 - `value-get` has a line per case and type (`ValueBench <type> <case> ns_per_get=<x>`: `plain`, `const`, `slot`, `tree_field`, `tree_slot`, then `formula_plain`, `formula_tree`, `formula_program`, `formula_native`, `formula_run` (printed, not in the set: `Run` without the look for a bound function), `formula_unfused`, `formula_cached` and `madd_plain`, `madd_program`, `madd_native`, `madd_unfused`; the `Vec3` `madd` program is fused like the numbers), then `ValueBench mask_<case>` with no type (`mask_plain`, `mask_program`, `mask_run` (printed, not in the set), `mask_native`), then `ValueBench derived_hit_1`, `derived_hit_2`, `derived_hit_sources` and `derived_hand` (a `Derived` hit over one level, two levels and one source counter against the hand-kept compare, no type), then `ValueBench trigger_plain` and `trigger_script` (a script of a cell over `RunEffects` against C++, no type), then `ValueBench int32_t list_<op>_<case>` and `ValueBench bool list_<op>_<case>` (`list_count`, `list_any`, `list_any_early`, `list_sum` and `list_nested`, each as `_plain`, `_program` and `_native`: a formula with a loop over a hand's lists against a C++ loop). Nothing in it gates. Only the ratios of one run mean anything, and a loaded machine (other worker loops) moves every one: take the lowest of several runs.
 - `editor-frame` names its own `preset` (`macos-release-editor`), so a run that selects it builds the editor too (a full editor build the first time), which is why it is not `fast`; its baseline is the owner's word like every other.
 - The sentinel (`todo-merge`): `ask`. Its commands: the fast run `python3 <engine>/tools/perf/perf.py --fast --json <scratchpad>/sentinel-<branch-id>.json` after the preflight of `.claude/skills/perf/SKILL.md` step 1; the repeat of the regressed ones `--only <names> --repetitions 10 --no-build`; the investigate command an entry ends with: `/perf-investigate <benchmark>`.
