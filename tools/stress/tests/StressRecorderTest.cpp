@@ -22,10 +22,54 @@ namespace BECore::Stress::Tests {
             return recorder;
         }
 
-        constexpr const char* kKeys[] = {"allocBytesPerFrame", "allocTracking", "allocsPerFrame", "atlases",      "batching",   "churn",  "count",      "cpuMs",     "cpuMsP50",    "cpuMsP99",
-                                         "drawCalls",          "drawMs",        "drawMsP50",      "frameMsP50",   "frameMsP99", "frames", "gpuMs",      "gpuMsP50",  "gpuMsP99",    "interleave",
-                                         "manualClock",        "mix",           "presentMs",      "presentMsP50", "primitives", "scene",  "spriteSize", "submitMs",  "submitMsP50", "textureSwitches",
-                                         "triangles",          "updateMs",      "updateMsP50",    "waitMs",       "waitMsP50",  "warmup", "workMs",     "workMsP50", "workMsP99",   "world"};
+        constexpr const char* kKeys[] = {"allocBytesPerFrame",
+                                         "allocTracking",
+                                         "allocsPerFrame",
+                                         "atlases",
+                                         "batchBreakBlend",
+                                         "batchBreakBoundary",
+                                         "batchBreakClip",
+                                         "batchBreakFull",
+                                         "batchBreakTexture",
+                                         "batchBreakUnbatched",
+                                         "batching",
+                                         "churn",
+                                         "count",
+                                         "cpuMs",
+                                         "cpuMsP50",
+                                         "cpuMsP99",
+                                         "drawCalls",
+                                         "drawMs",
+                                         "drawMsP50",
+                                         "frameMsP50",
+                                         "frameMsP99",
+                                         "frames",
+                                         "geometryUploadBytes",
+                                         "gpuMs",
+                                         "gpuMsP50",
+                                         "gpuMsP99",
+                                         "interleave",
+                                         "manualClock",
+                                         "mix",
+                                         "presentMs",
+                                         "presentMsP50",
+                                         "primitives",
+                                         "scene",
+                                         "spriteSize",
+                                         "submitMs",
+                                         "submitMsP50",
+                                         "textureSwitches",
+                                         "textureUploadBytes",
+                                         "triangles",
+                                         "updateMs",
+                                         "updateMsP50",
+                                         "waitMs",
+                                         "waitMsP50",
+                                         "warmup",
+                                         "workMs",
+                                         "workMsP50",
+                                         "workMsP99",
+                                         "world"};
 
         StressRunContext Context() {
             StressRunContext context;
@@ -113,6 +157,10 @@ namespace BECore::Stress::Tests {
         a.textureSwitches = 4;
         a.allocCount = 6;
         a.allocBytes = 600;
+        a.batchBreaks[+BatchBreak::Texture] = 8;
+        a.batchBreaks[+BatchBreak::Clip] = 2;
+        a.geometryUploadBytes = 1000;
+        a.textureUploadBytes = 64;
         StressSample b;
         b.cpuMs = 4.0;
         b.workMs = 3.0;
@@ -122,6 +170,8 @@ namespace BECore::Stress::Tests {
         b.textureSwitches = 0;
         b.allocCount = 0;
         b.allocBytes = 0;
+        b.batchBreaks[+BatchBreak::Texture] = 4;
+        b.geometryUploadBytes = 3000;
         recorder.Add(a);
         recorder.Add(b);
 
@@ -135,6 +185,10 @@ namespace BECore::Stress::Tests {
         EXPECT_DOUBLE_EQ(summary.textureSwitches, 2.0);
         EXPECT_DOUBLE_EQ(summary.allocsPerFrame, 3.0);
         EXPECT_DOUBLE_EQ(summary.allocBytesPerFrame, 300.0);
+        EXPECT_DOUBLE_EQ(summary.batchBreaks[+BatchBreak::Texture], 6.0);
+        EXPECT_DOUBLE_EQ(summary.batchBreaks[+BatchBreak::Clip], 1.0);
+        EXPECT_DOUBLE_EQ(summary.geometryUploadBytes, 2000.0);
+        EXPECT_DOUBLE_EQ(summary.textureUploadBytes, 32.0);
     }
 
     TEST(StressRecorderTest, MoreSamplesThanReservedAreIgnoredNotGrown) {
@@ -165,6 +219,9 @@ namespace BECore::Stress::Tests {
         stats.draws.drawCalls = 3;
         stats.draws.triangles = 6;
         stats.draws.textureSwitches = 2;
+        stats.draws.batchBreaks[+BatchBreak::Blend] = 4;
+        stats.draws.geometryUploadBytes = 70;
+        stats.draws.textureUploadBytes = 80;
         stats.allocCount = 5;
         stats.allocBytes = 50;
         const StressSample sample = SampleOf(stats);
@@ -174,6 +231,9 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(sample.drawCalls, 3u);
         EXPECT_EQ(sample.triangles, 6u);
         EXPECT_EQ(sample.textureSwitches, 2u);
+        EXPECT_EQ(sample.batchBreaks[+BatchBreak::Blend], 4u);
+        EXPECT_EQ(sample.geometryUploadBytes, 70u);
+        EXPECT_EQ(sample.textureUploadBytes, 80u);
         EXPECT_EQ(sample.allocCount, 5u);
         EXPECT_EQ(sample.allocBytes, 50u);
 
@@ -307,6 +367,26 @@ namespace BECore::Stress::Tests {
             EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), median.c_str()).value_or(0.0), i + 11.0) << median.c_str();
         }
         EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "gpuMsP99").value_or(0.0), 26.0);
+    }
+
+    TEST(StressRecorderTest, EveryBatchBreakAndUploadKeyOfTheLineHoldsItsOwnValue) {
+        StressSummary summary;
+        constexpr const char* kBreakKeys[] = {"batchBreakTexture", "batchBreakBlend", "batchBreakFull", "batchBreakClip", "batchBreakUnbatched", "batchBreakBoundary"};
+        static_assert(std::size(kBreakKeys) == kBatchBreakCount);
+        for (size_t i = 0; i < kBatchBreakCount; ++i) {
+            summary.batchBreaks[i] = static_cast<double>(i + 1);
+        }
+        summary.geometryUploadBytes = 11.0;
+        summary.textureUploadBytes = 12.0;
+
+        const BECore::Tests::JsonDoc parsed(FormatJsonLine(summary, Context()));
+
+        ASSERT_TRUE(parsed.IsParsed());
+        for (size_t i = 0; i < std::size(kBreakKeys); ++i) {
+            EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), kBreakKeys[i]).value_or(0.0), i + 1.0) << kBreakKeys[i];
+        }
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "geometryUploadBytes").value_or(0.0), 11.0);
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "textureUploadBytes").value_or(0.0), 12.0);
     }
 
     TEST(StressRecorderTest, TheLineCarriesTheRunAndTheSummary) {
