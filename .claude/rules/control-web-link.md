@@ -60,7 +60,7 @@ The page retries after every close but 1008: after 1 s, doubling to 10 s, and fr
 - A message without a channel aborts the connection like a refused send (a script cannot close with 1002), and what the transport still holds of it does not run.
 - A failed dial also puts one error of the browser's own into its console, which no script can silence: a page with no bridge shows one per retry. `localhost` reaches the bridge's 127.0.0.1 in Chromium and WebKit.
 - One Info line per outage, and the one Warning of a 1008: a QA run reads warnings as findings. The token is never logged.
-- `ControlLink::kTransportLimits` are the `RoomTransportLimits` the browser transport of a link takes; its defaults are those of the rooms, and the desktop transport takes none.
+- `ControlLink::kTransportLimits` are the `RoomTransportLimits` the browser transport of a link takes; its defaults are those of the rooms. The desktop transport takes them only from a caller that passes them (the remote editor).
 
 **What a linked page does not do as a desktop game does:**
 

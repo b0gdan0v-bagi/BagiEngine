@@ -1,6 +1,6 @@
 # Remote editor: the scene of another process
 
-Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the control API. The files here are data and logic with no ImGui and no transport: results of control methods go in as text, property visits and writes come out. Everything read is a peer's: a wrong shape is left out, every recursion is bounded, and nothing is interned (the editor's pool never frees).
+Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the control API. The files here are data and logic with no ImGui. The data classes know no transport: results of control methods go in as text, property visits and writes come out. Everything read is a peer's: a wrong shape is left out, every recursion is bounded, and nothing is interned (the editor's pool never frees).
 
 | File | Holds |
 |------|-------|
@@ -9,6 +9,7 @@ Editor code (`BE_WITH_EDITOR`) for editing a game the editor reaches over the co
 | `RemoteComponent` | one `scene_get` answer with all fields; `Walk` visits it |
 | `RemoteFieldWalker` | the visit itself |
 | `RemotePendingWrites` | edits not yet seen in read data |
+| `RemoteSession` | the link: connects, keeps the data above current, sends the writes |
 
 `Load` of the three data classes rebuilds only for another text, so polling an unchanged scene costs a compare; a rebuild invalidates every pointer into the object. A walk allocates nothing in a steady state.
 
@@ -31,3 +32,23 @@ No edit is taken below a `readonly` or `hidden` field.
 An edit overrides the received value until a read **sent after** the write was answered arrives: a read sent earlier may still carry the old value. The caller numbers its requests in the order sent, and releases by component (`scene_get`) or for the layers (`scene_tree`).
 
 One unsent write per target, a newer value replacing it, and at most one in flight. A text is held until the caller says no item is active: the visitor reports every keystroke, and a half typed name would be refused (`interning`: a name field of the game takes only a text it already knows). A refusal drops that write's override and is kept for the panel until the next edit.
+
+## The session
+
+`RemoteSession` is polled once a frame on the main thread (`Poll(now)`) over an `IRoomTransport` of its factory. The default, `MakeRemoteTransport`, is the desktop socket with room for the longest answer a control server sends, and null where there are no sockets (the web build too), which `Attach` reports.
+
+| State | Meaning |
+|-------|---------|
+| `Detached` | no link. Every other state is remote mode |
+| `Connecting` | the first connection of an `Attach` is being made or read |
+| `Attached` | this connection has read the schema and the tree. The only state that sends writes and reads components: every other one is read-only |
+| `Lost` | the link ended. What was read stays; the state lasts through the retries, until a new connection has read the schema and the tree |
+
+- **Polling.** On open `status`, `schema` and `scene_tree`; then the tree again, and the selected node's components as one `batch` of `scene_get` with `continueOnError`, each on its interval (`RemoteSessionTiming`). At most one request of each kind is unanswered. Answers are matched by id; pushes and unreadable messages are dropped. `no_scene` is an empty tree.
+- **Selection** is a node path, kept while the tree lists it. An answer about an earlier selection is dropped.
+- **Writes** go out in the order of `GetWrites()`, one unanswered per target. A new connection drops what is pending: it was edited for what answered before.
+- **A loss** is retried with a doubling wait, which starts over once attached. An outage is one Info line of the session's and no warning (QA reads warnings as findings); the transport adds an Info line per connection that ends. A peer that answers `unknown_method` to what the session reads with is `Lost` and not retried; to a write it is a refusal like any other.
+- **Stalled** (`IsStalled`) is not a loss: requests wait and nothing is answered, as with a hidden browser tab or another client's deferred call holding the program's queue.
+- A poll with nothing due, or with answers that repeat the last ones, allocates nothing in the session (the desktop transport allocates per message).
+
+Tests drive it over `tests/BECore/FakeControlEndpoint.h`: the real methods over a scene, behind a transport in memory that answers on `Serve()`.

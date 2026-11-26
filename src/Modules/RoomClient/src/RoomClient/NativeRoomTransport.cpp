@@ -2,6 +2,8 @@
 
 #if BE_WITH_REMOTE_CONTROL
 
+#include <EASTL/algorithm.h>
+
 namespace BECore {
 
     namespace {
@@ -29,6 +31,11 @@ namespace BECore {
         settings.logName = String(kLogName);
         settings.threadName = String(kThreadName);
         settings.threadOrder = kThreadOrder;
+        if (_limits) {
+            settings.maxMessageBytes = _limits->maxMessageBytes;
+            settings.maxOutboxBytes = _limits->maxSendBufferBytes;
+            settings.maxInboxBytes = eastl::max(settings.maxInboxBytes, _limits->maxMessageBytes);
+        }
         return _client.Open(url, std::move(settings));
     }
 
