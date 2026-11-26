@@ -37,14 +37,17 @@ namespace BECore::Tests {
             if constexpr (!AllocTracker::kEnabled) {
                 GTEST_SKIP() << kNoAllocTracker;
             }
-            for (const String& request : {Ping(), LogSince()}) {
-                for (int round = 0; round < kRounds; ++round) {
-                    const AllocCount counted = CountAllocations([&] {
-                        service.Post(request, [this](const String& text) { replyBytes += text.size(); });
-                        service.Drain();
-                    });
-                    if (round > 0) {
-                        EXPECT_EQ(counted.count, 0u) << "round " << round << " of " << request.c_str();
+            const IntrusivePtr<ControlClient> client = service.OpenConnectionClient();
+            for (const IntrusivePtr<ControlClient>& asker : {IntrusivePtr<ControlClient>(), client}) {
+                for (const String& request : {Ping(), LogSince()}) {
+                    for (int round = 0; round < kRounds; ++round) {
+                        const AllocCount counted = CountAllocations([&] {
+                            service.Post(request, [this](const String& text) { replyBytes += text.size(); }, asker);
+                            service.Drain();
+                        });
+                        if (round > 0) {
+                            EXPECT_EQ(counted.count, 0u) << "round " << round << " of " << request.c_str() << (asker ? " with a client" : "");
+                        }
                     }
                 }
             }

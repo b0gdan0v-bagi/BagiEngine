@@ -591,7 +591,7 @@ namespace BECore {
         service.RegisterHandler("ui_tree", HandleUITree);
         service.RegisterHandler("ui_click", HandleUIClick);
 
-        service.DescribeMethod("ui_tree", {"The canvases and elements of the active scene with their rects and the validator's findings", {}});
+        service.DescribeMethod("ui_tree", {"The canvases and elements of the active scene with their rects and the validator's findings", {}, /*quiet=*/true});
         service.DescribeMethod("ui_click", {"Clicks a visible button, toggle or slider by its name as a person would",
                                             {{"name", "string", true, "The name of the element"},
                                              {"canvas", "string", false, "The scene node of the canvas, when the name is not unique"},

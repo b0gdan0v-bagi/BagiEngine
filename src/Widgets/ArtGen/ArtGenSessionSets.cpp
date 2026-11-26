@@ -782,7 +782,8 @@ namespace BECore {
                                   "an image set: the atlas group its sprites join, packed into assets/atlases/<group>.png (Accept all packs once); \"\" for none; missing takes the preset's "
                                   "atlas key at this call, and the set keeps it; refused for a sound set"}}});
         service.DescribeMethod("artgen_set", ControlMethodInfo{"One set as its manifest.json, plus state (Active while a job is pending or running, else Complete)",
-                                                               {ControlParamInfo{"set", "string", true, "the set's name"}}});
+                                                               {ControlParamInfo{"set", "string", true, "the set's name"}},
+                                                               /*quiet=*/true});
         service.DescribeMethod("artgen_pick",
                                ControlMethodInfo{"Picks the variant of a job that Accept all takes (kept in the manifest); on a row already accepted and not kept it switches the game "
                                                  "to that variant (the same name; `switched` is the acceptor's answer), unless another set accepted that name later; a kept row takes no pick",

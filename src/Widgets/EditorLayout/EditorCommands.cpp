@@ -79,6 +79,8 @@ namespace BECore {
                 {kExportRun, "Export: Run", std::nullopt, false},
                 {kExportStop, "Export: Stop Server", std::nullopt, false},
                 {kExportCheck, "Export: Check Assets", std::nullopt, false},
+                {kViewActivity, "Activity", std::nullopt, true},
+                {kActivityClear, "Activity: Clear", std::nullopt, false},
                 {kConsolePause, "Console: Pause / Resume", std::nullopt, true},
                 {kConsoleClear, "Console: Clear Log", std::nullopt, true},
                 {kConsoleClearOutput, "Console: Clear Output", std::nullopt, true},

@@ -77,6 +77,14 @@ namespace BECore {
         String log;  // the last line the service said
         String error;
         bool cancelRequested = false;
+
+        /// How far the step in work is, 0 to 1; none while the service reported no total
+        [[nodiscard]] Optional<float> GetFraction() const {
+            if (total <= 0) {
+                return {};
+            }
+            return static_cast<float>(static_cast<double>(done) / static_cast<double>(total));
+        }
     };
 
     /// One request and what came back for it
@@ -100,6 +108,13 @@ namespace BECore {
         int32_t keptVariants = 0;             // the variants of the last run it started with (Request with keepVariants)
         Optional<ArtGenReference> reference;  // the picture the run starts from, sent in the request; a job of a set has its set's
         bool cancelRequested = false;
+
+        /// How far the run is, 0 to 1: the images it made itself and the step of the one in work, of its count
+        [[nodiscard]] float GetFraction() const {
+            const int32_t made = static_cast<int32_t>(variants.size()) - keptVariants;
+            const float perImage = steps > 0 ? static_cast<float>(step) / static_cast<float>(steps) : 0.0f;
+            return count > 0 ? (static_cast<float>(made) + perImage) / static_cast<float>(count) : 0.0f;
+        }
     };
 
     /// What EnqueueSet takes: one preset applied to a list of subjects

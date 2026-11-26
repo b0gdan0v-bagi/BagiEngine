@@ -42,7 +42,7 @@ To keep a bug as a test, call record_start right after launch_game (or pass reco
 a scenario that replays from a fresh start of the game, and its calls become the test.
 """
 
-session = GameSession()
+session = GameSession(client_name="mcp")
 server = MCPServer("bagi", instructions=INSTRUCTIONS)
 
 

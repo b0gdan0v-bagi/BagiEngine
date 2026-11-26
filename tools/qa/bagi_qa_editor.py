@@ -55,6 +55,7 @@ LEFT_DOCK_SPLITTER = (211.0, 400.0)  # the gap between the left column and the v
 LEFT_DOCK_DRAG_TO = (500.0, 700.0)
 ROW_CLICK_OFFSET = 60.0  # a hierarchy row also holds hide and lock toggles at its right end: click near its left
 ITEM_LIMIT = 500
+PANEL_CLOSE_FRAMES = 12  # at the default step, longer than the fade of a closing panel, whose window is drawn until it ends
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,7 @@ def close_panel(session: Any, title: str) -> None:
     if not panel_open(session, title):
         return
     _toggle_from_menu(session, title)
+    session.step(PANEL_CLOSE_FRAMES)
     if panel_open(session, title):
         raise SessionError(f"the panel '{title}' did not close after View, {_panel(title).menu_item}")
 

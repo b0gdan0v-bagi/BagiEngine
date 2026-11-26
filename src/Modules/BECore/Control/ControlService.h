@@ -1,9 +1,11 @@
 #pragma once
 
+#include <BECore/Control/ControlClient.h>
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonView.h>
 #include <BECore/Control/RequestBuffers.h>
 #include <BECore/Memory/ArenaAllocator.h>
+#include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockSite.h>
 #include <BECore/Threading/Mutex.h>
@@ -13,6 +15,7 @@
 
 namespace BECore {
 
+    class ControlActivity;
     class ControlCall;
     class ControlLog;
     class ControlRoots;
@@ -28,7 +31,7 @@ namespace BECore {
      * is answered, except those of methods registered with bypassBarrier. All state of the manual clock lives here,
      * so that a test can play the application loop without the application.
      *
-     * Everything except Post() belongs to the main thread.
+     * Everything except Post() and the opening and closing of clients belongs to the main thread.
      */
     class ControlService {
     public:
@@ -56,14 +59,29 @@ namespace BECore {
         ControlService(const ControlService&) = delete;
         ControlService& operator=(const ControlService&) = delete;
 
+        /// A client for a connection a transport accepted, with an id of its own and no name. Any thread. The main thread learns of it at the start of the next
+        /// Drain(), before any request posted after this call; the barrier holds no such notice. After Shutdown() nobody is told
+        [[nodiscard]] IntrusivePtr<ControlClient> OpenConnectionClient();
+
+        /// Tells the main thread, as OpenConnectionClient() does, that the connection of @p client ended; once per connection client. Any thread. Requests the
+        /// client posted may still run afterwards (the barrier may hold them), with the same client
+        void CloseConnectionClient(IntrusivePtr<ControlClient> client);
+
+        /// A client of a part of the program itself, named @p name, which posts with no connection and sends no notice. Any thread
+        [[nodiscard]] IntrusivePtr<ControlClient> OpenLocalClient(StringView name);
+
+        /// Gives @p client the name @p name, which the caller has checked (`client_hello`). Main thread
+        void RenameClient(ControlClient& client, StringView name);
+
         /**
          * @brief Queues a request. Thread-safe.
          *
          * @p requestText is copied and tokenized here, on the posting thread (`JsonTape`); a request that is not valid is answered with an error
          * when its turn comes, so the order of the answers stays the order of the requests. @p reply gets the response
-         * on the main thread. After Shutdown() the request is answered at once, on the calling thread.
+         * on the main thread. After Shutdown() the request is answered at once, on the calling thread. @p client is who asks (ControlCall::GetClient());
+         * none is the engine's own call.
          */
-        void Post(StringView requestText, ControlReplyFn reply);
+        void Post(StringView requestText, ControlReplyFn reply, IntrusivePtr<ControlClient> client = {});
 
         /// Registers (or replaces) the handler of @p method. A method with @p bypassBarrier runs even while a deferred call is pending
         void RegisterHandler(StringView method, Handler handler, bool bypassBarrier = false);
@@ -84,6 +102,16 @@ namespace BECore {
 
         [[nodiscard]] const ControlLog& Log() const {
             return *_log;
+        }
+
+        /// Who connected, who named itself and which calls that act were answered (a method described as `quiet` is left out; the answers of Shutdown() are
+        /// not calls it lists). Main thread only
+        [[nodiscard]] ControlActivity& Activity() {
+            return *_activity;
+        }
+
+        [[nodiscard]] const ControlActivity& Activity() const {
+            return *_activity;
         }
 
         /// Says what @p method does and which parameters it reads (for list_methods and the completion of a console). Kept apart from the handler: registering the
@@ -221,6 +249,10 @@ namespace BECore {
             bool bypassBarrier = false;
             uint64_t generation = 0;  // the registration that made this entry; a running handler goes back only if it is still the current one
         };
+        struct ClientNotice {
+            IntrusivePtr<ControlClient> client;
+            bool connected = false;
+        };
         struct ObserverEntry {
             PublishObserverId id = kNoPublishObserver;  // reset to none by a removal while Publish runs the observers
             PublishObserver observer;
@@ -233,6 +265,9 @@ namespace BECore {
 
         void ParseRequest(StringView text, Request& request);
 
+        /// Applies the connects and disconnects taken from the queue, in the order they happened
+        void DeliverClientNotices();
+
         /// Buffers for one request: a recycled pair when the free list has one, else new. Any thread
         [[nodiscard]] RequestBuffersPtr AcquireBuffers();
 
@@ -242,8 +277,11 @@ namespace BECore {
         /// Write a response into the reply buffer and give it to @p reply (main thread: ControlCall and the answers of Process and Shutdown). The buffer
         /// keeps its capacity between replies; a reply sent from inside a reply function gets a local String, never the busy buffer. SendOk sends the error
         /// response in place of the result when @p writeResult fails or does not write one value
-        void SendOk(ControlReplyFn& reply, StringView id, WriteResultFn writeResult);
+        void SendOk(ControlCall& call, WriteResultFn writeResult);
         void SendError(ControlReplyFn& reply, StringView id, const ControlError& error);
+
+        /// Puts the answer of @p call into the journal, unless its method is quiet; @p error is empty for a success. Main thread
+        void RecordCall(const ControlCall& call, StringView error);
 
         [[nodiscard]] bool BypassesBarrier(const Request& request) const;
         void Process(Request& request);
@@ -258,15 +296,19 @@ namespace BECore {
         Vector<UniquePtr<RequestBuffers>> _freeBuffers;  // guarded by _buffersMutex
 
         Mutex _mutex{BE_LOCK_SITE("Control queue")};
-        ConditionVariable _posted;        // notified by Post(); WaitForRequests() waits on it
-        Fifo<UniquePtr<Request>> _queue;  // posted, not yet seen by the main thread; guarded by _mutex
-        bool _stopped = false;            // guarded by _mutex
+        ConditionVariable _posted;            // notified by Post() and by a client notice; WaitForRequests() waits on it
+        Fifo<UniquePtr<Request>> _queue;      // posted, not yet seen by the main thread; guarded by _mutex
+        Vector<ClientNotice> _queuedNotices;  // not yet seen by the main thread; guarded by _mutex
+        uint64_t _lastClientId = 0;           // guarded by _mutex, so the notices are in the order of the ids
+        bool _stopped = false;                // guarded by _mutex
 
         // Main thread only
         Fifo<UniquePtr<Request>> _inbox;  // taken from _queue, in order, waiting for the barrier
+        Vector<ClientNotice> _notices;    // taken from _queuedNotices, empty between two Drain() calls; the two swap, so both keep their capacity
         HashMap<String, HandlerEntry> _handlers;
         UniquePtr<ControlRoots> _roots;                    // behind a pointer so this header does not pull in the reflection registry
         UniquePtr<ControlLog> _log;                        // behind a pointer so this header does not pull in the logger
+        UniquePtr<ControlActivity> _activity;              // behind a pointer for the same reason
         HashMap<String, ControlMethodInfo> _descriptions;  // beside the handlers, so a handler registered again keeps its description
         uint64_t _methodsVersion = 0;
         // Before _pending: a deferred call that owns an observer (run_until) removes it when it dies with the service

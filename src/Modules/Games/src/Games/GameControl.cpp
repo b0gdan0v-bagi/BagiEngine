@@ -559,11 +559,11 @@ namespace BECore {
                                      return game == nullptr ? TypedRef{} : TypedRef::Of(*game);
                                  }});
 
-        service.DescribeMethod("list_games", {"The registered games and the active one", {}});
+        service.DescribeMethod("list_games", {"The registered games and the active one", {}, /*quiet=*/true});
         service.DescribeMethod("switch_game", {"Makes another game the active one", {{"name", "string", true, "The name of the game, as list_games gives it"}}});
         service.DescribeMethod("reset", {"Starts the active game again; the parameters are the game's own", {}});
-        service.DescribeMethod("get_state", {"The state of the active game and its version", {}});
-        service.DescribeMethod("list_actions", {"The actions the active game accepts now", {}});
+        service.DescribeMethod("get_state", {"The state of the active game and its version", {}, /*quiet=*/true});
+        service.DescribeMethod("list_actions", {"The actions the active game accepts now", {}, /*quiet=*/true});
         service.DescribeMethod("perform_action", {"Plays an action of the active game; the parameters are the game's (see list_actions and its control header)", {}});
         service.DescribeMethod("set_state", {"Sets the state of the active game; the parameters are the game's (see its control header)", {}});
 
@@ -573,7 +573,8 @@ namespace BECore {
              {{"condition", "object", true,
                "Exactly one of {pointer, equals} (a JSON pointer into the answer of get_state), {versionMoved: true} or {event: {name, equal?}} (a pushed event whose data has these members)"},
               {"maxFrames", "integer", false, Format("Most frames to wait, 1 to {} (default {})", kMaxStepFrames, kDefaultRunUntilFrames)},
-              {"dt", "number", false, Format("Seconds each frame lasts on the manual clock, 0 to {} (default 1/60)", Time::kMaxFrameTime)}}});
+              {"dt", "number", false, Format("Seconds each frame lasts on the manual clock, 0 to {} (default 1/60)", Time::kMaxFrameTime)}},
+             /*quiet=*/true});
 
         RegisterReplayControl(service);
 

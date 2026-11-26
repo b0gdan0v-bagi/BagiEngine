@@ -9,6 +9,7 @@
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
 #include <Events/ConfigEvents.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/Feedback/UIMotion.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/PanelAssets/PanelInterpreter.h>
@@ -32,6 +33,10 @@ namespace BECore {
      *
      * A change of the asset's config is only noted by the event and applied at the next `Update` or at the end of the command being run: the event can
      * come from inside a model's own command (applying the panel's file), and a reload may drop that very model.
+     *
+     * **Fade.** A `Docked` or `Floating` window fades in when it is opened and out when it is closed; one that is open when the widget first reads its
+     * asset is opaque at once. While it fades out the panel counts as closed (no command, no `Update`, the models already told) and the window is
+     * still begun, with no input and an empty body.
      *
      * **Window kinds** (`PanelAsset::window`). `Docked` is an ordinary window. `Floating` is `ImGuiWindowFlags_NoDocking`. `Dialogs` is always open (the open flag is forced true every
      * `Update`, and the asset's `command`, when it has one, does not toggle it): the host is a one-pixel window that draws nothing and takes no input, with no close button, so the only
@@ -98,6 +103,8 @@ namespace BECore {
         void NotifyOpenChanged();
         void DrawBanner() const;
         void DrawBarBanner() const;
+        /// A frame of a closed window that has not faded out yet; nothing once it has
+        void DrawFadingOut();
         void EmitClick();
         /// Keeps the registration of a `Bar` asset and drops it when a reload made the asset another kind
         void SyncBarRegistration(bool bar);
@@ -120,6 +127,10 @@ namespace BECore {
         PanelBinding _titleBinding;
         PanelBindingReader _titleReader;
         bool _hasTitleBinding = false;
+        Fade _fade;
+        /// The size of what the open window drew last, which the empty body of a fading one keeps
+        float _contentWidth = 0.0f;
+        float _contentHeight = 0.0f;
         uint32_t _preparedVersion = 0;
         bool _open = false;
         bool _openDecided = false;

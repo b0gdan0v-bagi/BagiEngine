@@ -315,7 +315,7 @@ namespace BECore {
             }
         }
         if (ok) {
-            NotifyConfigChanged(name);  // the lock is released: a subscriber may call the manager
+            ConfigEvents::ConfigChangedEvent::Emit(name, ConfigEvents::ConfigChangeCause::Saved);  // the lock is released: a subscriber may call the manager
         }
         return ok;
     }
@@ -325,7 +325,7 @@ namespace BECore {
         ASSERT(_initialized.load(std::memory_order_acquire));
         const bool reloaded = ReloadFromDisk(name, false, nullptr);
         if (reloaded) {
-            NotifyConfigChanged(name);
+            ConfigEvents::ConfigChangedEvent::Emit(name, ConfigEvents::ConfigChangeCause::Reloaded);
         }
         return reloaded;
     }
@@ -401,7 +401,7 @@ namespace BECore {
     }
 
     void ConfigManager::NotifyConfigChanged(PoolString name) const {
-        ConfigEvents::ConfigChangedEvent::Emit(name);
+        ConfigEvents::ConfigChangedEvent::Emit(name, ConfigEvents::ConfigChangeCause::Edited);
     }
 
     void ConfigManager::StartWatching(FileWatcher& watcher) {
@@ -441,7 +441,7 @@ namespace BECore {
         }
         String failure;
         if (ReloadFromDisk(name, true, &failure)) {
-            NotifyConfigChanged(name);
+            ConfigEvents::ConfigChangedEvent::Emit(name, ConfigEvents::ConfigChangeCause::Reloaded);
         } else if (!failure.empty()) {
             change.ok = false;
             change.error = failure;

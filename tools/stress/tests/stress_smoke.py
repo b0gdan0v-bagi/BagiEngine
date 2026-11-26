@@ -494,6 +494,7 @@ def drive_editor_panels(client: BagiControlClient) -> None:
 
     chord = [{"type": "key", "key": "G", "mods": ["ctrl", "shift"]}]
     client.call("imgui_input", {"events": chord})
+    client.call("step", {"frames": editor.PANEL_CLOSE_FRAMES})
     check_game_panel_window(client, False, "after the chord Ctrl+Shift+G")
     client.call("imgui_input", {"events": chord})
     check_game_panel_window(client, True, "after the chord Ctrl+Shift+G again")

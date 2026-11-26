@@ -13,6 +13,7 @@
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Feedback/ToastEvents.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
@@ -30,6 +31,7 @@ namespace BECore {
 
     namespace {
         constexpr float kUITreeHeight = 160.0f;
+        constexpr StringView kSaveFailedText = "Scene save failed";
         constexpr StringView kToolbarAsset = "SceneEditorToolbarPanel";
         constexpr StringView kInspectorAsset = "SceneInspectorPanel";
         constexpr StringView kComponentsSlot = "sceneComponents";
@@ -513,14 +515,12 @@ namespace BECore {
 
         auto& configManager = CoreManager::GetConfigManager();
         auto xmlRoot = configManager.GetConfig(ConfigNames::scene);
-        if (!xmlRoot) {
-            return;
-        }
 
         // An instance of a node file is saved as its <node ref> with the overrides; one that cannot be goes inline and is told here
         const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
         Vector<String> notes;
-        if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
+        if (!xmlRoot || !WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
+            EditorToastEvent::Emit(ToastLevel::Error, kSaveFailedText);
             return;
         }
         for (const String& note : notes) {
@@ -529,6 +529,8 @@ namespace BECore {
 
         if (configManager.SaveConfig(ConfigNames::scene)) {
             _isDirty = false;
+        } else {
+            EditorToastEvent::Emit(ToastLevel::Error, kSaveFailedText);
         }
     }
 

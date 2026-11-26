@@ -13,6 +13,7 @@
 #include <Widgets/EditorLayout/LayoutStore.h>
 #include <Widgets/EditorLayout/MainToolbar.h>
 #include <Widgets/EditorLayout/StatusBar.h>
+#include <Widgets/Feedback/ToastOverlay.h>
 #include <expected>
 #include <imgui.h>
 
@@ -21,7 +22,7 @@ namespace BECore {
     class IDeserializer;
 
     // Full-screen DockSpace host that provides the unified editor layout, with the main toolbar under the menu bar and the status bar
-    // at the bottom (both children of the host, so the dock layout and imgui.ini do not know them).
+    // at the bottom (both children of the host, so the dock layout and imgui.ini do not know them). The editor's toasts are drawn by it too.
     // Must be registered after ImGuiWidget and the `Bar` assets it draws (`MainToolbarPanel`, `MainMenuPanel`: their models update before
     // this widget draws them) and before the other editor windows, so they dock into this space.
     //
@@ -85,6 +86,7 @@ namespace BECore {
         EditorPlayModel _playModel;
         EditorChordText _chordText;
         StatusBar _statusBar;
+        ToastOverlay _toasts;
 
         CommandPalette _palette;
 

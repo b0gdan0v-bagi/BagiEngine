@@ -1938,4 +1938,194 @@ namespace BECore::Tests {
         EXPECT_TRUE(coreResponses[0].IsOk());
     }
 
+    namespace {
+
+        /// What a handler saw of the client that asked
+        struct SeenClient {
+            uint64_t id = 0;  // 0: the call had no client
+            String name;
+            bool connected = false;
+        };
+
+        void RegisterWho(ControlService& service, Vector<SeenClient>& seen, StringView method = "who") {
+            service.RegisterHandler(method, [&seen](ControlCall& call) {
+                SeenClient& entry = seen.emplace_back();
+                if (const ControlClient* client = call.GetClient()) {
+                    entry.id = client->GetId();
+                    entry.name = client->GetName();
+                    entry.connected = client->IsConnected();
+                }
+                call.ReplyEmpty();
+            });
+        }
+
+    }  // namespace
+
+    TEST_F(ControlServiceTest, ClientHelloNamesTheClientAndASecondOneRenamesIt) {
+        RegisterControlBuiltins(service);
+        const IntrusivePtr<ControlClient> client = service.OpenConnectionClient();
+
+        service.Post(MakeRequestText(1, "client_hello", R"({"name":"hello_name_5d02a1"})"), Collect(), client);
+        service.Drain();
+        EXPECT_EQ(client->GetName(), "hello_name_5d02a1");
+        service.Post(MakeRequestText(2, "client_hello", R"({"name":"second"})"), Collect(), client);
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 2u);
+        ASSERT_TRUE(responses[0].IsOk());
+        EXPECT_EQ(IntOf(ResultOf(0), "id").value_or(0), static_cast<int64_t>(client->GetId()));
+        EXPECT_EQ(StringOf(ResultOf(0), "name"), "hello_name_5d02a1");
+        EXPECT_EQ(StringOf(ResultOf(1), "name"), "second");
+        EXPECT_EQ(client->GetName(), "second");
+        EXPECT_FALSE(PoolString::Find(StringView{"hello_name_5d02a1"}).has_value());
+    }
+
+    TEST_F(ControlServiceTest, ClientHelloRefusesABadNameAndKeepsTheOldOne) {
+        RegisterControlBuiltins(service);
+        const IntrusivePtr<ControlClient> client = service.OpenLocalClient("before");
+        const String tooLong(kMaxControlClientNameBytes + 1, 'a');
+        const Vector<String> refused = {
+            R"({})",
+            R"({"name":""})",
+            R"({"name":7})",
+            R"({"name":"a\nb"})",
+            R"({"name":"a\u0000b"})",
+            R"({"name":"del\u007f"})",
+            R"({"name":"next\u0085line"})",
+            Format(R"({{"name":"{}"}})", tooLong),
+        };
+
+        for (const String& params : refused) {
+            service.Post(MakeRequestText(1, "client_hello", params), Collect(), client);
+        }
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), refused.size());
+        for (size_t i = 0; i < refused.size(); ++i) {
+            EXPECT_EQ(responses[i].ErrorCode(), "invalid_params") << refused[i].c_str();
+        }
+        EXPECT_EQ(client->GetName(), "before");
+
+        // The longest name there is, with characters of two bytes whose second byte alone is in the range of the C1 controls
+        String longest;
+        while (longest.size() < kMaxControlClientNameBytes) {
+            longest += "\xD0\x90";  // U+0410
+        }
+        service.Post(MakeRequestText(2, "client_hello", Format(R"({{"name":"{}"}})", longest)), Collect(), client);
+        service.Drain();
+        EXPECT_EQ(client->GetName(), longest);
+    }
+
+    TEST_F(ControlServiceTest, ClientHelloOfACallWithoutAClientFails) {
+        RegisterControlBuiltins(service);
+
+        Post(MakeRequestText(1, "client_hello", R"({"name":"nobody"})"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(responses[0].ErrorCode(), ControlErrors::kNoClient);
+    }
+
+    TEST_F(ControlServiceTest, ANestedCallHasTheClientOfTheOuterOneAfterFramesToo) {
+        RegisterControlBuiltins(service);
+        Vector<SeenClient> seen;
+        RegisterWho(service, seen);
+        const IntrusivePtr<ControlClient> client = service.OpenLocalClient("batcher");
+        service.SetManualClock(true);
+
+        service.Post(MakeRequestText(1, "batch", R"({"calls":[{"method":"who"},{"method":"step"},{"method":"who"},{"method":"client_hello","params":{"name":"renamed"}},{"method":"who"}]})"),
+                     Collect(), client);
+        service.Drain();
+        RunDueFrames();
+
+        ASSERT_EQ(seen.size(), 3u);
+        for (const SeenClient& entry : seen) {
+            EXPECT_EQ(entry.id, client->GetId());
+        }
+        EXPECT_EQ(seen[1].name, "batcher");
+        EXPECT_EQ(seen[2].name, "renamed");
+    }
+
+    TEST_F(ControlServiceTest, ClientsHaveTheirOwnIdsAndALocalOneIsNoConnection) {
+        const IntrusivePtr<ControlClient> first = service.OpenConnectionClient();
+        const IntrusivePtr<ControlClient> local = service.OpenLocalClient("tool");
+        const IntrusivePtr<ControlClient> second = service.OpenConnectionClient();
+        service.Drain();
+
+        EXPECT_GT(first->GetId(), 0u);
+        EXPECT_GT(local->GetId(), first->GetId());
+        EXPECT_GT(second->GetId(), local->GetId());
+        EXPECT_TRUE(local->IsLocal());
+        EXPECT_FALSE(local->IsConnected());
+        EXPECT_EQ(local->GetName(), "tool");
+        EXPECT_FALSE(first->IsLocal());
+        EXPECT_TRUE(first->IsConnected());
+        EXPECT_TRUE(first->GetName().empty());
+    }
+
+    TEST_F(ControlServiceTest, ConnectsAndDisconnectsReachTheMainThreadBeforeTheRequestsBehindThem) {
+        Vector<SeenClient> seen;
+        RegisterWho(service, seen);
+
+        const IntrusivePtr<ControlClient> client = service.OpenConnectionClient();
+        EXPECT_FALSE(client->IsConnected());
+        service.Post(MakeRequestText(1, "who"), Collect(), client);
+        service.Drain();
+        EXPECT_TRUE(client->IsConnected());
+
+        service.CloseConnectionClient(client);
+        EXPECT_TRUE(client->IsConnected());
+        service.Drain();
+        EXPECT_FALSE(client->IsConnected());
+
+        // Both between two drains: applied in the order they happened
+        const IntrusivePtr<ControlClient> brief = service.OpenConnectionClient();
+        service.CloseConnectionClient(brief);
+        service.Drain();
+        EXPECT_FALSE(brief->IsConnected());
+
+        ASSERT_EQ(seen.size(), 1u);
+        EXPECT_TRUE(seen[0].connected);
+    }
+
+    TEST_F(ControlServiceTest, TheBarrierHoldsARequestButNoNoticeAndAHeldRequestKeepsItsClient) {
+        RegisterControlBuiltins(service);
+        Vector<SeenClient> seen;
+        RegisterWho(service, seen);
+        RegisterDeferring("slow", 2);
+        service.Post(MakeRequestText(1, "slow"), Collect());
+        service.Drain();
+
+        IntrusivePtr<ControlClient> client = service.OpenConnectionClient();
+        service.Drain();
+        EXPECT_TRUE(client->IsConnected());
+
+        service.RenameClient(*client, "gone");
+        service.Post(MakeRequestText(2, "who"), Collect(), client);
+        service.CloseConnectionClient(std::move(client));  // the request is the only holder from now on
+        service.Drain();
+        EXPECT_TRUE(seen.empty());
+
+        service.EndFrame();
+        service.EndFrame();
+        service.Drain();
+
+        ASSERT_EQ(seen.size(), 1u);
+        EXPECT_EQ(seen[0].name, "gone");
+        EXPECT_FALSE(seen[0].connected);
+    }
+
+    TEST_F(ControlServiceTest, AClientNoticeEndsTheIdleWaitAndNobodyIsToldAfterShutdown) {
+        const IntrusivePtr<ControlClient> early = service.OpenConnectionClient();
+        service.WaitForRequests(std::chrono::minutes(5));  // returns at once: a notice is waiting
+        service.Shutdown();
+
+        const IntrusivePtr<ControlClient> late = service.OpenConnectionClient();
+        service.CloseConnectionClient(early);
+        service.Drain();
+
+        EXPECT_FALSE(late->IsConnected());
+        EXPECT_FALSE(early->IsConnected());
+    }
+
 }  // namespace BECore::Tests

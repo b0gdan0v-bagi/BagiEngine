@@ -185,15 +185,21 @@ namespace BECore {
                               {ControlParamInfo{"job", "string", false, "a job of a set: cancel it (a pending one at once, the running one through the service)"},
                                ControlParamInfo{"set", "string", false, "the set of the job (default: the only active set that has the job), or with all the set to cancel"},
                                ControlParamInfo{"all", "boolean", false, "with set: cancel every pending job and the running one"}}});
-        service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, the current run with its images, and a summary of each set", {}});
+        service.DescribeMethod("artgen_state", ControlMethodInfo{"The art generation service as the editor sees it, the current run with its images, and a summary of each set", {}, /*quiet=*/true});
         service.DescribeMethod("artgen_setup", ControlMethodInfo{"Asks the art generation service to plan, install, start or stop its generator (the panel's Set up / Start / Stop)",
                                                                  {ControlParamInfo{"action", "string", true, "Plan, Install, Start, Stop, or cancel (an install in work)"}}});
         Register<&ArtGenSession::HandleSavePreset>(service, *this, "artgen_save_preset");
         service.DescribeMethod("artgen_save_preset", ControlMethodInfo{"Writes a style preset of the game (artgen/presets/<name>.json), as the panel's Save does",
                                                                        {ControlParamInfo{"name", "string", true, "1 to 64 of A-Z a-z 0-9 _ -"},
                                                                         ControlParamInfo{"preset", "object", true, "the preset (tools/artgen/CLAUDE.md, \"Presets\")"}}});
-        service.DescribeMethod("artgen_poll",
-                               ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request (with outDir and name for a job of a set) or a cancel out", {}});
+        service.DescribeMethod(
+            "artgen_poll",
+            ControlMethodInfo{"Called by the art generation service: its status in, the game root and a new request (with outDir and name for a job of a set) or a cancel out", {}, /*quiet=*/true});
+        service.DescribeMethod("artgen_progress",
+                               ControlMethodInfo{"Called by the art generation service: how far the image in work is; stale when the request is not the current one", {}, /*quiet=*/true});
+        service.DescribeMethod("artgen_image", ControlMethodInfo{"Called by the art generation service: one finished image or sound of the request", {}, /*quiet=*/true});
+        service.DescribeMethod("artgen_done", ControlMethodInfo{"Called by the art generation service: the request ended, with an error when it failed", {}, /*quiet=*/true});
+        service.DescribeMethod("artgen_setup_report", ControlMethodInfo{"Called by the art generation service: the plan, the progress or the end of a setup action", {}, /*quiet=*/true});
     }
 
     std::expected<uint32_t, String> ArtGenSession::Request(StringView preset, StringView subject, int32_t count, Optional<int64_t> seed, bool keepVariants, Optional<ArtGenReference> reference) {
