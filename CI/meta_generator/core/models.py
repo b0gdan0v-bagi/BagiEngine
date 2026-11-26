@@ -98,6 +98,7 @@ class FieldAttrs:
     readonly: bool = False
     hidden: bool = False
     required: bool = False
+    asset: str = ""  # the AssetKind name of asset(<Kind>); empty: no asset field
     # The generator's own flag: a pointer field of a factory base that is not a factory field (the scene tree). It is not a
     # FieldAttributes member, so it writes nothing into ReflectionTraits and does not make a field "have attributes".
     no_factory: bool = False
@@ -115,6 +116,7 @@ class FieldAttrs:
             "readonly": self.readonly,
             "hidden": self.hidden,
             "required": self.required,
+            "asset": self.asset,
             "no_factory": self.no_factory,
         }
 
@@ -129,6 +131,7 @@ class FieldAttrs:
             readonly=data.get("readonly", False),
             hidden=data.get("hidden", False),
             required=data.get("required", False),
+            asset=data.get("asset", ""),
             no_factory=data.get("no_factory", False),
         )
 

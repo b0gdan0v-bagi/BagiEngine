@@ -43,7 +43,9 @@ _RE_ATTR_NAME = re.compile(r'[A-Za-z_]\w*')
 _RE_ATTR_NUMBER = re.compile(r'[+-]?\s*(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[fF]?')
 _RE_ATTR_STRING = re.compile(r'"[ \n]*"')
 _ATTR_FLAGS = ('readonly', 'hidden', 'required', 'no_factory')
-_ATTR_NAMES = ('range', 'step', 'tooltip') + _ATTR_FLAGS
+_ATTR_NAMES = ('range', 'step', 'tooltip', 'asset') + _ATTR_FLAGS
+# The values of BECore::AssetKind a field can take: the kinds a string names by a file path that is dropped on it.
+_ATTR_ASSET_KINDS = ('Texture', 'Font', 'Sound', 'UiDocument')
 _RE_IDENT = re.compile(r'[A-Za-z_]\w*$')
 # Pure virtual declaration: `virtual X Foo() const = 0;`
 _RE_PURE_VIRTUAL = re.compile(r'\)\s*(?:const\s*)?(?:noexcept\s*)?(?:override\s*)?=\s*0\s*;')
@@ -542,6 +544,14 @@ def _parse_field_attrs(masked: str, raw: str, type_name: str, is_enum: bool) -> 
             else:
                 begin, end = args[0]
                 attrs.tooltip = raw[masked.index('"', begin, end) + 1:masked.rindex('"', begin, end)]
+        elif name == 'asset':
+            word = masked[args[0][0]:args[0][1]].strip() if count == 1 else ''
+            if word not in _ATTR_ASSET_KINDS:
+                problems.append(f"'asset' takes one asset kind: asset({', '.join(_ATTR_ASSET_KINDS)})")
+            elif not is_string_type(type_name):
+                problems.append("'asset' ignored: it needs a string field")
+            else:
+                attrs.asset = word
         elif kind is not None:
             problems.append(f"'{name}' ignored: it has no meaning on {kind} field")
         elif name == 'range':

@@ -21,7 +21,7 @@ namespace BECore {
         }
 
         BE_REFLECT_FIELD PoolString _spriteId;
-        BE_REFLECT_FIELD PoolString _texturePath;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(asset(Texture)) PoolString _texturePath;
         BE_REFLECT_FIELD Rect _srcRect{};
         BE_REFLECT_FIELD SpriteFit _fit = SpriteFit::Stretch;
         BE_REFLECT_FIELD BlendMode _blend = BlendMode::Alpha;  ///< how the sprite blends with what is behind it; Alpha is straight alpha

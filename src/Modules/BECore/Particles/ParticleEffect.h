@@ -118,8 +118,8 @@ namespace BECore {
 
         // Drawing
         BE_REFLECT_FIELD ParticleFlipbook flipbook;
-        BE_REFLECT_FIELD PoolString spriteId;     ///< a sprite of the TextureLibrary; empty and no `texturePath` draws plain squares
-        BE_REFLECT_FIELD PoolString texturePath;  ///< a texture file, used when `spriteId` is empty (the whole texture)
+        BE_REFLECT_FIELD PoolString spriteId;                                    ///< a sprite of the TextureLibrary; empty and no `texturePath` draws plain squares
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(asset(Texture)) PoolString texturePath;  ///< a texture file, used when `spriteId` is empty (the whole texture)
         BE_REFLECT_FIELD BlendMode blend = BlendMode::Alpha;
         BE_REFLECT_FIELD ParticleFrameClass frameClass = ParticleFrameClass::FiniteEffect;
 

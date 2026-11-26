@@ -78,7 +78,7 @@ namespace BECore {
 
         /// A screen in a file of its own, a UIDocument such as `assets/ui/hud.ui.xml`. Its elements and variants come first, the inline ones below come after them
         /// (drawn on top, and a later variant wins). The elements of a file belong to the file: they are not saved back with the scene
-        BE_REFLECT_FIELD PoolString _source;
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(asset(UiDocument)) PoolString _source;
 
         /// The elements and variants written inline in the scene file (`<elements><element type="UIPanel" .../></elements>`, `<variants>`). Initialize() hands them to
         /// the layout; they stay here as the part of the screen that is saved back. Elements added in code are not in this list

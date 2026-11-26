@@ -33,7 +33,7 @@ namespace BECore {
             return false;
         }
 
-        BE_REFLECT_FIELD PoolString _clip;  ///< the path of a .wav or .ogg
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(asset(Sound)) PoolString _clip;  ///< the path of a .wav or .ogg
         BE_REFLECT_FIELD AudioBus _bus = AudioBus::Sfx;
         BE_REFLECT_FIELD BE_FIELD_ATTRS(range(0, 1)) float _volume = 1.0f;
         BE_REFLECT_FIELD bool _playOnStart = false;
