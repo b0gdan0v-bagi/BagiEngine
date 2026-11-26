@@ -100,6 +100,10 @@ namespace BECore {
         [[nodiscard]] uint64_t GetFrameCount() const {
             return _frames;
         }
+        /// The FrameStats::frame that the open frame will get at its end; between two frames, that of the next one
+        [[nodiscard]] uint64_t GetOpenFrameNumber() const {
+            return _frames + 1;
+        }
 
         /// Times one stage of the collector for the length of a scope
         class StageScope {
