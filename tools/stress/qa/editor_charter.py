@@ -233,6 +233,7 @@ def chord(session: QaSession) -> None:
     """The Game panel's chord shuts it and opens it again; the panel was opened from the menu, so it starts open."""
     for expected in (False, True):
         editor.press_chord(session, editor.GAME_PANEL_CHORD)
+        session.step(editor.PANEL_CLOSE_FRAMES)
         if editor.panel_open(session, "Game Panel") != expected:
             session.flag(NAME_CHORD_NO_EFFECT, f"after Ctrl+Shift+G the Game panel is {'open' if not expected else 'closed'}, expected {'open' if expected else 'closed'}")
     session.shot("chord-game-panel", EDITOR_SHOT_SIZE)

@@ -10,6 +10,7 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 | `ToastOverlay.{h,cpp}` | the toasts on screen; ImGui |
 | `EditorProgress.{h,cpp}` | `EditorProgressRegistry`: the sources of the status bar's progress strip; no ImGui |
 | `ActivityPanelModel.{h,cpp}` | the model of the Activity panel (`config/panels/ActivityPanel.xml`): the control journal as rows; no ImGui |
+| `UIMotion.{h,cpp}` | what moves by the frame's time: `Fade`, `HoverBlendTable`, the durations; no ImGui |
 
 ## Toasts
 
@@ -40,3 +41,12 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 - A client is shown by the name it has **now** (also in rows older than its `client_hello`), an unnamed one as `client N`, a call with no client as `engine`. Names and params are client text: the table draws them unformatted.
 - A game with its own `config/WidgetsConfig.xml` adds the `AssetPanelWidget` line of `ActivityPanel`, or has no panel behind the menu item.
 - Tests: `ActivityPanelModelTest`, `ActivityAssetTest` (over a service of its own, `ActivityTestModel.h`).
+
+## Motion
+
+- Three things move: a docked or floating asset panel fades in and out (`src/Widgets/PanelAssets/CLAUDE.md`), the command palette fades in, and the hover colour of a button blends (`IconButton`, `IconTextButton` and the asset panels' buttons, all through `BlendedButton` of `EditorLayout/EditorControls.h`). A new button of a panel goes through one of them.
+- A disabled button and a filled one (`ScopedHoverSnap`: a `fill`, a toggle that is on) keep ImGui's colours, which change at once.
+- The blend follows the hover one frame late, and an item that is not drawn for a frame starts from rest.
+- Time is `io.DeltaTime`: on the manual clock only a `step` moves them, so a closed panel's window stays drawn and a hovered button unlit until the clock goes on.
+- Nothing at rest is animated or allocates. Tests: `UIMotionTest`; the fill's colours, `PanelInterpreterTest`.
+

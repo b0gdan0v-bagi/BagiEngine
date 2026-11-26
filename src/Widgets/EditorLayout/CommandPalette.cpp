@@ -1,6 +1,7 @@
 #include "CommandPalette.h"
 
 #include <Widgets/EditorLayout/CommandFilter.h>
+#include <Widgets/EditorLayout/EditorControls.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -43,8 +44,14 @@ namespace BECore {
             _query[0] = '\0';
             _selected = 0;
             _focusQuery = true;
+            _fade.Snap(false);
             ImGui::OpenPopup(kPopupId);
         }
+        if (!ImGui::IsPopupOpen(kPopupId)) {
+            return {};
+        }
+        _fade.Advance(true, ImGui::GetIO().DeltaTime, kPaletteFadeSeconds);
+        const ScopedAlpha alpha(_fade.Alpha());
 
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         const ImVec2 anchor(viewport->GetCenter().x, viewport->WorkPos.y + viewport->WorkSize.y * kPaletteTopFraction);

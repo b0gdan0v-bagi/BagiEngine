@@ -3,6 +3,7 @@
 #include <BECore/PoolString/PoolString.h>
 #include <Widgets/EditorLayout/CommandFilter.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
+#include <Widgets/Feedback/UIMotion.h>
 #include <cstddef>
 
 namespace BECore {
@@ -14,7 +15,7 @@ namespace BECore {
      * @brief The command palette: a centered popup with a text field and the commands that match it.
      *
      * Owned by EditorLayoutWidget, which calls Open() on view.commandPalette and Draw() once per frame inside its window.
-     * Up and Down move the selection, Enter or a click chooses, Esc or a click outside closes. Draw returns the chosen
+     * It fades in as it opens. Up and Down move the selection, Enter or a click chooses, Esc or a click outside closes. Draw returns the chosen
      * command after the popup is closed; the caller emits EditorCommandEvent, so a command that opens a popup of its own
      * does not do it from inside this one.
      */
@@ -33,6 +34,7 @@ namespace BECore {
         int _selected = 0;
         bool _openRequested = false;
         bool _focusQuery = false;
+        Fade _fade;
         // The filtered rows and, parallel to them, the chord text of each; both change only with the query
         CommandMatchList _matches;
         Vector<String> _chordTexts;
