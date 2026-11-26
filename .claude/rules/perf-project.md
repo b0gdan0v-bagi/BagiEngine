@@ -15,7 +15,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
   "area": "engine",
   "preset": "macos-release",
   "profilePreset": "macos-profile",
-  "targets": ["BagiStress", "BagiEngineTests"],
+  "targets": ["BagiStress", "BagiEngineTests", "StressTests"],
   "repetitions": 5,
   "thresholdPercent": 3,
   "benchmarks": [
@@ -75,6 +75,17 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
         "cpu_ms_p50": {"source": "json", "key": "cpuMsP50", "unit": "ms/frame", "better": "lower", "gate": false},
         "draw_calls": {"source": "json", "key": "drawCalls", "unit": "per frame", "better": "lower", "gate": false},
         "allocs_per_frame": {"source": "json", "key": "allocsPerFrame", "unit": "per frame", "better": "lower", "gate": false}
+      }
+    },
+    {
+      "name": "stress-entities-aging",
+      "about": "The `entities` field as it ages (StressEntitiesAgingTest, no game loop): 100000 nodes, a frame of 1/32 s timed over the scene update and the advance of the tweens. young_ms is the median of the first 30 frames, old_ms of 60 frames after two more longest orbits of game time; old_over_young is the guard and about 1 is expected (the young frames also carry the growth of the tween manager's lists, so a little under 1 is normal). The line's young2_ms (not a metric) is the field built again in the same process: when old_ms is above young_ms, a young2_ms back near young_ms puts the cost on the age of the field, one near old_ms on the machine or on state that outlives a field (a pool's free list). On a Mac16,7 (M4 Pro), macos-release, engine 1bb44463a, three runs: young_ms 2.09 to 2.11, old_ms 1.99 to 2.04, old_over_young 0.94 to 0.97. gate false until a baseline shows the noise",
+      "fast": false,
+      "command": ["{bin}/StressTests", "--gtest_also_run_disabled_tests", "--gtest_filter=StressEntitiesAgingTest.DISABLED_*"],
+      "metrics": {
+        "old_over_young": {"source": "regex", "pattern": "^EntitiesAging .* old_over_young=([0-9.]+)", "unit": "ratio", "better": "lower", "gate": false},
+        "young_ms": {"source": "regex", "pattern": "^EntitiesAging .* young_ms=([0-9.]+)", "unit": "ms/frame", "better": "lower", "gate": false},
+        "old_ms": {"source": "regex", "pattern": "^EntitiesAging .* old_ms=([0-9.]+)", "unit": "ms/frame", "better": "lower", "gate": false}
       }
     },
     {
