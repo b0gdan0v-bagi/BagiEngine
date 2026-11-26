@@ -1,5 +1,6 @@
 #include "ArtGenSession.h"
 
+#include <BECore/Audio/AudioSourceComponent.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlParams.h>
 #include <BECore/Control/ControlService.h>
@@ -9,7 +10,9 @@
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/File/File.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneControl.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
 #include <EASTL/sort.h>
@@ -27,6 +30,17 @@ namespace BECore {
         double SteadySeconds() {
             const auto now = std::chrono::steady_clock::now().time_since_epoch();
             return std::chrono::duration<double>(now).count();
+        }
+
+        /// Reports to @p service that its call running now wrote @p field of the node's TComponent; nothing without a service or the component
+        template <typename TComponent>
+        void ReportUsedOn(ControlService* service, const SceneNode& node, StringView field) {
+            if (service == nullptr) {
+                return;
+            }
+            if (const auto component = node.GetComponent<TComponent>()) {
+                ReportNodeTouched(*service, node, component->GetTypeMeta().typeName, field);
+            }
         }
 
     }  // namespace
@@ -113,7 +127,11 @@ namespace BECore {
         }
         ArtGenImagePlan plan{settings != nullptr ? *settings : ImageSettingsOfRun(), {}};
         plan.atlas = atlas != nullptr ? *atlas : AtlasOfRun();
-        return _acceptor(*variant, sprite, plan, node);
+        auto accepted = _acceptor(*variant, sprite, plan, node);
+        if (accepted && node != nullptr) {
+            ReportUsedOn<SpriteRendererComponent>(_registeredOn, *node, "spriteId");
+        }
+        return accepted;
     }
 
     std::expected<ArtGenAcceptAnswer, ControlError> ArtGenSession::AcceptSound(int64_t seed, const ArtGenSoundTarget& target, const ArtGenSoundSettings& settings, bool useOnSelected) {
@@ -134,7 +152,11 @@ namespace BECore {
                 return std::unexpected(ControlError{String(kAcceptFailedCode), String("no node is selected in the scene editor")});
             }
         }
-        return _soundAcceptor(*variant, target, settings, node);
+        auto accepted = _soundAcceptor(*variant, target, settings, node);
+        if (accepted && node != nullptr) {
+            ReportUsedOn<AudioSourceComponent>(_registeredOn, *node, "clip");
+        }
+        return accepted;
     }
 
     void ArtGenSession::RegisterControl(ControlService& service) {

@@ -4,12 +4,20 @@
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNode.h>
 #include <Common/AllocCheck.h>
 #include <Common/ControlTestSupport.h>
+#include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
+#include <Common/SceneTestSupport.h>
+#include <Events/SubscriptionHolder.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/Feedback/ActivityPanelModel.h>
+#include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -40,7 +48,96 @@ namespace BECore::Tests {
             ActivityPanelModel model;
         };
 
+        /// The model over a service of its own, with a scene loaded from a string as the active one of the engine and an ear for its selection requests
+        class ActivityPanelSelectTest : public ActivityPanelModelTest, public SubscriptionHolder {
+        protected:
+            static void SetUpTestSuite() {
+                EngineEnvironment::EnsureCoreServices();
+            }
+
+            void SetUp() override {
+                ActivityPanelModelTest::SetUp();
+                XmlDeserializer deserializer;
+                const String xml = SceneConfigText(R"(<node name="A"><children><node name="B"/></children></node>)");
+                ASSERT_TRUE(deserializer.LoadFromString(xml.c_str()));
+                _manager = New<SceneManager>();
+                _manager->Deserialize(deserializer);
+                ASSERT_FALSE(deserializer.HasErrors());
+                _manager->Initialize();
+                EngineEnvironment::UseSceneManager(_manager);
+                _scene = _manager->GetActiveScene();
+                ASSERT_NE(_scene, nullptr);
+                Subscribe<SelectSceneNodeRequestEvent, &ActivityPanelSelectTest::OnSelectRequest>(this);
+            }
+
+            void TearDown() override {
+                UnsubscribeAll();
+                EngineEnvironment::UseSceneManager({});
+                _manager = {};
+            }
+
+            SceneNode& Node(const char* name) {
+                return Require(FindNodeBelow(_scene->GetRootNode(), name));
+            }
+
+            /// The model's answer to the button of a row
+            void Select(StringView argument) {
+                const PoolString command = EditorCommandIds::kActivitySelectNode;
+                EXPECT_TRUE(model.RunCommand(command.ToStringView(), argument));
+            }
+
+            void OnSelectRequest(const SelectSceneNodeRequestEvent& event) {
+                EXPECT_EQ(event.scene, _scene);
+                _requested.push_back(event.node);
+            }
+
+            IntrusivePtr<SceneManager> _manager;
+            Scene* _scene = nullptr;
+            Vector<const SceneNode*> _requested;
+        };
+
     }  // namespace
+
+    TEST_F(ActivityPanelSelectTest, ARowOfACallThatTouchedANodeSelectsThatNode) {
+        const uint64_t id = Node("B").GetRuntimeId();
+        service.RegisterHandler("touch", [this, id](ControlCall& call) {
+            service.ReportTouch(id);
+            call.ReplyEmpty();
+        });
+        const IntrusivePtr<ControlClient> client = service.OpenLocalClient("agent");
+        Send("touch", {}, client);
+        Send("act", {}, client);
+        model.Update();
+
+        ASSERT_EQ(model.GetView().rows.size(), 2u);
+        EXPECT_FALSE(Row(0).hasNode);
+        EXPECT_EQ(Row(0).node, "");
+        ASSERT_TRUE(Row(1).hasNode);
+
+        Select(Row(1).node);
+
+        ASSERT_EQ(_requested.size(), 1u);
+        EXPECT_EQ(_requested.front(), &Node("B"));
+    }
+
+    TEST_F(ActivityPanelSelectTest, AGoneNodeABadArgumentAndNoSceneAskForNothing) {
+        const String id = "{}"_format(Node("B").GetRuntimeId());
+        Select({});
+        Select("B");
+        Select("-1");
+        Select("0");
+        const String withTail = "{} "_format(Node("B").GetRuntimeId());
+        Select(withTail);
+
+        Node("A").RemoveChild(&Node("B"));
+        Select(id);
+
+        const String rootId = "{}"_format(_scene->GetRootNode().GetRuntimeId());
+        EngineEnvironment::UseSceneManager({});
+        Select(rootId);
+
+        EXPECT_TRUE(_requested.empty());
+    }
 
     TEST_F(ActivityPanelModelTest, TheRowsAreTheJournalNewestFirstWithWhoDidWhat) {
         const IntrusivePtr<ControlClient> client = service.OpenConnectionClient();

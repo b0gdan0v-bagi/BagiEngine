@@ -140,6 +140,13 @@ namespace BECore {
         _registered = true;
     }
 
+    void UICanvasComponent::OnPropertyWritten(StringView field) {
+        // The layout shares the authored elements, so only it has to be told; the settings of the canvas it notices by itself
+        if (field == "elements") {
+            _layout.Invalidate();
+        }
+    }
+
     void UICanvasComponent::RefreshInputOrder() {
         // The draw order can change after attaching (a node added, a layer edited): the input order follows it
         const int order = GetScene().GetInputOrder(*this);

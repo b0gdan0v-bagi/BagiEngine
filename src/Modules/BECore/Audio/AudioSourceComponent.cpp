@@ -15,6 +15,12 @@ namespace BECore {
         LoadClip();
     }
 
+    void AudioSourceComponent::OnPropertyWritten(StringView field) {
+        if (field == "clip") {
+            ReloadClip();
+        }
+    }
+
     void AudioSourceComponent::LoadClip() {
         _loadedPath = _clip;
         _loaded.Reset();

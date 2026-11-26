@@ -5,6 +5,8 @@
 
 namespace BECore {
 
+    struct ComponentTouches;
+
     /**
      * @brief IPropertyVisitor implementation that renders ImGui editing widgets
      *
@@ -23,6 +25,9 @@ namespace BECore {
      *   virtual path; not while it is disabled
      * A value is constrained when the user edits it, not when it is shown: a value loaded outside the range stays as it is until touched.
      *
+     * With a ComponentTouches, a top-level field that a client of the control API changed is marked once it is drawn: its flash over it and the line
+     * "changed: <client>" under it (a change inside a compound or a list marks the top-level field). An edit of the field removes the mark.
+     *
      * Containers (the hooks of `IPropertyVisitor`; the dispatch applies what they ask, after the list, never here):
      * - a sequence or a map is a tree node `name (size)`, an `x` button after each element and a `+` after the last; a
      *   button the `ListInfo` does not allow is drawn disabled. A map with text keys has a key field before its `+`, which
@@ -38,6 +43,8 @@ namespace BECore {
     class ImGuiPropertyVisitor : public IPropertyVisitor {
     public:
         ImGuiPropertyVisitor() = default;
+        /// Marks the fields of the component @p touches names, which must outlive the visit; null marks nothing
+        explicit ImGuiPropertyVisitor(const ComponentTouches* touches) : _touches(touches) {}
         ~ImGuiPropertyVisitor() override = default;
 
         bool Visit(StringView name, bool& value) override;
@@ -86,7 +93,20 @@ namespace BECore {
         /// The attributes of the field being visited: those of the innermost open BeginField, `FieldAttributes{}` outside one
         const FieldAttributes& CurrentField() const;
 
+        /// The id of the next widget, one of the field or element @p name; a top-level field takes its name from the first of these
+        int NextId(StringView name);
+        /// @p changed, remembered for the field that is open
+        bool Edited(bool changed);
+        /// The mark and the flash of the top-level field that was just drawn
+        void ShowTouch() const;
+
         int _idCounter = 0;
+        const ComponentTouches* _touches = nullptr;
+        StringView _fieldName;    ///< of the open top-level field; empty until a widget of it names it
+        float _fieldLeft = 0.0f;  ///< the screen position the open top-level field began at
+        float _fieldTop = 0.0f;
+        float _fieldWidth = 0.0f;
+        bool _fieldEdited = false;  ///< the user changed something of the open top-level field
         /// The fields between BeginField and EndField, outermost first (a compound's children are visited inside its bracket). Inline, since the visitor is made again every frame
         SmallVector<FieldAttributes, kInlineListDepth> _fields;
         /// The open lists, innermost last

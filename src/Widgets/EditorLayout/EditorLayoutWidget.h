@@ -22,7 +22,8 @@ namespace BECore {
     class IDeserializer;
 
     // Full-screen DockSpace host that provides the unified editor layout, with the main toolbar under the menu bar and the status bar
-    // at the bottom (both children of the host, so the dock layout and imgui.ini do not know them). The editor's toasts are drawn by it too.
+    // at the bottom (both children of the host, so the dock layout and imgui.ini do not know them). The editor's toasts are drawn by it too, and it drives the
+    // flashes of what the control API touched (TouchHighlights), which the panels read.
     // Must be registered after ImGuiWidget and the `Bar` assets it draws (`MainToolbarPanel`, `MainMenuPanel`: their models update before
     // this widget draws them) and before the other editor windows, so they dock into this space.
     //

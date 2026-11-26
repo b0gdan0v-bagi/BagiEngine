@@ -133,6 +133,8 @@ namespace BECore {
         inline constexpr auto kViewActivity = "view.activity"_intern;
         /// The Activity panel's Clear button: ActivityPanelModel empties the control journal, only while its panel is open
         inline constexpr auto kActivityClear = "activity.clear"_intern;
+        /// The button of a row of the Activity panel: ActivityPanelModel selects the node the argument names (its runtime id), only while its panel is open
+        inline constexpr auto kActivitySelectNode = "activity.selectNode"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

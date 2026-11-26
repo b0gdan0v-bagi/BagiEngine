@@ -5,6 +5,8 @@
 
 namespace BECore {
 
+    struct ComponentTouches;
+
     /**
      * @brief Inspector function type: renders ImGui widgets for a component
      *
@@ -39,9 +41,13 @@ namespace BECore {
      *
      * Changes are applied directly to the component (live editing).
      *
+     * With @p touches the fields a client of the control API changed are marked, and an edit removes the mark: the generic inspector marks each field where
+     * it stands, a custom one gets a line per mark at its top and an edit of anything removes them all. With no mark and no flash nothing differs.
+     *
      * @param component The component to inspect and edit (must not be null)
+     * @param touches What TouchHighlights knows of this component; null draws it unmarked
      * @return True if any field was changed
      */
-    bool RenderComponentInspector(IComponent* component);
+    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches = nullptr);
 
 }  // namespace BECore

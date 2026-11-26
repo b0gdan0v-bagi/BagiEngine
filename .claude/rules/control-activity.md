@@ -4,10 +4,11 @@ paths:
   - "src/Modules/RemoteControl/**/*"
   - "tools/control/**/*"
   - "tests/BECore/Control*"
+  - "src/Modules/BECore/Scene/SceneControl*"
   - "tests/BECore/WebSocketServerTest.cpp"
 ---
 
-# Who asks the control API (`ControlClient`, `client_hello`) and the activity journal
+# Who asks the control API (`ControlClient`, `client_hello`), the activity journal and the touch record
 
 The module: `src/Modules/BECore/Control/CLAUDE.md`; the transport: `src/Modules/RemoteControl/CLAUDE.md`. Additive to protocol version 1.
 
@@ -41,9 +42,20 @@ A request may carry a `ControlClient` (`Control/ControlClient.h`, ref-counted): 
 |------|---------------|
 | `Connected`, `Disconnected` | `Drain()` applies the notice of a connection (a local client has none) |
 | `Named` | `RenameClient()`; `text` is the name given then, while `client->GetName()` is the latest |
-| `Call` | a call is answered: `method`, `text` (the params), `error` (the code, empty for a success) |
+| `Call` | a call is answered: `method`, `text` (the params), `error` (the code, empty for a success), `node` (the node it touched first, 0 for none) |
 
 - A deferred call is listed when it is answered, a call nested in a `batch` under the outer client.
 - Not listed: a method described as quiet; a request that ran no method (it could not be read, `unknown_method`); what `Shutdown()` answers with `shutting_down`.
 - **`ControlMethodInfo::quiet`** is for a method that acts on nothing: a read, a poll, the clock (`step`, `run_until`), `batch` (its calls are listed) and what the art service reports. A method with no description is listed, so a game's acting methods show without a change and its reads need a description with `quiet`. `list_methods` does not show the flag.
 - `text` is client data cut to `kMaxTextBytes` between two UTF-8 characters, its control characters turned into spaces. Neither it nor a name is ever interned or used as a format string.
+
+## The touch record (`service.Touches()`)
+
+`ControlTouches` (`Control/ControlTouches.h`) keeps who touched which node, for the editor: the last `kCapacity` reports of `{sequence, nodeId, component, field, client}`, read like the journal (oldest first, `GetNextSequence()`, `GetVersion()`). Main thread only.
+
+- A node is named by `SceneNode::GetRuntimeId()`, never by a pointer: the record keeps no node alive and the pool reuses a dead node's address. A reader finds the node with `FindNodeByRuntimeId`.
+- `ControlService::ReportTouch(nodeId, component, field)` records for the call whose handler or `done` runs now; inside `RunNested` that is the nested call. It also puts the first node of a call into that call's journal entry, so report before the answer.
+- Nothing is recorded outside a call or for a call with no client: a panel's own button that shares code with a method leaves no trace.
+- A change applied after its call (a game that queues it for a later frame) keeps `GetCurrentClient()` in an `IntrusivePtr` and calls `ReportTouch(client, nodeId, ...)`, which writes no journal entry.
+- A game calls `ReportNodeTouched(node, component, field)` (`Scene/SceneControl.h`) from a method that changes or acts on a node; nothing is reported for it by itself.
+- `component` and `field` may be client data: cut like the journal's `text`, never interned, never a format string.

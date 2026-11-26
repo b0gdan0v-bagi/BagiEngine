@@ -404,6 +404,13 @@ namespace BECore::Fuzz {
             add("screenshot.bin", Request("14", "screenshot", R"({"maxSize":256})"));
             add("ui-tree.bin", Request("15", "ui_tree"));
             add("ui-click.bin", Request("16", "ui_click", R"({"name":"PlayButton","canvas":"Hud","at":0.5})"));
+            add("scene-tree.bin", Request("50", "scene_tree", R"({"node":"Board","limit":2})"));
+            add("scene-get.bin", Request("51", "scene_get", R"({"node":"Board/Cell[1]","component":"ChangeToRandomColorDebugComponent","index":0})"));
+            add("scene-get-bad-path.bin", Request("52", "scene_get", R"({"node":"Board/a\\/b\\x[99999999999]","component":"TransformComponent","path":"x"})"));
+            add("scene-set.bin", Request("53", "scene_set", R"({"node":"Board","component":"QuadRendererComponent","path":"color.r","value":200})"));
+            add("scene-set-huge.bin", Request("54", "scene_set", R"({"node":"Sparks","component":"ParticleEmitterComponent","path":"effect.maxParticles","value":18446744073709551615})"));
+            add("scene-set-name.bin", Request("56", "scene_set", R"({"node":"Board/Cell[1]","component":"ChangeToRandomColorDebugComponent","path":"actionFilter","value":""})"));
+            add("scene-set-interning.bin", Request("55", "scene_set", R"({"node":"Board/Cell[1]","component":"ChangeToRandomColorDebugComponent","path":"actionFilter","value":"fuzz_seed_action"})"));
             add("frame-stats.bin", Request("17", "frame_stats", R"({"frames":10})"));
             add("profiler-dump.bin", Request("18", "profiler_dump", R"({"path":"trace.json"})"));
             add("zone-allocs.bin", Request("19", "zone_allocs", R"({"top":5,"reset":false})"));

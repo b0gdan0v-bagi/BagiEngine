@@ -6,7 +6,7 @@
 
 The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The default
 scenario is game-neutral: it uses no game rules (the methods `ping`, `list_games`, `status`, `step`, `frame_stats`, `zone_allocs`,
-the answer to garbage and to an unknown method, a screenshot, the UI tree, the log marks, `batch`, `run_until` and `set_window`), so it fits any game that implements the control API.
+the answer to garbage and to an unknown method, a screenshot, the UI tree, the scene by path, the log marks, `batch`, `run_until` and `set_window`), so it fits any game that implements the control API.
 A game with rules brings its own script that imports the helpers of this file and calls run_smoke() with its scenarios
 (BagiEngine-Chess has one: tests/control_smoke.py; `be_add_game_control_tests(<exe> SCRIPT <file>)` runs it). The game runs
 --headless (no window, drawn in memory), which also lets the test look at screenshots; --window runs it in a real window instead
@@ -51,6 +51,7 @@ HIGH_DENSITY = 2.0
 NOTCH_TOP = 40.0  # window units of the safe-area inset the window step sets at the top
 SCREENSHOT_LIMIT = 4096  # the longest side `screenshot` can be asked for: no shrinking of a picture of the window step
 BAD_USER_SCALE = 100.0
+TRANSFORM = "TransformComponent"
 WINDOW_FLAGS_SCENARIO = ["--manual-clock", f"--window={WINDOW_SIZE}x{WINDOW_SIZE}", f"--density={HIGH_DENSITY:g}"]
 HEADLESS_ONLY_FLAGS = ("--window=", "--density=")  # the game stops at start-up when it gets one without --headless
 
@@ -216,6 +217,19 @@ def check_ui_tree(client: BagiControlClient) -> None:
     clicked = client.call("click_at", {"x": -10, "y": -10})
     check(clicked["consumed"] is False, f"click_at outside the window was consumed: {clicked}")
     expect_error("invalid_params", lambda: client.call("click_at", {"x": "left", "y": 1}), "a click at a point that is not a number")
+
+
+def check_scene_methods(client: BagiControlClient) -> None:
+    """The scene by path: the tree, a transform read and written back as it is (when a node has one) and a path that leads nowhere."""
+    tree = client.call("scene_tree")
+    check(isinstance(tree.get("scene"), str) and isinstance(tree.get("nodes"), list), f"scene_tree has no scene and nodes: {tree}")
+    placed = next((node for node in tree["nodes"] if TRANSFORM in node["components"]), None)
+    if placed is not None:
+        field = {"node": placed["path"], "component": TRANSFORM, "path": "x"}
+        value = client.call("scene_get", field)["value"]
+        written = client.call("scene_set", {**field, "value": value})
+        check(written["value"] == value, f"scene_set of {value} to '{placed['path']}' left {written['value']}")
+    expect_error("node_not_found", lambda: client.call("scene_get", {"node": "NoSuchNode/Below", "component": TRANSFORM}), "scene_get of a node that does not exist")
 
 
 def safe_area_of(top: float) -> dict:
@@ -421,6 +435,7 @@ def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None
         expect_error("capture_failed", lambda: client.call("screenshot"), "a screenshot on a backend that cannot capture")
 
     check_ui_tree(client)
+    check_scene_methods(client)
     check_log_and_batch(client)
     check_run_until(client, manual_clock=True)
     check_window_control(client, headless)

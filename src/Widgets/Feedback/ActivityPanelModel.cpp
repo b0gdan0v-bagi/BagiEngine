@@ -3,31 +3,24 @@
 #include <BECore/Control/ControlActivity.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNode.h>
 #include <Generated/ActivityPanelModel.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/Feedback/ControlClientLabel.h>
+#include <Widgets/SceneEditor/SceneSelectionEvents.h>
 
 namespace BECore {
 
     namespace {
 
-        constexpr StringView kEngineClientText = "engine";
         constexpr StringView kConnectedText = "connected";
         constexpr StringView kDisconnectedText = "disconnected";
         constexpr StringView kNamedText = "named";
 
         void Assign(String& out, StringView text) {
             out.assign(text.data(), text.size());
-        }
-
-        void AssignClient(String& out, const ControlClient* client) {
-            if (client == nullptr) {
-                Assign(out, kEngineClientText);
-            } else if (client->GetName().empty()) {
-                out.clear();
-                AppendFormat(out, "client {}", client->GetId());
-            } else {
-                out = client->GetName();
-            }
         }
 
         /// What happened: the method of a call, a word for the other kinds
@@ -66,14 +59,31 @@ namespace BECore {
         }
     }
 
-    bool ActivityPanelModel::RunCommand(StringView id, StringView /*argument*/) {
+    bool ActivityPanelModel::RunCommand(StringView id, StringView argument) {
         const PoolString clear = EditorCommandIds::kActivityClear;
-        if (id != clear.ToStringView()) {
-            return false;
+        if (id == clear.ToStringView()) {
+            Service().Activity().Clear();
+            RebuildView();
+            return true;
         }
-        Service().Activity().Clear();
-        RebuildView();
-        return true;
+        const PoolString selectNode = EditorCommandIds::kActivitySelectNode;
+        if (id == selectNode.ToStringView()) {
+            SelectNode(argument);
+            return true;
+        }
+        return false;
+    }
+
+    void ActivityPanelModel::SelectNode(StringView argument) {
+        const Optional<uint64_t> id = StringUtils::ParseNumber<uint64_t>(argument);
+        SceneManager* const scenes = CoreManager::FindSceneManager();
+        Scene* const scene = scenes ? scenes->GetActiveScene() : nullptr;
+        if (!id || !scene) {
+            return;
+        }
+        if (const SceneNode* const node = FindNodeByRuntimeId(scene->GetRootNode(), *id)) {
+            SelectSceneNodeRequestEvent::Emit(scene, node);
+        }
     }
 
     void ActivityPanelModel::RebuildView() {
@@ -85,10 +95,16 @@ namespace BECore {
             const ControlActivityEntry& entry = activity.At(count - 1 - i);
             ActivityRow& row = _view.rows[i];
             row.time.assign(entry.time);
-            AssignClient(row.client, entry.client.Get());
+            Array<char, kControlClientLabelSize> clientLabel;
+            Assign(row.client, ControlClientLabel(entry.client.Get(), clientLabel));
             Assign(row.method, MethodText(entry));
             row.params = entry.text;
             row.error = entry.error;
+            row.hasNode = entry.node != 0;
+            row.node.clear();
+            if (row.hasNode) {
+                AppendFormat(row.node, "{}", entry.node);
+            }
         }
         _builtVersion = activity.GetVersion();
     }

@@ -29,6 +29,7 @@ namespace BECore {
         BE_REFLECT_FIELD bool _flipY = false;                  ///< mirrors the picture top to bottom
 
         void OnAttached() override;
+        void OnPropertyWritten(StringView field) override;
 
         /**
          * @brief Reload the texture from the sprite id or _texturePath

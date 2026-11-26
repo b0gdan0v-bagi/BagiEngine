@@ -443,7 +443,7 @@ namespace BECore {
         double _lastPollSeconds = -1.0;
         uint64_t _pollCount = 0;
         uint64_t _version = 0;
-        const ControlService* _registeredOn = nullptr;
+        ControlService* _registeredOn = nullptr;  // also where an accept reports the node it wrote
     };
 
 }  // namespace BECore

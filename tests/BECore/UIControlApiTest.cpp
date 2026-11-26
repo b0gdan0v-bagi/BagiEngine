@@ -1,6 +1,8 @@
+#include <BECore/Control/ControlActivity.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/ControlTouches.h>
 #include <BECore/Control/JsonWriter.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Input/UIInput.h>
@@ -8,6 +10,7 @@
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNode.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
@@ -1332,6 +1335,28 @@ namespace BECore::Tests {
         EXPECT_TRUE(BoolMember(FindElement(group, "Left"), "disabled")) << "a click on it does nothing, which is what the field says";
         EXPECT_TRUE(BoolMember(FindElement(group, "Right"), "disabled"));
         EXPECT_FALSE(BoolMember(FindElement(FindCanvas(response.Result(), "Panel"), "Plain"), "disabled"));
+    }
+
+    TEST_F(UIControlApiTest, AClickThatFindsItsElementTouchesTheNodeOfTheCanvasAndAMissDoesNot) {
+        Show("Main");
+        const IntrusivePtr<ControlClient> client = _service.OpenLocalClient("tool");
+        const auto click = [&](StringView name) {
+            _service.Post(MakeRequestText(++_nextId, "ui_click", Click(name)), [](const String&) {}, client);
+            _service.Drain();
+        };
+
+        click("Note");  // not interactive
+        click("Nothing");
+        EXPECT_EQ(_service.Touches().Size(), 0u);
+
+        click("Ok");  // the first canvas in scene order that has it: Hud
+        ASSERT_EQ(_service.Touches().Size(), 1u);
+        const ControlTouch& touch = _service.Touches().At(0);
+        EXPECT_EQ(touch.nodeId, Require(Canvas("Main", "Hud").Get()).GetNode().GetRuntimeId());
+        EXPECT_EQ(touch.component, "UICanvasComponent");
+        EXPECT_EQ(touch.field, "");
+        EXPECT_EQ(touch.client.Get(), client.Get());
+        EXPECT_EQ(_service.Activity().At(_service.Activity().Size() - 1).node, touch.nodeId);
     }
 
     TEST_F(UIControlApiTest, AButtonAboveASceneTargetTakesTheClickAndTheTargetGetsNothing) {

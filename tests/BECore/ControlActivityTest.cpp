@@ -190,6 +190,22 @@ namespace BECore::Tests {
         }
     }
 
+    TEST_F(ControlActivityTest, AnEntryThatTakesAnOldSlotKeepsNoNodeOfIt) {
+        service.RegisterHandler("touch", [this](ControlCall& call) {
+            service.ReportTouch(5);
+            call.ReplyEmpty();
+        });
+        const IntrusivePtr<ControlClient> client = service.OpenLocalClient("tool");
+        for (size_t i = 0; i < ControlActivity::kCapacity; ++i) {
+            Send("touch", {}, client);
+        }
+
+        Send("act", {}, client);
+
+        EXPECT_EQ(Entry(ControlActivity::kCapacity - 2).node, 5u);
+        EXPECT_EQ(Entry(ControlActivity::kCapacity - 1).node, 0u);
+    }
+
     TEST_F(ControlActivityTest, ClearGivesTheClientsBackAndKeepsTheSequence) {
         const IntrusivePtr<ControlClient> client = service.OpenLocalClient("tool");
         Send("act", {}, client);

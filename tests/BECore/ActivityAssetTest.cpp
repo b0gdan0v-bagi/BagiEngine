@@ -10,6 +10,7 @@
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
+#include <Events/SubscriptionHolder.h>
 #include <Generated/ActivityTestModel.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/ImGuiFonts.h>
@@ -143,8 +144,12 @@ namespace BECore::Tests {
         void Click(StringView part) {
             const ImGuiItemRecord* item = Find(part);
             ASSERT_NE(item, nullptr) << String(part).c_str();
+            ClickAt(*item);
+        }
+
+        void ClickAt(const ImGuiItemRecord& item) {
             ImGuiIO& io = ImGui::GetIO();
-            io.AddMousePosEvent(item->CenterX(), item->CenterY());
+            io.AddMousePosEvent(item.CenterX(), item.CenterY());
             Frame();
             io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
             Frame();
@@ -185,6 +190,52 @@ namespace BECore::Tests {
 
         EXPECT_EQ(_service.Activity().Size(), 0u);
         EXPECT_EQ(DrawnText().find("scene_spawn"), String::npos);
+    }
+
+    namespace {
+
+        /// The arguments the panel's `activity.selectNode` buttons sent
+        struct SelectNodeRecorder : SubscriptionHolder {
+            SelectNodeRecorder() {
+                Subscribe<EditorCommandEvent, &SelectNodeRecorder::OnCommand>(this);
+            }
+
+            void OnCommand(const EditorCommandEvent& event) {
+                if (event.commandId == EditorCommandIds::kActivitySelectNode) {
+                    arguments.push_back(event.argument);
+                }
+            }
+
+            Vector<String> arguments;
+        };
+
+    }  // namespace
+
+    TEST_F(ActivityAssetTest, OnlyTheButtonOfARowWithANodeAsksToSelectIt) {
+        Open();
+        constexpr uint64_t kNode = 42;
+        _service.RegisterHandler("scene_touch", [this](ControlCall& call) {
+            _service.ReportTouch(kNode);
+            call.ReplyEmpty();
+        });
+        _service.Post(MakeRequestText(1, "scene_touch"), [](const String&) {}, _service.OpenLocalClient("agent"));
+        Call(R"({})");  // the newer row, with no node
+        Settle();
+        Vector<ImGuiItemRecord> buttons;
+        for (const ImGuiItemRecord& item : _index.Items()) {
+            if (item.visible && StringView(item.label).find("##select") != StringView::npos) {
+                buttons.push_back(item);
+            }
+        }
+        ASSERT_EQ(buttons.size(), 2u);
+        const SelectNodeRecorder recorder;
+
+        ClickAt(buttons[0]);
+        EXPECT_TRUE(recorder.arguments.empty());
+        ClickAt(buttons[1]);
+
+        ASSERT_EQ(recorder.arguments.size(), 1u);
+        EXPECT_EQ(recorder.arguments.front(), "42");
     }
 
     TEST_F(ActivityAssetTest, AFrameOverAStandingJournalAllocatesNothing) {
