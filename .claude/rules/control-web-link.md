@@ -5,6 +5,8 @@ paths:
   - "tools/control/tests/test_bridge.py"
   - "src/Application/ControlLink*"
   - "tools/web/web_game.py"
+  - "tools/web/tests/web_control_smoke.py"
+  - "tools/web/tests/test_web_game.py"
   - "tests/BECore/ControlLinkTest.cpp"
   - "src/Modules/RoomClient/src/RoomClient/EmscriptenRoomTransport.*"
 ---
@@ -56,6 +58,7 @@ The page retries after every close but 1008: after 1 s, doubling to 10 s, and fr
 - An answer goes out only on the connection its request came on. A later reply is dropped, one after `Stop()` or the link's destruction too (`ControlService::Shutdown()` answers late): a restarted bridge counts its channels from 1 again, so an old answer would reach a stranger.
 - The link holds the service's event sink only while it is connected.
 - A message without a channel aborts the connection like a refused send (a script cannot close with 1002), and what the transport still holds of it does not run.
+- A failed dial also puts one error of the browser's own into its console, which no script can silence: a page with no bridge shows one per retry. `localhost` reaches the bridge's 127.0.0.1 in Chromium and WebKit.
 - One Info line per outage, and the one Warning of a 1008: a QA run reads warnings as findings. The token is never logged.
 - `ControlLink::kTransportLimits` are the `RoomTransportLimits` the browser transport of a link takes; its defaults are those of the rooms, and the desktop transport takes none.
 
@@ -63,6 +66,26 @@ The page retries after every close but 1008: after 1 s, doubling to 10 s, and fr
 
 - A hidden tab runs no frame: requests wait until it is shown again.
 - `record_start`, `replay` and `profiler_dump` answer `unsupported`: their files would be in the page's memory, where no client can reach them.
+
+## A browser game as an executable
+
+`tools/web/web_game.py` stands where a game executable is expected: `GameSession.launch`, `bagi_play.py`, `/qa`, the monkey and `run_smoke` of `smoke.py` start it with a game's flags.
+
+```bash
+python3 tools/web/package.py build/web-debug/bin build/web-control-dist/debug --game BagiStress
+BAGI_WEB_DIST=build/web-control-dist/debug python3 tools/control/bagi_play.py tools/web/web_game.py <scenario>
+BAGI_WEB_DIST=build/web-control-dist/debug .venv/bin/python tools/web/tests/web_control_smoke.py --exe tools/web/web_game.py --window --startup-timeout 120
+```
+
+It serves the dist with `serve.py`, runs the bridge on the control port with a token of its own, opens the page and copies the browser's console to stdout, so the engine's log lines are the "game's" log. It exits 0 when the page says the game ended (after `quit`), 1 when the page aborted, threw, crashed or was closed (a `[Fatal] web_game:` line says which) or the port is taken, 77 without a dist, Playwright or the browser. A page that never dials (a release build) is not noticed: the harness's start-up timeout ends it. The variables (`BAGI_WEB_DIST`, `BAGI_WEB_BROWSER`, `BAGI_WEB_HEADED`) and the flags are in its docstring; the Playwright venv is that of `tools/web/tests/CLAUDE.md`. It starts as a script through its first line, which Windows does not do.
+
+**Against a headless desktop game**, a harness meets:
+
+- `status.window.headless` is false and `set_window` is `not_headless`; `--window` and `--density` size the browser's viewport at the start. `screenshot` works (the canvas as the game drew it).
+- `--editor` and every other flag are refused (exit 2). A `web-editor` page is the editor by its build, so `imgui_find` works on its dist, but nothing that passes `--editor` or `--content-overlay` (an editor scenario, the editor charters) runs on a page.
+- The browser's renderer is not the software one: a `reference` picture taken on a desktop does not match.
+
+Run in headless Chromium and Playwright's WebKit with `BagiStress` and the `BagiDemo` editor page; Safari itself, a headed window and a hosted `https` page have not run.
 
 ## The control side
 

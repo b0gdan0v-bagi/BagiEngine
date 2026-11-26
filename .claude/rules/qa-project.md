@@ -44,6 +44,8 @@ Fields the `qa` and `qa-loop` skills read. A game fills every row.
 | Editor content files | the tracked files an editor run must never change: the guard's second line (`QaSession` backs them up and puts them back, a restore is a finding; `tools/qa/CLAUDE.md`, "The session") and the "before" of the compare with the overlay's saved copy; `none` for a game with no editor charter | the member `EDITOR_CONTENT_FILES` of `<invariants>`: `tools/stress/config/SceneConfig.xml` |
 | Editor charter | the command `/qa-loop` runs once per run, after the monkey sweeps; its exit codes are the sweep's (0 clean, 1 a bug, 2 a bad option, 77 skipped); `none` for a game with no editor charter | `python3 tools/stress/qa/editor_charter.py --exe <exe> --out <out> --charter all` |
 
+**A browser game** is a product too: `tools/web/web_game.py` as the executable (`--exe`, `launch(exe=...)`), `BAGI_WEB_DIST` naming a packaged `web-debug` page. No `set_window`, recording of the game, profiler dump, editor flags or desktop reference pictures there (`.claude/rules/control-web-link.md`, "A browser game as an executable").
+
 ## Invariants
 
 The generic ones (no new Warning / Error / Fatal line, every `ui_tree` canvas laid out with no `issues`, a version that never goes back, a listed action that is accepted) hold for every game and are in `tools/qa/CLAUDE.md`. The game's are in `<invariants>`; this section says them in words, the module is the truth.
