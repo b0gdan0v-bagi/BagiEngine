@@ -17,6 +17,10 @@ A game adds cheat commands and debug panels to the editor without the engine kno
 - **A command** (`GameToolCommand`): `name`, `title` (empty: the name), `summary`, parameters (`name`, `type`: `String`, `Integer`, `Number`, `Boolean` or `Json`, `required`, `description`) and the callback. The callback has the contract of `IControllableGame::PerformAction`: it writes exactly one value (`Null()` for nothing to say) and returns success, or returns an error and what it wrote is dropped.
 - **A panel** (`GameToolPanel`): `id`, `title` (empty: the id) and the draw callback. The registered entry adds `open`, true at first.
 
+## The editor
+
+The command palette lists `<Game>: <title>` for a command (one with parameters opens a form) and `<Game>: Panel <title>` for a panel. A panel is a dockable window in the Editor run mode only; the draw callback is called between its `ImGui::Begin` and `ImGui::End`, only while the window shows, so it draws the content and leaves the ImGui stacks as it found them. The window is kept in layouts by the prefix and the panel id. Details: `src/Widgets/GamePanel/CLAUDE.md`.
+
 ## Names
 
 A command is the control method `<prefix>.<name>`, listed by `list_methods` with its parameters, in every run mode of an editor build. The prefix is the game's name in ASCII lower case with every other byte outside `[a-z0-9_]` as `_`; no engine method has a dot, so a command cannot shadow one. Command names, panel ids and parameter names are `[A-Za-z0-9_]+`. A bad or repeated one, a missing callback, a game whose name is empty and a registration while no game is activated are refused with one error line, never an assert.
@@ -69,4 +73,4 @@ The override is guarded as the declaration is, or a build without the editor doe
 #endif
 ```
 
-Tests: `tests/BECore/GameEditorToolsTest.cpp`, over the hook of `FakeControllableGame`.
+Tests: `GameEditorToolsTest`, and for the editor `GameEditorCommandsTest`, `GameCommandFormTest` and `GameEditorPanelsTest` (all in `tests/BECore/`, over the hook of `FakeControllableGame`).

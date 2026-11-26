@@ -216,6 +216,8 @@ namespace BECore {
         _statusBar.Draw();
 
         ImGui::End();
+        // After the host, so their windows dock into its space
+        _gamePanels.Draw(gameTools);
         _toasts.Draw(StatusBar::GetHeight());
 
         // The panels' Initialize ran before the first Update, so they hear the stored preferences now

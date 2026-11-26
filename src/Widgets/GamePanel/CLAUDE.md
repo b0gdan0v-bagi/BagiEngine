@@ -1,6 +1,6 @@
 # The Game panel and a game's own tools
 
-Two things over the active game: the Game panel, which needs no code of a game, and the editor side of what a game registers itself ("Game commands").
+Two things over the active game: the Game panel, which needs no code of a game, and the editor side of what a game registers itself ("Game commands", "Game debug panels").
 
 ## Game panel
 
@@ -17,10 +17,20 @@ The editor's panel over the active game: an asset (`config/panels/GamePanel.xml`
 
 ## Game commands
 
-The commands a game registers in `GameEditorTools` (`.claude/rules/games-editor-tools.md`) in the editor. `EditorLayoutWidget` owns both objects, hands them the registry of `GameManager` once a frame before the palette draws, and calls the runner's `Draw()` inside its own window.
+The commands a game registers in `GameEditorTools` (`.claude/rules/games-editor-tools.md`) in the editor. `EditorLayoutWidget` owns the list, the runner and the panels, hands them the registry of `GameManager` once a frame before the palette draws, and calls the runner's `Draw()` inside its own window.
 
-- **`GameEditorCommands`** (no ImGui) is the list the palette shows: the static table of `EditorCommands.cpp`, then a row `<Game>: <title>` per command with the control method as the id. With no game command it hands out the table itself. It is made again only when the registry's version moved; `EditorCommand::title` is a view, so the rows are made after every title string. A holder of pointers into the list drops them when `GetVersion()` moves (`CommandPalette` does, also while open: a control client can switch the game then). Hotkeys, the Preferences table and `FindEditorCommand` know the static table only. A game method that reads like an engine command id gets no row and is not run, so one `EditorCommandEvent` has one meaning.
-- **`GameCommandRunner`** answers `EditorCommandEvent` for a method of the registry: with no declared parameter it runs the command inside the event, otherwise it opens a modal form, also when every parameter is optional. The result is a success toast and an info line; an error, a failed writer and a result that is not exactly one value are an error toast and a warning. The form keeps the method name and the registry's version and closes when the version moves, so it never runs a command of another game; the command runs after the popup is closed and may switch the game.
+- **`GameEditorCommands`** (no ImGui) is the list the palette shows: the static table of `EditorCommands.cpp`, then a row `<Game>: <title>` per command with the control method as the id and a row `<Game>: Panel <title>` per panel. With no game row it hands out the table itself. It is made again only when the registry's version moved; `EditorCommand::title` is a view, so the rows are made after every title string. A holder of pointers into the list drops them when `GetVersion()` moves (`CommandPalette` does, also while open: a control client can switch the game then). Hotkeys, the Preferences table and `FindEditorCommand` know the static table only. A game id that reads like an engine command id gets no row and is not run, so one `EditorCommandEvent` has one meaning.
+- **`GameCommandRunner`** answers `EditorCommandEvent` for a panel's row by toggling its `open`, and for a method of the registry: with no declared parameter it runs the command inside the event, otherwise it opens a modal form, also when every parameter is optional. The result is a success toast and an info line; an error, a failed writer and a result that is not exactly one value are an error toast and a warning. The form keeps the method name and the registry's version and closes when the version moves, so it never runs a command of another game; the command runs after the popup is closed and may switch the game.
 - **`GameCommandForm`** (no ImGui) keeps a copy of the parameters, a text per parameter and a switch per `Boolean`, and makes the JSON arguments, which the registry checks again like a client's.
 
 Tests: `GameEditorCommandsTest` (the list, and the runner with its form), `GameCommandFormTest`.
+
+## Game debug panels
+
+`GameEditorPanels` draws each open panel of the registry as an ordinary dockable window, after the host window of the dock space has ended; it exists only with `EditorLayoutWidget`, so nothing is drawn in Game mode.
+
+- **The window id** is `###GamePanel/<prefix>/<panel id>`; the title before it is free to change. ImGui keeps the place and dock by that id in `imgui.ini` and in a named layout, also while another game is active, so renaming a game or a panel id loses them. "Reset to Defaults" knows no game panel, which then floats.
+- **The open state is not stored:** a panel starts open at every activation of its game. The close button and the palette row (`<prefix>.view.<panel>`, no control method) change `GameToolPanelEntry::open`; a reopened panel is focused. A game panel has no View menu row (the menu is a static asset).
+- **Lifetime:** labels are made when the registry's version moves, and no entry is kept between frames. A callback may switch the game: its entry is held for the call, its window ended and the walk stopped. A callback runs only while `ImGui::Begin` says the window shows.
+
+Test: `GameEditorPanelsTest`.

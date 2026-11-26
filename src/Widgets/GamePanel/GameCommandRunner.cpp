@@ -6,6 +6,7 @@
 #include <Games/GameEditorTools.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Feedback/ToastEvents.h>
+#include <Widgets/GamePanel/GameEditorCommands.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
@@ -39,6 +40,10 @@ namespace BECore {
             return;
         }
         const StringView id = event.commandId.ToStringView();
+        if (const IntrusivePtr<GameToolPanelEntry> panel = FindPanelOfViewCommand(*_tools, id)) {
+            panel->open = !panel->open;
+            return;
+        }
         const IntrusivePtr<GameToolCommandEntry> entry = _tools->FindCommand(id);
         if (!entry) {
             return;

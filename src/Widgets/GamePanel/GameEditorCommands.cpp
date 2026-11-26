@@ -4,6 +4,25 @@
 
 namespace BECore {
 
+    namespace {
+
+        String PanelViewCommand(StringView prefix, StringView panelId) {
+            return Format("{}.view.{}", prefix, panelId);
+        }
+
+    }  // namespace
+
+    IntrusivePtr<GameToolPanelEntry> FindPanelOfViewCommand(const GameEditorTools& tools, StringView id) {
+        const String& prefix = tools.GetPrefix();
+        for (const IntrusivePtr<GameToolPanelEntry>& entry : tools.GetPanels()) {
+            const String view = PanelViewCommand(StringView(prefix.data(), prefix.size()), StringView(entry->panel.id.data(), entry->panel.id.size()));
+            if (StringView(view.data(), view.size()) == id) {
+                return entry;
+            }
+        }
+        return {};
+    }
+
     void GameEditorCommands::Sync(const GameEditorTools* tools) {
         const uint64_t toolsVersion = tools != nullptr ? tools->GetVersion() : 0;
         if (tools == _tools && toolsVersion == _toolsVersion) {
@@ -19,14 +38,22 @@ namespace BECore {
         }
 
         Vector<PoolString> ids;
-        for (const IntrusivePtr<GameToolCommandEntry>& entry : tools->GetCommands()) {
-            const StringView method(entry->method.data(), entry->method.size());
-            if (FindEditorCommand(method) != nullptr) {
-                LOG_WARNING("[GameEditorCommands] '{}' is a command of the editor, so the palette does not list the game's", entry->method);
-                continue;
+        const auto add = [this, &ids](const String& id, String title) {
+            const StringView text(id.data(), id.size());
+            if (FindEditorCommand(text) != nullptr) {
+                LOG_WARNING("[GameEditorCommands] '{}' is a command of the editor, so the palette does not list the game's", id);
+                return;
             }
-            ids.push_back(PoolString::Intern(method));
-            _titles.push_back(Format("{}: {}", tools->GetGameName().ToStringView(), entry->command.title));
+            ids.push_back(PoolString::Intern(text));
+            _titles.push_back(std::move(title));
+        };
+        const StringView game = tools->GetGameName().ToStringView();
+        for (const IntrusivePtr<GameToolCommandEntry>& entry : tools->GetCommands()) {
+            add(entry->method, Format("{}: {}", game, entry->command.title));
+        }
+        const StringView prefix(tools->GetPrefix().data(), tools->GetPrefix().size());
+        for (const IntrusivePtr<GameToolPanelEntry>& entry : tools->GetPanels()) {
+            add(PanelViewCommand(prefix, StringView(entry->panel.id.data(), entry->panel.id.size())), Format("{}: Panel {}", game, entry->panel.title));
         }
         if (ids.empty()) {
             return;

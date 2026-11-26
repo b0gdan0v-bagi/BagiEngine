@@ -11,7 +11,8 @@ namespace BECore {
     class GameEditorTools;
 
     /**
-     * @brief Runs the game commands the editor asks for (EditorCommandEvent with a control method of the registry).
+     * @brief Runs the game commands the editor asks for (EditorCommandEvent with a control method of the registry) and toggles a game panel for the id
+     * of its palette row.
      *
      * A command without parameters runs inside the event; one with parameters opens a modal form first. The result or the error is a toast and a log line.
      * A command may switch the game inside its call. The form belongs to the registry it was opened on: it closes when the registry's version moves.
