@@ -6,13 +6,17 @@
 #include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Widgets/EditorDocuments.h>
+#include <EASTL/algorithm.h>
+#include <Games/GameManager.h>
 #include <Generated/ExportPanelModel.gen.hpp>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_misc.h>
+#include <Widgets/AssetBrowser/AssetReferences.h>
 #include <Widgets/Console/EditorLauncher.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/EditorLayout/EngineTools.h>
+#include <Widgets/Export/ExportScenes.h>
 
 namespace BECore {
 
@@ -27,6 +31,32 @@ namespace BECore {
                 return std::unexpected(String(SDL_GetError()));
             }
             return {};
+        }
+
+        void ReadRegisteredGameScenes(Vector<PoolString>& names) {
+            for (const IntrusivePtr<IGame>& game : GameManager::GetInstance().GetAll()) {
+                names.push_back(game->GetSceneName());
+            }
+        }
+
+        /// The counts of @p check and what its rows do not show
+        String SummaryOf(const ContentAssetCheck& check, size_t hidden) {
+            String summary = Format("Missing: {}, unused: {}", check.missing.size(), check.unused.size());
+            if (hidden > 0) {
+                summary += Format(" ({} more not shown)", hidden);
+            }
+            if (!check.unchecked.empty()) {
+                summary += ". Could not check: ";
+                const size_t named = std::min(check.unchecked.size(), kMaxExportCheckNamedFiles);
+                for (size_t i = 0; i < named; ++i) {
+                    summary += Format("{}{}", i == 0 ? "" : ", ", check.unchecked[i]);
+                }
+                if (named < check.unchecked.size()) {
+                    summary += Format(" and {} more", check.unchecked.size() - named);
+                }
+            }
+            summary += ". Names built in code are not seen";
+            return summary;
         }
 
         /// A new empty file at @p path. The old one is removed and not truncated: a cancelled export that is still ending writes on into its own
@@ -56,7 +86,7 @@ namespace BECore {
 
     }  // namespace
 
-    ExportPanelModel::ExportPanelModel() : _folderOpener(&OpenWithSystem) {
+    ExportPanelModel::ExportPanelModel() : _folderOpener(&OpenWithSystem), _gameScenes(&ReadRegisteredGameScenes) {
         SyncView();
     }
 
@@ -69,8 +99,8 @@ namespace BECore {
     }
 
     void ExportPanelModel::Update() {
-        if (_documentsStale) {
-            RefreshUnsaved();
+        if (_editorStale) {
+            RefreshFromEditor();
         }
         if (_process) {
             // Asked before the log is read: all a process wrote before it ended is in the file by now
@@ -86,7 +116,7 @@ namespace BECore {
 
     void ExportPanelModel::OnOpenChanged(bool open) {
         if (open) {
-            _documentsStale = true;
+            _editorStale = true;
         } else {
             _pointerOver = false;
         }
@@ -102,6 +132,8 @@ namespace BECore {
             OpenFolder();
         } else if (is(EditorCommandIds::kExportRun)) {
             RunPackage();
+        } else if (is(EditorCommandIds::kExportCheck)) {
+            CheckAssets();
         } else {
             return false;
         }
@@ -116,7 +148,8 @@ namespace BECore {
         _cancelRequested = false;
         _view.resultFolder.clear();
         _log.Follow({});
-        RefreshUnsaved();
+        RefreshFromEditor();
+        CheckAssets();
         if (auto launched = Launch(); !launched) {
             _reason = std::move(launched.error());
             LOG_WARNING("Export: {}", _reason);
@@ -127,8 +160,7 @@ namespace BECore {
     }
 
     std::expected<void, String> ExportPanelModel::Launch() {
-        const FileSystem& files = _fileSystem != nullptr ? *_fileSystem : CoreManager::GetFileSystem();
-        const Optional<Path> script = FindEngineScript(files.GetMountLayers(MountPoints::config), kExportScript);
+        const Optional<Path> script = FindEngineScript(Files().GetMountLayers(MountPoints::config), kExportScript);
         if (!script) {
             return std::unexpected(Format("no {} under the content roots (a packaged build cannot export)", kExportScript));
         }
@@ -151,7 +183,14 @@ namespace BECore {
         }
         _log.Follow(logPath);
 
-        const Vector<String> arguments = BuildExportLaunch(EnginePython(), _script, *executable, _view.config, Trimmed(_view.outputDirectory));
+        Vector<String> excluded;
+        for (const ExportSceneRow& scene : _view.scenes) {
+            if (!scene.included) {
+                excluded.push_back(scene.name);
+            }
+        }
+        const ExportRequest request{.executable = *executable, .config = _view.config, .outputDirectory = Trimmed(_view.outputDirectory), .excludedScenes = {excluded.data(), excluded.size()}};
+        const Vector<String> arguments = BuildExportLaunch(EnginePython(), _script, request);
         auto process = Launcher().Start({arguments.data(), arguments.size()}, logPath);
         if (!process) {
             return std::unexpected(std::move(process.error()));
@@ -236,6 +275,7 @@ namespace BECore {
         _view.canStart = !_view.running;
         _view.canCancel = _view.running && !_cancelRequested;
         _view.hasResult = _state == ExportState::Succeeded && !_view.resultFolder.empty();
+        SyncSceneRows();
         switch (_state) {
             case ExportState::Running:
                 _view.status = _cancelRequested ? "Cancelling..." : "Exporting...";
@@ -260,13 +300,94 @@ namespace BECore {
         }
     }
 
+    void ExportPanelModel::RefreshFromEditor() {
+        _editorStale = false;
+        RefreshUnsaved();
+        RefreshScenes();
+    }
+
     void ExportPanelModel::RefreshUnsaved() {
-        _documentsStale = false;
         const EditorDocuments& documents = _documents != nullptr ? *_documents : CoreManager::GetEditorDocuments();
         _view.hasUnsaved = false;
         for (const EditorDocumentState& document : documents.Collect()) {
             _view.hasUnsaved = _view.hasUnsaved || document.dirty;
         }
+    }
+
+    void ExportPanelModel::RefreshScenes() {
+        // A list that could not be read has no rows to take the choice from
+        if (!_view.scenes.empty()) {
+            _excluded.clear();
+            for (const ExportSceneRow& row : _view.scenes) {
+                if (!row.included) {
+                    _excluded.push_back(row.name);
+                }
+            }
+        }
+        _view.scenes.clear();
+        const Vector<Path> layers = Files().GetMountLayers(MountPoints::config);
+        auto names = ReadExportScenes({layers.data(), layers.size()});
+        _view.scenesUnread = !names;
+        if (!names) {
+            _view.scenesProblem = Format("The scenes cannot be listed ({}): every scene is exported", names.error());
+            return;
+        }
+        Vector<PoolString> asked;
+        _gameScenes(asked);
+        for (String& name : *names) {
+            const bool first = _view.scenes.empty();
+            const bool isAsked = eastl::any_of(asked.begin(), asked.end(), [&name](PoolString scene) { return scene.ToStringView() == StringView(name); });
+            ExportSceneRow& row = _view.scenes.emplace_back();
+            row.locked = first || isAsked;
+            row.included = row.locked || eastl::find(_excluded.begin(), _excluded.end(), name) == _excluded.end();
+            if (first) {
+                row.tooltip = "The game opens on the first scene, so it is always exported";
+            } else if (isAsked) {
+                row.tooltip = "The game asks for this scene, so it is always exported";
+            }
+            row.name = std::move(name);
+        }
+        SyncSceneRows();
+    }
+
+    void ExportPanelModel::SyncSceneRows() {
+        for (ExportSceneRow& row : _view.scenes) {
+            row.editable = !row.locked && _state != ExportState::Running;
+        }
+    }
+
+    void ExportPanelModel::CheckAssets() {
+        ContentAssetCheck check = CheckContentAssets(Files());
+        const size_t total = check.missing.size() + check.unused.size();
+        const size_t shown = std::min(total, kMaxExportCheckRows);
+        _view.findings.clear();
+        _view.findings.reserve(shown);
+        for (const MissingAsset& missing : check.missing) {
+            if (_view.findings.size() == shown) {
+                break;
+            }
+            ExportCheckRow& row = _view.findings.emplace_back();
+            row.problem = "Missing";
+            row.path = missing.name;
+            row.where = Format("{}:{}", missing.use.file, missing.use.line);
+            row.style = PanelTextStyle::Error;
+        }
+        for (const String& unused : check.unused) {
+            if (_view.findings.size() == shown) {
+                break;
+            }
+            ExportCheckRow& row = _view.findings.emplace_back();
+            row.problem = "Unused";
+            row.path = unused;
+            row.style = PanelTextStyle::Warning;
+        }
+        _view.checked = true;
+        _view.hasFindings = !_view.findings.empty();
+        _view.checkSummary = SummaryOf(check, total - shown);
+    }
+
+    const FileSystem& ExportPanelModel::Files() const {
+        return _fileSystem != nullptr ? *_fileSystem : CoreManager::GetFileSystem();
     }
 
     IExportLauncher& ExportPanelModel::Launcher() {

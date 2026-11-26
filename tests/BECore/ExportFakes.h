@@ -87,16 +87,18 @@ namespace BECore::Tests {
         int detachedStarts = 0;
     };
 
-    /// Everything the Export window's model takes from outside: a program, a content root that holds the script, a log of its own, fakes
+    /// Everything the Export window's model takes from outside: a program, a content root that holds the script, a log of its own, fakes and the scenes
+    /// its games ask for
     class ExportFixture {
     public:
         explicit ExportFixture(const String& prefix) : folder(prefix) {
             program = folder.Write("Game", "x");
             commandLine.SetProgramPath(program);
-            const Path root = Path(folder.PathOf("engine"));
+            root = Path(folder.PathOf("engine"));
             script = String((root / kExportScript).View());
             WriteFile(root / kExportScript, "");
             MakeDirectory(root / "config");
+            MakeDirectory(root / "assets");
             files.AddContentRoot(root);
             files.Initialize();
             logPath = folder.PathOf("user/export.log");
@@ -114,6 +116,7 @@ namespace BECore::Tests {
             model.SetCommandLine(commandLine);
             model.SetFileSystem(files);
             model.SetDocuments(documents);
+            model.SetGameScenes([this](Vector<PoolString>& names) { names.insert(names.end(), askedScenes.begin(), askedScenes.end()); });
             model.SetFolderOpener([this](StringView url) -> std::expected<void, String> {
                 openedUrl.assign(url.data(), url.size());
                 if (!openerRefusal.empty()) {
@@ -123,7 +126,19 @@ namespace BECore::Tests {
             });
         }
 
+        /// The scene file of the content root, with an empty scene of each of @p names
+        void WriteScenes(Span<const StringView> names) const {
+            String text = "<SceneManager>\n  <scenes>\n";
+            for (const StringView name : names) {
+                text += Format("    <scene type=\"Scene\" name=\"{}\"/>\n", name);
+            }
+            text += "  </scenes>\n</SceneManager>\n";
+            WriteFile(root / "config" / "SceneConfig.xml", text);
+        }
+
         TestTempFolder folder;
+        Path root;
+        Vector<PoolString> askedScenes;
         String program;
         String script;
         String logPath;

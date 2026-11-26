@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
@@ -20,11 +21,43 @@ namespace BECore {
 
     CORE_ENUM(ExportState, uint8_t, Idle, Running, Succeeded, Failed, Cancelled)
 
+    /// The rows of findings the panel lists at most; the summary counts the others
+    inline constexpr size_t kMaxExportCheckRows = 200;
+
+    /// The files a check could not read that its summary names; it counts the others
+    inline constexpr size_t kMaxExportCheckNamedFiles = 5;
+
+    /// A scene of the game, as the list of the panel shows it
+    struct ExportSceneRow {
+        BE_CLASS(ExportSceneRow)
+
+        BE_REFLECT_FIELD String name;
+        BE_REFLECT_FIELD bool included = true;
+        /// The game opens on it or asks for it by name, so it cannot be left out
+        BE_REFLECT_FIELD bool locked = false;
+        /// The choice can be changed now: not locked and no export runs
+        BE_REFLECT_FIELD bool editable = true;
+        /// Why a locked scene cannot be left out; empty otherwise
+        BE_REFLECT_FIELD String tooltip;
+    };
+
+    /// A finding of the check of the assets
+    struct ExportCheckRow {
+        BE_CLASS(ExportCheckRow)
+
+        BE_REFLECT_FIELD String problem;
+        BE_REFLECT_FIELD String path;
+        /// The file and the line that name a missing asset; empty for an unused file
+        BE_REFLECT_FIELD String where;
+        BE_REFLECT_FIELD PanelTextStyle style = PanelTextStyle::Normal;
+    };
+
     /**
      * @brief What the Export window's asset binds to
      *
-     * `config`, `outputDirectory` and `errorsOnly` are written by the controls of the panel; the rest is written by the model. The two choices are read when
-     * an export starts. A condition of an asset is one bool or one comparison, so every state the panel shows is a field of its own.
+     * `config`, `outputDirectory`, `errorsOnly` and the `included` of a scene are written by the controls of the panel; the rest is written by the model.
+     * The choices are read when an export starts. A condition of an asset is one bool or one comparison, so every state the panel shows is a field of
+     * its own.
      */
     struct ExportPanelView {
         BE_CLASS(ExportPanelView)
@@ -46,6 +79,16 @@ namespace BECore {
         BE_REFLECT_FIELD String countsText;
         /// An editor document has changes that are not saved: the export reads the saved files
         BE_REFLECT_FIELD bool hasUnsaved = false;
+        BE_REFLECT_FIELD Vector<ExportSceneRow> scenes;
+        /// The scenes cannot be listed, so none can be left out; `scenesProblem` says why
+        BE_REFLECT_FIELD bool scenesUnread = false;
+        BE_REFLECT_FIELD String scenesProblem;
+        /// The assets were checked at least once: `checkSummary` and `findings` are of the last check
+        BE_REFLECT_FIELD bool checked = false;
+        BE_REFLECT_FIELD String checkSummary;
+        /// Missing assets first, then unused files
+        BE_REFLECT_FIELD Vector<ExportCheckRow> findings;
+        BE_REFLECT_FIELD bool hasFindings = false;
     };
 
     /**
@@ -53,15 +96,19 @@ namespace BECore {
      *
      * One export at a time. The process runs on while the panel is closed; its end and the rest of its output are taken at the next `Update`. Destroying
      * the model (a switch to Game mode) cancels it. The exit code of the script decides the state. A steady `Update` with no new output allocates nothing.
-     * The documents are asked for unsaved changes when the panel opens, when the pointer comes back to it and when an export starts.
+     * The documents are asked for unsaved changes and the scenes are listed when the panel opens, when the pointer comes back to it and when an export
+     * starts. The assets are checked on command and at each start; a finding never stops an export.
      *
-     * Commands (`EditorCommandIds`, run only while the panel is open): `export.start`, `export.cancel`, `export.openFolder` and `export.run`.
+     * Commands (`EditorCommandIds`, run only while the panel is open): `export.start`, `export.cancel`, `export.openFolder`, `export.run` and
+     * `export.check`.
      */
     class ExportPanelModel : public IPanelModel {
         BE_CLASS(ExportPanelModel)
     public:
         /// Shows the folder a `file://` URL names
         using FolderOpener = MoveOnlyFunction<std::expected<void, String>(StringView url)>;
+        /// Adds the scenes the registered games ask for
+        using GameScenes = MoveOnlyFunction<void(Vector<PoolString>& names)>;
 
         ExportPanelModel();
 
@@ -87,24 +134,31 @@ namespace BECore {
             _commandLine = &commandLine;
         }
 
-        /// Looks for the script among the content roots of @p fileSystem instead of CoreManager's; it must outlive the model
+        /// Reads the content of @p fileSystem (the script, the scenes, the checked assets) instead of CoreManager's; it must outlive the model
         void SetFileSystem(const FileSystem& fileSystem) {
             _fileSystem = &fileSystem;
+            _editorStale = true;
         }
 
         /// Asks @p documents for unsaved changes instead of CoreManager's; it must outlive the model
         void SetDocuments(const EditorDocuments& documents) {
             _documents = &documents;
-            _documentsStale = true;
+            _editorStale = true;
         }
 
         void SetFolderOpener(FolderOpener opener) {
             _folderOpener = std::move(opener);
         }
 
+        /// Asks @p scenes for the scenes of the games instead of GameManager
+        void SetGameScenes(GameScenes scenes) {
+            _gameScenes = std::move(scenes);
+            _editorStale = true;
+        }
+
         /// Whether the pointer is over the panel, told every frame it is drawn: coming back to it, the user may have saved or edited elsewhere
         void NotePointerOver(bool over) {
-            _documentsStale = _documentsStale || (over && !_pointerOver);
+            _editorStale = _editorStale || (over && !_pointerOver);
             _pointerOver = over;
         }
 
@@ -134,7 +188,15 @@ namespace BECore {
         void ShowProblem(String problem);
         /// Makes the strings and the counts again when the output or the state moved
         void SyncView();
+        /// Reads again what the user may have changed elsewhere in the editor: the unsaved documents and the scenes
+        void RefreshFromEditor();
         void RefreshUnsaved();
+        /// Lists the scenes again, keeping the choice by name
+        void RefreshScenes();
+        /// A scene can be changed only while no export runs
+        void SyncSceneRows();
+        void CheckAssets();
+        [[nodiscard]] const FileSystem& Files() const;
         [[nodiscard]] IExportLauncher& Launcher();
 
         ExportPanelView _view;
@@ -146,6 +208,9 @@ namespace BECore {
         /// Why the export failed
         String _reason;
         FolderOpener _folderOpener;
+        GameScenes _gameScenes;
+        /// The scenes the user left out, kept while the list cannot be read
+        Vector<String> _excluded;
         IExportLauncher* _launcher = nullptr;
         UniquePtr<IExportLauncher> _ownLauncher;
         UniquePtr<IExportProcess> _process;  // after the launchers: it dies first
@@ -156,7 +221,7 @@ namespace BECore {
         uint32_t _shownRevision = 0;
         bool _viewStale = true;
         bool _cancelRequested = false;
-        bool _documentsStale = true;
+        bool _editorStale = true;
         bool _pointerOver = false;
     };
 

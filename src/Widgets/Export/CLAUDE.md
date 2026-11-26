@@ -6,6 +6,7 @@ The editor's side of the desktop export. The work (build, package, cancel of the
 |------|------|
 | `ExportLaunch.{h,cpp}` | the argument lists, the path of the running program, `IExportProcess` / `IExportLauncher` and their SDL implementation |
 | `ExportLog.{h,cpp}` | the output as classified lines, read from the log file; no ImGui |
+| `ExportScenes.{h,cpp}` | the scene names of the game's content; no ImGui |
 | `ExportPanelModel.{h,cpp}` | the model of the Export window and its reflected view; no ImGui |
 | `ExportSlots.{h,cpp}` | the slot `exportOutput`, the output list: the one part that draws with ImGui |
 
@@ -29,7 +30,13 @@ The script is found among the content roots and run by the Python of `Widgets/Ed
 - **Lifetime.** The model owns the process. Closing the window keeps the export running (the next `Update` takes its end and the rest of the log); destroying the model, which a switch to Game mode does, cancels it.
 - **The log** is `export.log` in the editor's user folder, removed and made again by each start, so a cancelled export that is still ending writes on into its own file. Two editors share the name.
 - `export.run` starts the package through the script and does not follow it: only a script that cannot be started is reported.
-- An unsaved editor document shows a line and does not block the export, which reads the saved files. Documents are asked when the window opens, when the pointer comes back to it and at a start, not each frame (asking allocates).
+- An unsaved editor document shows a line and does not block the export, which reads the saved files. Documents are asked and the scenes listed when the window opens, when the pointer comes back to it and at a start, not each frame (both allocate).
+
+## Scenes and the check
+
+- **Scenes** are listed from the file the script cuts (`tools/export/CLAUDE.md`, "Scenes left out"), so the same rule is written twice. The first one and every scene a registered game's `GetSceneName()` names are locked: the game opens on them. A scene the game switches to by another name is not known.
+- The choice is kept by name and a new scene is exported. A list that cannot be read exports every scene and says so; the choice waits for the next list.
+- **The check** is `CheckContentAssets` (`src/Widgets/AssetBrowser/CLAUDE.md`, "The content check"), on `export.check` and at each start. It reads every source on the main thread and never stops an export: its lists can miss a name built in code. Scenes left out are checked too, since their assets ship all the same.
 
 ## Window
 
@@ -37,4 +44,4 @@ The script is found among the content roots and run by the Python of `Widgets/Ed
 
 ## Tests
 
-`ExportLaunchTest` (arguments, the program's path, a stand-in Python script for the streams, the cancel, the destroy and the kill), `ExportLogTest` (classification, partial lines, the bound, the result lines), `ExportPanelModelTest` (the states over the fakes of `tests/BECore/ExportFakes.h`), `ExportAssetTest` (the shipped asset over those fakes). No test starts the export.
+`ExportLaunchTest` (arguments, the program's path, a stand-in Python script for the streams, the cancel, the destroy and the kill), `ExportLogTest` (classification, partial lines, the bound, the result lines), `ExportScenesTest` (which file gives the scenes), `ExportPanelModelTest` (the states, the scene choice and the check over the fakes of `tests/BECore/ExportFakes.h`), `ExportAssetTest` (the shipped asset over those fakes). No test starts the export.

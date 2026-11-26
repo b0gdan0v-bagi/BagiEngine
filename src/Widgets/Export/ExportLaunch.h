@@ -19,8 +19,18 @@ namespace BECore {
 
     CORE_ENUM(ExportConfig, uint8_t, Debug, Release)
 
-    /// The arguments of an export of the game that runs from @p executable; an empty @p outputDirectory leaves the script's default
-    [[nodiscard]] Vector<String> BuildExportLaunch(StringView python, StringView script, StringView executable, ExportConfig config, StringView outputDirectory);
+    /// What one export is asked for
+    struct ExportRequest {
+        /// The running program, which names the game to export
+        StringView executable;
+        ExportConfig config = ExportConfig::Debug;
+        /// Empty leaves the script's default
+        StringView outputDirectory;
+        /// The scenes the package goes without
+        Span<const String> excludedScenes;
+    };
+
+    [[nodiscard]] Vector<String> BuildExportLaunch(StringView python, StringView script, const ExportRequest& request);
 
     /// The arguments that start the game of an exported package
     [[nodiscard]] Vector<String> BuildPackageRunLaunch(StringView python, StringView script, StringView packageDirectory);

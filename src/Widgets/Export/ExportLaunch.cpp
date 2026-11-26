@@ -143,15 +143,19 @@ namespace BECore {
 
     }  // namespace
 
-    Vector<String> BuildExportLaunch(StringView python, StringView script, StringView executable, ExportConfig config, StringView outputDirectory) {
+    Vector<String> BuildExportLaunch(StringView python, StringView script, const ExportRequest& request) {
         Vector<String> arguments = ScriptCommand(python, script, "build");
         arguments.emplace_back("--exe");
-        arguments.emplace_back(executable.data(), executable.size());
+        arguments.emplace_back(request.executable.data(), request.executable.size());
         arguments.emplace_back("--config");
-        arguments.emplace_back(config == ExportConfig::Release ? "release" : "debug");
-        if (!outputDirectory.empty()) {
+        arguments.emplace_back(request.config == ExportConfig::Release ? "release" : "debug");
+        if (!request.outputDirectory.empty()) {
             arguments.emplace_back("--out");
-            arguments.emplace_back(outputDirectory.data(), outputDirectory.size());
+            arguments.emplace_back(request.outputDirectory.data(), request.outputDirectory.size());
+        }
+        for (const String& scene : request.excludedScenes) {
+            arguments.emplace_back("--exclude-scene");
+            arguments.emplace_back(scene);
         }
         arguments.emplace_back("--cancel-on-stdin-close");
         return arguments;

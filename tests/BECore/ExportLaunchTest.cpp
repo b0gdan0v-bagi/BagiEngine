@@ -51,13 +51,22 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(ExportLaunchTest, APathWithSpacesIsOneArgumentAndAnEmptyFolderIsLeftToTheScript) {
-        const Vector<String> arguments = BuildExportLaunch("python3", "/the engine/tools/export/export.py", "/my game/bin/Game", ExportConfig::Release, "/out folder");
+        const Vector<String> arguments =
+            BuildExportLaunch("python3", "/the engine/tools/export/export.py", {.executable = "/my game/bin/Game", .config = ExportConfig::Release, .outputDirectory = "/out folder"});
         const Vector<String> expected{"python3", "/the engine/tools/export/export.py", "build", "--exe", "/my game/bin/Game", "--config", "release", "--out", "/out folder", "--cancel-on-stdin-close"};
         EXPECT_EQ(arguments, expected);
 
-        const Vector<String> byDefault = BuildExportLaunch("python3", "/e/export.py", "/g/Game", ExportConfig::Debug, "");
+        const Vector<String> byDefault = BuildExportLaunch("python3", "/e/export.py", {.executable = "/g/Game"});
         const Vector<String> expectedByDefault{"python3", "/e/export.py", "build", "--exe", "/g/Game", "--config", "debug", "--cancel-on-stdin-close"};
         EXPECT_EQ(byDefault, expectedByDefault);
+    }
+
+    TEST(ExportLaunchTest, EachSceneLeftOutIsAnArgumentOfItsOwn) {
+        const Vector<String> excluded{"Main Menu", "Credits"};
+        const Vector<String> arguments = BuildExportLaunch("python3", "/e/export.py", {.executable = "/g/Game", .excludedScenes = {excluded.data(), excluded.size()}});
+        const Vector<String> expected{"python3", "/e/export.py",    "build",     "--exe",           "/g/Game", "--config",
+                                      "debug",   "--exclude-scene", "Main Menu", "--exclude-scene", "Credits", "--cancel-on-stdin-close"};
+        EXPECT_EQ(arguments, expected);
     }
 
     TEST(ExportLaunchTest, RunNamesThePackageFolder) {
