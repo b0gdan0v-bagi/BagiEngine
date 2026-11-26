@@ -8,7 +8,11 @@ paths:
 
 # QA facts of this repository
 
-Read by the skills `qa` (`.claude/skills/qa/SKILL.md`) and `qa-loop` (`.claude/skills/qa-loop/SKILL.md`; the library they drive: `tools/qa/CLAUDE.md`) and by `tools/shots/shots.py` (the `## Screenshots` set below). A game that carries this repository as the submodule `engine/` has a file of the same name with the same headings and fields: this file is its template. A game without the file is not tested by `/qa`. The build facts are in `build-project.md`, the todo areas in `todo-project.md`, not here.
+Read by the skills `qa` (`.claude/skills/qa/SKILL.md`) and `qa-loop` (`.claude/skills/qa-loop/SKILL.md`; the library they drive: `tools/qa/CLAUDE.md`) and by `tools/shots/shots.py` (the `## Replay of a reproduction (the todo agents)
+
+The commands the `todo-*` agents mean by "the replay commands of `qa-project.md`" for a `bug-*` entry: before the fix `python3 <engine>/tools/control/bagi_play.py <exe> <scenario>` fails, after it passes; when the repro plan says `bagi_play` passes, `python3 <engine>/tools/qa/bagi_qa.py replay --exe <exe> --invariants <invariants> <scenario>` finds the finding before (exit 1) and exits 0 after. An uncut recording is cut first with `bagi_qa.py shrink`, or the report says why it cannot be. The ctests are `<Exe>Scenario.<short>` and `<Exe>QaReplay.<short>` when the product registers them.
+
+## Screenshots` set below). A game that carries this repository as the submodule `engine/` has a file of the same name with the same headings and fields: this file is its template. A game without the file is not tested by `/qa`. The build facts are in `build-project.md`, the todo areas in `todo-project.md`, not here.
 
 ## Terms
 

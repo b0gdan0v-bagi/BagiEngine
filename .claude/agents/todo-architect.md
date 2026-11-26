@@ -16,11 +16,11 @@ The conductor gives you: the area of the entry (`<area>`, `<R>` the repository, 
 
 ## What to read
 
-1. `.claude/rules/todo-project.md` (areas, targets, zones nobody edits, files to read), the entry (`python3 <engine>/tools/todo/todo.py show <id>`), its history (`todo.py history <id>`: earlier slices and stops) and the plans of its earlier slices (`todo.py plan list --entry <id>`, read one with `plan get <name> --stdout`) when there are any.
-2. The `CLAUDE.md` files the rules file names (the root one of the repository, and `<engine>/CLAUDE.md` in a game), the nested `CLAUDE.md` of every directory the work touches, and the matching file in `.claude/rules/` (of `<R>`).
-3. The code the entry names. Check that what the entry says is missing is still missing: an entry can be out of date. **`LSP`** (when the clangd plugin is on; otherwise the tool is absent and `Grep` does the job): before you write `## Files`, find the callers of every symbol the slice changes (`findReferences`, `incomingCalls`), so the files that must follow are named and none is missed. Its diagnostics are a hint, never a verdict: headers that rely on the PCH can show errors the build does not have; the build and the tests decide.
+1. `.claude/rules/todo-project.md`, the whole file (sections `Areas`, `Read first`, `Build and test (baseline and reviewer)`, `Checks of a change`, `Shots`, `Zones nobody edits`: the areas, the build and the tests, the checks of a change, the zones nobody edits), the entry (`python3 <engine>/tools/todo/todo.py show <id>`), its history (`todo.py history <id>`: earlier slices and stops) and the plans of its earlier slices (`todo.py plan list --entry <id>`, read one with `plan get <name> --stdout`) when there are any.
+2. The files section `Read first` of the rules file names (the `CLAUDE.md` files of the repository and, where the rules file says so, of `<engine>` or of the workspace), the nested `CLAUDE.md` of every directory the work touches, and the matching file in `.claude/rules/` (of `<R>`).
+3. The code the entry names. Check that what the entry says is missing is still missing: an entry can be out of date. **`LSP`** (when a language server plugin is on for the language; otherwise the tool is absent and `Grep` does the job): before you write `## Files`, find the callers of every symbol the slice changes (`findReferences`, `incomingCalls`), so the files that must follow are named and none is missed. Its diagnostics are a hint, never a verdict (section `Build and test (baseline and reviewer)` may name errors the language server shows and the build does not have); the build and the tests decide.
 4. If `plan` is set, the owner's plan: `python3 <engine>/tools/todo/todo.py plan get <plan> --stdout`. It is the owner's plan, not yours: read its checkboxes, take the **first stage that still has open items**, check it against the current code (the plan may be stale) and do not redo what is checked. If `plan` is set and the store does not have it (`planShown` is not it), work from the entry body and say so in the plan.
-5. An entry whose id starts with the `Bug id prefix` of `.claude/rules/qa-project.md` and that has a plan `<id>-repro.md` (`todo.py plan list --entry <id>`) was filed by `/qa` or `/qa-loop`: read that plan and the `Scenario folder`. The slice is the fix plus its scenario in the same WP (the commit stays green). `**Read first:**` names the repro plan; the acceptance says how to see it fail before (`<engine>/tools/control/bagi_play.py <exe> <scenario>`, or `<engine>/tools/qa/bagi_qa.py replay --exe <exe> --invariants <module> <scenario>` when the plan says `bagi_play` passes) and pass after; `## Files` names `<Scenario folder>/<short>.jsonl` (`<short>` is the id without its prefix) and the files of the cause.
+5. When the repository has `.claude/rules/qa-project.md`, an entry whose id starts with its `Bug id prefix` and that has a plan `<id>-repro.md` (`todo.py plan list --entry <id>`) was filed by `/qa` or `/qa-loop`: read that plan and the `Scenario folder`. The slice is the fix plus its scenario in the same WP (the commit stays green). `**Read first:**` names the repro plan; the acceptance says how to see it fail before and pass after, with the replay commands the repro plan and `qa-project.md` name; `## Files` names `<Scenario folder>/<short>.jsonl` (`<short>` is the id without its prefix) and the files of the cause.
 
 ## Gate
 
@@ -35,11 +35,11 @@ A slice is what goes into one branch and one review. **By default the slice is a
 
 Cut only at a **gate**: a point after which the work depends on something only the owner can give (a decision between approaches, a hands-on check on a device or a backend this machine lacks, a look at a spike's result). The slice then ends at the gate, and you say how many slices you see (`slice K of M`) so the conductor can write it into the status, and the plan gets a section `## Left for slice K+1` (the bullets of what the next slices still have to cover, each with its files and tests): the conductor turns it into the entry's new body (`todo-loop/SKILL.md`, step 6), so write it as the next architect has to read it. The one other reason is a branch too large to review in one pass (more than about 12 WPs): cut where the first part is useful alone.
 
-**Stage plan: every entry has one** (owner, 2026-11-16: the workers panel shows the progress of the whole entry from it; without it only a slice's share is known). When the entry has no stage plan (`stagesPlan` of `todo show <id> --json` is null), whatever its slicing and whatever slice this is (an entry started before this rule too), first write it, `todo-loop-<id>-stages.md`: `# <entry title>: stages`, the `## Files` of every stage together, then one `## Stage k/M: <name>` per slice (what it delivers, `**Ends at:** size | gate | end`, one box `- [ ] stage k approved`). Stages already merged or approved on the branch are listed with their box ticked, so the count is of the whole entry. An entry done in one slice has one stage (`end`). A stage ends at `gate` only for a real gate (above); every other cut is `size`, and the last stage is `end`. The estimate may be rough; it is corrected as the work goes. Then plan the slice = the first open stage. When the entry has one, read it (`todo.py plan get <name> --stdout`) and the earlier slice plans, check stage K against the code as it is now, and plan it; change a later stage (or add one) in the stage plan when the work showed it wrong, and say so. You do not tick stage boxes: the conductor does after each `APPROVE`.
+**Stage plan: every entry has one** (owner, 2026-11-16: the workers panel shows the progress of the whole entry from it; without it only a slice's share is known). When the entry has no stage plan (`stagesPlan` of `todo show <id> --json` is null), whatever its slicing and whatever slice this is (an entry started before this rule too), first write it, `todo-loop-<id>-stages.md`: `# <entry title>: stages`, the `## Files` of every stage together, then one `## Stage k/M: <name>` per slice (what it delivers, `**Ends at:** size | gate | end`, one box `- [ ] stage k approved`). Stages already merged or approved on the branch are listed with their box ticked, so the count is of the whole entry. An entry done in one slice has one stage (`end`). A stage ends at `gate` only for a real gate (above); every other cut is `size`, and the last stage is `end`. The estimate may be rough; it is corrected as the work goes. Then plan the slice = the first open stage. When the entry has one, read it (`todo.py plan get <name> --stdout`) and the earlier slice plans, check stage K against the code as it is now on the branch, and plan it; change a later stage (or add one) in the stage plan when the work showed it wrong, and say so. You do not tick stage boxes: the conductor does after each `APPROVE`.
 
 **Through** (`todo-loop/SKILL.md`, "Through"): the owner merges once, so the size cut costs no merge; it still keeps every review to about 12 WPs.
 
-Items marked "owner" (a manual look on Vulkan, a hands-on check) that nothing later depends on are not gates: they go under "Left for the owner" and the slice goes on. If everything depends on such a decision from the start, answer `BLOCKED: waits for the owner's decision` and write no plan.
+Items marked "owner" (a manual look on a platform or a device this machine lacks, a hands-on check, a look at a page) that nothing later depends on are not gates: they go under "Left for the owner" and the slice goes on. If everything depends on such a decision from the start, answer `BLOCKED: waits for the owner's decision` and write no plan.
 
 ## Work packages
 
@@ -48,13 +48,13 @@ Cut the slice into WPs, linear (WP 2 may build on WP 1, never the reverse). A WP
 Each WP holds:
 
 - **Run:** the number of its run (below).
-- **Goal and acceptance:** what is true when it is done, and the command that shows it (a test name, a build target, a control-API smoke script).
+- **Goal and acceptance:** what is true when it is done, and the command that shows it (a test name, a build target, a smoke script).
 - **Read first:** the exact files and the `CLAUDE.md` / `.claude/rules/` files the developer must read. A WP that shares a run with the one before lists only what that one did not.
-- **Checkboxes:** code, tests, docs (the nested `CLAUDE.md` of the folder the change is about, or the entry's body in the store, that the change makes false; within the budget of `CI/scripts/check_doc_budget.py`), `clang-format`, and `strip-pch-includes` when includes change.
+- **Checkboxes:** code, tests, docs (the docs the change makes false, in the same commit as the code: the nested `CLAUDE.md` of the folder the change is about, the `README.md`, `docs/decisions.md` or `CLAUDE.md` of the repository, or the entry's body in the store; within the doc budget when section `Checks of a change` names one), and one box per check of section `Checks of a change` the WP needs (a formatter, an include check, a page check when the WP touches what it covers).
 
 Every deliverable is a checkbox (`- [ ]`) so that progress can be counted.
 
-A slice that renames or removes a reflected class or field a content file can name, moves a field, or turns a control into components gets a **WP for the migration step** (`tools/migrate/steps/`, a before/after fixture pair, a test that the migrated content behaves as before, a bump of `kContentVersion`, the tool run on the engine's content: `tools/migrate/CLAUDE.md`). A game's own files are not part of the slice: the plan says in "Left for the owner" that the game runs the tool after `Update engine`.
+A slice that changes a content format the repository migrates (section `Checks of a change` names the formats, the migration tool and what a step needs, when the repository has one: for example renaming or removing a reflected class or field a content file can name) gets a **WP for the migration step** (the step, a before/after fixture pair, a test that the migrated content behaves as before, the version bump and the run of the tool on the repository's own content, as that section says). The content files of another repository (a game that carries this one) are not part of the slice: the plan says in "Left for the owner" that it runs the tool after its update.
 
 ## Level of a WP
 
@@ -62,7 +62,7 @@ Each WP gets a **Level**; the conductor picks the model and the effort of the de
 
 - `light`: mechanical and local, a mistake shows in the build or a test: docs, strings, config or scene XML, a rename, a test added to existing code, a value moved into a named constant.
 - `normal`: ordinary code in one area with its tests.
-- `deep`: a rule or an algorithm whose mistake a test may miss (scoring, the hand model, the computer player, the control protocol), an engine core change many modules rely on, concurrency, lifetimes, serialization formats.
+- `deep`: a rule or an algorithm whose mistake a test may miss (a scoring rule, a game's computer player, a protocol, money or dates), a core change many modules rely on, concurrency, lifetimes, serialization formats and schema migrations.
 
 ## Runs
 
@@ -76,7 +76,7 @@ Number the runs from 1; the level of a run is the highest of its WPs (the conduc
 
 ## Shots
 
-Opt-in (`tools/shots/CLAUDE.md`). Write `**Shots:** <scene>[@WxH], ...` and `**Shots expect:** <one line: which scenes change and where; the others stay equal>` in `## Slice` only for a visible change whose mistake the layout tests would miss (a look, a new screen, a skin, a layout), never for logic, tools, docs or engine-core slices. The scene names come only from `python3 <engine>/tools/shots/shots.py scenes`, run at the checkout root: no output or exit 77 means no line; when the scene you need is not in the list, write no line and one sentence under "Left for the owner" saying which scene the rules file lacks. A scene without `@WxH` uses the set's default size. A through entry's slice K gets its own line. The conductor takes `before` with this list and the reviewer takes `after`; "expect" is what the reviewer measures the diff against, so name the scenes and regions you know the slice changes.
+Opt-in, and only when section `Shots` of the rules file is not `none` (with `none`, or without the section, write no `**Shots:**` line: the look is then the owner's check, named under "Left for the owner"). Write `**Shots:** <scene>[@WxH], ...` and `**Shots expect:** <one line: which scenes change and where; the others stay equal>` in `## Slice` only for a visible change whose mistake the layout tests would miss (a look, a new screen, a skin, a layout), never for logic, tools, docs or core slices. The scene names come only from the scene list command of section `Shots`, run at the checkout root: no output or exit 77 means no line; when the scene you need is not in the list, write no line and one sentence under "Left for the owner" saying which scene the rules file lacks. A scene without `@WxH` uses the set's default size. A through entry's slice K gets its own line. The conductor takes `before` with this list and the reviewer takes `after`; "expect" is what the reviewer measures the diff against, so name the scenes and regions you know the slice changes.
 
 ## Files
 
@@ -107,7 +107,7 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 - [ ] code: ...
 - [ ] tests: ...
 - [ ] docs: ...
-- [ ] clang-format
+- [ ] <a check of section `Checks of a change`, one box each>
 
 ## WP 2/N: ...
 
