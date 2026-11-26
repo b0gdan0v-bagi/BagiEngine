@@ -37,6 +37,7 @@ namespace BECore::Stress {
         double workMs = 0.0;   // cpuMs without Present and Wait: headless the present is the software renderer's copy, in a window the two wait for the display
         double frameMs = 0.0;  // end to end, from the end of the frame before (on a manual clock it includes the idle between steps)
         uint32_t drawCalls = 0;
+        uint64_t primitives = 0;  // what the renderer was asked to draw, whether or not it batched
         uint64_t triangles = 0;
         uint32_t textureSwitches = 0;
         uint64_t allocCount = 0;  // 0 without ENGINE_PROFILER_ALLOC
@@ -68,6 +69,7 @@ namespace BECore::Stress {
         double cpuMs = 0.0;  // the means from here on
         double workMs = 0.0;
         double drawCalls = 0.0;
+        double primitives = 0.0;
         double triangles = 0.0;
         double textureSwitches = 0.0;
         double allocsPerFrame = 0.0;
@@ -115,6 +117,7 @@ namespace BECore::Stress {
         bool batching = true;      // the renderer batched 2D quads during the run
         bool manualClock = false;  // `frameMs` of a manual-clock run includes the idle between steps: it is reported, nothing gates on it
         bool allocTracking = false;
+        StressLoad load;
     };
 
     /// A number as a plain decimal (`12.3457`, never `1e-05`, `nan` or `inf`: a value that is not finite is 0)

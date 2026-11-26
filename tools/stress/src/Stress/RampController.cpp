@@ -165,6 +165,7 @@ namespace BECore::Stress {
         AddNumber(line, "presentMs", result.stages.presentMs);
         AddText(line, "scene", ToFlagValue(context.scene));
         AddInteger(line, "settleFrames", kSettleFrames);
+        AddInteger(line, "spriteSize", context.load.spriteSize);
         AddInteger(line, "steps", result.steps);
         AddNumber(line, "submitMs", result.stages.submitMs);
         AddNumber(line, "updateMs", result.stages.updateMs);

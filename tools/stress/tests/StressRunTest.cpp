@@ -70,7 +70,7 @@ namespace BECore::Stress::Tests {
         }
 
         /// One frame as Application::RunFrame makes it: opened, the scene updated inside it, closed with a present of @p presentMs and a total of @p cpuMs
-        void Frame(double cpuMs, double presentMs = 0.0, bool held = false) {
+        void Frame(double cpuMs, double presentMs = 0.0, bool held = false, const RenderCounters& draws = {}) {
             FrameStatsCollector& stats = CoreManager::GetFrameStats();
             stats.BeginFrame(held);
             Update();
@@ -78,7 +78,7 @@ namespace BECore::Stress::Tests {
             g_fakeNow += static_cast<uint64_t>(presentMs * kNanosecondsPerMs);
             stats.EndStage(FrameStage::Present);
             g_fakeNow += static_cast<uint64_t>((cpuMs - presentMs) * kNanosecondsPerMs);
-            stats.EndFrame({}, {});
+            stats.EndFrame(draws, {});
         }
 
         /// Frames of a cost that grows with the count on show (@p msPerObject for each object, @p presentMs of it in the present) until the run is done
@@ -168,6 +168,23 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetParamBool(parsed.Root(), "interleave"), Optional(true));
         EXPECT_EQ(GetParamInt(parsed.Root(), "atlases").value_or(0), 2);
         EXPECT_EQ(GetParamBool(parsed.Root(), "manualClock"), Optional(false));
+    }
+
+    TEST_F(StressRunTest, TheLineCarriesTheLoadAndThePrimitivesOfTheFrames) {
+        StartRun({"--stress-sprite-size=64"});
+        RenderCounters draws;
+        draws.drawCalls = 2;
+        draws.primitives = 30;
+
+        for (uint32_t i = 0; i < 100 && !Run().IsDone(); ++i) {
+            Frame(kFastMs, 0.0, false, draws);
+        }
+
+        ASSERT_EQ(_lines.size(), 1u);
+        const BECore::Tests::JsonDoc parsed(_lines[0]);
+        ASSERT_TRUE(parsed.IsParsed()) << _lines[0].c_str();
+        EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "primitives").value_or(0.0), 30.0);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "spriteSize").value_or(0), 64);
     }
 
     TEST_F(StressRunTest, NoBatchingTurnsTheBatcherOffAtTheFirstUpdateAndTheLineSaysSo) {
@@ -348,7 +365,7 @@ namespace BECore::Stress::Tests {
 
     TEST_F(StressRunTest, TheBudgetFlagIsWhatTheRampHoldsAndItsLineNames) {
         constexpr double kMsPerObject = 0.055;  // 33 / 0.055 = 600
-        StartRamp({"--stress-budget-ms=33"});
+        StartRamp({"--stress-budget-ms=33", "--stress-sprite-size=64"});
 
         RampFramesUntilDone(kMsPerObject);
 
@@ -356,6 +373,7 @@ namespace BECore::Stress::Tests {
         const BECore::Tests::JsonDoc parsed(_lines[0]);
         ASSERT_TRUE(parsed.IsParsed()) << _lines[0].c_str();
         EXPECT_DOUBLE_EQ(GetParamNumber(parsed.Root(), "budgetMs").value_or(0.0), 33.0);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "spriteSize").value_or(0), 64);
         const int64_t found = GetParamInt(parsed.Root(), "objectsAt60fps").value_or(0);
         EXPECT_LE(found, 600);
         EXPECT_GE(found, 575);

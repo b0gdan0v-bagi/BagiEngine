@@ -121,6 +121,7 @@ namespace BECore::Stress {
             CheckBareFlag(commandLine, StressFlags::kNoBatching),
             ReadNumber(commandLine, StressFlags::kAtlases, kMinAtlases, kMaxAtlases, settings.atlases),
             ReadChoice(commandLine, StressFlags::kLanguage, kLanguageNames, settings.language),
+            ReadNumber(commandLine, StressFlags::kSpriteSize, 1, kMaxSpriteSize, settings.load.spriteSize),
         };
         for (const auto& error : errors) {
             if (error) {

@@ -38,6 +38,7 @@ namespace BECore::Stress::Tests {
         EXPECT_FALSE(result->noBatching);
         EXPECT_EQ(result->atlases, 4u);
         EXPECT_EQ(result->language, StressLanguage::En);
+        EXPECT_EQ(result->load.spriteSize, 0u);
     }
 
     TEST(StressSettingsTest, OtherFlagsOfTheProgramAreIgnored) {
@@ -122,6 +123,14 @@ namespace BECore::Stress::Tests {
         for (const char* wrong : {"--stress-budget-ms=0.5", "--stress-budget-ms=1000.5", "--stress-budget-ms=-8", "--stress-budget-ms=", "--stress-budget-ms", "--stress-budget-ms=fast",
                                   "--stress-budget-ms=8ms", "--stress-budget-ms=nan", "--stress-budget-ms=inf"}) {
             ExpectErrorNaming({wrong}, "--stress-budget-ms");
+        }
+    }
+
+    TEST(StressSettingsTest, TheSpriteSizeIsAWholeNumberUpToTheViewHeight) {
+        EXPECT_EQ(Parse({"--stress-sprite-size=1"})->load.spriteSize, 1u);
+        EXPECT_EQ(Parse({"--stress-sprite-size=1080"})->load.spriteSize, kMaxSpriteSize);
+        for (const char* wrong : {"--stress-sprite-size=0", "--stress-sprite-size=1081", "--stress-sprite-size=12.5", "--stress-sprite-size=", "--stress-sprite-size"}) {
+            ExpectErrorNaming({wrong}, "--stress-sprite-size");
         }
     }
 

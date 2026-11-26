@@ -121,6 +121,7 @@ namespace BECore::Stress {
         bool manualClock = false;
         bool allocTracking = false;
         double budgetMs = kDefaultRampBudgetMs;
+        StressLoad load;
     };
 
     /**

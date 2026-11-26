@@ -95,6 +95,24 @@ namespace BECore::Stress::Tests {
         EXPECT_TRUE(negative);
     }
 
+    TEST(SpriteFieldTest, AFixedSideKeepsEverySpriteInsideTheViewWhateverTheCount) {
+        StressSettings settings = Settings(false);
+        for (const uint32_t side : {400u, kMaxSpriteSize}) {
+            settings.load.spriteSize = side;
+            for (uint32_t i = 0; i < kCount; ++i) {
+                const SpritePlacement p = Place(i, kCount, settings, kView);
+                ASSERT_EQ(p.size, static_cast<float>(side)) << i;
+                ASSERT_GE(p.x, 0.0f) << i;
+                ASSERT_GE(p.y, 0.0f) << i;
+                ASSERT_LE(p.x + p.size, kView.width) << i;
+                ASSERT_LE(p.y + p.size, kView.height) << i;
+                const SpritePlacement larger = Place(i, 2 * kCount, settings, kView);
+                ASSERT_EQ(larger.x, p.x) << i;
+                ASSERT_EQ(larger.y, p.y) << i;
+            }
+        }
+    }
+
     TEST(SpriteFieldTest, EveryBlendModeAndEveryAtlasOccursInRunsAndInterleaved) {
         for (bool interleave : {false, true}) {
             const StressSettings settings = Settings(interleave);

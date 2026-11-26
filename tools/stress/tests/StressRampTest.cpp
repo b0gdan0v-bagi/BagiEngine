@@ -390,6 +390,7 @@ namespace BECore::Stress::Tests {
         context.scene = StressScene::Entities;
         context.atlases = 4;
         context.manualClock = true;
+        context.load.spriteSize = 256;
 
         const String line = FormatRampLine(result, StressMeasure::Cpu, context);
 
@@ -423,10 +424,15 @@ namespace BECore::Stress::Tests {
             }
             at = line.find('"', end + 1);
         }
+        const Vector<String> expected = {"aborted",      "allocTracking", "atlases", "budgetMs",      "capped",   "drawMs",         "frames",    "gpuMs",
+                                         "interleave",   "manualClock",   "measure", "measureFrames", "mode",     "objectsAt60fps", "presentMs", "scene",
+                                         "settleFrames", "spriteSize",    "steps",   "submitMs",      "updateMs", "verified",       "waitMs"};
+        EXPECT_EQ(keys, expected);
         EXPECT_EQ(keys.size(), parsed.Root().Size());
         for (size_t i = 1; i < keys.size(); ++i) {
             EXPECT_LT(keys[i - 1], keys[i]);
         }
+        EXPECT_EQ(GetParamInt(parsed.Root(), "spriteSize").value_or(0), 256);
     }
 
 }  // namespace BECore::Stress::Tests

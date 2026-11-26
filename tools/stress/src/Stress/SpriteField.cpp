@@ -37,7 +37,7 @@ namespace BECore::Stress {
 
     SpritePlacement Place(uint32_t index, uint32_t count, const StressSettings& settings, const FieldView& view) {
         SpritePlacement placement;
-        placement.size = std::floor(Between(kSpriteMinSize, kSpriteMaxSize + 1.0f, Unit(index, kSaltSize)));
+        placement.size = settings.load.spriteSize != 0 ? static_cast<float>(settings.load.spriteSize) : std::floor(Between(kSpriteMinSize, kSpriteMaxSize + 1.0f, Unit(index, kSaltSize)));
         placement.x = std::floor(Unit(index, kSaltX) * (view.width - placement.size));
         placement.y = std::floor(Unit(index, kSaltY) * (view.height - placement.size));
         const float spinSpeed = Between(kSpriteMinSpin, kSpriteMaxSpin, Unit(index, kSaltSpin));

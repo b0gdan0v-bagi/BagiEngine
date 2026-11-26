@@ -116,6 +116,21 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(transform->_height, height);
     }
 
+    TEST_F(StressSpritesTest, TheSizeFlagGivesEverySpriteThatSide) {
+        StartSprites({"--stress-sprite-size=300"});
+        SetCount(50);
+        Update();
+        SetCount(80);
+        Update();
+
+        ASSERT_EQ(Field().GetChildren().size(), 80u);
+        for (const auto& node : Field().GetChildren()) {
+            const auto transform = node->GetComponent<TransformComponent>();
+            EXPECT_EQ(transform->_width, 300.0f);
+            EXPECT_EQ(transform->_height, 300.0f);
+        }
+    }
+
     TEST_F(StressSpritesTest, CountZeroDrawsNothingAndComesBack) {
         StartSprites();
         SetCount(40);

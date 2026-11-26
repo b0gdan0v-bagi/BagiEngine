@@ -40,6 +40,7 @@ namespace BECore::Stress {
      * @brief The placement of sprite @p index of @p count, the same on every machine (an own integer hash: the standard distributions are not
      *        the same in every standard library).
      *
+     * The side is `settings.load.spriteSize`, or without one a side of its own between kSpriteMinSize and kSpriteMaxSize.
      * The position keeps the whole sprite inside @p view. The atlas and the blend mode follow what a batcher sees: by default the sprites are in
      * runs, the way a game sorts by atlas: `count / atlases` consecutive sprites share an atlas and `kBlendRunLength` share a blend mode.
      * `settings.interleave` changes both on every sprite (the worst case).
