@@ -33,6 +33,14 @@ Python tools for the browser build (entry `web-build` of the todo store; the CMa
 | `HEAD` works; any other method is 405 with `Allow: GET, HEAD` and `Connection: close` (the body is not read); `Server: BagiWebServe` | No Python version on the wire |
 | `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` on every answer (304 and errors too). First match wins: the switch, then `COOP_COEP`, then the boolean `threads` of `manifest.json` in the root, then **on**. The start line prints the decision and its reason | A pthread wasm needs `SharedArrayBuffer`, which only a cross-origin isolated page gets: the threaded build (the default) does not start without both headers. The single-thread build needs neither and is served without them, so it works on a host that cannot send them. The headers break a page that embeds another origin without CORP. Unknown means on: a needless header costs a page that embeds nothing, a missing one a game that does not start |
 
+## The editor page
+
+A page built with the editor (preset `web-editor`) can change everything; publishing it open is what these rules prevent. From a game's root: `python engine/tools/web/build_and_deploy.py --game <Game> --preset web-editor [--deploy --service <its own>]`; the package is `build/web-editor-dist`, never `dist/`.
+
+- **How it is known:** the link writes `<game>.editor` beside the page (`cmake/BagiWeb.cmake`) and removes it for a build without the editor; `package.py` turns it into `"editor": true` in `manifest.json` (no key otherwise), writes that before the first file, and refuses a folder whose manifest says the other kind.
+- **One rule** (`serve.editor_door`): Basic, or sign-in with `SIGNIN_ALLOW`. `serve.py` does not start an editor root without it, except on a loopback host with no `RAILWAY_*` marker. `--deploy` asks the same of the service's variables (`railway variable list`) before the staging, so a hand `railway up` skips that question but not `serve.py`.
+- **The deploy** needs `--service` or a target (the default service is the release page's). A failed or unreadable answer refuses, no option skips the question, and nothing of the answer is printed or recorded: it holds the secrets.
+
 ## Match logs (`/matches/`)
 
 Off unless `MATCH_STORE` names a folder (without it `/matches/...` is as it was: 405 for POST and DELETE, 404 for GET). It lets a page send a match log to its own server, piece by piece; the game side is `WebPostStart` / `WebPostPoll` (`src/Modules/SDL/CLAUDE.md`) over `window.bagiWebPost` of `web/shell.html`, a `fetch` of the page's own origin that carries its credentials (Basic or the session cookie). Behind Basic, whoever holds the password can post, read and delete every log; open, anybody can (the start line warns); with sign-in and `MATCH_COLLECT_TOKEN` the rules of `ACCESS.md` (stamp, 403, bearer). The answers carry the isolation headers.

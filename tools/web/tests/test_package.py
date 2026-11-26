@@ -377,6 +377,65 @@ class WebAppTest(unittest.TestCase):
         self.assertIn("package.py:", err.getvalue())
 
 
+class BrokenBrotli:
+    """A compression that stops the run halfway, as an interrupt would."""
+
+    @staticmethod
+    def compress(data: bytes, quality: int = 11) -> bytes:
+        raise KeyboardInterrupt
+
+
+class EditorPageTest(unittest.TestCase):
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.root = Path(self._temp.name)
+        self.release = write_build_output(self.root / "release")
+        self.editor = write_build_output(self.root / "editor")
+        (self.editor / f"{GAME}.editor").write_bytes(b"")
+        self.out = self.root / "dist"
+
+    def manifest(self) -> dict:
+        return json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+
+    def snapshot(self) -> dict:
+        return {path.relative_to(self.out).as_posix(): path.read_bytes() for path in self.out.rglob("*") if path.is_file()}
+
+    def test_the_marker_of_the_build_makes_the_manifest_say_editor_and_is_not_published(self):
+        package.package(self.editor, self.out, brotli_module=None)
+        self.assertIs(self.manifest()["editor"], True)
+        self.assertFalse((self.out / f"{GAME}.editor").exists())
+        self.assertNotIn(f"{GAME}.editor", self.manifest()["files"])
+
+    def test_without_the_marker_the_manifest_has_no_such_key(self):
+        package.package(self.release, self.out, brotli_module=None)
+        self.assertNotIn("editor", self.manifest())
+
+    def test_a_folder_takes_its_own_kind_again(self):
+        for build in (self.release, self.editor):
+            with self.subTest(build.name):
+                folder = self.root / f"dist-{build.name}"
+                package.package(build, folder, brotli_module=None)
+                package.package(build, folder, brotli_module=None)
+
+    def test_a_folder_of_the_other_kind_is_refused_and_left_as_it_was(self):
+        for first, second in ((self.release, self.editor), (self.editor, self.release)):
+            with self.subTest(second=second.name):
+                self.out = self.root / f"dist-{first.name}"
+                package.package(first, self.out, brotli_module=None)
+                before = self.snapshot()
+                (second / f"{GAME}.wasm").write_bytes(b"another build")
+                with self.assertRaisesRegex(package.PackageError, "folder of its own"):
+                    package.package(second, self.out, brotli_module=None)
+                self.assertEqual(self.snapshot(), before)
+
+    def test_an_editor_package_that_stops_halfway_already_says_editor(self):
+        with self.assertRaises(KeyboardInterrupt):
+            package.package(self.editor, self.out, brotli_module=BrokenBrotli)
+        self.assertTrue((self.out / "index.html").is_file())
+        self.assertIs(self.manifest()["editor"], True)
+
+
 class NoticesTest(unittest.TestCase):
     NOTICES = b"Third-party notices\n"
 

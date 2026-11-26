@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -634,7 +635,7 @@ class GateRunsTestsTest(DeployTestCase):
     def test_the_area_of_the_target_goes_to_alltests(self):
         (self.source / "web").mkdir()
         (self.source / "web" / "targets.json").write_text(json.dumps({"format": 1, "targets": {"t": {
-            "game": "G", "preset": "web-editor", "service": "svc", "address": "svc.example.dev", "area": "mahjong"}}}), encoding="utf-8")
+            "game": "G", "preset": "web-release", "service": "svc", "address": "svc.example.dev", "area": "mahjong"}}}), encoding="utf-8")
         verdicts = iter([alltests_results.Verdict(False, GREEN_COMMIT, "no result"), alltests_results.Verdict(True, GREEN_COMMIT, "green")])
         runner = FakeRunner()
         code, _, err, _ = self.run_script("--target", "t", "--deploy", which=have_railway, runner=runner, gate=lambda *_: next(verdicts))
@@ -891,6 +892,185 @@ class AlltestsGateTest(DeployTestCase):
 
         code, _, err, _ = self.run_script("--dry-run", gate=no_gate)
         self.assertEqual(code, 0, err)
+
+
+SECRET = "sekret-value-0123456789-abcdefghijklmnopqrstuvwxyz"
+BASIC_VARIABLES = {"BASIC_AUTH_USER": "studio", "BASIC_AUTH_PASSWORD": SECRET}
+SIGN_IN_VARIABLES = {"GOOGLE_CLIENT_ID": "client", "GOOGLE_CLIENT_SECRET": SECRET, "PUBLIC_URL": "https://studio.example.com",
+                     "SESSION_SECRET": SECRET}
+
+
+class EditorRunner(FakeRunner):
+    """The runner of an editor build: the package step writes a manifest into its output folder (`editor` says which kind), and
+    `railway variable list` answers `variables` (a dict, or the bytes of an answer) with the exit code `code`, or raises `error`. The
+    answer's stderr holds the secret too."""
+
+    def __init__(self, variables=None, code: int = 0, error: Exception | None = None, editor: bool = True):
+        super().__init__()
+        self.variables = {} if variables is None else variables
+        self.code = code
+        self.error = error
+        self.editor = editor
+        self.options: dict = {}
+
+    def __call__(self, command, cwd, check, **options):
+        if command[1:3] == ["variable", "list"]:
+            self.calls.append((list(command), Path(cwd)))
+            self.options = options
+            if self.error:
+                raise self.error
+            answer = self.variables if isinstance(self.variables, bytes) else json.dumps(self.variables).encode("utf-8")
+            return SimpleNamespace(returncode=self.code, stdout=answer, stderr=f"stderr {SECRET}".encode("utf-8"))
+        completed = super().__call__(command, cwd, check)
+        if len(command) > 3 and command[1].endswith(build_and_deploy.PACKAGE_SCRIPT):
+            dist = Path(command[3])
+            dist.mkdir(parents=True, exist_ok=True)
+            manifest = {"game": "BagiStress", **({"editor": True} if self.editor else {})}
+            (dist / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        return completed
+
+    def railway_verbs(self) -> list[str]:
+        return [command[1] for command, _ in self.calls if command[0] == RAILWAY_PATH]
+
+
+class EditorPageTest(DeployTestCase):
+    def deploy(self, runner: EditorRunner, *extra, preset="web-editor", service=("--service", "studio")):
+        status = Path(self._temp.name) / "status.json"
+        code, out, err, _ = self.run_script("--preset", preset, "--deploy", *service, "--status-file", str(status), *extra,
+                                            which=have_railway, runner=runner)
+        return code, out, err, status.read_text(encoding="utf-8") if status.exists() else ""
+
+    def assert_refused(self, runner: EditorRunner, code: int, out: str, err: str, status: str):
+        self.assertEqual(code, 2, out + err)
+        self.assertEqual(runner.railway_verbs(), ["variable"])
+        self.assertFalse((self.source / build_and_deploy.STAGE_FOLDER).exists())
+        recorded = json.loads(status)
+        self.assertEqual((recorded["state"], recorded["stage"]), ("failed", "deploy"))
+        for text in (out, err, status):
+            self.assertNotIn(SECRET, text)
+
+    def test_an_editor_preset_packages_into_a_folder_of_its_own_and_leaves_dist_alone(self):
+        runner = EditorRunner()
+        code, _, err, _ = self.run_script("--preset", "web-editor", runner=runner)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(Path(runner.calls[-1][0][3]), self.source.resolve() / "build" / "web-editor-dist")
+        self.assertFalse((self.source / "dist").exists())
+
+    def test_a_dist_option_wins_over_the_folder_of_the_editor_preset(self):
+        chosen = self.source / "elsewhere"
+        runner = EditorRunner()
+        self.run_script("--preset", "web-editor", "--dist", str(chosen), runner=runner)
+        self.assertEqual(Path(runner.calls[-1][0][3]), chosen)
+
+    def test_a_deploy_of_an_editor_preset_without_a_service_starts_nothing(self):
+        for extra in ((), ("--dry-run",)):
+            with self.subTest(extra=extra):
+                runner = EditorRunner(BASIC_VARIABLES)
+                code, _, err, _ = self.deploy(runner, *extra, service=())
+                self.assertEqual(code, 2)
+                self.assertIn("--service", err)
+                self.assertEqual(runner.calls, [])
+
+    def test_a_dry_run_says_the_check_would_run_and_asks_nothing(self):
+        runner = EditorRunner()
+        code, out, err, _ = self.deploy(runner, "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("the access of the service studio would be checked", out)
+        self.assertEqual(runner.calls, [])
+
+    def test_a_service_behind_basic_auth_or_an_allowlist_gets_the_page_after_the_check(self):
+        doors = {"Basic auth": BASIC_VARIABLES, "sign-in with an allowlist": {**SIGN_IN_VARIABLES, "SIGNIN_ALLOW": "me@example.com"}}
+        for door, variables in doors.items():
+            with self.subTest(door):
+                runner = EditorRunner(variables)
+                code, out, err, status = self.deploy(runner)
+                self.assertEqual(code, 0, err)
+                self.assertEqual(runner.railway_verbs(), ["variable", "up"])
+                check = runner.calls[-2]
+                self.assertEqual(check[0][1:], ["variable", "list", "--service", "studio", "--json"])
+                # The folder `railway up` runs in, or its closest parent before the first staging: one linked project for both
+                self.assertTrue((self.source.resolve() / build_and_deploy.STAGE_FOLDER).is_relative_to(check[1]))
+                self.assertTrue(runner.options["capture_output"])
+                self.assertIn(f"the service studio is behind {door}", out)
+                for text in (out, err, status):
+                    self.assertNotIn(SECRET, text)
+
+    def test_a_service_without_access_control_is_refused_before_the_staging(self):
+        cases = {
+            "open": {"PORT": "8080"},
+            "half a pair": {"BASIC_AUTH_PASSWORD": SECRET},
+            "a user with a colon": {"BASIC_AUTH_USER": "a:b", "BASIC_AUTH_PASSWORD": SECRET},
+            "sign-in without a list": SIGN_IN_VARIABLES,
+            "an empty list": {**SIGN_IN_VARIABLES, "SIGNIN_ALLOW": " "},
+            "a list without a provider": {"SIGNIN_ALLOW": "me@example.com", "SESSION_SECRET": SECRET},
+            "both doors": {**BASIC_VARIABLES, **SIGN_IN_VARIABLES, "SIGNIN_ALLOW": "me@example.com"},
+            # The server quotes this value in its own message
+            "settings the server refuses": {**SIGN_IN_VARIABLES, "SIGNIN_ALLOW": "me@example.com", "PUBLIC_URL": f"ftp://{SECRET}"},
+            # urlsplit raises, and its message quotes the address
+            "an address that does not parse": {**SIGN_IN_VARIABLES, "SIGNIN_ALLOW": "me@example.com", "PUBLIC_URL": f"https://[{SECRET}]"},
+        }
+        for name, variables in cases.items():
+            with self.subTest(name):
+                runner = EditorRunner(variables)
+                code, out, err, status = self.deploy(runner)
+                self.assert_refused(runner, code, out, err, status)
+                self.assertIn("no access control", err)
+
+    def test_a_check_that_fails_or_cannot_be_read_is_a_refusal(self):
+        cases = {
+            "exit code": EditorRunner(BASIC_VARIABLES, code=1),
+            "cannot start": EditorRunner(error=FileNotFoundError(2, "no railway")),
+            "time out": EditorRunner(error=subprocess.TimeoutExpired(["railway"], 60, output=SECRET.encode("utf-8"))),
+            "not JSON": EditorRunner(f"BASIC_AUTH_PASSWORD={SECRET}".encode("utf-8")),
+            "not text": EditorRunner(b"\xff\xfe\x00"),
+            "a list": EditorRunner(json.dumps([BASIC_VARIABLES]).encode("utf-8")),
+            "a value that is no string": EditorRunner({**BASIC_VARIABLES, "SESSION_DAYS": 30}),
+        }
+        for name, runner in cases.items():
+            with self.subTest(name):
+                code, out, err, status = self.deploy(runner)
+                self.assert_refused(runner, code, out, err, status)
+                self.assertIn("cannot check the access of the service studio", err)
+
+    def test_skip_alltests_does_not_skip_the_access_check(self):
+        runner = EditorRunner()
+        code, out, err, status = self.deploy(runner, "--skip-alltests")
+        self.assert_refused(runner, code, out, err, status)
+
+    def test_a_package_that_says_editor_is_checked_whatever_the_preset_and_needs_a_named_service(self):
+        runner = EditorRunner()
+        code, out, err, status = self.deploy(runner, preset="web-release")
+        self.assert_refused(runner, code, out, err, status)
+        shutil.rmtree(self.source / "dist")
+        runner = EditorRunner(BASIC_VARIABLES)
+        code, _, err, _ = self.deploy(runner, preset="web-release", service=())
+        self.assertEqual(code, 2)
+        self.assertIn("--service", err)
+        self.assertEqual(runner.railway_verbs(), [])
+
+    def test_an_editor_preset_is_checked_even_when_its_package_does_not_say_editor(self):
+        runner = EditorRunner(editor=False)
+        code, out, err, status = self.deploy(runner)
+        self.assert_refused(runner, code, out, err, status)
+
+    def test_a_release_page_asks_the_service_nothing(self):
+        runner = EditorRunner(editor=False)
+        code, _, err, _ = self.deploy(runner, preset="web-release", service=())
+        self.assertEqual(code, 0, err)
+        self.assertEqual(runner.railway_verbs(), ["up"])
+
+    def test_a_target_with_the_editor_preset_is_checked_on_its_service(self):
+        folder = self.source / "web"
+        folder.mkdir()
+        target = {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio.example.com"}
+        (folder / "targets.json").write_text(json.dumps({"format": 1, "targets": {"editor": target}}), encoding="utf-8")
+        runner = EditorRunner(BASIC_VARIABLES)
+        code, _, err, _ = self.run_script("--target", "editor", "--deploy", which=have_railway, runner=runner)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(runner.railway_verbs(), ["variable", "up"])
+        self.assertIn("studio-mahjong", runner.calls[-2][0])
+        self.assertTrue((self.checkout_dir / "build" / "web-editor-dist" / "manifest.json").is_file())
+        self.assertFalse((self.checkout_dir / "dist").exists())
 
 
 class DeployFilesTest(unittest.TestCase):
