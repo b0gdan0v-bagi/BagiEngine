@@ -228,6 +228,14 @@ Entry: `editor-asset-panels-rest`. Bump: minor.
 - The widget types `ConsoleWidget`, `ProfilerWidget`, `TextureEditorWidget` and `ArtGenWidget` and the class `PreferencesWindow` are removed; their windows are panel assets drawn by `AssetPanelWidget`. Adapt: in a game's own `config/WidgetsConfig.xml` replace each `<widget type="XWidget"/>` with `<widget type="AssetPanelWidget" asset="..."/>`: `ConsolePanel`, `ProfilerPanel`, `SpriteLibraryPanel`, `GeneratePanel`.
 - The menu bar, the main toolbar, the Preferences window, the editor and Scene Editor dialogs, the Viewport toolbars and the Scene Editor's Save row and inspector frame are drawn only when their asset line is in `WidgetsConfig.xml`; without `ViewportToolbarPanel` F8 and W/E/R/X do nothing. Adapt: a game with its own `WidgetsConfig.xml` adds the `AssetPanelWidget` lines of the engine's `config/WidgetsConfig.xml`: `MainToolbarPanel`, `MainMenuPanel` and `ViewportToolbarPanel` before `EditorLayoutWidget`, `PreferencesPanel` and `EditorDialogsPanel` after it, `SceneEditorToolbarPanel` and `SceneInspectorPanel` before `SceneEditorWidget`, `SceneDialogsPanel` after it.
 
+## 0.26.3 - 2026-11-25 - Perf: a benchmark set names one preset, so a game's set runs on one OS only (Chess: Windows, not the Mac)
+
+Entry: `perf-preset-per-platform`. Bump: patch.
+
+### Added
+
+- `preset` and `profilePreset` of a game's benchmark set (`.claude/rules/perf-project.md`) may be an object keyed by platform (`macos`, `windows`, `linux`); `tools/perf/perf.py` takes the running OS's preset and stops with a message naming the platform when the set has none for it. A plain string works as before.
+
 ## 0.26.2 - 2026-11-25 - Editor: the Config Editor floats instead of docking with an imgui.ini saved before it became a panel asset
 
 Entry: `bug-config-editor-not-docked`. Bump: patch.
