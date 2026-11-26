@@ -1,3 +1,5 @@
+#include <Common/AllocCheck.h>
+#include <Stress/Components/StressLifeComponent.h>
 #include <Stress/Components/StressSpritesComponent.h>
 #include <Stress/SpriteField.h>
 #include <Stress/StressNames.h>
@@ -43,6 +45,50 @@ namespace BECore::Stress::Tests {
         Vec2 PositionOf(size_t i) const {
             const auto transform = Field().GetChildren()[i]->GetComponent<TransformComponent>();
             return Vec2(transform->_x, transform->_y);
+        }
+
+        Vector<IntrusivePtr<SceneNode>> Nodes() const {
+            Vector<IntrusivePtr<SceneNode>> nodes;
+            for (const auto& node : Field().GetChildren()) {
+                nodes.push_back(node);
+            }
+            return nodes;
+        }
+
+        size_t Updaters() const {
+            return GetScene("StressSprites").GetUpdaterCount(SceneUpdateKind::Frame);
+        }
+
+        /// The age of the life of the sprite node @p i; negative when it has none
+        float AgeOf(size_t i) const {
+            const SceneNode& node = *Field().GetChildren()[i];
+            if (node.GetChildren().size() != 1) {
+                return -1.0f;
+            }
+            const auto life = node.GetChildren()[0]->GetComponent<StressLifeComponent>();
+            return life ? life->GetAge() : -1.0f;
+        }
+
+        /// Runs enough frames for every list of a frame to reach its size, then expects further frames to allocate nothing
+        void ExpectSteadyFramesToAllocateNothing() {
+            constexpr int kWarmup = 8;
+            constexpr int kMeasured = 64;
+            // Without an output size nothing is culled: the recorder gets the storage of a call for every sprite, however many a later frame draws
+            const float width = _renderer->width;
+            _renderer->width = 0.0f;
+            Update();
+            Draw();
+            _renderer->width = width;
+            for (int frame = 0; frame < kWarmup; ++frame) {
+                Update();
+                Draw();
+            }
+            BECore::Tests::ExpectNoAllocations([&] {
+                for (int frame = 0; frame < kMeasured; ++frame) {
+                    Update();
+                    Draw();
+                }
+            });
         }
 
         /// Where sprite @p i of @p count lies in the field of a world of @p world views
@@ -235,6 +281,129 @@ namespace BECore::Stress::Tests {
         Draw();
 
         EXPECT_EQ(_renderer->calls.size(), kCount);
+    }
+
+    TEST_F(StressSpritesTest, ChurnReplacesTheOldestSpritesWithNewOnesAtTheTail) {
+        StartSprites({"--stress-churn=10"});
+        SetCount(100);
+        Update();
+        const Vector<IntrusivePtr<SceneNode>> before = Nodes();  // held, so that a new node cannot have the address of an old one
+
+        Update();
+        Draw();
+
+        const auto& after = Field().GetChildren();
+        ASSERT_EQ(after.size(), 100u);
+        for (size_t i = 0; i < 90; ++i) {
+            ASSERT_EQ(after[i].Get(), before[i + 10].Get()) << i;
+        }
+        for (size_t i = 90; i < 100; ++i) {
+            for (const auto& old : before) {
+                ASSERT_NE(after[i].Get(), old.Get()) << i;
+            }
+        }
+        EXPECT_EQ(Component().GetSpriteCount(), 100u);
+        EXPECT_EQ(_renderer->calls.size(), 100u);
+    }
+
+    TEST_F(StressSpritesTest, ASpriteOfAChurnIsTheNextOfTheFieldAndKeepsItsPlace) {
+        StartSprites({"--stress-churn=10"});
+        SetCount(100);
+        Update();  // builds sprites 0..99 and replaces the first 10
+        Update();
+        Update();
+
+        for (uint32_t i = 0; i < 100; ++i) {
+            ASSERT_EQ(PositionOf(i), PlaceInWorld(30 + i, 100, 1)) << i;
+        }
+    }
+
+    TEST_F(StressSpritesTest, ASpriteLivesOnItsChildNodeUntilItIsReplaced) {
+        StartSprites({"--stress-churn=10"});
+        SetCount(40);
+        for (int frame = 0; frame < 5; ++frame) {
+            Update();
+        }
+
+        EXPECT_GT(AgeOf(0), AgeOf(39)) << "the oldest sprite is at the head";
+        EXPECT_EQ(AgeOf(39), 0.0f) << "a new life is first updated in the next pass";
+    }
+
+    TEST_F(StressSpritesTest, WithoutChurnASpriteHasNoChild) {
+        StartSprites();
+        SetCount(20);
+        Update();
+
+        for (const auto& node : Field().GetChildren()) {
+            ASSERT_TRUE(node->GetChildren().empty());
+        }
+    }
+
+    TEST_F(StressSpritesTest, AChurnAboveTheCountReplacesEverySprite) {
+        StartSprites({"--stress-churn=1000"});
+        SetCount(30);
+        Update();
+        const Vector<IntrusivePtr<SceneNode>> before = Nodes();
+
+        Update();
+        Draw();
+
+        ASSERT_EQ(Field().GetChildren().size(), 30u);
+        for (const auto& node : Field().GetChildren()) {
+            for (const auto& old : before) {
+                ASSERT_NE(node.Get(), old.Get());
+            }
+        }
+        EXPECT_EQ(_renderer->calls.size(), 30u);
+    }
+
+    TEST_F(StressSpritesTest, ChurnFollowsTheCountDownToNothingAndBack) {
+        StartSprites({"--stress-churn=7"});
+        SetCount(0);
+        Update();
+        const size_t withoutSprites = Updaters();
+
+        for (const uint32_t count : {50u, 200u, 3u, 0u, 20u}) {
+            SetCount(count);
+            Update();
+            Update();
+            Draw();
+            ASSERT_EQ(Field().GetChildren().size(), count);
+            ASSERT_EQ(_renderer->calls.size(), count);
+            ASSERT_EQ(Updaters(), withoutSprites + count) << "one life per sprite";
+        }
+    }
+
+    TEST_F(StressSpritesTest, AChurnFrameRebuildsTheDrawListOnce) {
+        StartSprites({"--stress-churn=5"});
+        SetCount(50);
+        Update();
+        Draw();
+        const uint32_t builds = GetScene("StressSprites").GetDrawListBuilds();
+
+        for (int frame = 0; frame < 6; ++frame) {
+            Update();
+            Draw();
+        }
+
+        EXPECT_EQ(GetScene("StressSprites").GetDrawListBuilds(), builds + 6);
+    }
+
+    TEST_F(StressSpritesTest, ASteadyChurnFrameAllocatesNothing) {
+        constexpr uint32_t kChurned = 400;
+        StartSprites({"--stress-churn=50"});
+        SetCount(kChurned);
+
+        ExpectSteadyFramesToAllocateNothing();
+    }
+
+    TEST_F(StressSpritesTest, ASteadyFrameOfAWorldAllocatesNothing) {
+        StartSprites({"--stress-world=4"});
+        _renderer->width = GetScene("StressSprites").GetViewWidth();
+        _renderer->height = GetScene("StressSprites").GetViewHeight();
+        SetCount(kCount);
+
+        ExpectSteadyFramesToAllocateNothing();
     }
 
     TEST_F(StressSpritesTest, CountZeroDrawsNothingAndComesBack) {

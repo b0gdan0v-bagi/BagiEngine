@@ -153,6 +153,7 @@ namespace BECore::Stress {
         AddInteger(line, "atlases", context.atlases);
         AddNumber(line, "budgetMs", context.budgetMs);
         AddBool(line, "capped", result.capped);
+        AddInteger(line, "churn", context.load.churn);
         AddNumber(line, "drawMs", result.stages.drawMs);
         AddInteger(line, "frames", result.frames);
         AddNumber(line, "gpuMs", result.stages.gpuMs);

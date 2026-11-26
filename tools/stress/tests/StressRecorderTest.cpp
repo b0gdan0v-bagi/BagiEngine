@@ -22,11 +22,11 @@ namespace BECore::Stress::Tests {
             return recorder;
         }
 
-        constexpr const char* kKeys[] = {"allocBytesPerFrame", "allocTracking", "allocsPerFrame", "atlases",         "batching",   "count",        "cpuMs",       "cpuMsP50",
-                                         "cpuMsP99",           "drawCalls",     "drawMs",         "drawMsP50",       "frameMsP50", "frameMsP99",   "frames",      "gpuMs",
-                                         "gpuMsP50",           "gpuMsP99",      "interleave",     "manualClock",     "presentMs",  "presentMsP50", "primitives",  "scene",
-                                         "spriteSize",         "submitMs",      "submitMsP50",    "textureSwitches", "triangles",  "updateMs",     "updateMsP50", "waitMs",
-                                         "waitMsP50",          "warmup",        "workMs",         "workMsP50",       "workMsP99",  "world"};
+        constexpr const char* kKeys[] = {"allocBytesPerFrame", "allocTracking",   "allocsPerFrame", "atlases",   "batching",     "churn",      "count",     "cpuMs",      "cpuMsP50",
+                                         "cpuMsP99",           "drawCalls",       "drawMs",         "drawMsP50", "frameMsP50",   "frameMsP99", "frames",    "gpuMs",      "gpuMsP50",
+                                         "gpuMsP99",           "interleave",      "manualClock",    "presentMs", "presentMsP50", "primitives", "scene",     "spriteSize", "submitMs",
+                                         "submitMsP50",        "textureSwitches", "triangles",      "updateMs",  "updateMsP50",  "waitMs",     "waitMsP50", "warmup",     "workMs",
+                                         "workMsP50",          "workMsP99",       "world"};
 
         StressRunContext Context() {
             StressRunContext context;
@@ -39,6 +39,7 @@ namespace BECore::Stress::Tests {
             context.allocTracking = false;
             context.load.spriteSize = 256;
             context.load.world = 4;
+            context.load.churn = 12;
             return context;
         }
 
@@ -318,6 +319,7 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetParamInt(parsed.Root(), "atlases").value_or(0), 8);
         EXPECT_EQ(GetParamInt(parsed.Root(), "spriteSize").value_or(0), 256);
         EXPECT_EQ(GetParamInt(parsed.Root(), "world").value_or(0), 4);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "churn").value_or(0), 12);
         EXPECT_EQ(GetParamInt(parsed.Root(), "batching").value_or(-1), 1);
         EXPECT_EQ(GetParamBool(parsed.Root(), "interleave"), Optional(true));
         EXPECT_EQ(GetParamBool(parsed.Root(), "manualClock"), Optional(true));

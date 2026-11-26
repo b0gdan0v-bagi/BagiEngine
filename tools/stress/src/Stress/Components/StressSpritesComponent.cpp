@@ -7,7 +7,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/SceneEvents.h>
 #include <Generated/StressSpritesComponent.gen.hpp>
-#include <Stress/SpriteField.h>
+#include <Stress/Components/StressLifeComponent.h>
 #include <Stress/StressGame.h>
 
 namespace BECore::Stress {
@@ -16,10 +16,11 @@ namespace BECore::Stress {
 
         constexpr float kFullTurn = 360.0f;
 
-        /// The one name of every sprite node: a name is a PoolString, so a million nodes share it
-        PoolString SpriteNodeName() {
-            return "Sprite"_intern;
-        }
+        /// The names of the nodes of the field. A name is a PoolString, so a million nodes share one
+        struct NodeNames {
+            static constexpr auto sprite = "Sprite"_intern;
+            static constexpr auto life = "Life"_intern;  // the child of a sprite that can despawn
+        };
 
     }  // namespace
 
@@ -39,8 +40,11 @@ namespace BECore::Stress {
             _builtVersion = state.Version();
             Rebuild(state.GetCount(), game->GetSettings());
         }
+        if (game->GetSettings().load.churn > 0) {
+            Churn(state.GetCount(), game->GetSettings());
+        }
 
-        // After the rebuild, so that a new sprite is shifted before it is first drawn. A world of one view has no camera and writes no position
+        // After the rebuild and the churn, so that a new sprite is shifted before it is first drawn. A world of one view has no camera and writes no position
         const uint32_t world = game->GetSettings().load.world;
         const bool cameraMoves = world > 1;
         Vec2 camera;
@@ -95,8 +99,6 @@ namespace BECore::Stress {
     }
 
     void StressSpritesComponent::Rebuild(uint32_t count, const StressSettings& settings) {
-        const float world = static_cast<float>(settings.load.world);
-        const FieldView field{GetScene().GetViewWidth() * world, GetScene().GetViewHeight() * world};
         const size_t target = count;
 
         // Shrink from the tail
@@ -108,18 +110,38 @@ namespace BECore::Stress {
         // The runs of atlas and blend mode depend on the count: the kept nodes follow them again when it moved
         if (count != _placedCount) {
             for (size_t i = 0; i < _sprites.size(); ++i) {
-                const SpritePlacement placement = Place(static_cast<uint32_t>(i), count, settings, field);
+                const SpritePlacement placement = PlacementOf(i, count, settings);
                 ApplyRun(_sprites[i], placement.atlas, placement.srcRect, placement.blend);
             }
             _placedCount = count;
         }
 
-        // Grow at the tail
-        _sprites.reserve(target);
-        while (_sprites.size() < target) {
-            const SpritePlacement placement = Place(static_cast<uint32_t>(_sprites.size()), count, settings, field);
+        Grow(count, settings);
+    }
+
+    void StressSpritesComponent::Churn(uint32_t count, const StressSettings& settings) {
+        const size_t replaced = std::min<size_t>(settings.load.churn, _sprites.size());
+        for (size_t i = 0; i < replaced; ++i) {
+            GetNode().RemoveChild(_sprites[i].node.Get());
+        }
+        // Before the new ones are made: the last references go here, so the pools hand the same blocks out again
+        _sprites.erase(_sprites.begin(), _sprites.begin() + static_cast<ptrdiff_t>(replaced));
+        _firstSerial += static_cast<uint32_t>(replaced);
+        Grow(count, settings);
+    }
+
+    SpritePlacement StressSpritesComponent::PlacementOf(size_t index, uint32_t count, const StressSettings& settings) const {
+        const float world = static_cast<float>(settings.load.world);
+        const FieldView field{GetScene().GetViewWidth() * world, GetScene().GetViewHeight() * world};
+        return Place(_firstSerial + static_cast<uint32_t>(index), count, settings, field);
+    }
+
+    void StressSpritesComponent::Grow(uint32_t count, const StressSettings& settings) {
+        _sprites.reserve(count);
+        while (_sprites.size() < count) {
+            const SpritePlacement placement = PlacementOf(_sprites.size(), count, settings);
             Sprite sprite;
-            sprite.node = GetNode().AddChild(SpriteNodeName());
+            sprite.node = GetNode().AddChild(NodeNames::sprite);
             sprite.transform = New<TransformComponent>();
             sprite.transform->_x = placement.x;
             sprite.transform->_y = placement.y;
@@ -128,6 +150,10 @@ namespace BECore::Stress {
             sprite.node->AddComponent(sprite.transform);
             sprite.renderer = New<SpriteRendererComponent>();
             sprite.node->AddComponent(sprite.renderer);
+            // On a child: a third component of the sprite's node would not fit its inline list and cost a heap block per spawn
+            if (settings.load.churn > 0) {
+                sprite.node->AddChild(NodeNames::life)->AddComponent(New<StressLifeComponent>());
+            }
             sprite.position = Vec2(placement.x, placement.y);
             sprite.spin = placement.spin;
             ApplyRun(sprite, placement.atlas, placement.srcRect, placement.blend);
