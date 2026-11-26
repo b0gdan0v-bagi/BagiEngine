@@ -43,7 +43,8 @@ namespace BECore::Tests {
             CountedGuard& operator=(CountedGuard&&) = delete;
             ~CountedGuard() {
                 if (_destroyed != nullptr) {
-                    _destroyed->fetch_add(1, std::memory_order_relaxed);
+                    // Release: a case that has read the count may end and reuse the stack this thread has just written
+                    _destroyed->fetch_add(1, std::memory_order_release);
                 }
             }
 
