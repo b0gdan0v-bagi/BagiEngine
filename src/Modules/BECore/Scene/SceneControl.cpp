@@ -16,6 +16,9 @@ namespace BECore {
 
     namespace {
 
+        /// The serialized name of IComponent::_enabled
+        constexpr StringView kEnabledPath = "enabled";
+
         /// What the handlers of one registration share
         struct SceneSource : RefCounted {
             explicit SceneSource(SceneProvider provider) : find(std::move(provider)) {}
@@ -161,6 +164,22 @@ namespace BECore {
             String _path;
         };
 
+        /// The write of `scene_set`. The hidden field `enabled`, which the generic write refuses, goes through SetEnabled() and so through the component's hook
+        std::expected<void, PropertyError> WriteComponentField(IComponent& component, StringView path, const PropertyValue& value) {
+            if (path == kEnabledPath) {
+                const bool* const enabled = std::get_if<bool>(&value);
+                if (enabled == nullptr) {
+                    return std::unexpected(PropertyError{PropertyErrorCode::type_mismatch, Format("'{}' takes true or false", kEnabledPath)});
+                }
+                component.SetEnabled(*enabled);
+                return {};
+            }
+            // A written PoolString is interned and the pool never frees: only a text it holds already costs it nothing
+            const String* const text = std::get_if<String>(&value);
+            const SetOptions options{.allowInterning = text != nullptr && PoolString::Find(StringView(*text)).has_value()};
+            return SetProperty(TypedRef::Of(component), path, value, options);
+        }
+
         /// `{component, node, path, value}`. By hand: `value` is a `PropertyValue`, written as the bare scalar
         void WriteFieldAnswer(JsonWriter& writer, const ComponentRequest& request, StringView path, const PropertyValue& value) {
             writer.BeginObject();
@@ -268,11 +287,7 @@ namespace BECore {
                 call.Fail(target.error());
                 return;
             }
-            const TypedRef component = TypedRef::Of(*target->component);
-            // A written PoolString is interned and the pool never frees: only a text it holds already costs it nothing
-            const String* text = std::get_if<String>(&*value);
-            const SetOptions options{.allowInterning = text != nullptr && PoolString::Find(StringView(*text)).has_value()};
-            if (const auto written = SetProperty(component, *path, *value, options); !written) {
+            if (const auto written = WriteComponentField(*target->component, *path, *value); !written) {
                 if (written.error().code == PropertyErrorCode::interning) {
                     call.Fail(MakePropertyControlError({PropertyErrorCode::interning, "the field takes only a text the program already knows, so that a client cannot grow the string pool"}));
                 } else {
@@ -284,7 +299,7 @@ namespace BECore {
             const StringView field = StringView(*path).substr(0, StringView(*path).find_first_of(".["));
             target->component->OnPropertyWritten(field);
             // The answer is what the field holds now, which the component may have changed
-            const auto readBack = GetProperty(component, *path);
+            const auto readBack = GetProperty(TypedRef::Of(*target->component), *path);
             if (!readBack) {
                 call.Fail(ControlErrors::kInternalError, Format("the value was written but cannot be read back: {}", readBack.error().message));
                 return;

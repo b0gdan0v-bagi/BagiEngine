@@ -2,6 +2,7 @@
 
 #include <BECore/Audio/AudioSourceComponent.h>
 #include <BECore/AudioTestSupport.h>
+#include <BECore/ComponentEnabledTest.h>
 #include <BECore/Control/ControlActivity.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlTouches.h>
@@ -408,6 +409,28 @@ namespace BECore::Tests {
         ASSERT_TRUE(Set("UICanvasComponent", "elements[0].blocksInput", "true").IsOk());
 
         EXPECT_FALSE(layout.IsValid());
+    }
+
+    TEST_F(SceneControlSetTest, TheEnabledFlagIsWrittenThroughSetEnabledAndReportedAsAnyWrite) {
+        const IntrusivePtr<ControlClient> client = _service.OpenLocalClient("tool");
+        const NodeEdits edits;
+        const IntrusivePtr<EnabledProbeComponent> probe = New<EnabledProbeComponent>();
+        Node("Thing").AddComponent(probe);
+        EXPECT_EQ(Read("EnabledProbeComponent", "enabled"), "true");
+
+        const ControlReply reply = Set("EnabledProbeComponent", "enabled", "false", client);
+
+        ASSERT_TRUE(reply.IsOk()) << reply.ErrorMessage().c_str();
+        EXPECT_EQ(RawOf(reply.Result(), "value"), "false");
+        EXPECT_EQ(Read("EnabledProbeComponent", "enabled"), "false");
+        EXPECT_EQ(probe->enabledChanges, 1);
+        EXPECT_EQ(probe->written, (Vector<String>{"enabled"}));
+        ASSERT_EQ(_service.Touches().Size(), 1u);
+        EXPECT_EQ(_service.Touches().At(0).field, "enabled");
+        EXPECT_EQ(edits.edits.size(), 1u);
+
+        EXPECT_EQ(Set("EnabledProbeComponent", "enabled", "0", client).ErrorCode(), "type_mismatch");
+        EXPECT_FALSE(probe->IsEnabled());
     }
 
     TEST_F(SceneControlSetTest, AWriteIsATouchOfTheTopFieldAndAnEditOfTheNode) {

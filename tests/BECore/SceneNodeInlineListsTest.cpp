@@ -175,7 +175,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Load(WideSceneText(kSpilledComponents, kSpilledChildren)));
 
         constexpr StringView kExpected =
-            R"(<root name="Main" viewWidth="0" viewHeight="0"><nodes><item type="SceneNode" name="Wide" layer="3" sourceRef=""><components><item type="TransformComponent" x="1" y="2" width="3" height="4" rotation="0" pivotX="0.5" pivotY="0.5"/><item type="ClipRectComponent"/><item type="ClickableComponent" actionName="Tap" shape="Rect" blocksInput="false"/><item type="QuadRendererComponent" blend="Alpha"><color r="255" g="0" b="0" a="255"/></item></components><children><item type="SceneNode" name="C0" layer="0" sourceRef=""><components/><children/></item><item type="SceneNode" name="C1" layer="0" sourceRef=""><components/><children/></item><item type="SceneNode" name="C2" layer="0" sourceRef=""><components/><children/></item></children></item></nodes></root>)";
+            R"(<root name="Main" viewWidth="0" viewHeight="0"><nodes><item type="SceneNode" name="Wide" layer="3" sourceRef=""><components><item type="TransformComponent" enabled="true" x="1" y="2" width="3" height="4" rotation="0" pivotX="0.5" pivotY="0.5"/><item type="ClipRectComponent" enabled="true"/><item type="ClickableComponent" enabled="true" actionName="Tap" shape="Rect" blocksInput="false"/><item type="QuadRendererComponent" enabled="true" blend="Alpha"><color r="255" g="0" b="0" a="255"/></item></components><children><item type="SceneNode" name="C0" layer="0" sourceRef=""><components/><children/></item><item type="SceneNode" name="C1" layer="0" sourceRef=""><components/><children/></item><item type="SceneNode" name="C2" layer="0" sourceRef=""><components/><children/></item></children></item></nodes></root>)";
         EXPECT_EQ(SavedScene(), kExpected);
     }
 
@@ -185,7 +185,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Load(SceneConfigText(kNode)));
 
         constexpr StringView kExpected =
-            R"(<root name="Main" viewWidth="0" viewHeight="0"><nodes><item type="SceneNode" name="Small" layer="1" sourceRef=""><components><item type="TransformComponent" x="1" y="2" width="3" height="4" rotation="0" pivotX="0.5" pivotY="0.5"/><item type="ClipRectComponent"/></components><children><item type="SceneNode" name="Leaf" layer="0" sourceRef=""><components/><children/></item></children></item></nodes></root>)";
+            R"(<root name="Main" viewWidth="0" viewHeight="0"><nodes><item type="SceneNode" name="Small" layer="1" sourceRef=""><components><item type="TransformComponent" enabled="true" x="1" y="2" width="3" height="4" rotation="0" pivotX="0.5" pivotY="0.5"/><item type="ClipRectComponent" enabled="true"/></components><children><item type="SceneNode" name="Leaf" layer="0" sourceRef=""><components/><children/></item></children></item></nodes></root>)";
         EXPECT_EQ(SavedScene(), kExpected);
     }
 

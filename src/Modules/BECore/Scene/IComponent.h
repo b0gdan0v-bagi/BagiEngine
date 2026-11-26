@@ -71,6 +71,26 @@ namespace BECore {
         Scene& GetScene() const;
         SceneNode& GetNode() const;
 
+        /**
+         * @brief False while the component sleeps: a saved state (`enabled="false"`), true unless a file or SetEnabled() says otherwise
+         *
+         * A sleeping component is skipped by the update and fixed update lists and by its SubscribeInScene handlers, Scene::Draw() leaves it out
+         * (OnDraw(), the quad or sprite drawn from its fields, the clip of a ClipRectComponent) and it takes no mouse input. It is still initialized
+         * and attached, gets OnPropertyWritten() and its plain Subscribe handlers (one that cares asks here), and answers the calls of code:
+         * SceneNode::GetComponent() returns it.
+         */
+        [[nodiscard]] bool IsEnabled() const {
+            return _enabled;
+        }
+
+        /// The one write of the flag at run time: calls OnEnabledChanged() when it changes. Works on a detached component too
+        void SetEnabled(bool enabled);
+
+        /// False for a component with nothing to switch off: an editor offers no way to disable it
+        virtual bool CanBeDisabled() const {
+            return true;
+        }
+
         /// The node, or null while the component is detached
         [[nodiscard]] SceneNode* TryGetNode() const {
             return _node;
@@ -83,8 +103,11 @@ namespace BECore {
         bool IsSceneActive() const;
 
     protected:
+        /// Called by SetEnabled() after the flag changed, never by a load: for what a component keeps going between the calls the engine skips
+        virtual void OnEnabledChanged() {}
+
         /**
-         * @brief Subscribe to a global event, but run @p Handler only while this component's scene is active.
+         * @brief Subscribe to a global event, but run @p Handler only while this component is enabled and its scene is active.
          *
          * Scene and input events are global: every loaded scene's components receive them, not just the active scene's. Use this instead
          * of Subscribe for any handler that reads input or changes game state; plain Subscribe is for handlers that must run whichever
@@ -119,20 +142,27 @@ namespace BECore {
     private:
         friend class SceneNode;
 
+        // Both invokers read the flag at each call, so a component disabled in the middle of a pass does not run and keeps its place
         template <typename Event, auto Handler, typename T>
         static void InvokeInActiveScene(T* self, const Event& event) {
-            if (self->IsSceneActive()) {
+            const IComponent& component = *self;
+            if (component._enabled && component.IsSceneActive()) {
                 (self->*Handler)(event);
             }
         }
 
         template <typename Event, auto Handler, typename T>
         static void InvokeSceneUpdate(IComponent* self, const void* event) {
-            (static_cast<T*>(self)->*Handler)(*static_cast<const Event*>(event));
+            if (self->_enabled) {
+                (static_cast<T*>(self)->*Handler)(*static_cast<const Event*>(event));
+            }
         }
 
         /// Adds this component to the update list of its scene (SubscribeInScene only); needs a scene
         void RegisterSceneUpdate(SceneUpdateKind kind, SceneUpdateInvoker invoke);
+
+        /// Hidden from the generic editor and the by-name write, which would pass SetEnabled() by
+        BE_REFLECT_FIELD BE_FIELD_ATTRS(hidden) bool _enabled = true;
     };
 
 }  // namespace BECore

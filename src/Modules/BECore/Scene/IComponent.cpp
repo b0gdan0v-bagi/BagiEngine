@@ -29,6 +29,14 @@ namespace BECore {
         return scene != nullptr && scene->IsActive();
     }
 
+    void IComponent::SetEnabled(bool enabled) {
+        if (_enabled == enabled) {
+            return;
+        }
+        _enabled = enabled;
+        OnEnabledChanged();
+    }
+
     void IComponent::RegisterSceneUpdate(SceneUpdateKind kind, SceneUpdateInvoker invoke) {
         GetScene().AddUpdater(kind, *this, invoke, {});
     }

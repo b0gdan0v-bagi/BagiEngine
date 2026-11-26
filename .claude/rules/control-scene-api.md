@@ -40,6 +40,7 @@ The names from below the scene root down to the node, joined by `/`: `Board/Cell
 ## Writing (`scene_set`)
 
 - The value rules and refusals are those of `set_property` (`type_mismatch`, `out_of_range` with a field's `range`, `read_only`, `hidden`); a refused write changes nothing and reports nothing. It writes one leaf and adds or removes no node, component or list element; a node's name and layer have no method.
+- `enabled` is the one hidden field it writes: `true` or `false` (else `type_mismatch`), through `IComponent::SetEnabled`, then as any successful write; `scene_get` reads it (`Scene/CLAUDE.md`, "Component lifecycle").
 - A name field (`PoolString`) takes only a text the pool already holds (a known sprite, action or path, or `""`), else `interning`: a client must not grow the pool.
 - The editor's Locked and Hidden flags do not stop a write: they are the human editor's own state, and the method also works in the Game mode.
 - A successful write calls `IComponent::OnPropertyWritten(<top-level field>)`, reports a touch of the node with the component and that field (`control-activity.md`) and sends `SceneEvents::SceneNodeEditedEvent`. For it the Scene Editor marks the active scene unsaved, unless the node or one above it is generated (Save leaves it out).
