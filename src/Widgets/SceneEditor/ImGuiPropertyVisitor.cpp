@@ -9,6 +9,7 @@
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/SceneEditor/ComponentDefaults.h>
 #include <Widgets/SceneEditor/DefaultMarkDraw.h>
+#include <Widgets/SceneEditor/FieldTooltips.h>
 #include <Widgets/SceneEditor/NumberField.h>
 #include <imgui.h>
 
@@ -62,22 +63,6 @@ namespace BECore {
         private:
             bool _disabled;
         };
-
-        /// The tooltip of the field for the last item (the text is a string literal of the generated code)
-        void FieldTooltip(const FieldAttributes& attributes) {
-            if (!attributes.tooltip.empty()) {
-                ItemTooltip(attributes.tooltip.data());
-            }
-        }
-
-        /// A reflected number of type @p T: a slider with a `range`, a drag otherwise (`DrawNumber`)
-        template <typename T>
-        bool DrawTyped(StringView name, int id, const FieldAttributes& attributes, T& value, ImGuiDataType dataType) {
-            constexpr FieldPresentation::NumberKind kind = std::is_floating_point_v<T> ? FieldPresentation::NumberKind::Float : FieldPresentation::NumberKind::Integer;
-            char idText[kIdSize];
-            snprintf(idText, sizeof(idText), "%d", id);
-            return DrawNumber(name, idText, FieldPresentation::Describe(attributes, kind), value, dataType);
-        }
 
         /// The trace as a tree of `label = value`, a node's children under it; stops at `kMaxFormattedLines` because a node several parents read is drawn under each
         void DrawTraceNode(const ProgramTrace& trace, uint32_t index, uint32_t& drawn) {
@@ -171,6 +156,36 @@ namespace BECore {
         return changed;
     }
 
+    const char* ImGuiPropertyVisitor::HelpText() const {
+        if (_help == nullptr || _fields.size() != 1 || _fieldName.empty()) {
+            return nullptr;
+        }
+        const char* const text = _help->Of(_fieldName);
+        return *text != '\0' ? text : nullptr;
+    }
+
+    void ImGuiPropertyVisitor::FieldTooltip(const FieldAttributes& attributes) const {
+        if (const char* const help = HelpText()) {
+            WrappedItemTooltip(help);
+        } else if (!attributes.tooltip.empty()) {
+            // A string literal of the generated code, so the view ends with a null
+            ItemTooltip(attributes.tooltip.data());
+        }
+    }
+
+    template <typename T>
+    bool ImGuiPropertyVisitor::VisitNumber(StringView name, T& value, int dataType) {
+        constexpr FieldPresentation::NumberKind kind = std::is_floating_point_v<T> ? FieldPresentation::NumberKind::Float : FieldPresentation::NumberKind::Integer;
+        // The id first: the first widget of a top-level field is what names it for its help
+        char id[kIdSize];
+        snprintf(id, sizeof(id), "%d", NextId(name));
+        FieldPresentation::Presentation presentation = FieldPresentation::Describe(CurrentField(), kind);
+        if (const char* const help = HelpText()) {
+            presentation.tooltip = help;
+        }
+        return Edited(DrawNumber(name, id, presentation, value, dataType));
+    }
+
     void ImGuiPropertyVisitor::ShowTouch() const {
         const float bottom = ImGui::GetCursorScreenPos().y - ImGui::GetStyle().ItemSpacing.y;
         const float alpha = _touches->highlights.FieldAlpha(_touches->nodeId, _touches->component, _fieldName);
@@ -191,43 +206,43 @@ namespace BECore {
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, int8_t& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_S8));
+        return VisitNumber(name, value, ImGuiDataType_S8);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, uint8_t& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_U8));
+        return VisitNumber(name, value, ImGuiDataType_U8);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, int16_t& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_S16));
+        return VisitNumber(name, value, ImGuiDataType_S16);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, uint16_t& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_U16));
+        return VisitNumber(name, value, ImGuiDataType_U16);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, int32_t& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_S32));
+        return VisitNumber(name, value, ImGuiDataType_S32);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, uint32_t& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_U32));
+        return VisitNumber(name, value, ImGuiDataType_U32);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, int64_t& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_S64));
+        return VisitNumber(name, value, ImGuiDataType_S64);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, uint64_t& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_U64));
+        return VisitNumber(name, value, ImGuiDataType_U64);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, float& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_Float));
+        return VisitNumber(name, value, ImGuiDataType_Float);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, double& value) {
-        return Edited(DrawTyped(name, NextId(name), CurrentField(), value, ImGuiDataType_Double));
+        return VisitNumber(name, value, ImGuiDataType_Double);
     }
 
     bool ImGuiPropertyVisitor::Visit(StringView name, PoolString& value) {

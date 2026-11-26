@@ -1,9 +1,9 @@
 #pragma once
 
 #include <BECore/Types/Types.h>
-#include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/SceneEditor/FieldPresentation.h>
+#include <Widgets/SceneEditor/FieldTooltips.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -41,7 +41,7 @@ namespace BECore {
     template <typename T>
     bool DrawNumber(StringView name, const char* id, const FieldPresentation::Presentation& presentation, T& value, ImGuiDataType dataType) {
         constexpr size_t kLabelSize = 32;
-        // A tooltip of the reflection is a string literal, so its view ends with a null
+        // A tooltip is a string literal of the reflection or a text of FieldTooltips, so its view ends with a null
         const char* const tooltip = presentation.tooltip.empty() ? nullptr : presentation.tooltip.data();
         ImGui::BeginDisabled(presentation.disabled);
         char label[kLabelSize];
@@ -58,7 +58,7 @@ namespace BECore {
                 changed = ImGui::DragScalar(label, dataType, &value, static_cast<float>(presentation.speed));
             }
         }
-        ItemTooltip(tooltip);
+        WrappedItemTooltip(tooltip);
         if (changed) {
             value = FieldPresentation::FromDouble<T>(FieldPresentation::Constrain(presentation, static_cast<double>(value)));
         }
@@ -67,7 +67,7 @@ namespace BECore {
             changed |= next != value;
             value = next;
         }
-        ItemTooltip(tooltip);
+        WrappedItemTooltip(tooltip);
         ImGui::EndDisabled();
         return changed;
     }

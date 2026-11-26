@@ -10,6 +10,8 @@
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/PanelAssets/PanelSlots.h>
 #include <Widgets/SceneEditor/ComponentDefaults.h>
+#include <Widgets/SceneEditor/FieldHelp.h>
+#include <Widgets/SceneEditor/FieldTooltips.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/ISceneEditorHost.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
@@ -26,6 +28,10 @@ namespace pugi {
 namespace BECore {
 
     class UICanvasComponent;
+
+    namespace ConfigEvents {
+        struct ConfigChangedEvent;
+    }  // namespace ConfigEvents
 
     namespace SceneEvents {
         struct SceneNodeEditedEvent;
@@ -112,6 +118,9 @@ namespace BECore {
         /// A field a control client wrote is unsaved like one the inspector edits, unless Save leaves its node out
         void OnNodeEdited(const SceneEvents::SceneNodeEditedEvent& event);
 
+        /// A change of a field help file is read at once, so the next tooltip shows it
+        void OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event);
+
         /// Answers the Add Node dialog: the scene is unsaved and the parent of the new node is revealed, when the scene is the active one
         void OnNodeAdded(const SceneNodeAddedEvent& event);
 
@@ -156,6 +165,8 @@ namespace BECore {
         SceneSelection _selection;  // every selected node; its primary is `_hierarchy.selected`
         SelectionHistory _selectionHistory;
         ComponentDefaults _componentDefaults;
+        FieldHelp _fieldHelp;
+        FieldTooltips _fieldTooltips{_fieldHelp, _componentDefaults};
         Vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
         Vector<SceneNode*> _pathAncestors;   // the same for the breadcrumbs
         Vector<SceneNode*> _announcedNodes;  // what SceneSelectionChangedEvent last told

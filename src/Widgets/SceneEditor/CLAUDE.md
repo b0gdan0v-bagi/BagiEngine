@@ -23,6 +23,14 @@ The rest of the Scene Editor (selection, hierarchy, dialogs, Save, the viewport)
 - A custom inspector cannot mark its own controls, so the card lists one line per differing field above it; its signature does not change, so a game's inspector gets the arrows too.
 - A click is applied after the inspector has run, makes the scene unsaved and removes that field's touch mark only.
 
+## Field tooltips
+
+Hovering a top-level field of a component (its control or its name) shows one tooltip composed by `FieldTooltips` (`FieldTooltips.h`): the description `FieldHelp` answers (the two help files and their precedence: `src/Modules/BECore/Config/CLAUDE.md`, "Field help"), the type in words, the range, and the default for every field `ComponentDefaults` compares, whether it differs or not. It stands in place of the field's `tooltip` attribute, whose text is the description when no file has one. Nested fields keep their attribute tooltips: the table is keyed by component class and field.
+
+- `SceneEditorWidget` owns the table and reads it again on a `ConfigChangedEvent` of either help file.
+- `RenderComponentInspector` shows them only when it gets the `FieldTooltips`. A custom inspector draws its own controls, so it calls `ShowFieldHelp(field)` after each one; the call answers for the component being inspected.
+- A text is composed once per field and table version, so a settled frame allocates nothing.
+
 ## Numbers
 
 A number of the generic inspector and of the sprite's source rect is drawn by `DrawNumber` (`NumberField.h`), which another custom inspector may call; the UI element section (`UIRectInspector`) draws its own fields. The decisions are in `FieldPresentation`, which needs no ImGui.

@@ -330,13 +330,13 @@ namespace BECore {
                 }
             }
         }
-        _differences.reserve(prototype->fields.size());
         return *_prototypes.emplace(meta.typeHash, eastl::move(prototype)).first->second;
     }
 
     Span<const ComponentFieldDifference> ComponentDefaults::Compare(IComponent& component) {
         const Prototype& prototype = PrototypeOf(component);
         _differences.clear();
+        _differences.reserve(prototype.fields.size());
         if (const TypedRef live = TypedRef::Of(component)) {
             for (const Field& field : prototype.fields) {
                 if (field.HashIn(live) != field.defaultHash) {
@@ -345,6 +345,14 @@ namespace BECore {
             }
         }
         return {_differences.data(), _differences.size()};
+    }
+
+    Optional<StringView> ComponentDefaults::DefaultText(IComponent& component, StringView field) {
+        const Field* const found = PrototypeOf(component).Find(field);
+        if (found == nullptr) {
+            return {};
+        }
+        return StringView(found->defaultText.data(), found->defaultText.size());
     }
 
     bool ComponentDefaults::Reset(IComponent& component, StringView field) {

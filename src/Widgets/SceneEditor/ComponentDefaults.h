@@ -38,6 +38,10 @@ namespace BECore {
         /// The fields of @p component that differ, the parents' first; the span is valid until the next call of `Compare` or of a reset
         Span<const ComponentFieldDifference> Compare(IComponent& component);
 
+        /// The default of the field of this serialized name as one line of text, whether it differs or not; empty for a field that is never compared.
+        /// It lives as long as this object and leaves the span of `Compare` alone
+        Optional<StringView> DefaultText(IComponent& component, StringView field);
+
         /**
          * @brief Gives the field of this serialized name its default and calls `IComponent::OnPropertyWritten` for it; no other field is written here
          *

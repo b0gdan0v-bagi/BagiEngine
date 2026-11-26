@@ -11,6 +11,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <Events/ConfigEvents.h>
 #include <Events/SceneEvents.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -81,10 +82,18 @@ namespace BECore {
         Subscribe<SceneEvents::SceneNodeEditedEvent, &SceneEditorWidget::OnNodeEdited>(this);
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
+        Subscribe<ConfigEvents::ConfigChangedEvent, &SceneEditorWidget::OnConfigChanged>(this);
+        _fieldHelp.Reload();
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         _hostHandle = SceneEditorHostRegistry::GetInstance().Register(*this);
         _componentsSlot = PanelSlots::GetInstance().Register(kComponentsSlot, [this] { DrawComponents(); });
         return true;
+    }
+
+    void SceneEditorWidget::OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event) {
+        if (FieldHelp::IsHelpConfig(event.name)) {
+            _fieldHelp.Reload();
+        }
     }
 
     SceneNode* SceneEditorWidget::FindInspected() const {
@@ -570,7 +579,7 @@ namespace BECore {
                     highlights.Dismiss(nodeId, typeMeta.typeName, kCanvasElementsField);
                 }
                 const ComponentTouches touches{highlights, nodeId, typeMeta.typeName};
-                changed |= RenderComponentInspector(component.Get(), &touches, &_componentDefaults);
+                changed |= RenderComponentInspector(component.Get(), &touches, &_componentDefaults, &_fieldTooltips);
                 return changed;
             });
             if (answer.changed) {

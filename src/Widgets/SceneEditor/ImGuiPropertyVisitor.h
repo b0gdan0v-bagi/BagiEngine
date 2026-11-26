@@ -6,6 +6,7 @@
 namespace BECore {
 
     struct ComponentFieldDifference;
+    struct ComponentFieldHelp;
     struct ComponentTouches;
 
     /**
@@ -18,7 +19,8 @@ namespace BECore {
      * `FieldPresentation`, which needs no ImGui):
      * - `range(min, max)`: a number is a slider; an edit is clamped to the range
      * - `step(s)`: an edit is snapped to multiples of `s` (from `min` with a range); a drag with no range moves by `s` per pixel
-     * - `tooltip("...")`: the text shown while the field is hovered, also a disabled one
+     * - `tooltip("...")`: the text shown while the field is hovered, also a disabled one. With a ComponentFieldHelp a top-level field shows the help's
+     *   tooltip instead, which holds that text when the help table has none
      * - `readonly`: the field is drawn disabled (`ImGui::BeginDisabled`); a read-only compound can be opened, its children are disabled
      * - `hidden`: the field is not drawn (the dispatch skips it: `ShowsHidden()` is false)
      * - `required`: not used here
@@ -47,8 +49,10 @@ namespace BECore {
     class ImGuiPropertyVisitor : public IPropertyVisitor {
     public:
         ImGuiPropertyVisitor() = default;
-        /// Marks the fields of the component @p touches names (null: none) and the fields @p differences names; both must outlive the visit
-        explicit ImGuiPropertyVisitor(const ComponentTouches* touches, Span<const ComponentFieldDifference> differences = {}) : _touches(touches), _differences(differences) {}
+        /// Marks the fields of the component @p touches names (null: none) and the fields @p differences names, and gives the top-level fields the
+        /// tooltips of @p help (null: their attribute's); all must outlive the visit
+        explicit ImGuiPropertyVisitor(const ComponentTouches* touches, Span<const ComponentFieldDifference> differences = {}, const ComponentFieldHelp* help = nullptr)
+            : _touches(touches), _help(help), _differences(differences) {}
         ~ImGuiPropertyVisitor() override = default;
 
         /// The serialized name of the field whose reset arrow was clicked in this walk, in static storage; empty when none was
@@ -106,6 +110,13 @@ namespace BECore {
         int NextId(StringView name);
         /// @p changed, remembered for the field that is open
         bool Edited(bool changed);
+        /// The help's tooltip of the open top-level field; null with no help, inside a nested field and before a widget named the field
+        [[nodiscard]] const char* HelpText() const;
+        /// The tooltip of the open field for the last item: the help's, else its attribute's
+        void FieldTooltip(const FieldAttributes& attributes) const;
+        /// A reflected number: a slider with a `range`, a drag otherwise (`DrawNumber`)
+        template <typename T>
+        bool VisitNumber(StringView name, T& value, int dataType);
         /// The mark and the flash of the top-level field that was just drawn
         void ShowTouch() const;
         /// The default mark of the top-level field that was just drawn, when it differs
@@ -113,6 +124,7 @@ namespace BECore {
 
         int _idCounter = 0;
         const ComponentTouches* _touches = nullptr;
+        const ComponentFieldHelp* _help = nullptr;
         Span<const ComponentFieldDifference> _differences;
         StringView _resetRequest;
         StringView _fieldName;    ///< of the open top-level field; empty until a widget of it names it
