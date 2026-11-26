@@ -127,27 +127,35 @@ namespace BECore::Tests {
     };
 
     /**
-     * @brief A RoomHub over the fake game with fake clients, an injected clock and a leak check on the sink side.
+     * @brief A RoomHub over the fake game (or a game's own) with fake clients, an injected clock and a leak check on the sink side.
      *
      * Every text the hub sends a client is judged, inside the send callback and against the live game of that client's room, by
      * FindLeakedCards (hidden hands are what the game holds *now*, so a check made after the fact would find nothing). A leak is a
-     * test failure unless failOnLeak is off, then it is only counted (the negative control with the leaky game).
+     * test failure unless failOnLeak is off, then it is only counted (the negative control with the leaky game). The check knows the
+     * fake games only: a game's own are judged by its observer.
+     *
+     * For a game's tests: include `<BECore/Rooms/TestClient.h>` (namespace `BECore::Tests`) and link the test target with
+     * `RoomsModule RoomClientModule RoomServerModule` (the fake game is RoomServer's demo game, so desktop only). What the registrar's
+     * factories and the observer capture must outlive the harness: declare it before the harness.
      */
     class HubHarness {
     public:
-        explicit HubHarness(RoomHubSettings settings = MakeSettings(), bool leaky = false, RandomFn random = MakeSequence(42)) : _hub(_registry, settings, std::move(random), MakeSink()) {
-            const auto factory = [this, leaky]() -> UniquePtr<ISeatedGame> {
-                const String room = _startingRoom;
-                if (leaky) {
-                    return MakeUnique<Tracked<LeakyFakeSeatedGame>>(this, room);
-                }
-                return MakeUnique<Tracked<FakeSeatedGame>>(this, room);
-            };
-            EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, factory));
-            // The same game with public options: the lobby shows `open` and `count` of `create_room`
-            EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-public", FakeSeatedGame::kSeatCount, {"open", "count"}}, factory));
-            // The same game that also lists its started public rooms that have a free seat
-            EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-started", FakeSeatedGame::kSeatCount, {}, true}, factory));
+        /// Registers the games of a harness instead of the fake games; a factory makes its game with MakeTracked() of the harness
+        using GameRegistrar = MoveOnlyFunction<void(HubHarness&, SeatedGameRegistry&)>;
+        /// Sees every message the hub sends a client, inside the send, so the game is still as it was when the hub sent it. The
+        /// client already has the room, seat and token the message names, still has them on `left`, and does not have the message in
+        /// `received` yet. It must not call back into the hub
+        using MessageObserver = MoveOnlyFunction<void(HubHarness&, const TestClient&, const ReceivedMessage&)>;
+
+        /// @param leaky The fake games send every hand; no effect with a registrar
+        /// @param registrar Called once, by this constructor
+        explicit HubHarness(RoomHubSettings settings = MakeSettings(), bool leaky = false, RandomFn random = MakeSequence(42), GameRegistrar registrar = {}, MessageObserver observer = {})
+            : _observer(std::move(observer)), _ownGames(static_cast<bool>(registrar)), _hub(_registry, settings, std::move(random), MakeSink()) {
+            if (registrar) {
+                registrar(*this, _registry);
+            } else {
+                RegisterFakeGames(leaky);
+            }
         }
 
         static RoomHubSettings MakeSettings() {
@@ -243,10 +251,10 @@ namespace BECore::Tests {
         }
 
         /// Creates a room of @p humans humans, the host and the guests who joined it by its code; returns the connections (host first). The room is in the lobby.
-        Vector<ConnectionId> MakeLobby(int humans) {
+        Vector<ConnectionId> MakeLobby(int humans, StringView game = "fake", StringView options = "{}") {
             Vector<ConnectionId> ids;
             const ConnectionId host = Connect();
-            Create(host, "P0");
+            Create(host, "P0", game, options);
             ids.push_back(host);
             const String code = Client(host).roomCode;
             for (int i = 1; i < humans; ++i) {
@@ -257,10 +265,22 @@ namespace BECore::Tests {
             return ids;
         }
 
-        /// The live game of a room, or null
-        [[nodiscard]] FakeSeatedGame* GetGame(const String& room) const {
+        /// A game for the factory of a registrar: GetSeatedGame() finds it under the room of the client whose message the hub is
+        /// handling, until it is destroyed. GameType must not be `final`
+        template <typename GameType, typename... Args>
+        [[nodiscard]] UniquePtr<ISeatedGame> MakeTracked(Args&&... args) {
+            return MakeUnique<Tracked<GameType>>(this, _startingRoom, std::forward<Args>(args)...);
+        }
+
+        /// The live tracked game of a room, or null
+        [[nodiscard]] ISeatedGame* GetSeatedGame(const String& room) const {
             const auto found = _games.find(room);
             return found == _games.end() ? nullptr : found->second;
+        }
+
+        /// The live fake game of a room, or null; always null with a registrar, whose types the harness does not know
+        [[nodiscard]] FakeSeatedGame* GetGame(const String& room) const {
+            return _ownGames ? nullptr : static_cast<FakeSeatedGame*>(GetSeatedGame(room));
         }
 
         /// The texts that contained a hidden card (counted only)
@@ -293,7 +313,8 @@ namespace BECore::Tests {
         template <typename GameType>
         class Tracked : public GameType {
         public:
-            Tracked(HubHarness* harness, String room) : _harness(harness), _room(std::move(room)) {
+            template <typename... Args>
+            Tracked(HubHarness* harness, String room, Args&&... args) : GameType(std::forward<Args>(args)...), _harness(harness), _room(std::move(room)) {
                 _harness->_games[_room] = this;
             }
 
@@ -308,6 +329,20 @@ namespace BECore::Tests {
             HubHarness* _harness;
             String _room;
         };
+
+        void RegisterFakeGames(bool leaky) {
+            const auto factory = [this, leaky]() -> UniquePtr<ISeatedGame> {
+                if (leaky) {
+                    return MakeTracked<LeakyFakeSeatedGame>();
+                }
+                return MakeTracked<FakeSeatedGame>();
+            };
+            EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, factory));
+            // The same game with public options: the lobby shows `open` and `count` of `create_room`
+            EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-public", FakeSeatedGame::kSeatCount, {"open", "count"}}, factory));
+            // The same game that also lists its started public rooms that have a free seat
+            EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-started", FakeSeatedGame::kSeatCount, {}, true}, factory));
+        }
 
         HubSink MakeSink() {
             HubSink sink;
@@ -344,6 +379,9 @@ namespace BECore::Tests {
                     }
                 }
             }
+            if (_observer) {
+                _observer(*this, client, message);
+            }
             if (message.type == RoomMessageTypes::kLeft) {
                 client.roomCode.clear();
                 client.seat = -1;
@@ -352,10 +390,13 @@ namespace BECore::Tests {
         }
 
         // Declaration order matters: the hub (and with it the games) is destroyed before the maps its games unregister from
-        HashMap<String, FakeSeatedGame*> _games;
+        HashMap<String, ISeatedGame*> _games;
         // A node-based map: a test may hold a TestClient& while other clients connect
         Map<ConnectionId, TestClient> _clients;
         SeatedGameRegistry _registry;
+        MessageObserver _observer;
+        /// A registrar replaced the fake games
+        const bool _ownGames;
         RoomHub _hub;
         RoomTime _now{std::chrono::seconds(1000)};
         ConnectionId _nextConnection = 1;
