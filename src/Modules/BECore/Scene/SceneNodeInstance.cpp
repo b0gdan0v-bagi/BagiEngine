@@ -1,10 +1,10 @@
 #include "SceneNodeInstance.h"
 
-#include <BECore/Config/StringXmlWriter.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlFieldDiff.h>
 #include <BECore/Reflection/XmlSerializer.h>
 
 namespace BECore {
@@ -16,12 +16,6 @@ namespace BECore {
             String type;
             pugi::xml_document fields;  // the document element holds the attributes and child elements of the fields
         };
-
-        String Printed(pugi::xml_node node) {
-            StringXmlWriter writer;
-            node.print(writer, "", pugi::format_raw);
-            return writer.text;
-        }
 
         void SerializeComponent(const IComponent& component, SerializedComponent& out) {
             out.type = component.GetTypeMeta().typeName.data();
@@ -38,67 +32,20 @@ namespace BECore {
             return result;
         }
 
-        /// One field of a serialized component: its attribute and the text of its child elements of that name
-        struct FieldState {
-            bool hasAttribute = false;
-            String attribute;
-            bool hasChildren = false;
-            String children;
-
-            bool operator==(const FieldState& other) const {
-                return hasAttribute == other.hasAttribute && attribute == other.attribute && hasChildren == other.hasChildren && children == other.children;
-            }
-        };
-
-        FieldState ReadField(pugi::xml_node fields, const char* name) {
-            FieldState state;
-            if (const pugi::xml_attribute attr = fields.attribute(name)) {
-                state.hasAttribute = true;
-                state.attribute = attr.value();
-            }
-            for (pugi::xml_node child = fields.child(name); child; child = child.next_sibling(name)) {
-                state.hasChildren = true;
-                state.children += Printed(child);
-            }
-            return state;
-        }
-
-        void AddName(Vector<String>& names, const char* name) {
-            if (eastl::find(names.begin(), names.end(), name) == names.end()) {
-                names.push_back(name);
-            }
-        }
-
-        /// The names of the fields of both sides: their attributes and their child elements
-        Vector<String> FieldNames(pugi::xml_node liveFields, pugi::xml_node baseFields) {
-            Vector<String> names;
-            for (const pugi::xml_node fields : {liveFields, baseFields}) {
-                for (pugi::xml_attribute attr = fields.first_attribute(); attr; attr = attr.next_attribute()) {
-                    AddName(names, attr.name());
-                }
-                for (pugi::xml_node child = fields.first_child(); child; child = child.next_sibling()) {
-                    if (child.type() == pugi::node_element) {
-                        AddName(names, child.name());
-                    }
-                }
-            }
-            return names;
-        }
-
         /// Writes the fields of @p live that differ from @p base into @p componentEl. False when a field is written in both spellings
         bool WriteFieldOverrides(pugi::xml_node live, pugi::xml_node base, pugi::xml_node componentEl, String& reason) {
-            for (const String& name : FieldNames(live, base)) {
-                const FieldState liveField = ReadField(live, name.c_str());
-                if (liveField == ReadField(base, name.c_str())) {
+            for (const String& name : XmlFieldDiff::FieldNames(live, base)) {
+                const XmlFieldDiff::Field liveField = XmlFieldDiff::ReadField(live, name.c_str());
+                if (liveField == XmlFieldDiff::ReadField(base, name.c_str())) {
                     continue;
                 }
-                if (liveField.hasAttribute && liveField.hasChildren) {
+                if (liveField.hasAttribute && liveField.hasElements) {
                     reason = Format("field '{}' is written as an attribute and as an element", name);
                     return false;
                 }
                 if (liveField.hasAttribute) {
                     componentEl.append_attribute(name.c_str()).set_value(liveField.attribute.c_str());
-                } else if (liveField.hasChildren) {
+                } else if (liveField.hasElements) {
                     for (pugi::xml_node child = live.child(name.c_str()); child; child = child.next_sibling(name.c_str())) {
                         componentEl.append_copy(child);
                     }
@@ -120,7 +67,8 @@ namespace BECore {
                 return false;
             }
             for (size_t i = 0; i < liveComponents.size(); ++i) {
-                if (liveComponents[i].type != otherComponents[i].type || Printed(liveComponents[i].fields.document_element()) != Printed(otherComponents[i].fields.document_element())) {
+                if (liveComponents[i].type != otherComponents[i].type ||
+                    XmlFieldDiff::CompactText(liveComponents[i].fields.document_element()) != XmlFieldDiff::CompactText(otherComponents[i].fields.document_element())) {
                     return false;
                 }
             }
@@ -142,32 +90,6 @@ namespace BECore {
                 SerializeComponent(*fresh, *defaults);
             }
             return cache.emplace(type, eastl::move(defaults)).first->second.get();
-        }
-
-        /// Writes the fields of @p live into @p componentEl in their order, leaving out each one the default has the same way (equal attribute and
-        /// equal text of its elements). A field the default has and @p live does not (a list that was emptied) is written as an empty element:
-        /// the loader would otherwise keep the default's. @p defaults null writes every field
-        void AppendComponentFields(pugi::xml_node live, const SerializedComponent* defaults, pugi::xml_node componentEl) {
-            const pugi::xml_node base = defaults ? defaults->fields.document_element() : pugi::xml_node{};
-            const auto isDefault = [&](const char* name) { return defaults && ReadField(live, name) == ReadField(base, name); };
-            for (pugi::xml_attribute attr = live.first_attribute(); attr; attr = attr.next_attribute()) {
-                if (!isDefault(attr.name())) {
-                    componentEl.append_attribute(attr.name()).set_value(attr.value());
-                }
-            }
-            for (pugi::xml_node child = live.first_child(); child; child = child.next_sibling()) {
-                if (!isDefault(child.name())) {
-                    componentEl.append_copy(child);
-                }
-            }
-            if (!defaults) {
-                return;
-            }
-            for (pugi::xml_node child = base.first_child(); child; child = child.next_sibling()) {
-                if (child.type() == pugi::node_element && !live.child(child.name()) && !live.attribute(child.name()) && !componentEl.child(child.name())) {
-                    componentEl.append_child(child.name());
-                }
-            }
         }
 
     }  // namespace
@@ -206,7 +128,8 @@ namespace BECore {
 
                     XmlSerializer serializer;
                     component->Serialize(serializer);
-                    AppendComponentFields(serializer.GetRootNode(), options.skipDefaults ? DefaultFieldsOf(*component, defaults) : nullptr, componentEl);
+                    const SerializedComponent* base = options.skipDefaults ? DefaultFieldsOf(*component, defaults) : nullptr;
+                    XmlFieldDiff::AppendChangedFields(serializer.GetRootNode(), base ? base->fields.document_element() : pugi::xml_node{}, componentEl);
                 }
             }
 
