@@ -9,6 +9,7 @@
 #include <BECore/Scene/SceneControl.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodeControl.h>
+#include <BECore/Scene/ScenePickControl.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Games/GameControl.h>
@@ -108,6 +109,7 @@ namespace BECore::Fuzz {
         };
         RegisterSceneControl(service, activeScene);
         RegisterSceneNodeControl(service, activeScene);
+        RegisterScenePickControl(service, activeScene, [] { return true; });
 
         // Real data for `get_property`, `set_property` and `call_method`; neither root allows interning, so a request cannot grow the pool
         ProbeState state = MakeFilledProbe();

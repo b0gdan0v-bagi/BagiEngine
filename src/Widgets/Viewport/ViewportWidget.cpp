@@ -7,6 +7,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Scene/ScenePick.h>
 #include <BECore/Time/GamePause.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIEnvironment.h>
@@ -20,7 +21,6 @@
 #include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/RemoteEditor/RemoteSessionRegistry.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
-#include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportUIDebug.h>
 #include <Widgets/Viewport/ViewportUIGizmos.h>

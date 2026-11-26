@@ -7,6 +7,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/ScenePick.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Events/SceneEvents.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
@@ -21,7 +22,6 @@
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
 #include <Widgets/SceneEditor/SceneDialogEvents.h>
 #include <Widgets/SceneEditor/SceneEditorDocuments.h>
-#include <Widgets/SceneEditor/ScenePick.h>
 #include <Widgets/SceneEditor/UIEditEvents.h>
 #include <Widgets/SceneEditor/UIRectInspector.h>
 #include <imgui.h>

@@ -4,13 +4,13 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/ScenePick.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
-#include <Widgets/SceneEditor/ScenePick.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -101,7 +101,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    /// The pick of the editor on scenes loaded from a string, drawn once so that the canvases have a layout and the scene its fit
+    /// ScenePick on scenes loaded from a string, drawn once so that the canvases have a layout and the scene its fit
     class ScenePickTest : public ::testing::Test {
     protected:
         static void SetUpTestSuite() {
