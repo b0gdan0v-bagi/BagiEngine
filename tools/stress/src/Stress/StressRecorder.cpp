@@ -81,6 +81,7 @@ namespace BECore::Stress {
         sample.workMs = std::max(0.0, stats.cpuMs - sample.presentMs - sample.waitMs);
         sample.frameMs = stats.frameMs;
         sample.drawCalls = stats.draws.drawCalls;
+        sample.primitives = stats.draws.primitives;
         sample.triangles = stats.draws.triangles;
         sample.textureSwitches = stats.draws.textureSwitches;
         sample.allocCount = stats.allocCount;
@@ -166,6 +167,7 @@ namespace BECore::Stress {
         summary.gpuMsP99 = NearestRank(WithGpuTime(gpuMs), kTail);
 
         double drawCalls = 0.0;
+        double primitives = 0.0;
         double triangles = 0.0;
         double textureSwitches = 0.0;
         double allocCount = 0.0;
@@ -176,6 +178,7 @@ namespace BECore::Stress {
             summary.cpuMs += sample.cpuMs;
             summary.workMs += sample.workMs;
             drawCalls += sample.drawCalls;
+            primitives += static_cast<double>(sample.primitives);
             triangles += static_cast<double>(sample.triangles);
             textureSwitches += sample.textureSwitches;
             allocCount += static_cast<double>(sample.allocCount);
@@ -185,6 +188,7 @@ namespace BECore::Stress {
         summary.cpuMs /= n;
         summary.workMs /= n;
         summary.drawCalls = drawCalls / n;
+        summary.primitives = primitives / n;
         summary.triangles = triangles / n;
         summary.textureSwitches = textureSwitches / n;
         summary.allocsPerFrame = allocCount / n;
@@ -206,6 +210,7 @@ namespace BECore::Stress {
         AddNumber(line, "allocsPerFrame", summary.allocsPerFrame);
         AddInteger(line, "atlases", context.atlases);
         AddInteger(line, "batching", context.batching ? 1 : 0);
+        AddInteger(line, "churn", context.load.churn);
         AddInteger(line, "count", context.count);
         AddNumber(line, "cpuMs", summary.cpuMs);
         AddNumber(line, "cpuMsP50", summary.cpuMsP50);
@@ -221,9 +226,12 @@ namespace BECore::Stress {
         AddNumber(line, "gpuMsP99", summary.gpuMsP99);
         AddBool(line, "interleave", context.interleave);
         AddBool(line, "manualClock", context.manualClock);
+        AddBool(line, "mix", context.load.mix);
         AddNumber(line, "presentMs", summary.stages.presentMs);
         AddNumber(line, "presentMsP50", summary.stagesP50.presentMs);
+        AddNumber(line, "primitives", summary.primitives);
         AddText(line, "scene", ToFlagValue(context.scene));
+        AddInteger(line, "spriteSize", context.load.spriteSize);
         AddNumber(line, "submitMs", summary.stages.submitMs);
         AddNumber(line, "submitMsP50", summary.stagesP50.submitMs);
         AddNumber(line, "textureSwitches", summary.textureSwitches);
@@ -236,6 +244,7 @@ namespace BECore::Stress {
         AddNumber(line, "workMs", summary.workMs);
         AddNumber(line, "workMsP50", summary.workMsP50);
         AddNumber(line, "workMsP99", summary.workMsP99);
+        AddInteger(line, "world", context.load.world);
         line.insert(size_t{0}, 1, '{');
         line += '}';
         return line;

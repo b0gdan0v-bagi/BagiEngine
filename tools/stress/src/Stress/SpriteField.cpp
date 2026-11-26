@@ -21,6 +21,8 @@ namespace BECore::Stress {
         constexpr uint64_t kSaltSize = 3;
         constexpr uint64_t kSaltSpin = 4;
         constexpr uint64_t kSaltCell = 5;
+        constexpr uint64_t kSaltKind = 6;
+        constexpr uint64_t kSaltLayer = 7;
 
         /// A colour channel of cell @p cell of atlas @p atlas: spread over 40..255 so that no two cells of one atlas look alike
         uint8_t Channel(uint32_t atlas, uint32_t cell, uint64_t channel) {
@@ -29,17 +31,46 @@ namespace BECore::Stress {
             return static_cast<uint8_t>(kLowest + mixed % (kFullColor - kLowest + 1));
         }
 
+        /// A coordinate that goes from 0 to @p range and back at @p speed for ever
+        float PingPong(double seconds, float speed, float range) {
+            if (range <= 0.0f) {
+                return 0.0f;
+            }
+            const double travelled = std::fmod(seconds * speed, 2.0 * range);
+            return static_cast<float>(travelled <= range ? travelled : 2.0 * range - travelled);
+        }
+
     }  // namespace
+
+    Vec2 CameraOffset(double seconds, uint32_t world, const FieldView& view) {
+        const float viewsToCross = static_cast<float>(std::max<uint32_t>(1, world) - 1);
+        return Vec2(PingPong(seconds, kCameraSpeedX, viewsToCross * view.width), PingPong(seconds, kCameraSpeedY, viewsToCross * view.height));
+    }
+
+    MixKind MixKindOf(uint32_t index) {
+        const uint32_t part = static_cast<uint32_t>(Hash(index, kSaltKind) % kMixParts);
+        if (part < kMixSpriteParts) {
+            return MixKind::Sprite;
+        }
+        if (part < kMixSpriteParts + kMixTextParts) {
+            return MixKind::Text;
+        }
+        return part < kMixSpriteParts + kMixTextParts + kMixShapeParts ? MixKind::Shape : MixKind::Particles;
+    }
+
+    int32_t MixLayerOf(uint32_t index) {
+        return static_cast<int32_t>(Hash(index, kSaltLayer) % kMixLayers);
+    }
 
     uint32_t AtlasRunLength(uint32_t count, uint32_t atlases) {
         return std::max<uint32_t>(1, count / std::max<uint32_t>(1, atlases));
     }
 
-    SpritePlacement Place(uint32_t index, uint32_t count, const StressSettings& settings, const FieldView& view) {
+    SpritePlacement Place(uint32_t index, uint32_t count, const StressSettings& settings, const FieldView& field) {
         SpritePlacement placement;
-        placement.size = std::floor(Between(kSpriteMinSize, kSpriteMaxSize + 1.0f, Unit(index, kSaltSize)));
-        placement.x = std::floor(Unit(index, kSaltX) * (view.width - placement.size));
-        placement.y = std::floor(Unit(index, kSaltY) * (view.height - placement.size));
+        placement.size = settings.load.spriteSize != 0 ? static_cast<float>(settings.load.spriteSize) : std::floor(Between(kSpriteMinSize, kSpriteMaxSize + 1.0f, Unit(index, kSaltSize)));
+        placement.x = std::floor(Unit(index, kSaltX) * (field.width - placement.size));
+        placement.y = std::floor(Unit(index, kSaltY) * (field.height - placement.size));
         const float spinSpeed = Between(kSpriteMinSpin, kSpriteMaxSpin, Unit(index, kSaltSpin));
         placement.spin = (Hash(index, kSaltSpin) & 1) != 0 ? spinSpeed : -spinSpeed;
 

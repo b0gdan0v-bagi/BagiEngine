@@ -153,6 +153,7 @@ namespace BECore::Stress {
         AddInteger(line, "atlases", context.atlases);
         AddNumber(line, "budgetMs", context.budgetMs);
         AddBool(line, "capped", result.capped);
+        AddInteger(line, "churn", context.load.churn);
         AddNumber(line, "drawMs", result.stages.drawMs);
         AddInteger(line, "frames", result.frames);
         AddNumber(line, "gpuMs", result.stages.gpuMs);
@@ -160,16 +161,19 @@ namespace BECore::Stress {
         AddBool(line, "manualClock", context.manualClock);
         AddText(line, "measure", ToFlagValue(measure));
         AddInteger(line, "measureFrames", kMeasureFrames);
+        AddBool(line, "mix", context.load.mix);
         AddText(line, "mode", "ramp");
         AddInteger(line, "objectsAt60fps", result.objectsAt60fps);
         AddNumber(line, "presentMs", result.stages.presentMs);
         AddText(line, "scene", ToFlagValue(context.scene));
         AddInteger(line, "settleFrames", kSettleFrames);
+        AddInteger(line, "spriteSize", context.load.spriteSize);
         AddInteger(line, "steps", result.steps);
         AddNumber(line, "submitMs", result.stages.submitMs);
         AddNumber(line, "updateMs", result.stages.updateMs);
         AddBool(line, "verified", result.verified);
         AddNumber(line, "waitMs", result.stages.waitMs);
+        AddInteger(line, "world", context.load.world);
         line.back() = '}';  // the comma of the last member
         line.insert(size_t{0}, 1, '{');
         return line;

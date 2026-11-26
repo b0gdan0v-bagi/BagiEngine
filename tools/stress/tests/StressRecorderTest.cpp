@@ -22,10 +22,10 @@ namespace BECore::Stress::Tests {
             return recorder;
         }
 
-        constexpr const char* kKeys[] = {"allocBytesPerFrame", "allocTracking", "allocsPerFrame", "atlases",      "batching",   "count",    "cpuMs",       "cpuMsP50",        "cpuMsP99",
-                                         "drawCalls",          "drawMs",        "drawMsP50",      "frameMsP50",   "frameMsP99", "frames",   "gpuMs",       "gpuMsP50",        "gpuMsP99",
-                                         "interleave",         "manualClock",   "presentMs",      "presentMsP50", "scene",      "submitMs", "submitMsP50", "textureSwitches", "triangles",
-                                         "updateMs",           "updateMsP50",   "waitMs",         "waitMsP50",    "warmup",     "workMs",   "workMsP50",   "workMsP99"};
+        constexpr const char* kKeys[] = {"allocBytesPerFrame", "allocTracking", "allocsPerFrame", "atlases",      "batching",   "churn",  "count",      "cpuMs",     "cpuMsP50",    "cpuMsP99",
+                                         "drawCalls",          "drawMs",        "drawMsP50",      "frameMsP50",   "frameMsP99", "frames", "gpuMs",      "gpuMsP50",  "gpuMsP99",    "interleave",
+                                         "manualClock",        "mix",           "presentMs",      "presentMsP50", "primitives", "scene",  "spriteSize", "submitMs",  "submitMsP50", "textureSwitches",
+                                         "triangles",          "updateMs",      "updateMsP50",    "waitMs",       "waitMsP50",  "warmup", "workMs",     "workMsP50", "workMsP99",   "world"};
 
         StressRunContext Context() {
             StressRunContext context;
@@ -36,6 +36,10 @@ namespace BECore::Stress::Tests {
             context.atlases = 8;
             context.manualClock = true;
             context.allocTracking = false;
+            context.load.spriteSize = 256;
+            context.load.world = 4;
+            context.load.churn = 12;
+            context.load.mix = true;
             return context;
         }
 
@@ -104,6 +108,7 @@ namespace BECore::Stress::Tests {
         a.cpuMs = 2.0;
         a.workMs = 1.0;
         a.drawCalls = 10;
+        a.primitives = 40;
         a.triangles = 100;
         a.textureSwitches = 4;
         a.allocCount = 6;
@@ -112,6 +117,7 @@ namespace BECore::Stress::Tests {
         b.cpuMs = 4.0;
         b.workMs = 3.0;
         b.drawCalls = 20;
+        b.primitives = 60;
         b.triangles = 300;
         b.textureSwitches = 0;
         b.allocCount = 0;
@@ -124,6 +130,7 @@ namespace BECore::Stress::Tests {
         EXPECT_DOUBLE_EQ(summary.cpuMs, 3.0);
         EXPECT_DOUBLE_EQ(summary.workMs, 2.0);
         EXPECT_DOUBLE_EQ(summary.drawCalls, 15.0);
+        EXPECT_DOUBLE_EQ(summary.primitives, 50.0);
         EXPECT_DOUBLE_EQ(summary.triangles, 200.0);
         EXPECT_DOUBLE_EQ(summary.textureSwitches, 2.0);
         EXPECT_DOUBLE_EQ(summary.allocsPerFrame, 3.0);
@@ -310,6 +317,10 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(GetParamInt(parsed.Root(), "frames").value_or(0), 100);
         EXPECT_EQ(GetParamInt(parsed.Root(), "warmup").value_or(0), 30);
         EXPECT_EQ(GetParamInt(parsed.Root(), "atlases").value_or(0), 8);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "spriteSize").value_or(0), 256);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "world").value_or(0), 4);
+        EXPECT_EQ(GetParamInt(parsed.Root(), "churn").value_or(0), 12);
+        EXPECT_EQ(GetParamBool(parsed.Root(), "mix"), Optional(true));
         EXPECT_EQ(GetParamInt(parsed.Root(), "batching").value_or(-1), 1);
         EXPECT_EQ(GetParamBool(parsed.Root(), "interleave"), Optional(true));
         EXPECT_EQ(GetParamBool(parsed.Root(), "manualClock"), Optional(true));

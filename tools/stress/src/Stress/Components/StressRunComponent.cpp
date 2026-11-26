@@ -111,6 +111,7 @@ namespace BECore::Stress {
         context.batching = renderer && renderer->IsBatchingEnabled();
         context.manualClock = IsManualClock();
         context.allocTracking = AllocTracker::kEnabled;
+        context.load = settings.load;
         Print(FormatJsonLine(_recorder.Summarize(), context));
         ApplicationEvents::QuitEvent::Emit();
     }
@@ -125,6 +126,7 @@ namespace BECore::Stress {
         context.manualClock = IsManualClock();
         context.allocTracking = AllocTracker::kEnabled;
         context.budgetMs = settings.budgetMs;
+        context.load = settings.load;
         Print(FormatRampLine(_ramp->GetResult(), settings.measure, context));
         ApplicationEvents::QuitEvent::Emit();
     }

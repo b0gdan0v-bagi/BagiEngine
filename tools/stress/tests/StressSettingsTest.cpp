@@ -38,6 +38,10 @@ namespace BECore::Stress::Tests {
         EXPECT_FALSE(result->noBatching);
         EXPECT_EQ(result->atlases, 4u);
         EXPECT_EQ(result->language, StressLanguage::En);
+        EXPECT_EQ(result->load.spriteSize, 0u);
+        EXPECT_EQ(result->load.world, 1u);
+        EXPECT_EQ(result->load.churn, 0u);
+        EXPECT_FALSE(result->load.mix);
     }
 
     TEST(StressSettingsTest, OtherFlagsOfTheProgramAreIgnored) {
@@ -123,6 +127,35 @@ namespace BECore::Stress::Tests {
                                   "--stress-budget-ms=8ms", "--stress-budget-ms=nan", "--stress-budget-ms=inf"}) {
             ExpectErrorNaming({wrong}, "--stress-budget-ms");
         }
+    }
+
+    TEST(StressSettingsTest, TheSpriteSizeIsAWholeNumberUpToTheViewHeight) {
+        EXPECT_EQ(Parse({"--stress-sprite-size=1"})->load.spriteSize, 1u);
+        EXPECT_EQ(Parse({"--stress-sprite-size=1080"})->load.spriteSize, kMaxSpriteSize);
+        for (const char* wrong : {"--stress-sprite-size=0", "--stress-sprite-size=1081", "--stress-sprite-size=12.5", "--stress-sprite-size=", "--stress-sprite-size"}) {
+            ExpectErrorNaming({wrong}, "--stress-sprite-size");
+        }
+    }
+
+    TEST(StressSettingsTest, TheWorldIsAWholeNumberOfViews) {
+        EXPECT_EQ(Parse({"--stress-world=1"})->load.world, 1u);
+        EXPECT_EQ(Parse({"--stress-world=8"})->load.world, kMaxWorld);
+        for (const char* wrong : {"--stress-world=0", "--stress-world=9", "--stress-world=1.5", "--stress-world=", "--stress-world"}) {
+            ExpectErrorNaming({wrong}, "--stress-world");
+        }
+    }
+
+    TEST(StressSettingsTest, TheChurnIsAWholeNumberOfSprites) {
+        EXPECT_EQ(Parse({"--stress-churn=1"})->load.churn, 1u);
+        EXPECT_EQ(Parse({"--stress-churn=4000000"})->load.churn, kMaxCount);
+        for (const char* wrong : {"--stress-churn=0", "--stress-churn=4000001", "--stress-churn=-1", "--stress-churn=", "--stress-churn"}) {
+            ExpectErrorNaming({wrong}, "--stress-churn");
+        }
+    }
+
+    TEST(StressSettingsTest, TheMixIsABareFlag) {
+        EXPECT_TRUE(Parse({"--stress-mix"})->load.mix);
+        ExpectErrorNaming({"--stress-mix=1"}, "--stress-mix");
     }
 
     TEST(StressSettingsTest, AnUnknownChoiceNamesItsFlagAndTheChoices) {

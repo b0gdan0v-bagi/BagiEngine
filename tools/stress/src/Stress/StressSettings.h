@@ -32,6 +32,10 @@ namespace BECore::Stress {
     inline constexpr double kDefaultRampBudgetMs = 16.6;
     inline constexpr double kMinRampBudgetMs = 1.0;
     inline constexpr double kMaxRampBudgetMs = 1000.0;
+    /// The largest side `--stress-sprite-size` takes: the height of the view, so a sprite of any allowed side fits the field
+    inline constexpr uint32_t kMaxSpriteSize = 1080;
+    /// The largest world `--stress-world` takes, in views per side
+    inline constexpr uint32_t kMaxWorld = 8;
 
     /// The names of the flags of the command line (the whole spelling, so a message and a test quote it as typed)
     namespace StressFlags {
@@ -46,7 +50,19 @@ namespace BECore::Stress {
         inline constexpr StringView kNoBatching = "--stress-no-batching";
         inline constexpr StringView kAtlases = "--stress-atlases";
         inline constexpr StringView kLanguage = "--stress-language";
+        inline constexpr StringView kSpriteSize = "--stress-sprite-size";
+        inline constexpr StringView kWorld = "--stress-world";
+        inline constexpr StringView kChurn = "--stress-churn";
+        inline constexpr StringView kMix = "--stress-mix";
     }  // namespace StressFlags
+
+    /// What loads the `sprites` scene beyond its plain field; the loads combine, the defaults are the plain field, and the line of a run carries each
+    struct StressLoad {
+        uint32_t spriteSize = 0;  // the side of every sprite (1..kMaxSpriteSize); 0: each has its own, from the spread of SpriteField
+        uint32_t world = 1;       // the field is this many views wide and tall (1..kMaxWorld); above 1 an emulated camera moves over it
+        uint32_t churn = 0;       // so many of the oldest sprites are replaced by new ones every update (up to kMaxCount; all when it exceeds the count)
+        bool mix = false;         // the objects of the field are sprites, texts, shapes and particle emitters (SpriteField's MixKindOf) on several layers
+    };
 
     /// What a run is asked to do; the defaults are what a plain `BagiStress` shows
     struct StressSettings {
@@ -62,6 +78,7 @@ namespace BECore::Stress {
         bool noBatching = false;                 // the renderer's 2D batcher is turned off at the first update: the comparison of a GPU backend with and without it
         uint32_t atlases = kDefaultAtlases;
         StressLanguage language = StressLanguage::En;
+        StressLoad load;
 
         /// A run that measures and quits (the fixed mode or the ramp) instead of just showing the scene
         bool IsMeasuring() const {
@@ -85,6 +102,10 @@ namespace BECore::Stress {
      * | --stress-no-batching | bare flag |
      * | --stress-atlases= | kMinAtlases..kMaxAtlases |
      * | --stress-language= | en, ru |
+     * | --stress-sprite-size= | 1..kMaxSpriteSize |
+     * | --stress-world= | 1..kMaxWorld |
+     * | --stress-churn= | 1..kMaxCount |
+     * | --stress-mix | bare flag |
      *
      * A flag that is wrong (a bad or empty value, a value on a bare flag, no value on a valued one) is an error that names the flag;
      * the caller decides what to do with it, nothing is defaulted silently. Flags of other parts of the program are ignored.

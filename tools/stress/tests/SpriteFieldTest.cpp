@@ -95,6 +95,59 @@ namespace BECore::Stress::Tests {
         EXPECT_TRUE(negative);
     }
 
+    TEST(SpriteFieldTest, AFixedSideKeepsEverySpriteInsideTheViewWhateverTheCount) {
+        StressSettings settings = Settings(false);
+        for (const uint32_t side : {400u, kMaxSpriteSize}) {
+            settings.load.spriteSize = side;
+            for (uint32_t i = 0; i < kCount; ++i) {
+                const SpritePlacement p = Place(i, kCount, settings, kView);
+                ASSERT_EQ(p.size, static_cast<float>(side)) << i;
+                ASSERT_GE(p.x, 0.0f) << i;
+                ASSERT_GE(p.y, 0.0f) << i;
+                ASSERT_LE(p.x + p.size, kView.width) << i;
+                ASSERT_LE(p.y + p.size, kView.height) << i;
+                const SpritePlacement larger = Place(i, 2 * kCount, settings, kView);
+                ASSERT_EQ(larger.x, p.x) << i;
+                ASSERT_EQ(larger.y, p.y) << i;
+            }
+        }
+    }
+
+    TEST(SpriteFieldTest, TheCameraStartsAtTheOriginAndMovesAtItsSpeed) {
+        EXPECT_EQ(CameraOffset(0.0, 4, kView), Vec2(0.0f, 0.0f));
+        EXPECT_EQ(CameraOffset(1.0, 4, kView), Vec2(kCameraSpeedX, kCameraSpeedY));
+    }
+
+    TEST(SpriteFieldTest, TheCameraStaysInTheFieldAndTurnsBack) {
+        constexpr uint32_t kWorld = 3;
+        const Vec2 furthest(kView.width * (kWorld - 1), kView.height * (kWorld - 1));
+        bool rightEnd = false;
+        bool bottomEnd = false;
+        bool backAtTheLeft = false;
+        for (int step = 0; step < 4000; ++step) {
+            const Vec2 camera = CameraOffset(step * 0.05, kWorld, kView);
+            ASSERT_GE(camera.x, 0.0f) << step;
+            ASSERT_GE(camera.y, 0.0f) << step;
+            ASSERT_LE(camera.x, furthest.x) << step;
+            ASSERT_LE(camera.y, furthest.y) << step;
+            rightEnd |= camera.x > furthest.x - kCameraSpeedX * 0.05f;
+            bottomEnd |= camera.y > furthest.y - kCameraSpeedY * 0.05f;
+            backAtTheLeft |= rightEnd && camera.x < kCameraSpeedX * 0.05f;
+        }
+        EXPECT_TRUE(rightEnd);
+        EXPECT_TRUE(bottomEnd);
+        EXPECT_TRUE(backAtTheLeft);
+
+        const double toTheRightEnd = furthest.x / kCameraSpeedX;
+        EXPECT_NEAR(CameraOffset(toTheRightEnd + 1.0, kWorld, kView).x, furthest.x - kCameraSpeedX, 0.01f);
+    }
+
+    TEST(SpriteFieldTest, AWorldOfOneViewHasNoCameraMove) {
+        for (const double seconds : {0.0, 1.0, 1000.5}) {
+            EXPECT_EQ(CameraOffset(seconds, 1, kView), Vec2(0.0f, 0.0f)) << seconds;
+        }
+    }
+
     TEST(SpriteFieldTest, EveryBlendModeAndEveryAtlasOccursInRunsAndInterleaved) {
         for (bool interleave : {false, true}) {
             const StressSettings settings = Settings(interleave);
@@ -122,6 +175,29 @@ namespace BECore::Stress::Tests {
         const StressSettings interleaved = Settings(true);
         EXPECT_EQ(CountChanges(interleaved, kCount, true), kCount - 1);
         EXPECT_EQ(CountChanges(interleaved, kCount, false), kCount - 1);
+    }
+
+    TEST(SpriteFieldTest, AMixIsMostlySpritesAndEveryLayerHoldsEveryKind) {
+        constexpr uint32_t kObjects = 1600 * kMixParts;
+        constexpr double kTolerance = 0.1;  // of a share: the kinds follow a hash, not a pattern
+        uint32_t kinds[4] = {};
+        uint32_t onLayer[kMixLayers][4] = {};
+        for (uint32_t i = 0; i < kObjects; ++i) {
+            const size_t kind = static_cast<size_t>(MixKindOf(i));
+            const int32_t layer = MixLayerOf(i);
+            ASSERT_GE(layer, 0) << i;
+            ASSERT_LT(layer, static_cast<int32_t>(kMixLayers)) << i;
+            ++kinds[kind];
+            ++onLayer[layer][kind];
+        }
+        const uint32_t parts[4] = {kMixSpriteParts, kMixTextParts, kMixShapeParts, kMixParticleParts};
+        for (size_t kind = 0; kind < 4; ++kind) {
+            const double expected = static_cast<double>(kObjects) * parts[kind] / kMixParts;
+            EXPECT_NEAR(kinds[kind], expected, expected * kTolerance) << kind;
+            for (uint32_t layer = 0; layer < kMixLayers; ++layer) {
+                EXPECT_NEAR(onLayer[layer][kind], expected / kMixLayers, expected / kMixLayers * 2 * kTolerance) << kind << " on " << layer;
+            }
+        }
     }
 
     TEST(SpriteFieldTest, AFewerAtlasesStaysInRange) {
