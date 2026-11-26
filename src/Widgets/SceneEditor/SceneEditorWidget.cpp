@@ -7,6 +7,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceManager.h>
+#include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
@@ -15,6 +16,8 @@
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Feedback/ToastEvents.h>
+#include <Widgets/Feedback/TouchFlashDraw.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/PanelAssets/PanelBars.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
@@ -36,6 +39,26 @@ namespace BECore {
         constexpr StringView kToolbarAsset = "SceneEditorToolbarPanel";
         constexpr StringView kInspectorAsset = "SceneInspectorPanel";
         constexpr StringView kComponentsSlot = "sceneComponents";
+        /// The serialized field of a canvas that an edit of an element's rect writes
+        constexpr StringView kCanvasElementsField = "elements";
+
+        /// A drag of the gizmo is the user's edit of the fields it moved, so their marks go
+        void DismissMovedFieldMarks(const NodeTransformEdit& edit) {
+            const IntrusivePtr<TransformComponent> transform = edit.node->GetComponent<TransformComponent>();
+            if (!transform) {
+                return;
+            }
+            struct MovedField {
+                StringView name;
+                float Gizmo::Item::* value;
+            };
+            constexpr MovedField kFields[] = {{"x", &Gizmo::Item::x}, {"y", &Gizmo::Item::y}, {"width", &Gizmo::Item::width}, {"height", &Gizmo::Item::height}, {"rotation", &Gizmo::Item::rotation}};
+            for (const MovedField& field : kFields) {
+                if (edit.before.*field.value != edit.after.*field.value) {
+                    TouchHighlights::GetInstance().Dismiss(edit.node->GetRuntimeId(), transform->GetTypeMeta().typeName, field.name);
+                }
+            }
+        }
     }  // namespace
 
     SceneEditorWidget::~SceneEditorWidget() {
@@ -231,6 +254,9 @@ namespace BECore {
     void SceneEditorWidget::OnTransformEdit(const NodeTransformEditEvent& event) {
         if (event.phase == NodeTransformEditPhase::Commit && !event.edits.empty()) {
             _isDirty = true;
+            for (const NodeTransformEdit& edit : event.edits) {
+                DismissMovedFieldMarks(edit);
+            }
         }
     }
 
@@ -278,6 +304,7 @@ namespace BECore {
                 const IntrusivePtr<UICanvasComponent> canvas = node ? node->GetComponent<UICanvasComponent>() : IntrusivePtr<UICanvasComponent>();
                 if (UIElement* const element = canvas ? ScenePick::FindElement(*canvas, event.element) : nullptr) {
                     _uiFileSession.Note(IntrusivePtr<UIElement>(element));
+                    TouchHighlights::GetInstance().Dismiss(node->GetRuntimeId(), canvas->GetTypeMeta().typeName, kCanvasElementsField);
                 }
                 break;
             }
@@ -480,6 +507,8 @@ namespace BECore {
         // A locked node is read-only: the whole list is disabled
         ImGui::BeginDisabled(_hierarchy.selected->HasEditorFlag(EditorFlags::Locked));
 
+        TouchHighlights& highlights = TouchHighlights::GetInstance();
+        const uint64_t nodeId = _hierarchy.selected->GetRuntimeId();
         const auto& components = _hierarchy.selected->GetComponents();
         PoolString componentToRemove;
         for (size_t i = 0; i < components.size(); ++i) {
@@ -490,13 +519,16 @@ namespace BECore {
 
             bool visible = true;
             const bool isOpen = ImGui::CollapsingHeader(typeMeta.typeName.data(), &visible);
+            FillItemWithTouchFlash(highlights.ComponentAlpha(nodeId, typeMeta.typeName));
 
             if (isOpen) {
                 ImGui::Indent();
                 if (typeMeta.typeHash == UICanvasComponent::GetStaticTypeMeta().typeHash && RenderUIElements(static_cast<UICanvasComponent&>(*component.Get()))) {
                     _isDirty = true;
+                    highlights.Dismiss(nodeId, typeMeta.typeName, kCanvasElementsField);
                 }
-                if (RenderComponentInspector(component.Get())) {
+                const ComponentTouches touches{highlights, nodeId, typeMeta.typeName};
+                if (RenderComponentInspector(component.Get(), &touches)) {
                     _isDirty = true;
                 }
                 ImGui::Unindent();

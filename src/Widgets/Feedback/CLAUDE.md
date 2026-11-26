@@ -12,7 +12,8 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 | `ActivityPanelModel.{h,cpp}` | the model of the Activity panel (`config/panels/ActivityPanel.xml`): the control journal as rows; no ImGui |
 | `UIMotion.{h,cpp}` | what moves by the frame's time: `Fade`, `HoverBlendTable`, the durations; no ImGui |
 | `TouchHighlights.{h,cpp}` | the flashes and the "who changed it" marks of what control API clients touched; no ImGui |
-| `TouchFlashDraw.{h,cpp}` | the fill of a flash over an item or a rect; ImGui |
+| `TouchFlashDraw.{h,cpp}` | the fill of a flash over an item or a rect and the "changed: <client>" line; ImGui |
+| `ControlClientLabel.{h,cpp}` | what the editor calls a control client, one rule for the Activity panel and the marks; no ImGui |
 
 ## Toasts
 
@@ -49,7 +50,9 @@ What the editor says back to its user. Editor only (`.claude/rules/widgets-modul
 - `TouchHighlights` (a `Singleton`, so a panel needs no widget line) reads the touch record (`.claude/rules/control-activity.md`). `EditorLayoutWidget` connects it, advances it by `io.DeltaTime` before the panels are drawn and resets it when it dies, so without that widget nothing flashes or is marked. What the record held at the connect is old news.
 - A **flash** belongs to a report and fades; a **mark** (the client who touched a field) belongs to the field and stays until it is dismissed or newer marks push it out; Activity's Clear keeps it. A report that names no field (`ui_click`) flashes and marks nothing. Calls of the Console and of a replay count like any client's.
 - Shown on the hierarchy row of the node, only when the row is shown (nothing is opened or scrolled), and as an outline in the viewport, in both input modes, for a node with a rect or a canvas. The viewport walks the tree only while a flash lives.
-- Tests: `TouchHighlightsTest`; the look is not covered.
+- **Inspector.** The header of a flashing component flashes, also while collapsed. `RenderComponentInspector` takes a `ComponentTouches`: the generic inspector marks the **top-level** field (`color.r` marks `color`), with its flash over it and the line under it; a custom inspector draws a line per mark at its top, with the field's name. Components are matched by type name, so two of one type on a node share their marks. The Game panel's use of the visitor passes nothing and stays unmarked.
+- **A mark goes with the user's edit** of the field: in the inspector (a custom one cannot say which field, so any edit drops the component's marks), an element's rect for a canvas's `elements`, and a committed gizmo drag for the transform fields it moved. Other panels that write a component (the Generate panel's accept) leave the mark.
+- Tests: `TouchHighlightsTest`, `InspectorMarksTest`; the header's flash and the look are not covered.
 
 ## Motion
 

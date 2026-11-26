@@ -100,14 +100,37 @@ namespace BECore {
         return nullptr;
     }
 
+    void TouchHighlights::ForEachMark(uint64_t nodeId, StringView component, FunctionRef<void(StringView field, const ControlClient& client)> visit) const {
+        for (size_t i = 0; i < _markCount; ++i) {
+            const Mark& mark = _marks[i];
+            if (mark.nodeId == nodeId && StringView(mark.component) == component) {
+                visit(mark.field, *mark.client);
+            }
+        }
+    }
+
     void TouchHighlights::Dismiss(uint64_t nodeId, StringView component, StringView field) {
         for (size_t i = 0; i < _markCount; ++i) {
             if (_marks[i].Is(nodeId, component, field)) {
-                _marks[i].client = {};
-                Remove(_marks, _markCount, i);
+                RemoveMark(i);
                 return;
             }
         }
+    }
+
+    void TouchHighlights::DismissComponent(uint64_t nodeId, StringView component) {
+        for (size_t i = 0; i < _markCount;) {
+            if (_marks[i].nodeId == nodeId && StringView(_marks[i].component) == component) {
+                RemoveMark(i);
+            } else {
+                ++i;
+            }
+        }
+    }
+
+    void TouchHighlights::RemoveMark(size_t index) {
+        _marks[index].client = {};
+        Remove(_marks, _markCount, index);
     }
 
     void TouchHighlights::ReadTouches() {

@@ -5,29 +5,18 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <Generated/ActivityPanelModel.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/Feedback/ControlClientLabel.h>
 
 namespace BECore {
 
     namespace {
 
-        constexpr StringView kEngineClientText = "engine";
         constexpr StringView kConnectedText = "connected";
         constexpr StringView kDisconnectedText = "disconnected";
         constexpr StringView kNamedText = "named";
 
         void Assign(String& out, StringView text) {
             out.assign(text.data(), text.size());
-        }
-
-        void AssignClient(String& out, const ControlClient* client) {
-            if (client == nullptr) {
-                Assign(out, kEngineClientText);
-            } else if (client->GetName().empty()) {
-                out.clear();
-                AppendFormat(out, "client {}", client->GetId());
-            } else {
-                out = client->GetName();
-            }
         }
 
         /// What happened: the method of a call, a word for the other kinds
@@ -85,7 +74,8 @@ namespace BECore {
             const ControlActivityEntry& entry = activity.At(count - 1 - i);
             ActivityRow& row = _view.rows[i];
             row.time.assign(entry.time);
-            AssignClient(row.client, entry.client.Get());
+            Array<char, kControlClientLabelSize> clientLabel;
+            Assign(row.client, ControlClientLabel(entry.client.Get(), clientLabel));
             Assign(row.method, MethodText(entry));
             row.params = entry.text;
             row.error = entry.error;

@@ -12,6 +12,8 @@
 #include <EASTL/unordered_map.h>
 #include <Widgets/AssetBrowser/AssetDrag.h>
 #include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Feedback/TouchFlashDraw.h>
+#include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/SceneEditor/ImGuiPropertyVisitor.h>
@@ -24,6 +26,14 @@ namespace BECore {
         HashMap<uint64_t, InspectorFunc>& GetRegistry() {
             static HashMap<uint64_t, InspectorFunc> reg;
             return reg;
+        }
+
+        /// The marks of a component whose inspector does not draw field by field, each flashing with its field
+        void DrawMarkLines(const ComponentTouches& touches) {
+            touches.highlights.ForEachMark(touches.nodeId, touches.component, [&touches](StringView field, const ControlClient& client) {
+                DrawTouchMark(client, field, field);
+                FillItemWithTouchFlash(touches.highlights.FieldAlpha(touches.nodeId, touches.component, field));
+            });
         }
 
         bool InspectSpriteRenderer(SpriteRendererComponent& s) {
@@ -286,17 +296,24 @@ namespace BECore {
         GetRegistry()[typeHash] = eastl::move(func);
     }
 
-    bool RenderComponentInspector(IComponent* component) {
+    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches) {
         if (!component) {
             return false;
         }
 
         const auto it = GetRegistry().find(component->GetTypeMeta().typeHash);
         if (it != GetRegistry().end()) {
-            return it->second(component);
+            if (touches) {
+                DrawMarkLines(*touches);
+            }
+            const bool changed = it->second(component);
+            if (changed && touches) {
+                touches->highlights.DismissComponent(touches->nodeId, touches->component);
+            }
+            return changed;
         }
 
-        ImGuiPropertyVisitor visitor;
+        ImGuiPropertyVisitor visitor(touches);
         return component->AcceptPropertyVisitor(visitor);
     }
 

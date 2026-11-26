@@ -3,6 +3,7 @@
 #include <BECore/Control/ControlClient.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/FunctionRef.h>
 #include <BECore/Utils/Singleton.h>
 #include <cstddef>
 #include <cstdint>
@@ -49,8 +50,14 @@ namespace BECore {
         /// The client that touched the field last; null for a field with no mark. A report that names no field leaves no mark
         [[nodiscard]] const ControlClient* FindMark(uint64_t nodeId, StringView component, StringView field) const;
 
+        /// Calls @p visit for every marked field of the component, in no order; @p visit changes no mark
+        void ForEachMark(uint64_t nodeId, StringView component, FunctionRef<void(StringView field, const ControlClient& client)> visit) const;
+
         /// Removes the mark of the field, if it has one
         void Dismiss(uint64_t nodeId, StringView component, StringView field);
+
+        /// Removes the marks of every field of the component
+        void DismissComponent(uint64_t nodeId, StringView component);
 
     private:
         /// What both tables are keyed by, and the report that put an entry there last
@@ -77,6 +84,9 @@ namespace BECore {
         template <typename TMatch>
         [[nodiscard]] float StrongestAlpha(const TMatch& matches) const;
 
+        /// Removes the live mark @p index
+        void RemoveMark(size_t index);
+
         void ReadTouches();
 
         const ControlTouches* _touches = nullptr;
@@ -85,6 +95,13 @@ namespace BECore {
         Vector<Mark> _marks;         ///< as _flashes
         size_t _flashCount = 0;
         size_t _markCount = 0;
+    };
+
+    /// One component of one node as TouchHighlights knows it: what an inspector asks about and dismisses. Good while the three it names are
+    struct ComponentTouches {
+        TouchHighlights& highlights;
+        uint64_t nodeId = 0;
+        StringView component;  ///< the component's type name
     };
 
 }  // namespace BECore
