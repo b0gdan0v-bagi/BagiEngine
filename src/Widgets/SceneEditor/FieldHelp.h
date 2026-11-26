@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Config/FieldHelpConfig.h>
+#include <BECore/File/Path.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <expected>
@@ -39,8 +40,17 @@ namespace BECore {
         /// Over a file system of the caller, which must outlive the table
         explicit FieldHelp(const FileSystem& fileSystem) : _fileSystem(&fileSystem) {}
 
+        /// The config name of @p file, as `ConfigChangedEvent` gives it
+        static PoolString ConfigName(FieldHelpFile file);
+
         /// Whether a config of this name is one of the two help files, so a change of it asks for a `Reload`
         static bool IsHelpConfig(PoolString name);
+
+        /// The file system the files are read from and written through
+        [[nodiscard]] const FileSystem& Files() const;
+
+        /// The file @p file is read from, or where a save would make it (`Save` writes `FileSystem::WriteTarget` of it); empty when `config` has no folder
+        [[nodiscard]] Path SourcePath(FieldHelpFile file) const;
 
         /// Reads both files again; changes that were not saved are lost
         void Reload();
@@ -52,6 +62,12 @@ namespace BECore {
          * entry wins over the engine's. With no entry the field's `tooltip` attribute answers. An entry with no text is none.
          */
         [[nodiscard]] FieldHelpAnswer Find(StringView component, StringView field) const;
+
+        /// The file whose entry for exactly this class and field answers, the game's before the engine's; none when neither has one with a text
+        [[nodiscard]] Optional<FieldHelpFile> HolderOf(StringView component, StringView field) const;
+
+        /// Whether the entries of @p file differ from what the last `Reload` read or a later `Save` wrote
+        [[nodiscard]] bool IsModified(FieldHelpFile file) const;
 
         /// Adds or replaces the entry of @p file for exactly this class and field; nothing is written until `Save`
         void Set(FieldHelpFile file, StringView component, StringView field, StringView text);
@@ -76,11 +92,15 @@ namespace BECore {
         struct Table {
             /// Sorted by class and field, one per pair
             Vector<FieldHelpEntry> entries;
+            /// What `entries` were when the file was last read or written
+            Vector<FieldHelpEntry> stored;
             bool unreadable = false;
         };
 
-        [[nodiscard]] const FileSystem& Files() const;
         [[nodiscard]] Table& TableOf(FieldHelpFile file) {
+            return _tables[static_cast<size_t>(file)];
+        }
+        [[nodiscard]] const Table& TableOf(FieldHelpFile file) const {
             return _tables[static_cast<size_t>(file)];
         }
         [[nodiscard]] const FieldHelpEntry* FindEntry(FieldHelpFile file, StringView component, StringView field) const;

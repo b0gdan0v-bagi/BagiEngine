@@ -80,6 +80,7 @@ PANELS = (
     Panel("Console", "Console", contains=True),  # the title counts the errors and warnings
     Panel("Generate Art", "Generate", contains=True),  # the window is `Generate###Generate`
     Panel("Profiler", "Profiler"),
+    Panel("Field Help", "Field Help"),
 )
 VIEW_MENU_COMMANDS = ("Command Palette...", "Preferences...", "Layouts", "Save Layout As...", "Delete Layout", "Reset to Defaults")  # the items that are no panel
 

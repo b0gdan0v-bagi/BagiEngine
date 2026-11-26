@@ -138,6 +138,13 @@ namespace BECore {
         inline constexpr auto kActivityClear = "activity.clear"_intern;
         /// The button of a row of the Activity panel: ActivityPanelModel selects the node the argument names (its runtime id), only while its panel is open
         inline constexpr auto kActivitySelectNode = "activity.selectNode"_intern;
+        /// Show and hide the Field Help panel (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewFieldHelp = "view.fieldHelp"_intern;
+        /// The Field Help panel's rows and buttons. FieldHelpPanelModel owns them and runs them only while its panel is open; select takes the name of a
+        /// field of the chosen class as the argument
+        inline constexpr auto kFieldHelpSelect = "fieldHelp.select"_intern;
+        inline constexpr auto kFieldHelpSave = "fieldHelp.save"_intern;
+        inline constexpr auto kFieldHelpRevert = "fieldHelp.revert"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

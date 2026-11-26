@@ -18,8 +18,8 @@ ROW_HEIGHT = 30.0
 FIELD_HEIGHT = 29.0
 SPLITTER_X = 211.0
 WIDE_DOCK = 400.0
-PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console": "Console (1 errors)###Console", "Game Panel": "Game###GamePanel", "Profiler": "Profiler"}
-MENU_ITEMS = ["Command Palette...", "Preferences...", "Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Layouts", "Reset to Defaults"]
+PANEL_TITLES = {"Viewport": "Viewport", "Scene Editor": "Scene Editor", "Console": "Console (1 errors)###Console", "Game Panel": "Game###GamePanel", "Profiler": "Profiler", "Field Help": "Field Help###FieldHelp"}
+MENU_ITEMS = ["Command Palette...", "Preferences...", "Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Field Help", "Layouts", "Reset to Defaults"]
 PALETTE_COMMANDS = ["Game Panel", "Switch Game and Editor", "Console", "Save Scene"]
 TRANSFORM_FIELDS = 7
 CARD_ICON = "\ue194"  # any glyph of the Lucide range
@@ -77,9 +77,6 @@ class FakeEditor:
 
     def items(self):
         found = [item("View", "##EditorRoot", **VIEW_ITEM)]
-        if self.menu_open:
-            for index, label in enumerate(self.menu_items):
-                found.append(item(label, "View###Menu_00", 94.0, 155.0 + index * MENU_ROW_HEIGHT, 217.0, MENU_ROW_HEIGHT))
         if self.palette:
             found.append(item("##query", "##Popup_c0f026a4", 730.0, 224.0, 459.0, 24.0))
             commands = [command for command in PALETTE_COMMANDS if self.query in command.lower()]
@@ -99,6 +96,10 @@ class FakeEditor:
             found.append(item(" Add Node", HIERARCHY, 20.0, 300.0, 279.0, 24.0))
             if self.selected and self.dock_width >= WIDE_DOCK:
                 found += self.inspector_items()
+        # A popup is drawn over every window
+        if self.menu_open:
+            for index, label in enumerate(self.menu_items):
+                found.append(item(label, "View###Menu_00", 94.0, 155.0 + index * MENU_ROW_HEIGHT, 217.0, MENU_ROW_HEIGHT))
         return found
 
     def inspector_items(self):
@@ -365,6 +366,13 @@ def test_a_panel_whose_title_changes_is_found_by_part_of_it(ed):
     assert editor.panel_open(ed, "Console")
 
 
+def test_the_field_help_panel_opens_and_closes_through_the_view_menu(ed):
+    editor.open_panel(ed, "Field Help")
+    assert editor.panel_open(ed, "Field Help")
+    editor.close_panel(ed, "Field Help")
+    assert not editor.panel_open(ed, "Field Help")
+
+
 def test_a_panel_that_does_not_appear_is_an_error():
     broken = FakeEditor()
     broken.toggle_panel = lambda label: None
@@ -374,7 +382,7 @@ def test_a_panel_that_does_not_appear_is_an_error():
 
 def test_the_view_menu_lists_known_panels_and_names_what_it_does_not_know():
     known, unknown = editor.view_panels(FakeEditor())
-    assert known == ["Viewport", "Scene Editor", "Game Panel", "Console", "Profiler"] and unknown == []
+    assert known == ["Viewport", "Scene Editor", "Game Panel", "Console", "Profiler", "Field Help"] and unknown == []
     known, unknown = editor.view_panels(FakeEditor(menu_items=[*MENU_ITEMS, "Timeline"]))
     assert unknown == ["Timeline"]
 

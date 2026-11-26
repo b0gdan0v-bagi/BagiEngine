@@ -7,6 +7,14 @@ namespace BECore {
     class ComponentDefaults;
     class FieldHelp;
     class IComponent;
+    struct FieldAttributes;
+    struct TypeDesc;
+
+    /// Appends what a value of @p type is, in words: the kind, the class, or the elements of a container
+    void AppendTypeWords(String& text, const TypeDesc& type);
+
+    /// The range of a field as `a .. b`; empty when it has none
+    [[nodiscard]] String RangeWords(const FieldAttributes& attributes);
 
     /**
      * @brief The tooltips of the component fields: the description the help table answers, the type in words, the range and the default

@@ -5,6 +5,7 @@
 namespace BECore {
 
     class IComponent;
+    struct ClassMeta;
 
     /// A top-level field of a component that differs from its default
     struct ComponentFieldDifference {
@@ -42,6 +43,9 @@ namespace BECore {
         /// It lives as long as this object and leaves the span of `Compare` alone
         Optional<StringView> DefaultText(IComponent& component, StringView field);
 
+        /// The same for a component type with no component at hand
+        Optional<StringView> DefaultText(const ClassMeta& type, StringView field);
+
         /**
          * @brief Gives the field of this serialized name its default and calls `IComponent::OnPropertyWritten` for it; no other field is written here
          *
@@ -56,7 +60,7 @@ namespace BECore {
         struct Prototype;
         struct Field;
 
-        const Prototype& PrototypeOf(IComponent& component);
+        const Prototype& PrototypeOf(const ClassMeta& type);
 
         /// By `ClassMeta::typeHash`; held by pointer because the differences view the texts of a prototype
         HashMap<uint64_t, UniquePtr<Prototype>> _prototypes;

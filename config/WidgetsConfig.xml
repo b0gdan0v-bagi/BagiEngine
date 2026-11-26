@@ -28,6 +28,10 @@
         b="50"
         a="255" />
     </widget>
+    <!-- Before the Config Editor, so that its unsaved row of a config wins in editor_state -->
+    <widget
+      type="AssetPanelWidget"
+      asset="FieldHelpPanel" />
     <widget
       type="AssetPanelWidget"
       asset="ConfigEditorPanel" />

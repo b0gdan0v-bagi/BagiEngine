@@ -28,6 +28,7 @@ namespace pugi {
 namespace BECore {
 
     class UICanvasComponent;
+    struct FieldHelpSavedEvent;
 
     namespace ConfigEvents {
         struct ConfigChangedEvent;
@@ -120,6 +121,7 @@ namespace BECore {
 
         /// A change of a field help file is read at once, so the next tooltip shows it
         void OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event);
+        void OnFieldHelpSaved(const FieldHelpSavedEvent& event);
 
         /// Answers the Add Node dialog: the scene is unsaved and the parent of the new node is revealed, when the scene is the active one
         void OnNodeAdded(const SceneNodeAddedEvent& event);

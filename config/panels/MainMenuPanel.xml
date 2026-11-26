@@ -33,6 +33,7 @@
         <element type="PanelMenuItem" id="profiler" text="Profiler" command="view.profiler"/>
         <element type="PanelMenuItem" id="export" text="Export" command="view.export"/>
         <element type="PanelMenuItem" id="activity" text="Activity" command="view.activity"/>
+        <element type="PanelMenuItem" id="fieldHelp" text="Field Help" command="view.fieldHelp"/>
         <element type="PanelSeparator" id="layoutsLine"/>
         <element type="PanelMenu" id="layouts" title="Layouts" enableWhen="menu.hasStore" openCommand="layouts.menuOpened">
           <elements>

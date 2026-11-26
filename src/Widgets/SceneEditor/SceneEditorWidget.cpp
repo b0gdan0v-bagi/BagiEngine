@@ -24,6 +24,7 @@
 #include <Widgets/SceneEditor/Breadcrumbs.h>
 #include <Widgets/SceneEditor/ComponentCard.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
+#include <Widgets/SceneEditor/FieldHelpEvents.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneAssetDrop.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
@@ -83,6 +84,7 @@ namespace BECore {
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
         Subscribe<ConfigEvents::ConfigChangedEvent, &SceneEditorWidget::OnConfigChanged>(this);
+        Subscribe<FieldHelpSavedEvent, &SceneEditorWidget::OnFieldHelpSaved>(this);
         _fieldHelp.Reload();
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         _hostHandle = SceneEditorHostRegistry::GetInstance().Register(*this);
@@ -94,6 +96,10 @@ namespace BECore {
         if (FieldHelp::IsHelpConfig(event.name)) {
             _fieldHelp.Reload();
         }
+    }
+
+    void SceneEditorWidget::OnFieldHelpSaved(const FieldHelpSavedEvent& /*event*/) {
+        _fieldHelp.Reload();
     }
 
     SceneNode* SceneEditorWidget::FindInspected() const {

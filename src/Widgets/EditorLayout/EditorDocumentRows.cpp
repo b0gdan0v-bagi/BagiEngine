@@ -34,16 +34,24 @@ namespace BECore {
             return state;
         }
 
+        void SetConfigPaths(EditorDocumentState& state, const FileSystem& fileSystem, const Path& file) {
+            if (!file.Empty()) {
+                state.path = ConfigVirtualPath(fileSystem, file);
+                state.file = String(fileSystem.WriteTarget(file).View());
+            }
+        }
+
     }  // namespace
 
     EditorDocumentState MakeConfigDocument(const ConfigManager& manager, EditorDocumentKind kind, StringView name, bool dirty, PoolString config) {
         EditorDocumentState state = MakeRow(kind, name, dirty);
-        const Path file = manager.GetConfigFilePath(config);
-        if (!file.Empty()) {
-            const FileSystem& fileSystem = manager.GetFileSystem();
-            state.path = ConfigVirtualPath(fileSystem, file);
-            state.file = String(fileSystem.WriteTarget(file).View());
-        }
+        SetConfigPaths(state, manager.GetFileSystem(), manager.GetConfigFilePath(config));
+        return state;
+    }
+
+    EditorDocumentState MakeConfigFileDocument(const FileSystem& fileSystem, StringView name, bool dirty, const Path& file) {
+        EditorDocumentState state = MakeRow(EditorDocumentKind::Config, name, dirty);
+        SetConfigPaths(state, fileSystem, file);
         return state;
     }
 

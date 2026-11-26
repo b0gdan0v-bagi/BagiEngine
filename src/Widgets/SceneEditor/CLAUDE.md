@@ -27,9 +27,19 @@ The rest of the Scene Editor (selection, hierarchy, dialogs, Save, the viewport)
 
 Hovering a top-level field of a component (its control or its name) shows one tooltip composed by `FieldTooltips` (`FieldTooltips.h`): the description `FieldHelp` answers (the two help files and their precedence: `src/Modules/BECore/Config/CLAUDE.md`, "Field help"), the type in words, the range, and the default for every field `ComponentDefaults` compares, whether it differs or not. It stands in place of the field's `tooltip` attribute, whose text is the description when no file has one. Nested fields keep their attribute tooltips: the table is keyed by component class and field.
 
-- `SceneEditorWidget` owns the table and reads it again on a `ConfigChangedEvent` of either help file.
+- `SceneEditorWidget` owns the table and reads it again on a `ConfigChangedEvent` of either help file and on a `FieldHelpSavedEvent`.
 - `RenderComponentInspector` shows them only when it gets the `FieldTooltips`. A custom inspector draws its own controls, so it calls `ShowFieldHelp(field)` after each one; the call answers for the component being inspected.
 - A text is composed once per field and table version, so a settled frame allocates nothing.
+
+## Field Help panel
+
+The asset `FieldHelpPanel` (hidden until `view.fieldHelp`) over `FieldHelpPanelModel` shows the fields of a component class and edits their descriptions; the rules of an edit and the commands are in the model's header.
+
+- The model has a `FieldHelp` and a `ComponentDefaults` of its own, so what is typed reaches no tooltip before Save.
+- Save writes only the files that differ from what was read, then emits `FieldHelpSavedEvent`: a game file it has just made is no config of `ConfigManager`, so no `ConfigChangedEvent` would tell.
+- A rewritten file loses its comments and gets its entries sorted.
+- `editor_state` has a `config` row per unsaved help file. Its id is the Config Editor's for the same config and the earlier source wins, which is why the panel's line precedes `ConfigEditorPanel` in `WidgetsConfig.xml` (a game's own file too).
+- The multiline field holds less than a long description may: selecting it changes nothing, typing into it cuts the text to the field's buffer (`PanelAssets/CLAUDE.md`, "Input").
 
 ## Numbers
 

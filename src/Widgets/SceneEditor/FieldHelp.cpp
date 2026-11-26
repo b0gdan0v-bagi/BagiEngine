@@ -84,12 +84,28 @@ namespace BECore {
         return nullptr;
     }
 
+    PoolString FieldHelp::ConfigName(FieldHelpFile file) {
+        return file == FieldHelpFile::Game ? PoolString(Ids::game) : PoolString(Ids::engine);
+    }
+
     bool FieldHelp::IsHelpConfig(PoolString name) {
         return name == Ids::engine || name == Ids::game;
     }
 
     const FileSystem& FieldHelp::Files() const {
         return _fileSystem != nullptr ? *_fileSystem : CoreManager::GetFileSystem();
+    }
+
+    Path FieldHelp::SourcePath(FieldHelpFile file) const {
+        const StringView fileName = kFileNames[static_cast<size_t>(file)];
+        if (Path found = FindInLayers(Files(), fileName); !found.Empty()) {
+            return found;
+        }
+        const Vector<Path> layers = Files().GetMountLayers(MountPoints::config);
+        if (layers.empty()) {
+            return {};
+        }
+        return (file == FieldHelpFile::Game ? layers.back() : layers.front()) / fileName;
     }
 
     void FieldHelp::Reload() {
@@ -115,6 +131,7 @@ namespace BECore {
                     table.entries.insert(place, eastl::move(entry));
                 }
             }
+            table.stored = table.entries;
         }
         ++_version;
     }
@@ -132,10 +149,9 @@ namespace BECore {
         const TypeInfo* owner = type;
         StringView ownerName = component;
         while (true) {
-            for (const FieldHelpFile file : {FieldHelpFile::Game, FieldHelpFile::Engine}) {
-                if (const FieldHelpEntry* const entry = FindEntry(file, ownerName, field); entry != nullptr && !entry->text.empty()) {
-                    return {StringView(entry->text.data(), entry->text.size()), file == FieldHelpFile::Game ? FieldHelpSource::Game : FieldHelpSource::Engine};
-                }
+            if (const Optional<FieldHelpFile> holder = HolderOf(ownerName, field)) {
+                const FieldHelpEntry& entry = *FindEntry(*holder, ownerName, field);
+                return {StringView(entry.text.data(), entry.text.size()), *holder == FieldHelpFile::Game ? FieldHelpSource::Game : FieldHelpSource::Engine};
             }
             owner = owner != nullptr ? registry.Parent(*owner) : nullptr;
             if (owner == nullptr) {
@@ -149,6 +165,21 @@ namespace BECore {
             }
         }
         return {};
+    }
+
+    Optional<FieldHelpFile> FieldHelp::HolderOf(StringView component, StringView field) const {
+        for (const FieldHelpFile file : {FieldHelpFile::Game, FieldHelpFile::Engine}) {
+            if (const FieldHelpEntry* const entry = FindEntry(file, component, field); entry != nullptr && !entry->text.empty()) {
+                return file;
+            }
+        }
+        return {};
+    }
+
+    bool FieldHelp::IsModified(FieldHelpFile file) const {
+        const Table& table = TableOf(file);
+        const auto same = [](const FieldHelpEntry& left, const FieldHelpEntry& right) { return IsSame(KeyOf(left), KeyOf(right)) && left.text == right.text; };
+        return table.entries.size() != table.stored.size() || !eastl::equal(table.entries.begin(), table.entries.end(), table.stored.begin(), same);
     }
 
     void FieldHelp::Set(FieldHelpFile file, StringView component, StringView field, StringView text) {
@@ -184,21 +215,18 @@ namespace BECore {
     std::expected<void, String> FieldHelp::Save(FieldHelpFile file) {
         const FileSystem& files = Files();
         const StringView fileName = kFileNames[static_cast<size_t>(file)];
-        const Table& table = TableOf(file);
-        Path source = FindInLayers(files, fileName);
+        Table& table = TableOf(file);
         if (table.unreadable) {
             return std::unexpected<String>(Format("'{}' was not read and is not saved over", fileName));
         }
-        if (!source.Empty()) {
+        const Path source = SourcePath(file);
+        if (source.Empty()) {
+            return std::unexpected<String>(Format("no 'config' folder to make '{}' in", fileName));
+        }
+        if (GetFileInfo(source)) {
             if (const std::expected<FieldHelpConfig, String> read = ReadHelpFile(source); !read) {
                 return std::unexpected<String>(read.error());
             }
-        } else {
-            const Vector<Path> layers = files.GetMountLayers(MountPoints::config);
-            if (layers.empty()) {
-                return std::unexpected<String>(Format("no 'config' folder to make '{}' in", fileName));
-            }
-            source = (file == FieldHelpFile::Game ? layers.back() : layers.front()) / fileName;
         }
 
         const Path target = files.WriteTarget(source);
@@ -210,6 +238,7 @@ namespace BECore {
         if (!writer.SaveToFile(target)) {
             return std::unexpected<String>(Format("cannot write '{}'", target.View()));
         }
+        table.stored = table.entries;
         return {};
     }
 

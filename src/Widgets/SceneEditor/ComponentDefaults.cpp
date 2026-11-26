@@ -304,8 +304,7 @@ namespace BECore {
     ComponentDefaults::ComponentDefaults() = default;
     ComponentDefaults::~ComponentDefaults() = default;
 
-    const ComponentDefaults::Prototype& ComponentDefaults::PrototypeOf(IComponent& component) {
-        const ClassMeta& meta = component.GetTypeMeta();
+    const ComponentDefaults::Prototype& ComponentDefaults::PrototypeOf(const ClassMeta& meta) {
         if (const auto found = _prototypes.find(meta.typeHash); found != _prototypes.end()) {
             return *found->second;
         }
@@ -334,7 +333,7 @@ namespace BECore {
     }
 
     Span<const ComponentFieldDifference> ComponentDefaults::Compare(IComponent& component) {
-        const Prototype& prototype = PrototypeOf(component);
+        const Prototype& prototype = PrototypeOf(component.GetTypeMeta());
         _differences.clear();
         _differences.reserve(prototype.fields.size());
         if (const TypedRef live = TypedRef::Of(component)) {
@@ -348,7 +347,11 @@ namespace BECore {
     }
 
     Optional<StringView> ComponentDefaults::DefaultText(IComponent& component, StringView field) {
-        const Field* const found = PrototypeOf(component).Find(field);
+        return DefaultText(component.GetTypeMeta(), field);
+    }
+
+    Optional<StringView> ComponentDefaults::DefaultText(const ClassMeta& type, StringView field) {
+        const Field* const found = PrototypeOf(type).Find(field);
         if (found == nullptr) {
             return {};
         }
@@ -356,7 +359,7 @@ namespace BECore {
     }
 
     bool ComponentDefaults::Reset(IComponent& component, StringView field) {
-        const Prototype& prototype = PrototypeOf(component);
+        const Prototype& prototype = PrototypeOf(component.GetTypeMeta());
         const Field* const found = prototype.Find(field);
         const TypedRef live = TypedRef::Of(component);
         if (found == nullptr || !live || !found->Resettable() || found->HashIn(live) == found->defaultHash || !prototype.Restore(*found, live)) {
@@ -367,7 +370,7 @@ namespace BECore {
     }
 
     bool ComponentDefaults::ResetAll(IComponent& component) {
-        const Prototype& prototype = PrototypeOf(component);
+        const Prototype& prototype = PrototypeOf(component.GetTypeMeta());
         const TypedRef live = TypedRef::Of(component);
         if (!live) {
             return false;
