@@ -11,6 +11,7 @@ Each tool has its own `CLAUDE.md`; Python tools have pytest suites outside ctest
 | `perf` | benchmarks, trace summary (skills `perf`, `perf-investigate`) |
 | `qa` | the QA player and monkey (skills `qa`, `qa-loop`) |
 | `stress` | `BagiStress`, the 2D stress app: benchmarks and a control smoke |
+| `demo` | `BagiDemo`, the demo scene of the engine's components, to look at and edit |
 | `shots` | before / after pictures of scenes, PNG diff |
 | `sync` | helper of the `sync-engine` skill |
 | `alltests` | the full test run on demand (skill `alltests`, the deploy gate, `sync-engine`); a failure files `alltests-<test>` |

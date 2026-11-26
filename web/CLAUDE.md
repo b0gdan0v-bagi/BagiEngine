@@ -1,6 +1,6 @@
 # The web files of the engine
 
-The files the browser build links or packs in (`cmake/BagiWeb.cmake`); they name no game. `config/` is the web overlay of the content (`BAGI_WEB_ROOT`). The tools that package and serve the page are in `tools/web/CLAUDE.md`.
+The files the browser build links or packs in (`cmake/BagiWeb.cmake`); they name no game. `config/` is the web overlay of the content (`BAGI_WEB_ROOT`). `targets.json` is not linked or packed: the engine's own named deploy targets (`tools/web/DEPLOY.md`, "Targets"), the one file here that names an executable. The tools that package and serve the page are in `tools/web/CLAUDE.md`.
 
 **Run mode.** The overlay's `ApplicationConfig.xml` replaces every game's file and says `mode="Game"`. A page built with the editor (preset `web-editor`) uses the same overlay and adds `--editor` to its arguments (`src/main.cpp`): a page has no command line, and a second overlay would replace a game's file twice. Its `LoggerConfig.xml` replaces a game's too, so it carries the `LogHistorySink` the editor's Console reads.
 
