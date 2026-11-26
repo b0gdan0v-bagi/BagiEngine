@@ -2,6 +2,7 @@
 
 #include <BECore/PoolString/PoolBlockSource.h>
 #include <BECore/PoolString/PoolStringStorage.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Types/Types.h>
 #include <Common/FreshText.h>
 #include <algorithm>
@@ -56,6 +57,20 @@ namespace BECore::Tests {
         }
         return capacity;
     }
+
+    /// Makes `zone` the thread's innermost zone, as a `ProfileZone` of a build that tracks zones does
+    class CurrentZone {
+    public:
+        explicit CurrentZone(const ProfileSite* zone) : _previous(AllocTracker::ExchangeCurrentZone(zone)) {}
+        ~CurrentZone() {
+            AllocTracker::ExchangeCurrentZone(_previous);
+        }
+        CurrentZone(const CurrentZone&) = delete;
+        CurrentZone& operator=(const CurrentZone&) = delete;
+
+    private:
+        const ProfileSite* _previous;
+    };
 
     inline String CounterName(StringView prefix, size_t index) {
         String name(prefix);

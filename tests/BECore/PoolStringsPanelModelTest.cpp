@@ -16,6 +16,25 @@ namespace BECore::Tests {
         constexpr StringView kBrokenSource = "checks/Broken.bin";
         constexpr uint64_t kSharedHash = 42;
         constexpr std::chrono::seconds kThreadLimit{5};
+        constexpr ProfileSite kZone{"pool panel zone", "Load", "tests/PoolStringsPanelModelTest.cpp", 7, 0};
+
+        String ZoneLabel(StringView name, std::initializer_list<StringView> texts, uint64_t lastFrame) {
+            size_t bytes = 0;
+            for (const StringView text : texts) {
+                bytes += Details::PoolEntryBytes(text.size());
+            }
+            return Format("{} ({} strings, {}, last frame {})", name, texts.size(), FormatBytes(bytes), lastFrame);
+        }
+
+        /// The strings of a listed zone with their frames, `text@frame;` each
+        String ZoneTexts(const PoolStringsPanelModel& model, const PoolPanelZone& zone) {
+            String texts;
+            for (size_t i = zone.group.first; i < zone.group.first + zone.group.count; ++i) {
+                const PoolStringRecord& record = model.GetRecords()[i];
+                texts += Format("{}@{};", record.text.ToStringView(), record.frame);
+            }
+            return texts;
+        }
 
         struct Hashed {
             StringView text;
@@ -96,6 +115,22 @@ namespace BECore::Tests {
 
         const PoolStringsPanelView& View() const {
             return _model->GetView();
+        }
+
+        void Intern(StringView text) {
+            static_cast<void>(_pool.storage.Intern(text));
+        }
+
+        void Updates(uint32_t count) {
+            for (uint32_t i = 0; i < count; ++i) {
+                _model->Update();
+            }
+        }
+
+        /// What a click on the switch writes, read by the next frame of the model
+        void SwitchRecording(bool recording) {
+            const_cast<PoolStringsPanelView&>(_model->GetView()).recording = recording;
+            _model->Update();
         }
 
         /// What a control writes, read by the next frame of the model
@@ -391,6 +426,131 @@ namespace BECore::Tests {
         EXPECT_EQ(_model->GetSearchCount(), opened + 4);
         _model->Update();
         EXPECT_EQ(_model->GetSearchCount(), opened + 4);
+    }
+
+    TEST_F(PoolStringsPanelModelTest, TheGrowthShowsTheFramesThatAddedRuntimeStringsAndTheCleanOnesAfterThem) {
+        _monitor.BeginFrame(1);
+        _monitor.EndFrame();
+        Open();
+        EXPECT_FALSE(View().hasGrowth);
+        EXPECT_EQ(View().growthText, "No runtime string was added in the frames kept");
+
+        _monitor.BeginFrame(2);
+        Intern("grown_one");
+        Intern("grown_two");
+        _monitor.EndFrame();
+        _model->Update();
+        const uint64_t bytes = Details::PoolEntryBytes(StringView("grown_one").size()) + Details::PoolEntryBytes(StringView("grown_two").size());
+        const String grew = Format("Frames with new runtime strings: 1 (2 strings, {})", FormatBytes(bytes));
+        EXPECT_TRUE(View().hasGrowth);
+        EXPECT_EQ(View().growthText, grew);
+        ASSERT_EQ(_model->GetGrowth().size(), 2u);
+        EXPECT_EQ(_model->GetGrowth()[1].runtimeStrings, 2u);
+
+        _monitor.BeginFrame(3);
+        _monitor.EndFrame();
+        _model->Update();
+        ASSERT_EQ(_model->GetGrowth().size(), 3u);
+        EXPECT_EQ(_model->GetGrowth()[2].runtimeStrings, 0u);
+        EXPECT_EQ(View().growthText, grew) << "the frame is still kept";
+
+        for (uint64_t frame = 4; frame < 4 + PoolStringMonitor::kFrameHistory; ++frame) {
+            _monitor.BeginFrame(frame);
+            _monitor.EndFrame();
+        }
+        _model->Update();
+        EXPECT_FALSE(View().hasGrowth) << "the frame with the strings is no longer kept";
+    }
+
+    TEST_F(PoolStringsPanelModelTest, TheSwitchStartsAndStopsTheRecordingAndFollowsASwitchMadeElsewhere) {
+        Open();
+        SwitchRecording(true);
+        EXPECT_TRUE(_monitor.IsRecording());
+        SwitchRecording(false);
+        EXPECT_FALSE(_monitor.IsRecording());
+
+        _monitor.SetRecording(true);
+        _model->Update();
+        EXPECT_TRUE(View().recording);
+        EXPECT_TRUE(_monitor.IsRecording());
+        _monitor.SetRecording(false);
+        _model->Update();
+        EXPECT_FALSE(View().recording);
+        EXPECT_FALSE(_monitor.IsRecording());
+    }
+
+    TEST_F(PoolStringsPanelModelTest, ClosingThePanelAndDestroyingTheModelLeaveTheRecordingOn) {
+        Open();
+        SwitchRecording(true);
+        _model->OnOpenChanged(false);
+        EXPECT_TRUE(_monitor.IsRecording());
+        _model.Reset();
+        EXPECT_TRUE(_monitor.IsRecording());
+    }
+
+    TEST_F(PoolStringsPanelModelTest, TheRecordsAreListedByZoneWithTheirFramesAndTheCounts) {
+        _monitor.SetRecording(true);
+        _monitor.BeginFrame(5);
+        {
+            const CurrentZone zone(&kZone);
+            Intern("zoned_first_of_the_longer_strings");
+            Intern("zoned_second_of_the_longer_strings");
+        }
+        {
+            const CurrentZone none(nullptr);
+            Intern("loose");
+        }
+        _monitor.EndFrame();
+        Open();
+
+        EXPECT_EQ(View().recordsText, "Recorded: 3, dropped past the limit: 0");
+        ASSERT_EQ(_model->GetZones().size(), 2u);
+        const PoolPanelZone& zoned = _model->GetZones()[0];
+        EXPECT_EQ(zoned.label, ZoneLabel("pool panel zone", {"zoned_first_of_the_longer_strings", "zoned_second_of_the_longer_strings"}, 5));
+        EXPECT_EQ(zoned.location, "tests/PoolStringsPanelModelTest.cpp:7");
+        EXPECT_EQ(ZoneTexts(*_model, zoned), "zoned_first_of_the_longer_strings@5;zoned_second_of_the_longer_strings@5;");
+        const PoolPanelZone& loose = _model->GetZones()[1];
+        EXPECT_EQ(loose.label, ZoneLabel("(no zone)", {"loose"}, 5));
+        EXPECT_TRUE(loose.location.empty());
+        EXPECT_EQ(ZoneTexts(*_model, loose), "loose@5;");
+    }
+
+    TEST_F(PoolStringsPanelModelTest, StringsThatKeepComingAreGroupedAgainOnlyAfterSomeFramesAndByARefreshAtOnce) {
+        _monitor.SetRecording(true);
+        Open();
+        Intern("regroup_first");
+        _model->Update();
+        EXPECT_TRUE(_model->GetRecords().empty()) << "not in the frame after a grouping";
+        EXPECT_EQ(View().recordsText, "Recorded: 1, dropped past the limit: 0") << "the count does not wait";
+        Updates(PoolStringsPanelLimits::kRegroupFrames);
+        EXPECT_EQ(_model->GetRecords().size(), 1u);
+
+        Refresh();
+        Intern("regroup_second");
+        _model->Update();
+        EXPECT_EQ(_model->GetRecords().size(), 1u);
+        Refresh();
+        EXPECT_EQ(_model->GetRecords().size(), 2u);
+    }
+
+    TEST_F(PoolStringsPanelModelTest, AClearEmptiesTheListAtOnceWhoeverMadeIt) {
+        _monitor.SetRecording(true);
+        Intern("cleared_by_the_command");
+        Open();
+        ASSERT_EQ(_model->GetZones().size(), 1u);
+
+        ASSERT_TRUE(_model->RunCommand("poolStrings.clearRecords", {}));
+        EXPECT_TRUE(_model->GetZones().empty());
+        EXPECT_TRUE(_monitor.IsRecording());
+
+        Intern("cleared_by_the_monitor");
+        Refresh();
+        ASSERT_EQ(_model->GetZones().size(), 1u);
+        _monitor.ClearRecords();
+        Intern("came_after_the_clear");  // as many records as before
+        _model->Update();
+        ASSERT_EQ(_model->GetRecords().size(), 1u);
+        EXPECT_EQ(_model->GetRecords()[0].text.ToStringView(), "came_after_the_clear");
     }
 
     TEST(PoolStringsPanelTextTest, ALineEndsAtTheFirstBreakAndIsNeverCutInsideACharacter) {

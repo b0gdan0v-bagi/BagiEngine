@@ -37,6 +37,15 @@ namespace BECore {
         uint64_t lastFrame = 0;
     };
 
+    /// What the records of a monitor are now. A view copies them (`GroupByZone`) only when `records` or `clears` moved
+    struct PoolRecordCounts {
+        size_t records = 0;
+        size_t dropped = 0;
+        uint64_t clears = 0;  ///< Calls of `ClearRecords`: after one, the same number of records is other records
+
+        bool operator==(const PoolRecordCounts&) const = default;
+    };
+
     /**
      * @brief Watches one pool grow: the strings of each of the last frames and, while recording, each new runtime string with
      * the profiler zone that interned it
@@ -80,6 +89,8 @@ namespace BECore {
         /// Drops the records and the dropped count
         void ClearRecords();
         [[nodiscard]] size_t GetDroppedCount() const;
+        /// Cheap enough for every frame: copies no record and does not call the pool
+        [[nodiscard]] PoolRecordCounts GetRecordCounts() const;
 
         /// Refills `records` with a copy of the records, the ones of a zone side by side in the order they came, and `groups`
         /// with one entry per zone, the most bytes first
@@ -98,6 +109,7 @@ namespace BECore {
         mutable Mutex _mutex{BE_LOCK_SITE("PoolString monitor")};
         Vector<PoolStringRecord> _records;  // guarded by _mutex
         size_t _dropped = 0;                // guarded by _mutex
+        uint64_t _clears = 0;               // guarded by _mutex
     };
 
 }  // namespace BECore

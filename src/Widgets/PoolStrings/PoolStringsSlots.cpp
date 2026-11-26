@@ -2,6 +2,7 @@
 
 #include <EASTL/algorithm.h>
 #include <Widgets/ImGuiFonts.h>
+#include <Widgets/ImGuiTheme.h>
 #include <Widgets/PoolStrings/PoolStringsPanelModel.h>
 #include <Widgets/PoolStrings/PoolStringsText.h>
 #include <imgui.h>
@@ -12,6 +13,13 @@ namespace BECore {
 
         constexpr StringView kBlocksSlotName = "poolStringBlocks";
         constexpr StringView kContentsSlotName = "poolStringContents";
+        constexpr StringView kGrowthSlotName = "poolStringGrowth";
+        constexpr StringView kZonesSlotName = "poolStringZones";
+
+        constexpr float kPlotHeightEm = 3.0f;
+        constexpr float kPlotBarGap = 1.0f;
+        /// A frame that added little beside the largest one is still seen
+        constexpr float kMinBarHeight = 2.0f;
 
         constexpr int kContentColumns = 4;
         constexpr size_t kContentRowsShown = 20;
@@ -70,6 +78,8 @@ namespace BECore {
         PanelSlots& slots = PanelSlots::GetInstance();
         _blocksSlot = slots.Register(kBlocksSlotName, [this] { DrawBlocks(); });
         _contentsSlot = slots.Register(kContentsSlotName, [this] { DrawContents(); });
+        _growthSlot = slots.Register(kGrowthSlotName, [this] { DrawGrowth(); });
+        _zonesSlot = slots.Register(kZonesSlotName, [this] { DrawZones(); });
     }
 
     void PoolStringsSlots::DrawBlocks() {
@@ -149,6 +159,81 @@ namespace BECore {
             }
         }
         ImGui::EndTable();
+    }
+
+    void PoolStringsSlots::DrawGrowth() {
+        _drawnGrowthBars = 0;
+        DrawGrowthPlot("##poolGrowthStrings", "Runtime strings per frame", &PoolGrowthFrame::runtimeStrings);
+        DrawGrowthPlot("##poolGrowthBytes", "Runtime bytes per frame", &PoolGrowthFrame::runtimeBytes);
+    }
+
+    void PoolStringsSlots::DrawGrowthPlot(const char* id, const char* title, uint64_t PoolGrowthFrame::* value) {
+        const Span<const PoolGrowthFrame> frames = _model.GetGrowth();
+        uint64_t most = 0;
+        for (const PoolGrowthFrame& frame : frames) {
+            most = eastl::max(most, frame.*value);
+        }
+        ImGui::Text("%s (most: %llu)", title, static_cast<unsigned long long>(most));
+
+        const ImVec2 size(eastl::max(ImGui::GetContentRegionAvail().x, 1.0f), kPlotHeightEm * ImGui::GetFontSize());
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton(id, size);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        const float bottom = origin.y + size.y;
+        drawList->AddRectFilled(origin, ImVec2(origin.x + size.x, bottom), ImGui::GetColorU32(ImGuiCol_FrameBg));
+
+        // A place for every frame the monitor can keep, the newest at the right, so a bar does not change its width while the history fills
+        const float step = size.x / static_cast<float>(PoolStringMonitor::kFrameHistory);
+        const size_t firstPlace = PoolStringMonitor::kFrameHistory - frames.size();
+        const ImU32 color = ImGui::ColorConvertFloat4ToU32(GetImGuiPalette().warning);
+        for (size_t i = 0; i < frames.size(); ++i) {
+            const uint64_t amount = frames[i].*value;
+            if (amount == 0) {
+                continue;
+            }
+            const float x = origin.x + static_cast<float>(firstPlace + i) * step;
+            const float height = eastl::max(static_cast<float>(static_cast<double>(amount) / static_cast<double>(most)) * size.y, kMinBarHeight);
+            drawList->AddRectFilled(ImVec2(x, bottom - height), ImVec2(x + eastl::max(step - kPlotBarGap, 1.0f), bottom), color);
+            ++_drawnGrowthBars;
+        }
+
+        if (!ImGui::IsItemHovered() || step <= 0.0f) {
+            return;
+        }
+        const size_t place = static_cast<size_t>(eastl::max(ImGui::GetMousePos().x - origin.x, 0.0f) / step);
+        if (place >= firstPlace && place - firstPlace < frames.size()) {
+            const PoolGrowthFrame& frame = frames[place - firstPlace];
+            ImGui::SetTooltip("Frame %llu\nRuntime strings: %llu (%llu bytes)\nOther strings: %llu", static_cast<unsigned long long>(frame.frame),
+                              static_cast<unsigned long long>(frame.runtimeStrings), static_cast<unsigned long long>(frame.runtimeBytes), static_cast<unsigned long long>(frame.otherStrings));
+        }
+    }
+
+    void PoolStringsSlots::DrawZones() {
+        _drawnRecordRows = 0;
+        const Vector<PoolStringRecord>& records = _model.GetRecords();
+        for (const PoolPanelZone& zone : _model.GetZones()) {
+            // The id is the zone's, so a node stays open while the order and the numbers change
+            const bool open = ImGui::TreeNodeEx(static_cast<const void*>(zone.group.zone), ImGuiTreeNodeFlags_SpanAvailWidth, "%s", zone.label.c_str());
+            if (!zone.location.empty()) {
+                ImGui::SetItemTooltip("%s", zone.location.c_str());
+            }
+            if (!open) {
+                continue;
+            }
+            ImGuiListClipper clipper;
+            clipper.Begin(static_cast<int>(zone.group.count));
+            while (clipper.Step()) {
+                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+                    const PoolStringRecord& record = records[zone.group.first + static_cast<size_t>(i)];
+                    const StringView text = record.text.ToStringView();
+                    const StringView line = PoolStringLine(text, kMaxCellTextBytes);
+                    ImGui::Text("frame %llu: %.*s", static_cast<unsigned long long>(record.frame), static_cast<int>(line.size()), line.data());
+                    TextTooltip(text);
+                    ++_drawnRecordRows;
+                }
+            }
+            ImGui::TreePop();
+        }
     }
 
 }  // namespace BECore

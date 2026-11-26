@@ -4,6 +4,7 @@
 #include <BECore/Widgets/PanelAssets/PanelAssetLoader.h>
 #include <BECore/Widgets/PanelAssets/PanelDataSources.h>
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
+#include <Common/AllocCheck.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/TestFiles.h>
@@ -30,6 +31,8 @@ namespace BECore::Tests {
         constexpr size_t kManyStrings = 100000;
         constexpr size_t kHugeBytes = 100000;
         constexpr int kLengthColumn = 1;
+        constexpr int kSteadyFrames = 10;
+        constexpr ProfileSite kZone{"pool asset zone", "Load", "tests/PoolStringsPanelAssetTest.cpp", 7, 0};
 
         Path ShippedPanel(StringView file) {
             return Path(__FILE__).Parent().Parent().Parent() / "config" / "panels" / Path(file);
@@ -166,6 +169,18 @@ namespace BECore::Tests {
             static_cast<void>(_pool.storage.Intern(text));
         }
 
+        /// One frame of the monitor that interns @p texts in `kZone`
+        void RunMonitorFrame(std::initializer_list<StringView> texts) {
+            _monitor.BeginFrame(++_monitorFrame);
+            {
+                const CurrentZone zone(&kZone);
+                for (const StringView text : texts) {
+                    Intern(text);
+                }
+            }
+            _monitor.EndFrame();
+        }
+
         /// The scrolling child window of the list of strings
         const ImGuiWindow* ContentsWindow() const {
             for (const ImGuiWindow* window : ImGui::GetCurrentContext()->Windows) {
@@ -204,6 +219,7 @@ namespace BECore::Tests {
         PanelSourceHandle _handle;
         PanelInterpreter _interpreter;
         PanelDrawResult _result;
+        uint64_t _monitorFrame = 0;
     };
 
     TEST_F(PoolStringsPanelAssetTest, TheAssetIsTheHiddenWindowThatTheViewCommandOpens) {
@@ -290,6 +306,71 @@ namespace BECore::Tests {
         Intern(String("a_huge") + String(kHugeBytes, 'x'));
         ASSERT_NO_FATAL_FAILURE(Refresh());
         EXPECT_FLOAT_EQ(ContentsWindow()->ContentSize.y - withPlain, withPlain - before);
+    }
+
+    TEST_F(PoolStringsPanelAssetTest, OnlyAFrameThatAddedStringsHasABarInTheGrowthPlots) {
+        _monitor.BeginFrame(++_monitorFrame);
+        _monitor.EndFrame();  // takes the string of the set up
+        RunMonitorFrame({});
+        Settle();
+        const size_t before = _model->GetSlots().GetDrawnGrowthBars();
+
+        RunMonitorFrame({"bar_one"});
+        RunMonitorFrame({});
+        Settle();
+        EXPECT_EQ(_model->GetSlots().GetDrawnGrowthBars(), before + 2) << "one in the plot of strings, one in the plot of bytes";
+    }
+
+    TEST_F(PoolStringsPanelAssetTest, TheSwitchRecordsAZoneOpensToItsStringsAndClearDropsThem) {
+        Settle();
+        ASSERT_NO_FATAL_FAILURE(Click("###record"));
+        ASSERT_TRUE(_monitor.IsRecording());
+
+        RunMonitorFrame({"recorded_one", "recorded_two"});
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        EXPECT_EQ(_model->GetSlots().GetDrawnRecordRows(), 0u) << "a zone starts closed";
+        ASSERT_NO_FATAL_FAILURE(Click("pool asset zone"));
+        EXPECT_EQ(_model->GetSlots().GetDrawnRecordRows(), 2u);
+
+        // The numbers in the node's label and its place change; it stays open
+        RunMonitorFrame({"recorded_three"});
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        EXPECT_EQ(_model->GetSlots().GetDrawnRecordRows(), 3u);
+
+        ASSERT_NO_FATAL_FAILURE(Click("Clear"));
+        EXPECT_EQ(_monitor.GetRecordCounts().records, 0u);
+        EXPECT_EQ(_model->GetSlots().GetDrawnRecordRows(), 0u);
+        ASSERT_NO_FATAL_FAILURE(Click("###record"));
+        EXPECT_FALSE(_monitor.IsRecording());
+    }
+
+    TEST_F(PoolStringsPanelAssetTest, ASteadyFrameOfTheOpenPanelAddsNoPoolStringAndAllocatesNothing) {
+        Settle();
+        ASSERT_NO_FATAL_FAILURE(Click("###record"));
+        RunMonitorFrame({"steady_recorded"});
+        ASSERT_NO_FATAL_FAILURE(Refresh());
+        ASSERT_NO_FATAL_FAILURE(Click("pool asset zone"));
+        ASSERT_GT(_model->GetSlots().GetDrawnContentRows(), 0u);
+        ASSERT_GT(_model->GetSlots().GetDrawnGrowthBars(), 0u);
+        ASSERT_EQ(_model->GetSlots().GetDrawnRecordRows(), 1u);
+        _index.Disarm();  // the index of the test's own clicks is no part of a frame
+        const auto steadyFrame = [this] {
+            RunMonitorFrame({});
+            Frame();
+        };
+        for (int i = 0; i < kSteadyFrames; ++i) {
+            steadyFrame();
+        }
+        const size_t watched = _pool.storage.GetStats().stringCount;
+        const size_t process = PoolString::GetStats().stringCount;
+
+        ExpectNoAllocations([&] {
+            for (int i = 0; i < kSteadyFrames; ++i) {
+                steadyFrame();
+            }
+        });
+        EXPECT_EQ(_pool.storage.GetStats().stringCount, watched);
+        EXPECT_EQ(PoolString::GetStats().stringCount, process);
     }
 
     TEST(PoolStringsPanelMenuTest, TheViewMenuHasTheItemOfThePanel) {

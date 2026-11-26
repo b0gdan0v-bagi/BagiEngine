@@ -1,7 +1,9 @@
 #pragma once
 
 #include <BECore/PoolString/PoolStringAnalysis.h>
+#include <BECore/PoolString/PoolStringMonitor.h>
 #include <BECore/PoolString/PoolStringSnapshot.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Types/Types.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
@@ -11,13 +13,13 @@
 
 namespace BECore {
 
-    class PoolStringMonitor;
-
     struct PoolStringsPanelLimits {
         /// Pairs the checks list; the rest are counted in a line
         static constexpr size_t kMaxCheckRows = 100;
         /// Bytes of one text of a listed pair
         static constexpr size_t kMaxCheckTextBytes = 80;
+        /// Frames between two groupings of records that keep coming: a grouping copies and sorts all of them
+        static constexpr uint32_t kRegroupFrames = 30;
     };
 
     /// A row of the summary: what one source of strings holds, or the whole pool
@@ -43,9 +45,11 @@ namespace BECore {
     };
 
     /**
-     * @brief What `PoolStringsPanel.xml` binds to: the texts of one snapshot of the pool and the choices of its contents list
+     * @brief What `PoolStringsPanel.xml` binds to: the texts of one snapshot of the pool, the choices of its contents list and what the monitor
+     * saw lately
      *
-     * `search` and `sourceIndex` are written by the panel's controls with no command and read by the model in its next `Update`; the model writes the rest.
+     * `search`, `sourceIndex` and `recording` are written by the panel's controls with no command and read by the model in its next `Update`; the
+     * model writes the rest.
      */
     struct PoolStringsPanelView {
         BE_CLASS(PoolStringsPanelView)
@@ -71,6 +75,15 @@ namespace BECore {
         /// All, static, runtime, adopted, then the source names of the adopted blocks of the snapshot, sorted
         BE_REFLECT_FIELD Vector<String> sourceItems;
         BE_REFLECT_FIELD String matchText;
+
+        /// A frame the monitor keeps copied a runtime string into the pool
+        BE_REFLECT_FIELD bool hasGrowth = false;
+        BE_REFLECT_FIELD String growthText;
+        /// The switch; the model keeps it equal to what the monitor does, which others switch too
+        BE_REFLECT_FIELD bool recording = false;
+        BE_REFLECT_FIELD String recordsText;
+        /// False: this build tracks no zones, so no record has one
+        BE_REFLECT_FIELD bool zonesKnown = AllocTracker::kEnabled;
     };
 
     /// A block of the snapshot as the blocks table draws it
@@ -84,12 +97,24 @@ namespace BECore {
         float fill = 0.0f;  ///< Used over capacity
     };
 
+    /// A zone of the records as the zones list draws it
+    struct PoolPanelZone {
+        PoolZoneGroup group;  ///< Its part of `GetRecords`
+        String label;
+        String location;  ///< `file:line`; empty for the records with no zone
+    };
+
     /**
-     * @brief The model of the Pool Strings panel asset: one snapshot of a pool and the texts made from it, with no ImGui
+     * @brief The model of the Pool Strings panel asset: one snapshot of a pool, what its monitor saw lately and the texts made from both, with no
+     * ImGui
      *
      * A snapshot walks the whole table under the pool's lock, so no frame takes one by itself: it is taken in the first `Update` after the panel
-     * opens and by the command `poolStrings.refresh` (run only while the panel is open). Every text, row and check result is made then, so the
-     * numbers agree with each other and a later frame formats nothing. The model never interns: showing the pool must not grow it.
+     * opens and by the command `poolStrings.refresh` (run only while the panel is open). Every text, row and check result of it is made then, so the
+     * numbers agree with each other. The model never interns: showing the pool must not grow it.
+     *
+     * Growth and records are live. Each `Update` reads the monitor's last frames and record counts and formats a text only when its numbers
+     * changed. The records are grouped by zone again when they changed, at most once per `kRegroupFrames` while they keep coming, and at once after
+     * a clear or a new snapshot. Recording is the monitor's state: closing the panel and destroying the model leave it on.
      *
      * The contents list is `GetMatches`, the rows of the snapshot that the view's choices and the sort select; the search walks every string, so it
      * runs only when the snapshot, a choice or the sort changed.
@@ -140,11 +165,35 @@ namespace BECore {
         /// `static`, `runtime`, the file name of the adopted block of @p row (a row of `GetSnapshot`), or `adopted` for a block with none
         [[nodiscard]] StringView SourceOf(const PoolStringRow& row) const;
 
+        /// The frames the monitor keeps as of the last `Update`, the oldest first
+        [[nodiscard]] Span<const PoolGrowthFrame> GetGrowth() const {
+            return {_growth.data(), _growthCount};
+        }
+
+        /// The zones of `GetRecords`, the most bytes first
+        [[nodiscard]] const Vector<PoolPanelZone>& GetZones() const {
+            return _zones;
+        }
+
+        /// A copy of the monitor's records, those of a zone side by side
+        [[nodiscard]] const Vector<PoolStringRecord>& GetRecords() const {
+            return _records;
+        }
+
         [[nodiscard]] const PoolStringsSlots& GetSlots() const {
             return _slots;
         }
 
     private:
+        /// What the growth line says of the frames that added runtime strings
+        struct GrowthSums {
+            size_t frames = 0;
+            uint64_t strings = 0;
+            uint64_t bytes = 0;
+
+            bool operator==(const GrowthSums&) const = default;
+        };
+
         [[nodiscard]] PoolStringMonitor& Monitor() const;
         void TakeSnapshot();
         void BuildSummary();
@@ -153,6 +202,11 @@ namespace BECore {
         /// Keeps a chosen file chosen by its name, or goes back to every source when the new snapshot has no such file
         void BuildSourceItems();
         void Search();
+        /// Passes a change of the switch to the monitor, else makes the switch follow it
+        void SyncRecording();
+        void ReadGrowth();
+        void ReadRecords();
+        void GroupRecords();
 
         PoolStringsPanelView _view;
         PoolStringsSlots _slots{*this};
@@ -167,6 +221,17 @@ namespace BECore {
         String _searchedText;
         int32_t _searchedSource = 0;
         uint64_t _searchCount = 0;
+
+        bool _shownRecording = false;
+        Array<PoolGrowthFrame, PoolStringMonitor::kFrameHistory> _growth{};
+        size_t _growthCount = 0;
+        Optional<GrowthSums> _shownGrowth;
+        PoolRecordCounts _shownCounts;
+        Vector<PoolStringRecord> _records;
+        Vector<PoolZoneGroup> _groups;
+        Vector<PoolPanelZone> _zones;
+        uint64_t _groupedClears = 0;
+        uint32_t _framesSinceGroup = 0;
     };
 
 }  // namespace BECore

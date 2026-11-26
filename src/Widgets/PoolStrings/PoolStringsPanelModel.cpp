@@ -2,8 +2,8 @@
 
 #include <BECore/File/Path.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/PoolString/PoolStringMonitor.h>
 #include <BECore/PoolString/PoolStringsAnswers.h>
+#include <BECore/Profiler/Alloc/AllocSiteTable.h>
 #include <BECore/Profiler/FrameStats/FrameStatsText.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
@@ -18,6 +18,7 @@ namespace BECore {
         constexpr StringView kCollision = "collision";
         constexpr StringView kDuplicate = "duplicate";
         constexpr StringView kNoFindings = "Hash collisions and texts held twice: none";
+        constexpr StringView kNoGrowth = "No runtime string was added in the frames kept";
 
         struct SourceChoice {
             StringView label;
@@ -87,6 +88,9 @@ namespace BECore {
         } else if (_view.search != _searchedText || _view.sourceIndex != _searchedSource) {
             Search();
         }
+        SyncRecording();
+        ReadGrowth();
+        ReadRecords();
     }
 
     void PoolStringsPanelModel::SetSort(PoolStringSortKey key, bool descending) {
@@ -99,11 +103,16 @@ namespace BECore {
     }
 
     bool PoolStringsPanelModel::RunCommand(StringView id, StringView /*argument*/) {
-        if (id != EditorCommandIds::kPoolStringsRefresh.ToPoolString().ToStringView()) {
-            return false;
+        if (id == EditorCommandIds::kPoolStringsRefresh.ToPoolString().ToStringView()) {
+            TakeSnapshot();
+            return true;
         }
-        TakeSnapshot();
-        return true;
+        if (id == EditorCommandIds::kPoolStringsClearRecords.ToPoolString().ToStringView()) {
+            Monitor().ClearRecords();
+            GroupRecords();
+            return true;
+        }
+        return false;
     }
 
     void PoolStringsPanelModel::TakeSnapshot() {
@@ -114,6 +123,7 @@ namespace BECore {
         BuildChecks();  // after the blocks, whose file names it shows
         BuildSourceItems();
         Search();
+        GroupRecords();
     }
 
     void PoolStringsPanelModel::BuildSummary() {
@@ -230,6 +240,69 @@ namespace BECore {
         PoolStringAnalysis::Search(_snapshot, query, _matches);
         _view.matchText = Format("{} of {} strings", _matches.size(), _snapshot.strings.size());
         ++_searchCount;
+    }
+
+    void PoolStringsPanelModel::SyncRecording() {
+        PoolStringMonitor& monitor = Monitor();
+        if (_view.recording != _shownRecording) {
+            monitor.SetRecording(_view.recording);
+        }
+        _shownRecording = monitor.IsRecording();
+        _view.recording = _shownRecording;
+    }
+
+    void PoolStringsPanelModel::ReadGrowth() {
+        _growthCount = 0;
+        GrowthSums sums;
+        Monitor().ForEachRecent(_growth.size(), [this, &sums](const PoolGrowthFrame& frame) {
+            _growth[_growthCount++] = frame;
+            if (frame.runtimeStrings != 0) {
+                ++sums.frames;
+                sums.strings += frame.runtimeStrings;
+                sums.bytes += frame.runtimeBytes;
+            }
+        });
+        if (_shownGrowth.has_value() && *_shownGrowth == sums) {
+            return;
+        }
+        _shownGrowth = sums;
+        _view.hasGrowth = sums.frames != 0;
+        _view.growthText = _view.hasGrowth ? Format("Frames with new runtime strings: {} ({} strings, {})", sums.frames, sums.strings, FormatBytes(sums.bytes)) : String(kNoGrowth);
+    }
+
+    void PoolStringsPanelModel::ReadRecords() {
+        const PoolRecordCounts counts = Monitor().GetRecordCounts();
+        ++_framesSinceGroup;
+        const bool cleared = counts.clears != _groupedClears;
+        const bool grew = counts.records != _records.size() && _framesSinceGroup >= PoolStringsPanelLimits::kRegroupFrames;
+        if (cleared || grew) {
+            GroupRecords();
+        }
+        if (_view.recordsText.empty() || counts != _shownCounts) {
+            _shownCounts = counts;
+            _view.recordsText = Format("Recorded: {}, dropped past the limit: {}", counts.records, counts.dropped);
+        }
+    }
+
+    void PoolStringsPanelModel::GroupRecords() {
+        const PoolStringMonitor& monitor = Monitor();
+        const PoolRecordCounts counts = monitor.GetRecordCounts();
+        if (counts.records != 0) {
+            // Once, so that a recording that goes on grows nothing here
+            _records.reserve(PoolStringMonitor::kMaxRecords);
+        }
+        monitor.GroupByZone(_records, _groups);
+        _groupedClears = counts.clears;
+        _framesSinceGroup = 0;
+        _zones.resize(_groups.size());
+        for (size_t i = 0; i < _zones.size(); ++i) {
+            const PoolZoneGroup& group = _groups[i];
+            PoolPanelZone& zone = _zones[i];
+            const char* name = group.zone != nullptr ? group.zone->name : AllocSiteStats::kNoZone;
+            zone.group = group;
+            zone.label = Format("{} ({} strings, {}, last frame {})", name, group.count, FormatBytes(group.bytes), group.lastFrame);
+            zone.location = group.zone != nullptr ? Format("{}:{}", group.zone->file, group.zone->line) : String();
+        }
     }
 
 }  // namespace BECore

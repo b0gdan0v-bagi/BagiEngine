@@ -14,20 +14,6 @@ namespace BECore::Tests {
         constexpr ProfileSite kZone{"pool monitor zone", "Load", "tests/PoolStringMonitorTest.cpp", 1, 0};
         constexpr ProfileSite kOtherZone{"pool monitor other zone", "Update", "tests/PoolStringMonitorTest.cpp", 2, 0};
 
-        /// Makes `zone` the thread's innermost zone, as a `ProfileZone` of a build that tracks zones does
-        class CurrentZone {
-        public:
-            explicit CurrentZone(const ProfileSite* zone) : _previous(AllocTracker::ExchangeCurrentZone(zone)) {}
-            ~CurrentZone() {
-                AllocTracker::ExchangeCurrentZone(_previous);
-            }
-            CurrentZone(const CurrentZone&) = delete;
-            CurrentZone& operator=(const CurrentZone&) = delete;
-
-        private:
-            const ProfileSite* _previous;
-        };
-
         void Intern(IsolatedPool& pool, StringView text) {
             static_cast<void>(pool.storage.Intern(text));
         }
@@ -181,8 +167,22 @@ namespace BECore::Tests {
 
         EXPECT_EQ(Grouped(monitor).records.size(), PoolStringMonitor::kMaxRecords);
         EXPECT_EQ(monitor.GetDroppedCount(), kOver);
+        EXPECT_EQ(monitor.GetRecordCounts(), (PoolRecordCounts{.records = PoolStringMonitor::kMaxRecords, .dropped = kOver, .clears = 0}));
         monitor.ClearRecords();
         EXPECT_EQ(monitor.GetDroppedCount(), 0u);
+    }
+
+    TEST(PoolStringMonitorTest, TheCountsTellRecordsMadeAgainAfterAClearFromTheOnesBefore) {
+        IsolatedPool pool;
+        PoolStringMonitor monitor(pool.storage);
+        monitor.SetRecording(true);
+        Intern(pool, "counts_first");
+        const PoolRecordCounts before = monitor.GetRecordCounts();
+        EXPECT_EQ(before, (PoolRecordCounts{.records = 1, .dropped = 0, .clears = 0}));
+
+        monitor.ClearRecords();
+        Intern(pool, "counts_second");
+        EXPECT_EQ(monitor.GetRecordCounts(), (PoolRecordCounts{.records = 1, .dropped = 0, .clears = 1}));
     }
 
     TEST(PoolStringMonitorTest, StringsOfSeveralThreadsAreAllRecorded) {

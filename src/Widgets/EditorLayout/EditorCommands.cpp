@@ -108,6 +108,7 @@ namespace BECore {
                 {kSceneDialogsCancel, "Scene Dialogs: Cancel", std::nullopt, false},
                 {kViewPoolStrings, "Pool Strings", std::nullopt, true},
                 {kPoolStringsRefresh, "Pool Strings: Refresh", std::nullopt, true},
+                {kPoolStringsClearRecords, "Pool Strings: Clear Records", std::nullopt, true},
             };
             return table;
         }

@@ -170,6 +170,8 @@ namespace BECore {
         inline constexpr auto kViewPoolStrings = "view.poolStrings"_intern;
         /// A button of the Pool Strings panel. PoolStringsPanelModel owns it and runs it only while its panel is open; it takes no argument
         inline constexpr auto kPoolStringsRefresh = "poolStrings.refresh"_intern;
+        /// The Clear button of the Pool Strings panel's records, owned like `poolStrings.refresh`; it takes no argument
+        inline constexpr auto kPoolStringsClearRecords = "poolStrings.clearRecords"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

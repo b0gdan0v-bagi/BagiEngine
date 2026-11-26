@@ -58,11 +58,17 @@ namespace BECore {
         LockGuard lock(_mutex);
         _records.clear();
         _dropped = 0;
+        ++_clears;
     }
 
     size_t PoolStringMonitor::GetDroppedCount() const {
         LockGuard lock(_mutex);
         return _dropped;
+    }
+
+    PoolRecordCounts PoolStringMonitor::GetRecordCounts() const {
+        LockGuard lock(_mutex);
+        return {.records = _records.size(), .dropped = _dropped, .clears = _clears};
     }
 
     void PoolStringMonitor::GroupByZone(Vector<PoolStringRecord>& records, Vector<PoolZoneGroup>& groups) const {
