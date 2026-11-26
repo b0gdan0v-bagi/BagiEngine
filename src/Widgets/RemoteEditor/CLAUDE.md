@@ -61,6 +61,14 @@ One unsent write per target, a newer value replacing it, and at most one in flig
 
 Tests drive it over `tests/BECore/FakeControlEndpoint.h`: the real methods over a scene (`screenshot` alone is a stand-in), behind a transport in memory that answers on `Serve()`.
 
+## Pick and save
+
+- `RequestPick` takes a point of the picture and asks `scene_pick`; the hit becomes the selection and `TakeReveal` hands it to the view once. A choice made by `Select` or `ClearSelection` after the pick wins over its answer; a tree that drops the selected node does not.
+- A hit may be a node newer than the tree: the tree is read at once, and the first read sent after the answer selects it or gives it up.
+- A refusal (`not_screen_view`: the program runs its editor) is `GetPickError` until a pick works.
+- `RequestSave` sends `scene_save` only when no write is unsent (a held text too) or unanswered, so the file holds what was edited before it. A link that ends first leaves `Unconfirmed` and nothing is resent: the program may have written, and a later resend could write over another client's changes.
+- `HasUnsavedWrites` counts this session's accepted writes against what a save that worked held; the program has no dirty flag to ask. It lasts over a reconnect, and `Detach` forgets it.
+
 ## The picture
 
 Whoever shows the program's screen calls `RequestPicture` in each frame it does, so a hidden panel costs the program nothing: a poll sends `screenshot` only while `Attached`, when asked since the poll before, with one unanswered and the next one `kPictureInterval` after the answer.

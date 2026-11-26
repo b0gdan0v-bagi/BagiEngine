@@ -8,6 +8,8 @@
 #include <Common/LogRecorder.h>
 #include <Common/NullPropertyVisitor.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
+#include <Common/TestFiles.h>
 #include <Common/Wait.h>
 #include <CoreSDL/SDLScreenshot.h>
 #include <Widgets/RemoteEditor/RemoteSession.h>
@@ -26,7 +28,7 @@ namespace BECore::Tests {
 
         constexpr StringView kRemoteNodes = R"(
 <node name="Board" layer="2"><components>
-  <component type="TransformComponent"/>
+  <component type="TransformComponent" width="80" height="60"/>
   <component type="QuadRendererComponent"/>
 </components></node>
 <node name="Two"><components>
@@ -36,6 +38,9 @@ namespace BECore::Tests {
 
         constexpr StringView kAddress = "ws://127.0.0.1:8765";
         constexpr uint32_t kShownSide = 640;
+        // Fractions of the program's 800 by 600 screen: inside "Board", and over nothing
+        constexpr double kOnBoard = 0.05;
+        constexpr double kOnNothing = 0.9;
 
         /// The field `x` a walk shows
         class XReader final : public NullPropertyVisitor {
@@ -169,6 +174,26 @@ namespace BECore::Tests {
             void ShowPictureAfter(milliseconds time) {
                 _session->RequestPicture(kShownSide);
                 ExchangeAfter(time);
+            }
+
+            void PickAt(double point) {
+                _session->RequestPick(point, point);
+                Exchange();
+            }
+
+            /// The program serves `scene_save` into a folder of the test
+            void ServeSave() {
+                const Path folder(TestTempDirectory("BagiEngineRemoteSessionTest"));
+                RemoveDirectory(folder);
+                _endpoint->ServeSceneSave(folder);
+            }
+
+            void EditLayer(int64_t layer, RemoteEditKind kind = RemoteEditKind::Value) {
+                _session->GetWrites().Edit({"Board"}, PropertyValue{layer}, kind);
+            }
+
+            [[nodiscard]] RemoteSaveState SaveState() const {
+                return _session->GetSaveStatus().state;
             }
 
             UniquePtr<FakeControlEndpoint> _endpoint;
@@ -641,6 +666,257 @@ namespace BECore::Tests {
 
         EXPECT_EQ(Connection().nextEvent, Connection().inbox.size());
         EXPECT_EQ(_session->GetPicture().GetRevision(), revision);
+    }
+
+    TEST_F(RemoteSessionTest, APickSelectsWhatIsHitAndAMissClearsTheSelection) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        _endpoint->DrawScreen();
+
+        PickAt(kOnBoard);
+        EXPECT_EQ(_session->GetSelection(), Optional<String>("Board"));
+        EXPECT_EQ(_session->TakeReveal(), Optional<String>("Board"));
+        EXPECT_FALSE(_session->TakeReveal().has_value());
+        EXPECT_EQ(CountSent("batch"), 1u) << "the picked node's components are read at once";
+
+        PickAt(kOnBoard);
+        EXPECT_EQ(_session->TakeReveal(), Optional<String>("Board")) << "a pick of the selected node shows it again";
+
+        PickAt(kOnNothing);
+        EXPECT_FALSE(_session->GetSelection().has_value());
+        EXPECT_FALSE(_session->TakeReveal().has_value());
+        EXPECT_FALSE(_session->GetPickError().IsSet());
+    }
+
+    TEST_F(RemoteSessionTest, OnePickIsUnansweredAndTheNewestRequestWaits) {
+        ASSERT_TRUE(_session->Attach(kAddress).has_value());
+        _session->RequestPick(kOnBoard, kOnBoard);
+        Exchange();
+        ASSERT_EQ(_session->GetState(), RemoteSessionState::Attached);
+        EXPECT_EQ(CountSent("scene_pick"), 0u) << "asked of a link that was not attached";
+
+        _session->RequestPick(kOnBoard, kOnBoard);
+        Poll();
+        _session->RequestPick(0.25, 0.25);
+        _session->RequestPick(0.75, 0.5);
+        Poll();
+        EXPECT_EQ(CountSent("scene_pick"), 1u);
+        _endpoint->Serve();
+        Poll();
+
+        EXPECT_EQ(CountSent("scene_pick"), 2u);
+        EXPECT_NE(String(Connection().requests.back()).find(R"("params":{"x":0.75,"y":0.5})"), String::npos) << Connection().requests.back().c_str();
+    }
+
+    TEST_F(RemoteSessionTest, APickIsDroppedWhenTheSelectionWasChosenAfterIt) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        _endpoint->DrawScreen();
+
+        _session->RequestPick(kOnBoard, kOnBoard);
+        Poll();
+        _session->Select("Two");
+        Exchange();
+        EXPECT_EQ(_session->GetSelection(), Optional<String>("Two"));
+        EXPECT_FALSE(_session->TakeReveal().has_value());
+
+        _session->RequestPick(kOnBoard, kOnBoard);
+        _session->ClearSelection();
+        Exchange();
+        EXPECT_FALSE(_session->GetSelection().has_value());
+        EXPECT_EQ(CountSent("scene_pick"), 1u) << "a pick that waits goes too";
+
+        // A pick made after the choice counts, while the dropped one is still unanswered
+        _session->RequestPick(kOnNothing, kOnNothing);
+        Poll();
+        _session->Select("Two");
+        _session->RequestPick(kOnBoard, kOnBoard);
+        Exchange();
+        Exchange();
+        EXPECT_EQ(_session->GetSelection(), Optional<String>("Board"));
+    }
+
+    TEST_F(RemoteSessionTest, APickDoesNotOutliveItsConnection) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        _session->RequestPick(kOnBoard, kOnBoard);
+        Poll();
+        const String id = IdOf("scene_pick");
+        _session->RequestPick(kOnNothing, kOnNothing);
+
+        _endpoint->Drop();
+        Poll();
+        PollAfter(Timing::kFirstRetry);
+        _endpoint->Serve();
+        Poll();
+        ASSERT_EQ(_session->GetState(), RemoteSessionState::Attached);
+        Connection().PushText(Format(R"({{"id":{},"ok":true,"result":{{"hit":true,"node":"Board"}}}})", id));
+        Poll();
+
+        EXPECT_EQ(CountSent("scene_pick"), 0u);
+        EXPECT_FALSE(_session->GetSelection().has_value());
+    }
+
+    TEST_F(RemoteSessionTest, APickedNodeTheTreeDoesNotListIsSelectedByTheNextReadSentAfterIt) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        PollAfter(Timing::kTreeInterval);  // a read that is sent before the pick is answered
+        _session->RequestPick(kOnBoard, kOnBoard);
+        Poll();
+        AnswerWith("scene_pick", R"("ok":true,"result":{"hit":true,"node":"New"})");
+        Poll();
+        EXPECT_FALSE(_session->GetSelection().has_value());
+        const size_t reads = CountSent("scene_tree");
+        AnswerWith("scene_tree", R"("ok":true,"result":{"nodes":[{"path":"Board"}]})");
+        Poll();
+        ASSERT_EQ(CountSent("scene_tree"), reads + 1) << "the tree is read again at once";
+
+        AnswerWith("scene_tree", R"("ok":true,"result":{"nodes":[{"path":"Board"},{"path":"New"}]})");
+        Poll();
+
+        EXPECT_EQ(_session->GetSelection(), Optional<String>("New"));
+        EXPECT_EQ(_session->TakeReveal(), Optional<String>("New"));
+
+        // A node that read does not list either is given up
+        _session->RequestPick(kOnBoard, kOnBoard);
+        Poll();
+        AnswerWith("scene_pick", R"("ok":true,"result":{"hit":true,"node":"Gone"})");
+        Poll();
+        AnswerWith("scene_tree", R"("ok":true,"result":{"nodes":[{"path":"New"}]})");
+        Poll();
+        PollAfter(Timing::kTreeInterval);
+        AnswerWith("scene_tree", R"("ok":true,"result":{"nodes":[{"path":"New"},{"path":"Gone"}]})");
+        Poll();
+        EXPECT_EQ(_session->GetSelection(), Optional<String>("New"));
+        EXPECT_FALSE(_session->TakeReveal().has_value());
+    }
+
+    TEST_F(RemoteSessionTest, ARefusedPickKeepsTheReasonUntilOneWorks) {
+        ASSERT_NO_FATAL_FAILURE(AttachAndSelect("Two"));
+        _endpoint->DrawScreen();
+        _endpoint->SetSceneOnScreen(false);
+
+        PickAt(kOnBoard);
+        EXPECT_EQ(_session->GetPickError().code, "not_screen_view");
+        EXPECT_FALSE(_session->GetPickError().message.empty());
+        EXPECT_EQ(_session->GetSelection(), Optional<String>("Two"));
+
+        _endpoint->SetSceneOnScreen(true);
+        PickAt(kOnBoard);
+        EXPECT_FALSE(_session->GetPickError().IsSet());
+        EXPECT_EQ(_session->GetSelection(), Optional<String>("Board"));
+
+        _session->RequestPick(kOnBoard, kOnBoard);
+        Poll();
+        AnswerWith("scene_pick", R"("ok":false,"error":{"code":"unknown_method","message":"no such method"})");
+        Poll();
+        EXPECT_EQ(_session->GetPickError().code, "unknown_method");
+        EXPECT_EQ(_session->GetState(), RemoteSessionState::Attached);
+    }
+
+    TEST_F(RemoteSessionTest, ASaveIsSentAfterTheWritesItSaves) {
+        ServeSave();
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        EXPECT_FALSE(_session->HasUnsavedWrites());
+        EditLayer(7, RemoteEditKind::Text);
+        _session->RequestSave();
+        Exchange();
+        EXPECT_EQ(SaveState(), RemoteSaveState::Pending);
+        EXPECT_EQ(CountSent("scene_save"), 0u) << "a text is still held";
+
+        _session->GetWrites().ReleaseText();
+        Poll();
+        EXPECT_EQ(CountSent("scene_save"), 0u) << "the write has no answer yet";
+        _endpoint->Serve();
+        Poll();
+        EXPECT_TRUE(_session->HasUnsavedWrites());
+        _session->RequestSave();  // one is pending
+        Exchange();
+
+        EXPECT_EQ(CountSent("scene_save"), 1u);
+        const RemoteSaveStatus& status = _session->GetSaveStatus();
+        EXPECT_EQ(status.state, RemoteSaveState::Saved) << status.error.message.c_str();
+        EXPECT_NE(status.file.find("SceneConfig.xml"), String::npos) << status.file.c_str();
+        EXPECT_TRUE(status.persistent);
+        EXPECT_EQ(status.notes, 0u);
+        EXPECT_FALSE(_session->HasUnsavedWrites());
+        EXPECT_NE(_endpoint->SavedConfig().find(R"(layer="7")"), String::npos) << _endpoint->SavedConfig().c_str();
+    }
+
+    TEST_F(RemoteSessionTest, AWriteAcceptedAfterTheSaveWasSentIsUnsaved) {
+        ServeSave();
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        EditLayer(7);
+        Exchange();
+        _session->RequestSave();
+        Poll();
+        ASSERT_EQ(CountSent("scene_save"), 1u);
+        EditLayer(8);
+        Exchange();
+
+        EXPECT_EQ(SaveState(), RemoteSaveState::Saved);
+        EXPECT_TRUE(_session->HasUnsavedWrites());
+        EXPECT_NE(_endpoint->SavedConfig().find(R"(layer="7")"), String::npos) << _endpoint->SavedConfig().c_str();
+    }
+
+    TEST_F(RemoteSessionTest, ARefusedSaveSaysWhyAndLeavesTheWritesUnsaved) {
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        EditLayer(7);
+        Exchange();
+
+        _session->RequestSave();
+        Exchange();
+
+        EXPECT_EQ(SaveState(), RemoteSaveState::Refused);
+        EXPECT_EQ(_session->GetSaveStatus().error.code, "unknown_method");
+        EXPECT_TRUE(_session->HasUnsavedWrites());
+        EXPECT_EQ(_session->GetState(), RemoteSessionState::Attached);
+
+        _session->RequestSave();
+        Poll();
+        EXPECT_FALSE(_session->GetSaveStatus().error.IsSet());
+        AnswerWith("scene_save", R"("ok":true,"result":{"file":"memory","notes":["a","b"],"persistent":false})");
+        Poll();
+        EXPECT_EQ(SaveState(), RemoteSaveState::Saved);
+        EXPECT_EQ(_session->GetSaveStatus().file, "memory");
+        EXPECT_FALSE(_session->GetSaveStatus().persistent);
+        EXPECT_EQ(_session->GetSaveStatus().notes, 2u);
+    }
+
+    TEST_F(RemoteSessionTest, ASaveTheLinkEndedBeforeIsNotConfirmedAndNotSentAgain) {
+        ServeSave();
+        ASSERT_NO_FATAL_FAILURE(Attach());
+        EditLayer(7);
+        Exchange();
+        _session->RequestSave();
+        Poll();
+
+        _endpoint->Drop();
+        Poll();
+        EXPECT_EQ(SaveState(), RemoteSaveState::Unconfirmed);
+        _session->RequestSave();  // only an attached link takes one
+        PollAfter(Timing::kFirstRetry);
+        _endpoint->Serve();
+        Poll();
+        ASSERT_EQ(_session->GetState(), RemoteSessionState::Attached);
+        ExchangeAfter(Timing::kTreeInterval);
+
+        EXPECT_EQ(CountSent("scene_save"), 0u);
+        EXPECT_EQ(SaveState(), RemoteSaveState::Unconfirmed);
+        EXPECT_TRUE(_session->HasUnsavedWrites()) << "kept over the reconnect";
+        _session->Detach();
+        EXPECT_EQ(SaveState(), RemoteSaveState::None);
+        EXPECT_FALSE(_session->HasUnsavedWrites());
+    }
+
+    TEST_F(RemoteSessionTest, AnUnansweredPickOrSaveStallsTheSession) {
+        for (const bool save : {false, true}) {
+            ASSERT_NO_FATAL_FAILURE(Attach());
+            if (save) {
+                _session->RequestSave();
+            } else {
+                _session->RequestPick(kOnBoard, kOnBoard);
+            }
+            Poll();
+            PollAfter(Timing::kStallAfter);
+            EXPECT_TRUE(_session->IsStalled()) << save;
+        }
     }
 
 #if BE_WITH_REMOTE_CONTROL

@@ -26,6 +26,8 @@ namespace BECore {
         constexpr StringView kSceneSet = "scene_set";
         constexpr StringView kSceneSetNode = "scene_set_node";
         constexpr StringView kScreenshot = "screenshot";
+        constexpr StringView kScenePick = "scene_pick";
+        constexpr StringView kSceneSave = "scene_save";
 
         [[nodiscard]] bool IsDue(const Optional<RemoteSessionTime>& dueAt, RemoteSessionTime now) {
             return !dueAt || now >= *dueAt;
@@ -72,6 +74,10 @@ namespace BECore {
         _writes.Clear();
         _picture.Clear();
         _askedPictureSide.reset();
+        _pickError.Clear();
+        _saveStatus = {};
+        _acceptedWrites = 0;
+        _savedWrites = 0;
     }
 
     void RemoteSession::Poll(RemoteSessionTime now) {
@@ -112,19 +118,55 @@ namespace BECore {
     }
 
     void RemoteSession::Select(StringView path) {
-        if (_tree.Find(path) == nullptr) {
-            ClearSelection();
+        const String selected(path);  // @p path may view what ForgetPicks() or the old selection holds
+        ForgetPicks();
+        if (_tree.Find(selected) == nullptr) {
+            DropSelection();
             return;
         }
-        if (_selection && StringView(*_selection) == path) {
-            return;
-        }
-        String selected(path);  // @p path may view a component that goes with the old selection
-        ClearSelection();
-        _selection = std::move(selected);
+        ApplySelection(selected);
     }
 
     void RemoteSession::ClearSelection() {
+        ForgetPicks();
+        DropSelection();
+    }
+
+    void RemoteSession::RequestPick(double x, double y) {
+        if (_state == RemoteSessionState::Attached) {
+            _waitingPick = PickPoint{x, y};
+        }
+    }
+
+    Optional<String> RemoteSession::TakeReveal() {
+        Optional<String> reveal = std::move(_reveal);
+        _reveal.reset();
+        return reveal;
+    }
+
+    void RemoteSession::RequestSave() {
+        if (_state == RemoteSessionState::Attached && _saveStatus.state != RemoteSaveState::Pending) {
+            _saveStatus = {};
+            _saveStatus.state = RemoteSaveState::Pending;
+        }
+    }
+
+    void RemoteSession::ForgetPicks() {
+        _waitingPick.reset();
+        _pickedPath.reset();
+        _reveal.reset();
+        _pickSuperseded = true;
+    }
+
+    void RemoteSession::ApplySelection(StringView path) {
+        if (_selection && StringView(*_selection) == path) {
+            return;
+        }
+        DropSelection();
+        _selection = String(path);
+    }
+
+    void RemoteSession::DropSelection() {
         _selection.reset();
         _components.clear();
         _componentsDueAt.reset();
@@ -152,6 +194,14 @@ namespace BECore {
         _treeRequest = 0;
         _componentRequest = 0;
         _pictureRequest = 0;
+        _pickRequest = 0;
+        _saveRequest = 0;
+        _waitingPick.reset();
+        _pickedPath.reset();
+        // Sent again, it could write over what another client changed meanwhile
+        if (_saveStatus.state == RemoteSaveState::Pending) {
+            _saveStatus.state = RemoteSaveState::Unconfirmed;
+        }
         _sentWrites.clear();
         _schemaDueAt.reset();
         _treeDueAt.reset();
@@ -188,6 +238,7 @@ namespace BECore {
         // The edits made for the last connection are not for what answers now
         _writes.Clear();
         _picture.ClearError();
+        _pickError.Clear();
         _statusRequest = SendRequest(kStatus, [](JsonWriter&) {});
     }
 
@@ -216,6 +267,12 @@ namespace BECore {
         } else if (id == _pictureRequest) {
             _pictureRequest = 0;
             HandlePicture(answer, now);
+        } else if (id == _pickRequest) {
+            _pickRequest = 0;
+            HandlePick(answer);
+        } else if (id == _saveRequest) {
+            _saveRequest = 0;
+            HandleSave(answer);
         } else if (!HandleWrite(id, answer)) {
             return;
         }
@@ -254,7 +311,10 @@ namespace BECore {
         _hasTree = true;
         _writes.ReleaseLayers(requestId);
         if (_selection && _tree.Find(*_selection) == nullptr) {
-            ClearSelection();
+            DropSelection();
+        }
+        if (_pickedPath && !SelectPicked() && requestId > _pickedAfterRequest) {
+            _pickedPath.reset();
         }
         AttachWhenRead();
     }
@@ -308,6 +368,55 @@ namespace BECore {
         _pictureDueAt = now + RemoteSessionTiming::kPictureRetry;
     }
 
+    void RemoteSession::HandlePick(const Answer& answer) {
+        if (_pickSuperseded) {
+            return;
+        }
+        if (!answer.ok) {
+            _pickError.Read(answer.error);
+            return;
+        }
+        const Optional<bool> hit = GetParamBool(answer.result, "hit");
+        if (!hit) {
+            return;
+        }
+        _pickError.Clear();
+        _pickedPath.reset();
+        if (!*hit) {
+            _reveal.reset();
+            DropSelection();
+            return;
+        }
+        _pickedPath = GetParamString(answer.result, "node");
+        _pickedAfterRequest = _lastRequestId;
+        if (_pickedPath && !SelectPicked()) {
+            _treeDueAt.reset();
+        }
+    }
+
+    bool RemoteSession::SelectPicked() {
+        if (_tree.Find(*_pickedPath) == nullptr) {
+            return false;
+        }
+        ApplySelection(*_pickedPath);
+        _reveal = std::move(_pickedPath);
+        _pickedPath.reset();
+        return true;
+    }
+
+    void RemoteSession::HandleSave(const Answer& answer) {
+        if (!answer.ok) {
+            _saveStatus.state = RemoteSaveState::Refused;
+            _saveStatus.error.Read(answer.error);
+            return;
+        }
+        _savedWrites = _savingWrites;
+        _saveStatus.state = RemoteSaveState::Saved;
+        _saveStatus.file = GetParamString(answer.result, "file").value_or(String{});
+        _saveStatus.persistent = GetParamBool(answer.result, "persistent").value_or(true);
+        _saveStatus.notes = FindParam(answer.result, "notes").value_or(JsonView{}).Size();
+    }
+
     bool RemoteSession::HandleWrite(uint64_t requestId, const Answer& answer) {
         const auto sent = eastl::find_if(_sentWrites.begin(), _sentWrites.end(), [requestId](const SentWrite& write) { return write.requestId == requestId; });
         if (sent == _sentWrites.end()) {
@@ -315,6 +424,7 @@ namespace BECore {
         }
         if (answer.ok) {
             _writes.Accept(sent->writeId, _lastRequestId);
+            ++_acceptedWrites;
         } else {
             _writes.Refuse(sent->writeId, GetParamString(answer.error, "code").value_or(String{}), GetParamString(answer.error, "message").value_or(String{}));
         }
@@ -338,6 +448,14 @@ namespace BECore {
         if (_open && _state == RemoteSessionState::Attached) {
             SendWrites();
         }
+        // After the writes, so that a pick sees the edits made before it
+        if (_open && _waitingPick && _pickRequest == 0) {
+            SendPick();
+        }
+        if (_open && _saveStatus.state == RemoteSaveState::Pending && _saveRequest == 0 && !_writes.HasUnanswered()) {
+            _savingWrites = _acceptedWrites;
+            _saveRequest = SendRequest(kSceneSave, [](JsonWriter&) {});
+        }
         if (_open && !_hasSchema && _schemaRequest == 0 && IsDue(_schemaDueAt, now)) {
             _schemaRequest = SendRequest(kSchema, [](JsonWriter&) {});
             _schemaDueAt = now + RemoteSessionTiming::kTreeInterval;
@@ -353,6 +471,16 @@ namespace BECore {
         if (_open && _state == RemoteSessionState::Attached && _askedPictureSide && !_noPictureMethod && _pictureRequest == 0 && IsDue(_pictureDueAt, now)) {
             SendPicture();
         }
+    }
+
+    void RemoteSession::SendPick() {
+        const PickPoint point = *_waitingPick;
+        _waitingPick.reset();
+        _pickSuperseded = false;
+        _pickRequest = SendRequest(kScenePick, [point](JsonWriter& writer) {
+            writer.Member("x", point.x);
+            writer.Member("y", point.y);
+        });
     }
 
     void RemoteSession::SendPicture() {
@@ -438,7 +566,7 @@ namespace BECore {
     }
 
     bool RemoteSession::IsWaiting() const {
-        return _statusRequest != 0 || _schemaRequest != 0 || _treeRequest != 0 || _componentRequest != 0 || _pictureRequest != 0 || !_sentWrites.empty();
+        return _statusRequest != 0 || _schemaRequest != 0 || _treeRequest != 0 || _componentRequest != 0 || _pictureRequest != 0 || _pickRequest != 0 || _saveRequest != 0 || !_sentWrites.empty();
     }
 
 }  // namespace BECore

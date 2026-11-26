@@ -1,8 +1,10 @@
 #pragma once
 
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
+#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Renderer/RendererManager.h>
@@ -12,12 +14,15 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Scene/SceneNodeControl.h>
 #include <BECore/Scene/SceneNodePath.h>
+#include <BECore/Scene/ScenePickControl.h>
+#include <BECore/Scene/SceneSaveControl.h>
 #include <BECore/Utils/Base64.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
 #include <Common/SharedPtr.h>
+#include <Common/TestFiles.h>
 #include <CoreSDL/SDLScreenshot.h>
 #include <RoomClient/RoomTransport.h>
 #include <gtest/gtest.h>
@@ -125,7 +130,8 @@ namespace BECore::Tests {
 
     /**
      * @brief The program an editor attaches to: a real ControlService with the builtin and the scene methods over a scene of its own, reached
-     * through transports in memory. Nothing runs until Serve(). Its `screenshot` is a stand-in that answers what SetScreen() made.
+     * through transports in memory. Nothing runs until Serve(). Its `screenshot` is a stand-in that answers what SetScreen() made;
+     * `scene_pick` picks in the scene as DrawScreen() last drew it, and `scene_save` exists only after ServeSceneSave().
      *
      * Needs the core services; sets a RecordingRenderer and takes it back. Outlives the clients that use its factory.
      */
@@ -133,11 +139,10 @@ namespace BECore::Tests {
     public:
         enum class Methods : uint8_t { Builtins, All };
 
-        explicit FakeControlEndpoint(StringView nodes, Methods methods = Methods::All) {
+        explicit FakeControlEndpoint(StringView nodes, Methods methods = Methods::All) : _config(SceneConfigText(nodes)) {
             CoreManager::GetRendererManager().SetRenderer(New<RecordingRenderer>());
             XmlDeserializer deserializer;
-            const String xml = SceneConfigText(nodes);
-            EXPECT_TRUE(deserializer.LoadFromString(xml.c_str()));
+            EXPECT_TRUE(deserializer.LoadFromString(_config.c_str()));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
             EXPECT_FALSE(deserializer.HasErrors());
@@ -148,6 +153,7 @@ namespace BECore::Tests {
             if (methods == Methods::All) {
                 RegisterSceneControl(_service, [this] { return _active; });
                 RegisterSceneNodeControl(_service, [this] { return _active; });
+                RegisterScenePickControl(_service, [this] { return _active; }, [this] { return _sceneOnScreen; });
                 SetScreen(4, 3, 0);
                 _service.RegisterHandler("screenshot", [this](ControlCall& call) { HandleScreenshot(call); });
             }
@@ -201,6 +207,33 @@ namespace BECore::Tests {
             _screenshotFailure = String(code);
         }
 
+        /// Draws the scene to the screen of the recording renderer, 800 by 600
+        void DrawScreen() {
+            _manager->DrawAll();
+        }
+
+        /// While @p onScreen is false the screen shows something else than the scene, as the editor of a program does
+        void SetSceneOnScreen(bool onScreen) {
+            _sceneOnScreen = onScreen;
+        }
+
+        /// Registers `scene_save` over a config manager of the program's own, rooted at the folder @p root of the test, whose `SceneConfig` is the scene as it was loaded
+        void ServeSceneSave(const Path& root) {
+            _configFile = root / "config" / "SceneConfig.xml";
+            WriteFile(_configFile, _config);
+            _fileSystem = MakeUnique<FileSystem>();
+            _fileSystem->AddContentRoot(root);
+            _fileSystem->Initialize();
+            _configs = MakeUnique<ConfigManager>(*_fileSystem);
+            _configs->Initialize();
+            RegisterSceneSaveControl(_service, [this] { return _active; }, [this] { return _configs.get(); });
+        }
+
+        /// The text of the file `scene_save` writes
+        [[nodiscard]] String SavedConfig() const {
+            return ReadFile(_configFile);
+        }
+
         /// The connections made from now on are refused
         void SetRefusing(bool refusing) {
             _refusing = refusing;
@@ -242,6 +275,10 @@ namespace BECore::Tests {
             return _connections.empty() ? nullptr : _connections.back().get();
         }
 
+        String _config;
+        Path _configFile;
+        UniquePtr<FileSystem> _fileSystem;
+        UniquePtr<ConfigManager> _configs;
         ControlService _service;
         IntrusivePtr<SceneManager> _manager;
         Scene* _scene = nullptr;
@@ -250,6 +287,7 @@ namespace BECore::Tests {
         ScreenshotAnswer _screen;
         String _screenshotFailure;
         bool _refusing = false;
+        bool _sceneOnScreen = true;
     };
 
 }  // namespace BECore::Tests

@@ -66,6 +66,10 @@ namespace BECore {
         return nullptr;
     }
 
+    bool RemotePendingWrites::HasUnanswered() const {
+        return eastl::any_of(_writes.begin(), _writes.end(), [](const RemoteWrite& write) { return write.state != RemoteWriteState::Answered; });
+    }
+
     void RemotePendingWrites::MarkSent(uint64_t writeId) {
         if (RemoteWrite* write = FindById(writeId)) {
             write->state = RemoteWriteState::Sent;

@@ -76,6 +76,9 @@ namespace BECore {
 
         void MarkSent(uint64_t writeId);
 
+        /// A write is still unsent, a held text included, or has no answer yet
+        [[nodiscard]] bool HasUnanswered() const;
+
         /// The program accepted the write; @p lastRequestId is the id of the last request sent so far
         void Accept(uint64_t writeId, uint64_t lastRequestId);
 

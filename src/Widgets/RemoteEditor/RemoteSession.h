@@ -6,6 +6,7 @@
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/FunctionRef.h>
 #include <RoomClient/RoomTransport.h>
+#include <Widgets/RemoteEditor/RemoteCallError.h>
 #include <Widgets/RemoteEditor/RemoteComponent.h>
 #include <Widgets/RemoteEditor/RemotePendingWrites.h>
 #include <Widgets/RemoteEditor/RemotePicture.h>
@@ -22,6 +23,20 @@ namespace BECore {
 
     /// Everything but `Detached` is remote mode; every state but `Attached` is read-only
     CORE_ENUM(RemoteSessionState, uint8_t, Detached, Connecting, Attached, Lost)
+
+    /// `Unconfirmed`: the link ended before the program answered, so the scene may or may not have been written
+    CORE_ENUM(RemoteSaveState, uint8_t, None, Pending, Saved, Refused, Unconfirmed)
+
+    /// What became of the last save a RemoteSession was asked for
+    struct RemoteSaveStatus {
+        RemoteSaveState state = RemoteSaveState::None;
+        /// Of `Saved`: the file the program wrote (its text, untrusted), whether that file outlives the program, and how many things the writer could not keep as they were
+        String file;
+        bool persistent = true;
+        size_t notes = 0;
+        /// Of `Refused`
+        RemoteCallError error;
+    };
 
     /// The time RemoteSession::Poll() runs its polling and its retries against
     using RemoteSessionTime = std::chrono::steady_clock::time_point;
@@ -117,6 +132,34 @@ namespace BECore {
             return _selection;
         }
 
+        /**
+         * @brief Selects what the program shows at @p x, @p y, fractions 0..1 of its picture: a hit becomes the selection, a miss clears it
+         *
+         * Only while `Attached`. One pick is unanswered at a time and a newer request replaces the one that waits. A pick is dropped when
+         * Select() or ClearSelection() is called after it, or its connection ends. A node the tree does not list yet is selected once a new read does.
+         */
+        void RequestPick(double x, double y);
+
+        /// Why the last answered pick selected nothing; not set after one that worked
+        [[nodiscard]] const RemoteCallError& GetPickError() const {
+            return _pickError;
+        }
+
+        /// The path a pick has selected since the last call, for the view to bring it into sight
+        [[nodiscard]] Optional<String> TakeReveal();
+
+        /// Saves the program's scene by its own Save, after the edits made so far. Only while `Attached`; ignored while a save is pending
+        void RequestSave();
+
+        [[nodiscard]] const RemoteSaveStatus& GetSaveStatus() const {
+            return _saveStatus;
+        }
+
+        /// The program accepted a write of this session that no save is known to hold. Kept over a reconnect and forgotten with the link
+        [[nodiscard]] bool HasUnsavedWrites() const {
+            return _acceptedWrites > _savedWrites;
+        }
+
         /// The components of the selected node in its order, as last read: empty until the first read; one the program did not give is not loaded
         [[nodiscard]] Span<RemoteComponent> GetComponents() {
             return {_components.data(), _components.size()};
@@ -139,6 +182,11 @@ namespace BECore {
             [[nodiscard]] bool Failed(StringView code) const;
         };
 
+        struct PickPoint {
+            double x = 0.0;
+            double y = 0.0;
+        };
+
         struct SentWrite {
             uint64_t requestId = 0;
             uint64_t writeId = 0;
@@ -158,6 +206,8 @@ namespace BECore {
         void HandleTree(uint64_t requestId, const Answer& answer);
         void HandleComponents(uint64_t requestId, const Answer& answer);
         void HandlePicture(const Answer& answer, RemoteSessionTime now);
+        void HandlePick(const Answer& answer);
+        void HandleSave(const Answer& answer);
         /// False when no write waits for @p requestId
         bool HandleWrite(uint64_t requestId, const Answer& answer);
         /// `Attached` once this connection has read the schema and the tree
@@ -167,6 +217,12 @@ namespace BECore {
         void SendWrites();
         void SendComponents();
         void SendPicture();
+        void SendPick();
+        void ForgetPicks();
+        void ApplySelection(StringView path);
+        void DropSelection();
+        /// Selects the picked path when the tree lists it
+        bool SelectPicked();
         /// Sends a request whose params @p writeParams writes the members of; its id, or 0 when the transport refused it, which ends the connection
         uint64_t SendRequest(StringView method, FunctionRef<void(JsonWriter&)> writeParams);
         [[nodiscard]] bool IsWaiting() const;
@@ -186,6 +242,8 @@ namespace BECore {
         uint64_t _treeRequest = 0;
         uint64_t _componentRequest = 0;
         uint64_t _pictureRequest = 0;
+        uint64_t _pickRequest = 0;
+        uint64_t _saveRequest = 0;
         Vector<SentWrite> _sentWrites;
         Optional<RemoteSessionTime> _schemaDueAt;  // nullopt: due at once
         Optional<RemoteSessionTime> _treeDueAt;
@@ -193,6 +251,12 @@ namespace BECore {
         Optional<RemoteSessionTime> _pictureDueAt;
         /// The program has no `screenshot`
         bool _noPictureMethod = false;
+        Optional<PickPoint> _waitingPick;
+        /// The selection was chosen after the unanswered pick was sent
+        bool _pickSuperseded = false;
+        /// A picked node the tree did not list; a read sent after the request `_pickedAfterRequest` decides about it
+        Optional<String> _pickedPath;
+        uint64_t _pickedAfterRequest = 0;
         /// Since when requests have waited with nothing answered
         Optional<RemoteSessionTime> _waitingSince;
         bool _stalled = false;
@@ -211,6 +275,13 @@ namespace BECore {
         Optional<String> _selection;
         Vector<RemoteComponent> _components;
         RemotePendingWrites _writes;
+        Optional<String> _reveal;
+        RemoteCallError _pickError;
+        RemoteSaveStatus _saveStatus;
+        /// The writes the program has accepted, how many of them a save that worked holds, and how many the unanswered one holds
+        uint64_t _acceptedWrites = 0;
+        uint64_t _savedWrites = 0;
+        uint64_t _savingWrites = 0;
         RemotePicture _picture;
         /// The longer side asked for since the last poll
         Optional<uint32_t> _askedPictureSide;
