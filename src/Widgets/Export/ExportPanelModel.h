@@ -7,6 +7,7 @@
 #include <BECore/Widgets/PanelAssets/PanelElements.h>
 #include <Widgets/Export/ExportLaunch.h>
 #include <Widgets/Export/ExportLog.h>
+#include <Widgets/Export/ExportSlots.h>
 #include <Widgets/PanelAssets/IPanelModel.h>
 #include <cstdint>
 #include <expected>
@@ -64,6 +65,8 @@ namespace BECore {
 
         ExportPanelModel();
 
+        /// Registers the slot that draws the output; called once by the widget that hosts the model
+        void Initialize() override;
         [[nodiscard]] TypedRef GetObject() override;
         void Update() override;
         void OnOpenChanged(bool open) override;
@@ -136,6 +139,7 @@ namespace BECore {
 
         ExportPanelView _view;
         ExportLog _log;
+        ExportSlots _slots{*this};
         String _logPath;
         /// The export script the last export was started with
         String _script;

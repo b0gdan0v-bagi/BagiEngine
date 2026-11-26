@@ -119,6 +119,8 @@ namespace BECore {
         inline constexpr auto kAssetBrowserRename = "assetBrowser.rename"_intern;
         inline constexpr auto kAssetBrowserConfirm = "assetBrowser.confirm"_intern;
         inline constexpr auto kAssetBrowserCancel = "assetBrowser.cancel"_intern;
+        /// Show and hide the Export window (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewExport = "view.export"_intern;
         /// The Export window's buttons. ExportPanelModel owns them and runs them only while its panel is open; none takes an argument. openFolder and run do
         /// nothing before an export succeeded
         inline constexpr auto kExportStart = "export.start"_intern;

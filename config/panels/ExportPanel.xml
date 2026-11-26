@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<PanelAsset id="Export" title="Export" command="view.export" open="false" window="Floating" width="760" height="480">
+  <sources>
+    <item name="export" model="ExportPanelModel"/>
+  </sources>
+  <elements>
+    <element type="PanelRow" id="configuration">
+      <elements>
+        <element type="PanelText" id="configurationLabel" text="Configuration"/>
+        <element type="PanelRadio" id="debug" bind="export.config" value="Debug" text="Debug" enableWhen="export.canStart" tooltip="The game with its checks, shipping the XML content"/>
+        <element type="PanelRadio" id="release" bind="export.config" value="Release" text="Release" enableWhen="export.canStart" tooltip="The optimised game, shipping cooked content"/>
+      </elements>
+    </element>
+    <element type="PanelInput" id="outputDirectory" bind="export.outputDirectory" icon="folder" hint="Output folder (empty: dist/&lt;game&gt;-&lt;configuration&gt; in the project)" enableWhen="export.canStart" tooltip="The folder of the package. A relative path starts at the editor's working folder. A folder that holds other files is refused"/>
+    <element type="PanelRow" id="actions">
+      <elements>
+        <element type="PanelButton" id="start" icon="package" text="Export" command="export.start" enableWhen="export.canStart" tooltip="Build the game and put it into the output folder. The first export builds everything"/>
+        <element type="PanelButton" id="cancel" icon="x" text="Cancel" command="export.cancel" enableWhen="export.canCancel" tooltip="Stop the build; an earlier package stays as it was"/>
+        <element type="PanelButton" id="openFolder" icon="folder-open" text="Open folder" command="export.openFolder" visible="export.hasResult" tooltip="Show the package in the file manager"/>
+        <element type="PanelButton" id="run" icon="play" text="Run" command="export.run" visible="export.hasResult" tooltip="Start the exported game"/>
+      </elements>
+    </element>
+    <element type="PanelText" id="unsaved" icon="triangle-alert" text="Unsaved changes are not exported" style="Warning" visible="export.hasUnsaved"/>
+    <element type="PanelText" id="statusIdle" bind="export.status" style="Disabled" visible="export.statusStyle == Disabled"/>
+    <element type="PanelText" id="status" bind="export.status" wrap="true" visible="export.statusStyle == Normal"/>
+    <element type="PanelText" id="statusSuccess" bind="export.status" style="Success" visible="export.statusStyle == Success"/>
+    <element type="PanelText" id="statusWarning" bind="export.status" style="Warning" visible="export.statusStyle == Warning"/>
+    <element type="PanelText" id="statusError" bind="export.status" style="Error" wrap="true" visible="export.statusStyle == Error"/>
+    <element type="PanelText" id="resultFolder" bind="export.resultFolder" mono="true" wrap="true" visible="export.hasResult"/>
+    <element type="PanelRow" id="outputBar">
+      <elements>
+        <element type="PanelCheckbox" id="errorsOnly" bind="export.errorsOnly" text="Errors only" tooltip="Show only the error lines of the output"/>
+        <element type="PanelText" id="counts" bind="export.countsText" style="Disabled"/>
+      </elements>
+    </element>
+    <element type="PanelSlot" id="output" name="exportOutput"/>
+  </elements>
+</PanelAsset>

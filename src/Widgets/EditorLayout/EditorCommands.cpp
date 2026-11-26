@@ -72,6 +72,7 @@ namespace BECore {
                 {kAssetBrowserRename, "Asset Browser: Rename Asset", std::nullopt, false},
                 {kAssetBrowserConfirm, "Asset Browser: Confirm Delete Or Rename", std::nullopt, false},
                 {kAssetBrowserCancel, "Asset Browser: Cancel Delete Or Rename", std::nullopt, false},
+                {kViewExport, "Export", std::nullopt, true},
                 {kExportStart, "Export: Start", std::nullopt, false},
                 {kExportCancel, "Export: Cancel", std::nullopt, false},
                 {kExportOpenFolder, "Export: Open Folder", std::nullopt, false},

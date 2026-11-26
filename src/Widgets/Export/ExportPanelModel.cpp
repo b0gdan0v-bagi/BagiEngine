@@ -60,6 +60,10 @@ namespace BECore {
         SyncView();
     }
 
+    void ExportPanelModel::Initialize() {
+        _slots.Register();
+    }
+
     TypedRef ExportPanelModel::GetObject() {
         return TypedRef::Of(_view);
     }

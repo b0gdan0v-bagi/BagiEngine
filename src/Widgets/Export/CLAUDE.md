@@ -7,6 +7,7 @@ The editor's side of the desktop export. The work (build, package, cancel of the
 | `ExportLaunch.{h,cpp}` | the argument lists, the path of the running program, `IExportProcess` / `IExportLauncher` and their SDL implementation |
 | `ExportLog.{h,cpp}` | the output as classified lines, read from the log file; no ImGui |
 | `ExportPanelModel.{h,cpp}` | the model of the Export window and its reflected view; no ImGui |
+| `ExportSlots.{h,cpp}` | the slot `exportOutput`, the output list: the one part that draws with ImGui |
 
 The script is found among the content roots and run by the Python of `Widgets/EditorLayout/EngineTools.h`, which the Generate panel's bridge shares. What it gets as `--exe` is `argv[0]` (`CommandLine::GetProgramPath`) made absolute: an editor started by a bare name from `PATH`, or a packaged one, cannot export.
 
@@ -30,6 +31,10 @@ The script is found among the content roots and run by the Python of `Widgets/Ed
 - `export.run` starts the package through the script and does not follow it: only a script that cannot be started is reported.
 - An unsaved editor document shows a line and does not block the export, which reads the saved files. Documents are asked when the window opens, when the pointer comes back to it and at a start, not each frame (asking allocates).
 
+## Window
+
+`config/panels/ExportPanel.xml` over `ExportPanelModel`: the floating window `Export###Export`, hidden at start (View > Export, `view.export`). The status is one text per `statusStyle`, because a text's style is a literal of the asset. The output list follows the end unless the user scrolled up, and a right click on a line copies it. Not covered by a test or a shot scene: the colours and the layout, the following of the end, a long real build, Open folder and Run on a real package.
+
 ## Tests
 
-`ExportLaunchTest` (arguments, the program's path, a stand-in Python script for the streams, the cancel, the destroy and the kill), `ExportLogTest` (classification, partial lines, the bound, the result lines), `ExportPanelModelTest` (the states over the fakes of `tests/BECore/ExportFakes.h`). No test starts the export.
+`ExportLaunchTest` (arguments, the program's path, a stand-in Python script for the streams, the cancel, the destroy and the kill), `ExportLogTest` (classification, partial lines, the bound, the result lines), `ExportPanelModelTest` (the states over the fakes of `tests/BECore/ExportFakes.h`), `ExportAssetTest` (the shipped asset over those fakes). No test starts the export.
