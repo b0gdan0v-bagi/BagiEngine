@@ -275,6 +275,25 @@ namespace BECore {
         _handlers[String(method)] = HandlerEntry{std::move(handler), bypassBarrier, ++_registrations};
     }
 
+    void ControlService::UnregisterHandler(StringView method) {
+        // Both are found before either goes: @p method may be a view of one of the keys (GetMethodViews)
+        const auto handler = _handlers.find(method);
+        const auto description = _descriptions.find(method);
+        if (handler == _handlers.end() && description == _descriptions.end()) {
+            return;
+        }
+        ++_methodsVersion;
+        // Dies after both tables are done with the name: its capture may own that text, or call the service from its destructor
+        Handler removed;
+        if (description != _descriptions.end()) {
+            _descriptions.erase(description);
+        }
+        if (handler != _handlers.end()) {
+            removed = std::move(handler->second.handler);
+            _handlers.erase(handler);
+        }
+    }
+
     void ControlService::DescribeMethod(StringView method, ControlMethodInfo info) {
         _descriptions[String(method)] = std::move(info);
         ++_methodsVersion;
@@ -456,7 +475,7 @@ namespace BECore {
     }
 
     void ControlService::InvokeHandler(HandlerEntry& entry, ControlCall& call) {
-        // The running handler is moved out of the table: it may register handlers, which replaces entries (its own too, and its capture dies with the replaced handler)
+        // The running handler is moved out of the table: it may register and remove handlers, its own too, and its capture must outlive the call
         const uint64_t generation = entry.generation;
         Handler handler = std::move(entry.handler);
         ControlCall* const outer = std::exchange(_currentCall, &call);

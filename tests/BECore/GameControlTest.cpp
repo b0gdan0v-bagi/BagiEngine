@@ -33,6 +33,14 @@ namespace BECore::Tests {
         return this;
     }
 
+#if BE_WITH_EDITOR
+    void FakeControllableGame::RegisterEditorTools(GameEditorTools& tools) {
+        if (editorTools) {
+            editorTools(tools);
+        }
+    }
+#endif
+
     std::expected<void, ControlError> FakeControllableGame::WriteState(JsonWriter& writer) const {
         ++writeStateCalls;
         if (!rawState.empty()) {

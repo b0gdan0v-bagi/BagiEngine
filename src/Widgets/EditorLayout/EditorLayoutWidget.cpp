@@ -10,6 +10,7 @@
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
+#include <Games/GameManager.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
 #include <Widgets/EditorLayout/GitBranch.h>
 #include <Widgets/Feedback/TouchHighlights.h>
@@ -34,6 +35,11 @@ namespace BECore {
             }
             const std::expected<String, String> current = CurrentDirectory();
             return current ? Path(*current) : Path();
+        }
+
+        /// The registry of the active game's editor tools; null when there is no game manager
+        GameEditorTools* ActiveGameTools() {
+            return GameManager::IsInstanceCreated() ? &GameManager::GetInstance().GetEditorTools() : nullptr;
         }
 
         /// Moves the cursor back over the gap ImGui leaves after an item, so the bars and the dock space touch
@@ -73,6 +79,7 @@ namespace BECore {
         Subscribe<ViewportInputModeChangedEvent, &EditorLayoutWidget::OnViewportInputModeChanged>(this);
         Subscribe<ConsoleCommandSubmittedEvent, &EditorLayoutWidget::OnConsoleCommandSubmitted>(this);
         Subscribe<RenderEvents::ImGuiNewFrameEvent, &EditorLayoutWidget::OnImGuiNewFrame>(this);
+        _gameRunner.Connect();
         return true;
     }
 
@@ -180,9 +187,13 @@ namespace BECore {
         MainToolbar::Draw();
         CloseItemGap();
         DispatchHotkeys();
-        if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys()); !chosen.Empty()) {
+        GameEditorTools* const gameTools = ActiveGameTools();
+        _gameCommands.Sync(gameTools);
+        _gameRunner.SetTools(gameTools);
+        if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys(), _gameCommands.GetCommands(), _gameCommands.GetVersion()); !chosen.Empty()) {
             EditorCommandEvent::Emit(chosen);
         }
+        _gameRunner.Draw();
 
         // It takes what the status bar leaves; the bars are children of the host, so no dock node can overlap them
         const float dockHeight = eastl::max(0.0f, ImGui::GetContentRegionAvail().y - StatusBar::GetHeight());
@@ -205,6 +216,8 @@ namespace BECore {
         _statusBar.Draw();
 
         ImGui::End();
+        // After the host, so their windows dock into its space
+        _gamePanels.Draw(gameTools);
         _toasts.Draw(StatusBar::GetHeight());
 
         // The panels' Initialize ran before the first Update, so they hear the stored preferences now

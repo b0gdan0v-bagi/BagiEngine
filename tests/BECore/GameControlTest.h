@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Utils/MoveOnlyFunction.h>
 #include <Games/IControllableGame.h>
 #include <Games/IGame.h>
 #include <cstdint>
@@ -31,6 +32,9 @@ namespace BECore::Tests {
         PoolString GetSceneName() const override;
         void Reset() override;
         IControllableGame* AsControllable() override;
+#if BE_WITH_EDITOR
+        void RegisterEditorTools(GameEditorTools& tools) override;
+#endif
 
         std::expected<void, ControlError> WriteState(JsonWriter& writer) const override;
         std::expected<void, ControlError> WriteActions(JsonWriter& writer) const override;
@@ -56,6 +60,10 @@ namespace BECore::Tests {
         String rawState;
         mutable int writeStateCalls = 0;
         mutable int writeActionsCalls = 0;
+#if BE_WITH_EDITOR
+        /// What RegisterEditorTools() does; a test sets it before the game becomes active
+        MoveOnlyFunction<void(GameEditorTools&)> editorTools;
+#endif
     };
 
     /// A game that cannot be controlled from outside: it counts the IGame::Reset() calls

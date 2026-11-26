@@ -87,6 +87,10 @@ namespace BECore {
         /// Registers (or replaces) the handler of @p method. A method with @p bypassBarrier runs even while a deferred call is pending
         void RegisterHandler(StringView method, Handler handler, bool bypassBarrier = false);
 
+        /// Takes away the handler and the description of @p method: a request for it, one queued before this call too, is unknown_method. A handler may remove
+        /// itself, and its capture lives until the call returns; a call that has deferred already still completes. A name with neither changes nothing. Main thread
+        void UnregisterHandler(StringView method);
+
         /// The named objects the by-name methods may reach (ControlRoots.h); empty until a module registers one. Main thread only
         [[nodiscard]] ControlRoots& Roots() {
             return *_roots;
@@ -145,14 +149,14 @@ namespace BECore {
         /// method again keeps it, and a description of a name that has no handler is kept but not listed. Main thread
         void DescribeMethod(StringView method, ControlMethodInfo info);
 
-        /// Every registered method, sorted by name. The info pointers stay valid until the next DescribeMethod. Main thread
+        /// Every registered method, sorted by name. The info pointers stay valid until the next DescribeMethod or UnregisterHandler. Main thread
         [[nodiscard]] Vector<ControlMethodListing> GetMethods() const;
 
         /// GetMethods() for an answer written at once: the list is on the scratch arena (the caller's scope owns it) and the names are views of the table,
         /// so it allocates nothing on the heap. Main thread
         [[nodiscard]] ArenaVector<ControlMethodView> GetMethodViews() const;
 
-        /// Grows when a method is registered under a new name or described, so a widget rebuilds its copy of GetMethods() only on a change
+        /// Grows when a method is registered under a new name, described or removed, so a widget rebuilds its copy of GetMethods() only on a change
         [[nodiscard]] uint64_t GetMethodsVersion() const {
             return _methodsVersion;
         }

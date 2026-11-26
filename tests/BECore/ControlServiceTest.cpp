@@ -789,6 +789,85 @@ namespace BECore::Tests {
         EXPECT_EQ(responses.size(), 2u);
     }
 
+    TEST_F(ControlServiceTest, ARemovedMethodIsUnknownAndNotListedUntilRegisteredAgain) {
+        RegisterRecording("gone");
+        RegisterRecording("kept");
+        service.DescribeMethod("gone", {"Described", {}});
+
+        service.UnregisterHandler("gone");
+
+        Post(MakeRequestText(1, "gone"));
+        service.Drain();
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(responses[0].ErrorCode(), "unknown_method");
+        EXPECT_TRUE(order.empty());
+        ASSERT_EQ(service.GetMethods().size(), 1u);
+        EXPECT_EQ(service.GetMethods()[0].name, "kept");
+
+        RegisterRecording("gone");
+        const Vector<ControlMethodListing> methods = service.GetMethods();
+        ASSERT_EQ(methods.size(), 2u);
+        EXPECT_EQ(methods[0].info, nullptr);  // the description went with the handler
+    }
+
+    TEST_F(ControlServiceTest, ARequestQueuedBeforeARemovalIsUnknownWhenDrainedAfterIt) {
+        RegisterDeferring("hold", 1);
+        RegisterRecording("gone");
+
+        Post(MakeRequestText(1, "hold"));
+        Post(MakeRequestText(2, "gone"));
+        service.Drain();                   // "gone" waits behind the barrier, in the inbox
+        Post(MakeRequestText(3, "gone"));  // still in the queue
+        service.UnregisterHandler("gone");
+        service.EndFrame();
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 3u);
+        EXPECT_EQ(responses[1].ErrorCode(), "unknown_method");
+        EXPECT_EQ(responses[2].ErrorCode(), "unknown_method");
+        EXPECT_EQ(order, (Vector<String>{"hold", "hold-done"}));
+    }
+
+    TEST_F(ControlServiceTest, HandlerThatRemovesItselfAnswersAndKeepsItsCaptureUntilTheCallEnds) {
+        int destroyed = 0;
+        int destroyedAfterRemoving = -1;
+        constexpr int kWitness = 42;
+        int witnessAfterRemoving = 0;
+        service.RegisterHandler("self", [this, owner = DestroyTally(destroyed), witness = kWitness, &destroyed, &destroyedAfterRemoving, &witnessAfterRemoving](ControlCall& call) {
+            service.UnregisterHandler(call.GetMethod());
+            destroyedAfterRemoving = destroyed;
+            witnessAfterRemoving = witness;
+            call.ReplyEmpty();
+        });
+
+        Post(MakeRequestText(1, "self"));
+        Post(MakeRequestText(2, "self"));
+        service.Drain();
+
+        EXPECT_EQ(destroyedAfterRemoving, 0);
+        EXPECT_EQ(witnessAfterRemoving, kWitness);
+        EXPECT_EQ(destroyed, 1);
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_TRUE(responses[0].IsOk());
+        EXPECT_EQ(responses[1].ErrorCode(), "unknown_method");
+    }
+
+    TEST_F(ControlServiceTest, HandlerThatRemovesAndRegistersItsNameAgainKeepsTheNewHandler) {
+        service.RegisterHandler("self", [this](ControlCall& call) {
+            service.UnregisterHandler("self");
+            RegisterRecording("self");
+            call.ReplyEmpty();
+        });
+
+        Post(MakeRequestText(1, "self"));
+        Post(MakeRequestText(2, "self"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_TRUE(responses[1].IsOk());
+        EXPECT_EQ(order, (Vector<String>{"self"}));
+    }
+
     TEST_F(ControlServiceTest, FrameEndHookThatReplacesItselfKeepsItsCaptureUntilItReturns) {
         int destroyed = 0;
         int destroyedAfterReplacing = -1;
@@ -1240,6 +1319,31 @@ namespace BECore::Tests {
         service.SetFrameEndHook("hook", [] {});
         service.EndFrame();
         EXPECT_EQ(service.GetMethodsVersion(), afterDescription);
+    }
+
+    TEST_F(ControlServiceTest, TheMethodsVersionMovesOnARealRemovalOnly) {
+        RegisterRecording("one");
+        service.DescribeMethod("described", {"text", {}});
+        const uint64_t start = service.GetMethodsVersion();
+
+        service.UnregisterHandler("unknown");
+        EXPECT_EQ(service.GetMethodsVersion(), start);
+
+        service.UnregisterHandler("one");
+        const uint64_t afterHandler = service.GetMethodsVersion();
+        EXPECT_GT(afterHandler, start);
+
+        service.UnregisterHandler("described");
+        const uint64_t afterDescription = service.GetMethodsVersion();
+        EXPECT_GT(afterDescription, afterHandler);
+
+        service.UnregisterHandler("one");
+        service.UnregisterHandler("described");
+        EXPECT_EQ(service.GetMethodsVersion(), afterDescription);
+
+        RegisterRecording("described");
+        ASSERT_EQ(service.GetMethods().size(), 1u);
+        EXPECT_EQ(service.GetMethods()[0].info, nullptr);
     }
 
     TEST_F(ControlServiceTest, ListMethodsAnswersWithTheDescriptionsOfTheBuiltins) {
