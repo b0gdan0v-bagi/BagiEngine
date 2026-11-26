@@ -323,7 +323,7 @@ namespace BECore {
             template <typename Container>
             void SaveVectorLike(ISerializer& s, const Container& vec, eastl::string_view key) {
                 size_t count = vec.size();
-                if (s.BeginArray(key, "item", count)) {
+                if (s.BeginArray(key, kGenericElementName, count)) {
                     for (const auto& item : vec) {
                         if (s.BeginArrayElement()) {
                             SaveElement(s, item);
@@ -337,7 +337,7 @@ namespace BECore {
             template <typename Container>
             bool LoadVectorLike(IDeserializer& d, Container& vec, eastl::string_view key) {
                 size_t count = 0;
-                if (d.BeginArray(key, "item", count)) {
+                if (d.BeginArray(key, kGenericElementName, count)) {
                     vec.clear();
                     ReserveForLoad(vec, count);
                     size_t offered = 0;
@@ -432,7 +432,7 @@ namespace BECore {
             template <typename Arr>
             void SaveFixedArray(ISerializer& s, const Arr& arr, eastl::string_view key) {
                 size_t count = arr.size();
-                if (s.BeginArray(key, "item", count)) {
+                if (s.BeginArray(key, kGenericElementName, count)) {
                     for (const auto& item : arr) {
                         if (s.BeginArrayElement()) {
                             SaveElement(s, item);
@@ -446,7 +446,7 @@ namespace BECore {
             template <typename Arr>
             bool LoadFixedArray(IDeserializer& d, Arr& arr, eastl::string_view key) {
                 size_t count = 0;
-                if (d.BeginArray(key, "item", count)) {
+                if (d.BeginArray(key, kGenericElementName, count)) {
                     size_t loadCount = count < arr.size() ? count : arr.size();
                     for (size_t i = 0; i < loadCount; ++i) {
                         if (d.BeginArrayElement()) {

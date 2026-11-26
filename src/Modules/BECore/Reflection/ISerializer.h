@@ -7,6 +7,10 @@
 
 namespace BECore {
 
+    /// The element name of an array whose elements have no name of their own (reflected containers other than factory lists and maps).
+    /// XmlDeserializer takes a child element of any name for it, and only the asked name for every other element name.
+    inline constexpr StringView kGenericElementName = "item";
+
     /**
      * @brief Object and array nesting shared by ISerializer and IDeserializer.
      */
@@ -34,7 +38,7 @@ namespace BECore {
          * When reading: navigates into the array, count receives the element count
          *
          * @param name Name of the array container
-         * @param elementName Name for individual array elements (e.g., "item")
+         * @param elementName Name for individual array elements (kGenericElementName when they have none)
          * @param count [in/out] Number of elements
          * @return true if array exists or was created
          */

@@ -98,6 +98,9 @@ namespace BECore {
         bool BeginObject(StringView name) override;
         void EndObject() override;
 
+        /// With kGenericElementName (or an empty @p elementName) every child element is an element of the array, whatever it is called.
+        /// With any other name only the child elements of that name are: @p count is their number, BeginArrayElement hands out no other,
+        /// and the rest are unknown elements of the array ("Load diagnostics" below). A comment or a text is never an element.
         bool BeginArray(StringView name, StringView elementName, size_t& count) override;
         void EndArray() override;
         bool BeginArrayElement() override;
@@ -114,8 +117,8 @@ namespace BECore {
         // element nobody asked for gives the finding "Unknown attribute|element 'x'" at <scope path>.x, with "did you mean 'y'?" when a
         // name asked in that scope is near. Asked is what counts, not read: Read, ReadAttribute, BeginObject, BeginArray, HasKey and
         // NoteKnownKey name a key, so a value that fails to parse is no unknown key. A scope is checked once, when it ends
-        // (EndObject, EndArray, EndArrayElement) or, for the root, at FinishLoad. An array scope checks its own attributes only: its
-        // children are taken by position (BeginArrayElement) and are the elements. Children of one name count once. Off tracks nothing.
+        // (EndObject, EndArray, EndArrayElement) or, for the root, at FinishLoad. In an array scope the elements (see BeginArray) are asked
+        // for. Children of one name count once. Off tracks nothing.
         bool HasKey(StringView name) const override;
         void AttributeNames(Vector<String>& names) const override;
         void NoteKnownKey(StringView name) override;
@@ -172,7 +175,7 @@ namespace BECore {
             LinearArena::Mark mark;
             ArenaVector<StringView> askedAttributes;
             ArenaVector<StringView> askedElements;
-            bool isArray = false;
+            bool takesEveryElement = false;  // an array of elements of any name: no child element of it is unknown
             bool checked = false;
         };
 
@@ -192,7 +195,7 @@ namespace BECore {
         void SyncScopes() const;
 
         /// Called after a node is pushed on _nodeStack by BeginObject, BeginArray or BeginArrayElement
-        void OpenScope(bool isArray);
+        void OpenScope(bool takesEveryElement);
 
         /// Called before a node is popped from _nodeStack: checks its scope and drops it
         void CloseScope();
@@ -212,7 +215,8 @@ namespace BECore {
 
         struct ArrayContext {
             pugi::xml_node parentNode;
-            pugi::xml_node cursor;  // the next element to hand out; empty after the last
+            pugi::xml_node cursor;   // the next element to hand out; empty after the last
+            StringView elementName;  // empty: any name; else the DOM's text of the first element, since BeginArray's argument may be a temporary
             size_t index = 0;
             size_t count = 0;
         };
