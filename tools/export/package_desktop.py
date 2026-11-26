@@ -9,9 +9,11 @@ import json
 import os
 import shutil
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+import scenes
 
 # The names src/Modules/BECore/FileSystem/PackagedContent.h reads
 MARKER_NAME = "bagi-package.txt"
@@ -184,10 +186,11 @@ def _replace(partial: Path, out: Path) -> None:
 
 
 def package(manifest_file: Path, out_dir: Path, *, release: bool, project_dir: Path, runner: Runner,
-            checkpoint: Callable[[], None] = lambda: None) -> Path:
+            checkpoint: Callable[[], None] = lambda: None, excluded_scenes: Sequence[str] = ()) -> Path:
     """Makes the package of the manifest's target in `out_dir` and returns that folder, resolved.
 
     `release` cooks the config through `runner`. `checkpoint` is called between the copies and raises to give the export up.
+    `excluded_scenes` are removed from the packaged content before the cook (scenes.py, whose SceneError passes through).
     Whatever fails or raises, a package that was in `out_dir` stays as it was."""
     manifest = read_manifest(manifest_file)
     out = out_dir.resolve()
@@ -198,6 +201,9 @@ def package(manifest_file: Path, out_dir: Path, *, release: bool, project_dir: P
         if partial.exists():
             shutil.rmtree(partial)
         _assemble(manifest, partial, checkpoint)
+        if excluded_scenes:
+            layers = [partial / CONTENT_FOLDER / name / "config" for name in (ENGINE_FOLDER, GAME_FOLDER)]
+            scenes.exclude_scenes(layers, excluded_scenes)
         if release:
             _cook(manifest, partial, runner)
         checkpoint()

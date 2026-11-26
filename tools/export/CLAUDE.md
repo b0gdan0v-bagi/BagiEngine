@@ -1,12 +1,12 @@
 # tools/export
 
-Turns a game into a desktop package: a folder that runs without the sources or the build. Python, standard library only. `export.py` is the command, `package_desktop.py` the packaging.
+Turns a game into a desktop package: a folder that runs without the sources or the build. Python, standard library only. `export.py` is the command, `package_desktop.py` the packaging, `scenes.py` what it leaves out.
 
 ## Command
 
 ```bash
 export.py build (--exe <path> | --project <dir> --target <name>) --config debug|release
-                [--out <dir>] [--preset <p>] [--cancel-on-stdin-close] [--dry-run]
+                [--out <dir>] [--preset <p>] [--exclude-scene <name>]... [--cancel-on-stdin-close] [--dry-run]
 export.py run --dir <package>
 ```
 
@@ -43,6 +43,14 @@ The executable reads `content/` only because of the marker (`src/Modules/BECore/
 Left out of the content: dot files and folders, `imgui.ini` (the editor's window layout) and `*.artgen.json` (the art pipeline's records). A **release** package ships cooked config (`src/Modules/BECore/Cook/CLAUDE.md`): the packaged executable cooks its own packaged content with `--cook-verify`, so what is checked is what will be read, and each packaged `config/` is replaced by its `layer<k>/config`, `k` counting only the roots that have a `config/`, lowest first. The cook runs in the temp folder, because the executable leaves a log file where it runs. A debug package ships the XML.
 
 Only the libraries the manifest lists travel: a game that links shared libraries of its own has to add them.
+
+## Scenes left out
+
+`--exclude-scene` (once per scene) takes the names of the child elements of `<scenes>` in the `SceneConfig.xml` of the highest content root that has one, which is the file the game reads (`scenes.py`). Only those elements are cut from the **packaged** copy, before the cook; every asset still ships, because a name built in code cannot be seen. The sources are never touched.
+
+Refused, with the old package kept: an unknown name, the first scene (the game opens on it), a top file that is only a `.bin` (nothing to edit), no such file, and one that does not parse. A scene the game's code or content switches to by name is not checked.
+
+`scenes.py` reads the file with patterns, not `xml.etree`: a Homebrew Python can lack a working `pyexpat`, and expat refuses a `--` inside a comment, which the engine accepts.
 
 ## Manifest
 

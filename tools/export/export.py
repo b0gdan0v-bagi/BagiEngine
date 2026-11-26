@@ -29,6 +29,7 @@ sys.path.insert(0, str(ENGINE_DIR / "tools" / "dev"))
 
 import dev  # noqa: E402
 import package_desktop  # noqa: E402
+import scenes  # noqa: E402
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -237,10 +238,11 @@ def export(args: argparse.Namespace, cancel: Cancel, runner: Runner, system: str
             if code != 0:
                 raise ExportError(f"{name} failed with exit code {code}")
         elif args.dry_run:
-            say(f"would package {target} into {out}")
+            without = f" without the scenes {', '.join(args.exclude_scene)}" if args.exclude_scene else ""
+            say(f"would package {target} into {out}{without}")
         else:
             package_desktop.package(build_dir / "export" / f"{target}.json", out, release=args.config == "release", project_dir=project,
-                                    runner=run, checkpoint=cancel.check)
+                                    runner=run, checkpoint=cancel.check, excluded_scenes=args.exclude_scene)
     return out
 
 
@@ -281,6 +283,8 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     build.add_argument("--config", required=True, choices=("debug", "release"))
     build.add_argument("--out", type=Path, help="the package folder (default <project>/dist/<target>-<config>)")
     build.add_argument("--preset", help="the configure preset (default: the host's Ninja preset of --config)")
+    build.add_argument("--exclude-scene", action="append", default=[], metavar="NAME",
+                       help="a scene of SceneConfig.xml the package leaves out; once per scene")
     build.add_argument("--cancel-on-stdin-close", action="store_true", help="give up on a `cancel` line or the end of stdin")
     build.add_argument("--dry-run", action="store_true", help="print the commands and the folder; run and write nothing")
     run = commands.add_parser("run", help="start an exported game")
@@ -308,7 +312,7 @@ def main(argv: list[str] | None = None, *, runner: Runner = run_child, system: s
         say(RESULT_CANCELLED)
         return EXIT_CANCELLED
     except Exception as error:
-        if not isinstance(error, (ExportError, package_desktop.PackageError)):
+        if not isinstance(error, (ExportError, package_desktop.PackageError, scenes.SceneError)):
             traceback.print_exc()
             sys.stderr.flush()
         say(RESULT_FAILED + " ".join(str(error).split()))  # one line, whatever the message holds
