@@ -14,6 +14,7 @@
 #include <Generated/ViewportEvents.gen.hpp>
 #include <Generated/ViewportWidget.gen.hpp>
 #include <Widgets/AssetBrowser/AssetDrag.h>
+#include <Widgets/EditorLayout/ComponentCategories.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -64,6 +65,7 @@ namespace BECore {
         constexpr float kViewportPixelDensity = 1.0f;
         constexpr float kTouchOutlineThickness = 3.0f;  // wider than the selection's, so a touched node that is selected shows
         constexpr const char* kImageHitArea = "##ViewportImage";
+        constexpr float kMutedCategoryAlpha = 0.5f;  // a selected node that is not the primary one, outlined in its category's colour
 
         // The device of a shape for the Device safe area; none for a custom or an aspect shape and for an index this build lacks
         const PreviewDevice* DeviceOf(const PreviewShape& shape) {
@@ -86,6 +88,16 @@ namespace BECore {
                 }
                 drawList.AddPolyline(corners.data(), static_cast<int>(corners.size()), color, ImDrawFlags_Closed, thickness);
             }
+        }
+
+        // The colour of the outline of a selected node: that of its category, else the accent colour of the theme; a node that is not the primary one is muted
+        ImU32 SelectionColor(const SceneNode& node, bool primary) {
+            if (const Optional<Color> color = CategoryColorOfNode(node)) {
+                const float alpha = static_cast<float>(color->a) * (primary ? 1.0f : kMutedCategoryAlpha);
+                return IM_COL32(color->r, color->g, color->b, static_cast<int>(alpha));
+            }
+            const ImGuiPalette& palette = GetImGuiPalette();
+            return ImGui::ColorConvertFloat4ToU32(primary ? palette.accent : palette.accentMuted);
         }
 
         // @p node and its descendants that flash, each as strong as its flash
@@ -471,15 +483,11 @@ namespace BECore {
         if (!scene || scene != _selectedScene || _liveSelection.empty()) {
             return;
         }
-        const ImGuiPalette& palette = GetImGuiPalette();
-        const ImU32 primaryColor = ImGui::ColorConvertFloat4ToU32(palette.accent);
-        const ImU32 otherColor = ImGui::ColorConvertFloat4ToU32(palette.accentMuted);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
         const SceneNode* const primary = _selectedNodes.back();
         for (const SceneNode* const node : _liveSelection) {
-            const ImU32 color = node == primary ? primaryColor : otherColor;
-            DrawNodeOutlines(*drawList, frame, ScenePick::SelectionOutlines(*scene, *node), color, kSelectionOutlineThickness);
+            DrawNodeOutlines(*drawList, frame, ScenePick::SelectionOutlines(*scene, *node), SelectionColor(*node, node == primary), kSelectionOutlineThickness);
         }
         drawList->PopClipRect();
     }

@@ -34,7 +34,7 @@ namespace BECore {
      * another handler is held are not taken: they reach the game or the handler below.
      */
     class PointerTargetComponent : public IComponent, public IUIInputHandler {
-        BE_CLASS(PointerTargetComponent, ICON = mouse - pointer - click)
+        BE_CLASS(PointerTargetComponent, ICON = mouse - pointer - click, CATEGORY = logic)
     public:
         PointerTargetComponent() = default;
         ~PointerTargetComponent() override;

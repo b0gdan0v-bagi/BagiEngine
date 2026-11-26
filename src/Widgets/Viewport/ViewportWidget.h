@@ -91,8 +91,9 @@ namespace BECore {
         // The UI element the scene editor selected (UIElementSelectedEvent), for the handles and the anchor widget of ViewportUIGizmos
         void OnUIElementSelected(const UIElementSelectedEvent& event);
 
-        // The outline of every selected node (ScenePick::SelectionOutlines: its rect and, for a canvas, the canvas bounds) over the image, the primary (the last) in the accent colour and the
-        // others in its muted one, clipped to the panel. Nothing for no selection, another scene, or a node that is no longer in the tree of @p scene; a node hidden by the editor flag is outlined too
+        // The outline of every selected node (ScenePick::SelectionOutlines: its rect and, for a canvas, the canvas bounds) over the image, in the colour of the node's category or, without one, the
+        // accent colour; the primary (the last) in full, the others muted; clipped to the panel. Nothing for no selection, another scene, or a node that is no longer in the tree of @p scene; a node
+        // hidden by the editor flag is outlined too
         void DrawSelectionOutlines(Scene* scene, const ViewportFrame& frame) const;
 
         // A fading outline in the accent colour round every node of @p scene that a client of the control API touched a moment ago (TouchHighlights), in

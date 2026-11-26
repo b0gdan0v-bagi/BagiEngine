@@ -24,7 +24,7 @@ namespace BECore {
      * action take nothing, unless _blocksInput is set.
      */
     class ClickableComponent : public PointerTargetComponent {
-        BE_CLASS(ClickableComponent, ICON = mouse - pointer - click)
+        BE_CLASS(ClickableComponent, ICON = mouse - pointer - click, CATEGORY = logic)
     public:
         BE_POOLED_SINGLE_THREAD(ClickableComponent)
 

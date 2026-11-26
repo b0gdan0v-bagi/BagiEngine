@@ -14,7 +14,7 @@ The contract between the engine and a game. `Games` provides `IGame` and `GameMa
 | `GetSceneName()` | Name of the `Scene` in the game's `config/SceneConfig.xml` that the game wants active |
 | `Start()` / `Stop()` / `Reset()` | Game became active / is being replaced / restart the session without changing the scene |
 | `AsControllable()` | The game's `IControllableGame` for the external control API, or `nullptr` (the default) |
-| `RegisterEditorTools(GameEditorTools&)` | Editor builds only: where the game adds its editor commands and debug panels (default: none) |
+| `RegisterEditorTools(GameEditorTools&)` | Editor builds only: where the game adds its editor commands, debug panels and component categories (default: none) |
 
 `GameManager::GetEditorTools()` holds the active game's tools: cleared before its `Stop()` (and in `Shutdown()`), registered after the next `Start()`. Contract: `.claude/rules/games-editor-tools.md`.
 

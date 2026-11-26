@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Scene/IComponent.h>
+#include <Widgets/EditorLayout/ComponentCategories.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/IconTable.h>
 #include <Widgets/Feedback/TouchFlashDraw.h>
@@ -173,6 +174,14 @@ namespace BECore {
             ImGui::EndDragDropTarget();
         }
 
+        // The icon of the row just drawn again, in the colour of the node's category. Drawn over the label, so the item keeps its `<glyph> <name>` label
+        void TintRowIcon(const SceneNode& node, float rowLeft) {
+            if (const Optional<Color> color = CategoryColorOfNode(node)) {
+                const ImVec2 position(rowLeft + ImGui::GetTreeNodeToLabelSpacing(), ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - ImGui::GetFontSize()) * 0.5f);
+                ImGui::GetWindowDrawList()->AddText(position, IM_COL32(color->r, color->g, color->b, color->a), IconOfNode(node));
+            }
+        }
+
         void DrawNode(HierarchyState& state, const SceneSelection& selection, SceneNode& node, bool filterOn, bool ancestorHidden) {
             const auto& children = node.GetChildren();
 
@@ -194,9 +203,12 @@ namespace BECore {
             if (dimmed) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
             }
+            const float rowLeft = ImGui::GetCursorScreenPos().x;
             const bool isOpen = renaming ? ImGui::TreeNodeEx(&node, flags, "%s", IconOfNode(node)) : ImGui::TreeNodeEx(&node, flags, "%s %s", IconOfNode(node), node.GetName().CStr());
             if (dimmed) {
                 ImGui::PopStyleColor();
+            } else {
+                TintRowIcon(node, rowLeft);
             }
             FillItemWithTouchFlash(TouchHighlights::GetInstance().NodeAlpha(node.GetRuntimeId()));
             if (state.scrollTo == &node) {

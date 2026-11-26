@@ -10,7 +10,7 @@
 namespace BECore {
 
     class SpriteRendererComponent : public IComponent {
-        BE_CLASS(SpriteRendererComponent, ICON = image)
+        BE_CLASS(SpriteRendererComponent, ICON = image, CATEGORY = render)
     public:
         BE_POOLED_SINGLE_THREAD(SpriteRendererComponent)
 

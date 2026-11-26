@@ -25,7 +25,7 @@ namespace BECore {
      * edit in the inspector takes effect at once without a restart.
      */
     class ParticleEmitterComponent : public IComponent {
-        BE_CLASS(ParticleEmitterComponent, ICON = sparkles)
+        BE_CLASS(ParticleEmitterComponent, ICON = sparkles, CATEGORY = animation)
     public:
         ParticleEmitterComponent();
         ~ParticleEmitterComponent() override = default;

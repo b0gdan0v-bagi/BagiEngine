@@ -23,7 +23,7 @@ namespace BECore::Stress {
      * Does nothing while the game is not the active `StressGame`.
      */
     class StressUiComponent : public IComponent {
-        BE_CLASS(StressUiComponent)
+        BE_CLASS(StressUiComponent, CATEGORY = logic)
     public:
         StressUiComponent() = default;
         ~StressUiComponent() override = default;

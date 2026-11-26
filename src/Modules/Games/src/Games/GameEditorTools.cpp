@@ -22,6 +22,11 @@ namespace BECore {
             return !name.empty() && eastl::all_of(name.begin(), name.end(), IsNameChar);
         }
 
+        /// What `CATEGORY=` of `BE_CLASS` can name
+        bool IsCategoryName(StringView name) {
+            return !name.empty() && eastl::all_of(name.begin(), name.end(), [](char symbol) { return (symbol >= 'a' && symbol <= 'z') || (symbol >= '0' && symbol <= '9') || symbol == '-'; });
+        }
+
         /// No engine method has a dot in its name, so a prefixed method shadows none of them
         String MakePrefix(StringView gameName) {
             String prefix(gameName);
@@ -122,6 +127,7 @@ namespace BECore {
         // Out of the registry before anything dies: the destructor of a callback's capture may reach back here
         const Vector<IntrusivePtr<GameToolCommandEntry>> commands = std::move(_commands);
         const Vector<IntrusivePtr<GameToolPanelEntry>> panels = std::move(_panels);
+        _categories.clear();
         _prefix.clear();
         _gameName = PoolString();
         ++_version;
@@ -192,6 +198,35 @@ namespace BECore {
         entry->panel = std::move(panel);
         _panels.push_back(std::move(entry));
         ++_version;
+    }
+
+    void GameEditorTools::AddCategory(GameToolCategory category) {
+        StringView fault;
+        if (_control == nullptr) {
+            fault = "no game is activated";
+        } else if (!IsCategoryName(category.name)) {
+            fault = "its name is not [a-z0-9-]+";
+        } else if (eastl::find(std::begin(kBuiltInComponentCategories), std::end(kBuiltInComponentCategories), StringView(category.name)) != std::end(kBuiltInComponentCategories)) {
+            fault = "the name is a built-in one";
+        } else if (FindCategory(category.name) != nullptr) {
+            fault = "the category is registered already";
+        }
+        if (!fault.empty()) {
+            LOG_ERROR("[GameEditorTools] the category '{}' is refused: {}", category.name, fault);
+            return;
+        }
+
+        _categories.push_back(std::move(category));
+        ++_version;
+    }
+
+    const GameToolCategory* GameEditorTools::FindCategory(StringView name) const {
+        for (const GameToolCategory& category : _categories) {
+            if (category.name == name) {
+                return &category;
+            }
+        }
+        return nullptr;
     }
 
     std::expected<void, ControlError> GameEditorTools::Invoke(StringView method, JsonView arguments, JsonWriter& result) {

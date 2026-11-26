@@ -329,6 +329,30 @@ namespace BECore::Tests {
         EXPECT_EQ(kept, 1);  // the repeat did not replace the first
     }
 
+    TEST_F(GameEditorToolsTest, ACategoryStaysWhileItsGameIsActiveAndABadOrTakenNameIsRefused) {
+        LogRecorder log;
+        ActivateFake([](GameEditorTools& tools) {
+            tools.AddCategory({"turn-based-2", Color(1, 2, 3, 255)});
+            tools.AddCategory({"turn-based-2", Color(9, 9, 9, 255)});
+            tools.AddCategory({"", {}});
+            tools.AddCategory({"Combat", {}});
+            tools.AddCategory({"two words", {}});
+            tools.AddCategory({"render", {}});
+        });
+        LogEvent::Flush();
+
+        EXPECT_EQ(log.Count(LogLevel::Error, {"[GameEditorTools] the category", "refused"}), 5u);
+        ASSERT_EQ(Tools().GetCategories().size(), 1u);
+        EXPECT_EQ(Require(Tools().FindCategory("turn-based-2")).color.r, 1);  // the repeat did not replace the first
+        const uint64_t version = Tools().GetVersion();
+        Tools().AddCategory({"loot", {}});
+        EXPECT_GT(Tools().GetVersion(), version);
+
+        SwitchToPlain();
+
+        EXPECT_TRUE(Tools().GetCategories().empty());
+    }
+
     TEST_F(GameEditorToolsTest, NothingIsAcceptedWithoutAnActivatedGame) {
         GameManager::GetInstance().Shutdown();
         LogRecorder log;
@@ -336,9 +360,11 @@ namespace BECore::Tests {
 
         Tools().AddCommand(PlainCommand("deal"));
         Tools().AddPanel(PlainPanel("state"));
+        Tools().AddCategory({"combat", {}});
         LogEvent::Flush();
 
-        EXPECT_EQ(log.Count(LogLevel::Error, {"refused", "no game is activated"}), 2u);
+        EXPECT_EQ(log.Count(LogLevel::Error, {"refused", "no game is activated"}), 3u);
+        EXPECT_TRUE(Tools().GetCategories().empty());
         EXPECT_TRUE(Tools().GetCommands().empty());
         EXPECT_TRUE(Tools().GetPanels().empty());
         EXPECT_EQ(Tools().GetVersion(), version);

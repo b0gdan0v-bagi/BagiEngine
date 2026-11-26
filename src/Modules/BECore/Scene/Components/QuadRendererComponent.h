@@ -10,7 +10,7 @@ namespace BECore {
 
     /// A filled rect at the node's transform. It holds the fields; SceneDrawSystem draws it from them at draw time.
     class QuadRendererComponent : public IComponent {
-        BE_CLASS(QuadRendererComponent, ICON = square)
+        BE_CLASS(QuadRendererComponent, ICON = square, CATEGORY = render)
     public:
         BE_POOLED_SINGLE_THREAD(QuadRendererComponent)
 

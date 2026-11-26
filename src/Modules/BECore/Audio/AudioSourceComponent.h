@@ -25,7 +25,7 @@ namespace BECore {
      * time: Play() while it plays starts it again on a new voice and Stop() stops the latest.
      */
     class AudioSourceComponent : public IComponent {
-        BE_CLASS(AudioSourceComponent, ICON = volume - 2)
+        BE_CLASS(AudioSourceComponent, ICON = volume - 2, CATEGORY = audio)
     public:
         AudioSourceComponent() = default;
         ~AudioSourceComponent() override = default;
