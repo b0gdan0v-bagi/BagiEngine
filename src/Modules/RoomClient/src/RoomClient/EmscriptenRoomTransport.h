@@ -28,7 +28,7 @@ namespace BECore {
      */
     class EmscriptenRoomTransport final : public IRoomTransport {
     public:
-        EmscriptenRoomTransport() = default;
+        explicit EmscriptenRoomTransport(RoomTransportLimits limits = {}) : _limits(limits) {}
         ~EmscriptenRoomTransport() override;
         EmscriptenRoomTransport(const EmscriptenRoomTransport&) = delete;
         EmscriptenRoomTransport& operator=(const EmscriptenRoomTransport&) = delete;
@@ -58,6 +58,7 @@ namespace BECore {
         void PushEvent(RoomTransportEventKind kind, StringView text, uint16_t closeCode, StringView reason);
         void DeleteSocket();
 
+        RoomTransportLimits _limits;
         EMSCRIPTEN_WEBSOCKET_T _socket = 0;
         Phase _phase = Phase::Idle;
         /// An `error` came: the `close` that follows reports a failed connect, and the reason says so

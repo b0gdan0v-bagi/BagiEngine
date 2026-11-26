@@ -2,7 +2,6 @@
 
 #if PLATFORM_WEB
 
-#include <Rooms/RoomLimits.h>
 #include <cctype>
 
 namespace BECore {
@@ -11,8 +10,6 @@ namespace BECore {
 
         /// The longest address handed to the browser (as RemoteControl's URL parser: the page's own limit is much larger)
         constexpr size_t kMaxUrlBytes = 2048;
-        /// What the browser may still hold unsent before SendText refuses (the outbox cap of the desktop client)
-        constexpr size_t kMaxBufferedBytes = 1024 * 1024;
         /// The longest reason of a close a script may send (RFC 6455: 125 bytes of a control frame less the code)
         constexpr size_t kMaxCloseReasonBytes = 123;
         /// The first and the last code a script may close with besides 1000 (the application ranges of RFC 6455)
@@ -122,12 +119,12 @@ namespace BECore {
         if (_phase != Phase::Open) {
             return false;
         }
-        // The API takes a C string, so a NUL inside would cut the message; a protocol message is JSON and has none
+        // The API takes a C string, so a NUL inside would cut the message; a message of a protocol over this transport is JSON, which escapes it
         if (text.find('\0') != StringView::npos) {
             return false;
         }
         size_t buffered = 0;
-        if (emscripten_websocket_get_buffered_amount(_socket, &buffered) != EMSCRIPTEN_RESULT_SUCCESS || buffered + text.size() > kMaxBufferedBytes) {
+        if (emscripten_websocket_get_buffered_amount(_socket, &buffered) != EMSCRIPTEN_RESULT_SUCCESS || buffered + text.size() > _limits.maxSendBufferBytes) {
             return false;
         }
         _sendBuffer.assign(text.data(), text.size());
@@ -199,14 +196,14 @@ namespace BECore {
         }
         if (!event->isText) {
             // The room protocol is text; the server's own rule for a client is the same (1003)
-            LOG_WARNING("Room client: a binary message from the server closed the connection");
+            LOG_WARNING("WebSocket transport: a binary message closed the connection");
             self->Finish(kUnsupportedData, "binary message");
             return true;
         }
         // The browser's text is UTF-8 with a terminating NUL that numBytes counts (libwebsocket.js: lengthBytesUTF8 + 1)
         const size_t length = event->numBytes > 0 ? event->numBytes - 1 : 0;
-        if (length > RoomLimits::kMaxServerMessageBytes) {
-            LOG_WARNING("Room client: a message over the limit closed the connection");
+        if (length > self->_limits.maxMessageBytes) {
+            LOG_WARNING("WebSocket transport: a message over the limit closed the connection");
             self->Finish(kMessageTooBig, "message too big");
             return true;
         }

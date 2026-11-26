@@ -71,6 +71,15 @@ if(ENGINE_TARGET_WEB)
     message(STATUS "Target: web (Emscripten), Vulkan, remote control and shared SDL are forced off, the profiler unless ENGINE_PROFILER_STATS is ON")
 endif()
 
+# BE_CONTROL_LINK: the page may dial the control bridge of this machine (.claude/rules/control-web-link.md). Whoever holds the other end drives the
+# game, so only the web Debug build has the code and no option adds it to a page that is shipped
+if(ENGINE_TARGET_WEB AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_definitions(BE_CONTROL_LINK=1)
+    message(STATUS "Control link: ENABLED (web Debug)")
+else()
+    add_compile_definitions(BE_CONTROL_LINK=0)
+endif()
+
 if(ENGINE_WITH_VULKAN)
     message(STATUS "Vulkan: ENABLED (ENGINE_WITH_VULKAN)")
 else()

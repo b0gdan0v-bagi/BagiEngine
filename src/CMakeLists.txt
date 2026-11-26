@@ -42,6 +42,7 @@ target_link_libraries(RuntimeModule PUBLIC
     TaskSystemModule
     GamesModule
     SDLModule
+    RoomClientModule  # the WebSocket transport of the control link (Application/ControlLink.h)
 )
 
 # The socket server and the Vulkan backend are built only with ENGINE_WITH_REMOTE_CONTROL / ENGINE_WITH_VULKAN
