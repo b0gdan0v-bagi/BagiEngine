@@ -97,10 +97,10 @@ namespace BECore {
         }
 
         /// 0..1 of the raw time (not eased) since the end of the delay: 0 while waiting, 1 once completed, where it stopped when cancelled.
-        /// Always 0 for the handle of an endless timeline (`TweenManager::Play`): it has no end to measure against
+        /// Of a `TweenManager::Loop`, the progress of the current turn. Always 0 for the handle of an endless timeline (`TweenManager::Play`): it has no end to measure against
         [[nodiscard]] float GetProgress() const;
 
-        /// The frame class of the tween: `FiniteEffect` for `Start` and `Delay`, the class of the timeline for `Play`
+        /// The frame class of the tween: `FiniteEffect` for `Start` and `Delay`, `DecorativeLoop` for `Loop`, the class of the timeline for `Play`
         [[nodiscard]] AnimationFrameClass GetFrameClass() const {
             return _frameClass;
         }

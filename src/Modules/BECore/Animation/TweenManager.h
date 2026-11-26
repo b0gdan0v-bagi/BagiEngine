@@ -6,6 +6,7 @@
 #include <BECore/Animation/TweenAwaiter.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/Types/Types.h>
+#include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/MoveOnlyFunction.h>
 #include <cstddef>
 #include <cstdint>
@@ -13,12 +14,16 @@
 
 namespace BECore {
 
+    /// How a slot of `TweenManager` uses its time: `Once` ends at its duration (`Start`, `Delay`, a finite `Play`), `Loop` wraps there and goes on
+    /// (`TweenManager::Loop`), `Endless` hands its setter the seconds of the step (`Play` of an endless timeline)
+    CORE_ENUM(TweenRunMode, uint8_t, Once, Loop, Endless)
+
     /**
      * @brief Runs tweens: changes a value over time from a start to a target through a setter callback.
      *
      * Main thread only, like the scene state; `CoreManager` owns one and ticks it once per frame. A test makes its own and calls
      * `Advance(dt)` with a fake frame time. The order of callbacks, the cancel rules and the waiters are in `Animation/CLAUDE.md`, "Rules"
-     * (1 to 10; the tests pin them; rule 16 for an endless `Play`).
+     * (1 to 10; the tests pin them; rule 16 for an endless `Play`, 17 for `Loop`).
      *
      * The destructor drops the tweens like `Clear`: no callbacks, the surviving handles read Cancelled. Destroying the manager from
      * inside one of its callbacks is not supported.
@@ -41,6 +46,20 @@ namespace BECore {
         template <Tweenable T, TweenValueCallback<T> TOnValue = std::nullptr_t>
         IntrusivePtr<TweenHandle> Start(T from, T to, TweenSettings settings, TOnValue&& onValue, MoveOnlyFunction<void()> onComplete = {}, MoveOnlyFunction<void()> onCancel = {}) {
             return StartErased(settings, MakeTweenApply<T>(std::move(from), std::move(to), std::forward<TOnValue>(onValue)), std::move(onComplete), std::move(onCancel));
+        }
+
+        /**
+         * @brief A tween that runs turn after turn in the slot it started in: it keeps its place in the walk, its handle and its setter, and no
+         * turn allocates (`Animation/CLAUDE.md`, rule 17). A repeat uses it instead of a restart from `onComplete`.
+         *
+         * The delay of @p settings is applied once. Every `Advance` after it calls @p onValue once with the value of the current turn; the time past
+         * the end of a turn goes into the next one, so @p to is not necessarily written at the end of a turn. It never completes: only a cancel ends
+         * it, and @p onCancel runs then. A duration of zero or less, or not finite, makes an ordinary tween of no length instead (@p to once,
+         * `Completed`).
+         */
+        template <Tweenable T, TweenValueCallback<T> TOnValue>
+        IntrusivePtr<TweenHandle> Loop(T from, T to, TweenSettings settings, TOnValue&& onValue, MoveOnlyFunction<void()> onCancel = {}) {
+            return LoopErased(settings, MakeTweenApply<T>(std::move(from), std::move(to), std::forward<TOnValue>(onValue)), std::move(onCancel));
         }
 
         /// A tween with no setter that only lasts @p seconds of game time (the frame time given to `Advance`): @p onComplete runs at the end, @p onCancel when it is cancelled
@@ -87,7 +106,7 @@ namespace BECore {
         /// What every frame reads and writes of one tween, by value: the walk touches no handle and no reference count. A finished tween
         /// leaves a tombstone (`state` Completed or Cancelled) until a compaction
         struct Slot {
-            float elapsed = 0.0f;   // raw time since Start, the delay included
+            float elapsed = 0.0f;   // raw time since Start, the delay included; of a `Loop` past its delay, the time into the current turn
             float duration = 0.0f;  // finite, see `StartErased`
             float delay = 0.0f;     // finite
             float progress = 0.0f;
@@ -95,7 +114,7 @@ namespace BECore {
             EaseType ease = EaseType::Linear;
             TweenState state = TweenState::Waiting;
             AnimationFrameClass frameClass = AnimationFrameClass::FiniteEffect;
-            bool endless = false;  // `Play` of an endless timeline: no completion, the setter gets seconds instead of a progress
+            TweenRunMode mode = TweenRunMode::Once;
             TweenApply apply;
         };
 
@@ -116,10 +135,12 @@ namespace BECore {
         [[nodiscard]] Slot& SlotOf(uint32_t id);
         [[nodiscard]] const Slot& SlotOf(uint32_t id) const;
         [[nodiscard]] uint32_t AcquireId();
-        IntrusivePtr<TweenHandle> StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel, bool endless = false,
-                                              AnimationFrameClass frameClass = AnimationFrameClass::FiniteEffect);
+        IntrusivePtr<TweenHandle> StartErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onComplete, MoveOnlyFunction<void()> onCancel,
+                                              TweenRunMode mode = TweenRunMode::Once, AnimationFrameClass frameClass = AnimationFrameClass::FiniteEffect);
+        IntrusivePtr<TweenHandle> LoopErased(const TweenSettings& settings, TweenApply apply, MoveOnlyFunction<void()> onCancel);
         void CancelTween(uint32_t id);
         void Step(Slot& slot, float dt);
+        void StepLoop(Slot& slot, float dt);
         void StepEndless(Slot& slot, float dt);
         void CallSetter(Slot& slot, float value);
         [[nodiscard]] Retired Retire(Slot& slot, TweenState terminal);
