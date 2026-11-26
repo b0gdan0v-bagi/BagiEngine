@@ -1,13 +1,13 @@
 # tools/perf
 
-The benchmark runner of the skills `perf` and `perf-investigate` (`.claude/skills/perf/`, `.claude/skills/perf-investigate/`) and of the merge sentinel of `todo-merge`. Standard library only, Python 3.10+. The engine knows nothing of it; what a repository measures is its benchmark set in `.claude/rules/perf-project.md`.
+The benchmark runner of the skills `perf`, `perf-investigate` and `perf-render` (`.claude/skills/perf*/`) and of the merge sentinel of `todo-merge`. Standard library only, Python 3.10+. The engine knows nothing of it; what a repository measures is its benchmark set in `.claude/rules/perf-project.md`.
 
 | File | Purpose |
 |------|---------|
 | `perf.py` | the runner: builds, runs the set N times, compares with the baseline, `--update-baseline`, `--trace NAME` |
 | `perf_stats.py` | mean, t interval, Welch comparison, the verdicts |
 | `perf_baseline.py` | the machine fingerprint, the baseline plan (read, merge, append), the todo store through `tools/todo/todo.py` |
-| `headless_frames.py` | a game's benchmark command (the engine's own set uses `stress_frames.py`): a game `--headless --manual-clock`, N frames stepped over the control API, one JSON line of `frame_stats` means |
+| `headless_frames.py` | a game's benchmark command (the engine's own set uses `stress_frames.py`): a game `--headless --manual-clock`, N frames stepped over the control API, one JSON line of `frame_stats` means (`gpuMs` over the frames that have a value: headless there is none) |
 | `stress_frames.py` | a benchmark command: `BagiStress` `--headless --control --manual-clock` with the `--stress-*` flags, stepped in chunks until the game quits by itself, then the game's own JSON line (fixed run or `--ramp`) printed unchanged; no line, a non-zero exit code, the step bound or the time limit is an error with the game's log tail. `--backend sdl-gpu|vulkan` runs in a hidden window instead of `--headless` (`--no-batching` turns the batcher off, `--budget-ms` sets a ramp's frame budget, `--sprite-size` and `--world` load the `sprites` scene); a machine without the backend ends in `skip: <reason>` and exit code 77 |
 | `editor_frames.py` | the command of `editor-frame`: `BagiStress` as a headless editor (`--editor`, 1920x1080, a temporary `BAGI_EDITOR_DIR`) on the scene `sprites`, the Viewport, Scene Editor (node `Run`, `TransformComponent`) and Game panels open, the pointer parked; stepped from outside in chunks with `frame_stats` read after each (the game's own `--stress-frames` would count the frames that open the panels), one JSON line of `workMs` / `cpuMs` nearest-rank p50 and p99 and the counter means. Never clicks Save. A missing executable or a build without the editor (`status.runMode` not `Editor`) ends in `skip: <reason>` and exit code 77; a move of the editor that fails (a renamed label) is exit code 1, never a skip |
 | `trace_summary.py` | a Chrome trace of the profiler: zones by self / total time and allocations (with `otherData.allocNames` and `allocSizes`: by name, by size bucket), the frame-time distribution, the counters; a window of the ring (`WriteRingTraceJson`: `Frame` instants, `otherData.ringFrames`) reads the same way |
@@ -45,7 +45,7 @@ A benchmark prints its numbers; it never reads the baseline. A metric of the tim
 
 ## Statistics and verdicts
 
-Each metric: the mean of the repetitions and the half-width of its 95 % interval by Student's t (five runs are too few for the 1.96 of the normal approximation). Against the baseline: Welch's interval of the difference of the means. **Regression** or **improvement** needs both: the interval excludes 0, and the change is at least `thresholdPercent` of the baseline's mean (a machine drifts a percent or two between days; five runs of one day do not see that drift). Otherwise **noise**; a metric without a baseline is **new**. A benchmark takes its worst gated verdict.
+Each metric: the mean of the repetitions and the half-width of its 95 % interval by Student's t (five runs are too few for the 1.96 of the normal approximation). Against the baseline: Welch's interval of the difference of the means. **Regression** or **improvement** needs both: the interval excludes 0, and the change is at least `thresholdPercent` of the baseline's mean (a machine drifts a percent or two between days; five runs of one day do not see that drift). Otherwise **noise**; a metric without a baseline is **new**. A benchmark takes its worst gated verdict. A count that a deterministic run repeats exactly takes `thresholdPercent` 0, so any change of it is a verdict; equal samples summarize to exactly their value, so runs with different numbers of repetitions compare equal.
 
 ## The baseline
 

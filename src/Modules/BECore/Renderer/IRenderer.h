@@ -189,6 +189,14 @@ namespace BECore {
         void PauseCounters();
         void ResumeCounters();
 
+        /// Counts a texture of @p width by @p height RGBA8 pixels as uploaded (RenderCounters::textureUploadBytes), unless the counters are
+        /// paused. A backend or its texture loader calls it once the texture is filled, on the main thread like every GPU call.
+        void CountTextureUpload(uint32_t width, uint32_t height) {
+            if (_countersPaused == 0) {
+                _counters.textureUploadBytes += static_cast<uint64_t>(width) * height * kTextureBytesPerPixel;
+            }
+        }
+
         /// Whether the quads of DrawFilledRect(), DrawTexture() and the transformed draws are gathered into batches (off by default, a backend
         /// that implements SubmitBatch() turns it on where its result is exact). Turning it off submits the open batch. The look of the
         /// output does not change, only the number of submissions (RenderCounters::drawCalls against primitives).
@@ -200,8 +208,8 @@ namespace BECore {
         /// Submits the open batch, if any, so every draw made so far has reached the backend. The scene calls it at the end of its pass; the
         /// renderer calls it itself wherever the order or the state would otherwise be lost (a clip change, another texture or blend mode, a
         /// draw that is not batched, the frame and target boundaries of a backend, which calls it too). Outside a counters pause the backend's
-        /// SubmitBatch() is timed as FrameStage::Submit of the open frame.
-        void Flush();
+        /// SubmitBatch() is timed as FrameStage::Submit of the open frame and the submission is counted under @p reason.
+        void Flush(BatchBreak reason = BatchBreak::Boundary);
 
     protected:
         // Called after the clip changes (push or pop)
@@ -235,6 +243,13 @@ namespace BECore {
             }
         }
         static constexpr uint64_t kQuadTriangles = 2;
+
+        /// A backend calls it with the vertex and index bytes it wrote or handed over for a draw that reached it
+        void CountGeometryUpload(uint64_t bytes) {
+            if (_countersPaused == 0) {
+                _counters.geometryUploadBytes += bytes;
+            }
+        }
 
         /// Carries out one batch: the backend draws the quads as a single submission under the clip in effect (GetClipRect()). Called by Flush(),
         /// which has counted the submission; @p batch is emptied after the call.
@@ -277,6 +292,7 @@ namespace BECore {
         void AppendQuad(ITexture* texture, const Array<Vec2, 4>& corners, const Array<Vec2, 4>& uvs, const Color& color);
 
         static constexpr float kOpacityRounding = 0.5f;
+        static constexpr uint64_t kTextureBytesPerPixel = 4;
         static constexpr Color kWhite{255, 255, 255, 255};
 
         uint64_t _id = 0;

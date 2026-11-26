@@ -726,7 +726,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) {
-        Flush();  // not batched, so the quads before it are drawn first
+        Flush(BatchBreak::Unbatched);  // not batched, so the quads before it are drawn first
         if (!EnsureDrawPass()) {
             return;
         }
@@ -770,7 +770,9 @@ namespace BECore {
         // Only whole triangles are drawn, as in the SDL backend
         const size_t indexCount = indices.size() - indices.size() % kIndicesPerTriangle;
         VulkanGeometryBuffer::Allocation allocation;
-        if (!_geometryBuffer.Allocate(_currentFrame, vertices.size() * sizeof(VulkanGeometryPipeline::Vertex), indexCount * sizeof(uint32_t), allocation)) {
+        const size_t vertexBytes = vertices.size() * sizeof(VulkanGeometryPipeline::Vertex);
+        const size_t indexBytes = indexCount * sizeof(uint32_t);
+        if (!_geometryBuffer.Allocate(_currentFrame, vertexBytes, indexBytes, allocation)) {
             return 0;
         }
 
@@ -786,6 +788,7 @@ namespace BECore {
         for (size_t i = 0; i < indexCount; ++i) {
             outIndices[i] = static_cast<uint32_t>(indices[i]);
         }
+        CountGeometryUpload(vertexBytes + indexBytes);
 
         _geometryPipeline.Draw(_commandBuffers[_currentFrame], descriptorSet, allocation.buffer, allocation.vertexOffset, allocation.indexOffset, static_cast<uint32_t>(indexCount), _currentExtent,
                                scissor);

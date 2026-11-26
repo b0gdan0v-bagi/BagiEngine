@@ -69,6 +69,14 @@ namespace BECore::Tests {
             return renderer;
         }
 
+        uint32_t CountedBatches(const RenderCounters& counters) {
+            uint32_t sum = 0;
+            for (const uint32_t count : counters.batchBreaks) {
+                sum += count;
+            }
+            return sum;
+        }
+
         void ExpectSameVertex(const GeometryVertex& a, const GeometryVertex& b) {
             EXPECT_FLOAT_EQ(a.x, b.x);
             EXPECT_FLOAT_EQ(a.y, b.y);
@@ -203,6 +211,78 @@ namespace BECore::Tests {
         const RenderCounters counters = renderer->TakeRenderCounters();
         EXPECT_EQ(counters.primitives, 2u);
         EXPECT_EQ(counters.drawCalls, 2u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Boundary), 2u);
+        EXPECT_EQ(CountedBatches(counters), 2u);
+        EXPECT_EQ(counters.geometryUploadBytes, 2u * (kQuadVertices * sizeof(GeometryVertex) + kQuadIndices * sizeof(int)));
+    }
+
+    TEST(RendererBatchTest, ACountersPauseHidesTheUploadsAndTheReasonsOfItsDraws) {
+        auto renderer = MakeBatching();
+        {
+            const ScopedRenderCountersPause pause(*renderer);
+            const IntrusivePtr<ITexture> texture = MakeTexture(*renderer, 4, 4);
+            const GeometryVertex triangle[3] = {};
+            const int indices[3] = {0, 1, 2};
+            renderer->DrawTexture(*texture, nullptr, 0, 0, 1, 1);
+            renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+            renderer->DrawGeometry(nullptr, triangle, indices, 0.0f, 0.0f);
+        }
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(CountedBatches(counters), 0u);
+        EXPECT_EQ(counters.geometryUploadBytes, 0u);
+        EXPECT_EQ(counters.textureUploadBytes, 0u);
+    }
+
+    TEST(RendererBatchTest, EachBatchIsCountedUnderTheOneReasonThatEndedIt) {
+        auto renderer = MakeBatching();
+        const IntrusivePtr<ITexture> a = MakeTexture(*renderer, 4, 4);
+        const IntrusivePtr<ITexture> b = MakeTexture(*renderer, 4, 4);
+        const GeometryVertex triangle[3] = {};
+        const int indices[3] = {0, 1, 2};
+
+        renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        renderer->DrawTexture(*a, nullptr, 0, 0, 1, 1);  // Texture: none against one
+        renderer->DrawTexture(*b, nullptr, 0, 0, 1, 1);  // Texture
+        {
+            const ScopedBlendMode add(*renderer, BlendMode::Add);
+            renderer->DrawTexture(*b, nullptr, 0, 0, 1, 1);  // Blend
+        }
+        renderer->DrawTexture(*a, nullptr, 0, 0, 1, 1);  // texture and blend mode both differ: Texture
+        renderer->PushClipRect(Rect{0, 0, 10, 10});      // Clip
+        renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        renderer->PopClipRect();  // Clip
+        renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        renderer->DrawGeometry(nullptr, triangle, indices, 0.0f, 0.0f);  // Unbatched
+        renderer->DrawFilledRect(0, 0, 1, 1, kRed);
+        renderer->Flush();  // Boundary
+        renderer->Flush();  // nothing is open
+
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Texture), 3u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Blend), 1u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Full), 0u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Clip), 2u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Unbatched), 1u);
+        EXPECT_EQ(counters.GetBatchBreaks(BatchBreak::Boundary), 1u);
+        EXPECT_EQ(counters.drawCalls, CountedBatches(counters) + 1u) << "the geometry draw is the one that is no batch";
+    }
+
+    TEST(RendererBatchTest, TheUploadsAreTheBytesOfTheGeometryHandedOverAndOfTheTexturesFilled) {
+        auto renderer = MakeBatching();
+        constexpr uint32_t kWidth = 4;
+        constexpr uint32_t kHeight = 2;
+        const IntrusivePtr<ITexture> texture = MakeTexture(*renderer, kWidth, kHeight);
+        EXPECT_FALSE(renderer->CreateTexture(nullptr, kWidth, kHeight));
+        const GeometryVertex triangle[3] = {};
+        const int indices[3] = {0, 1, 2};
+        renderer->DrawTexture(*texture, nullptr, 0, 0, 1, 1);
+        renderer->DrawTexture(*texture, nullptr, 0, 0, 1, 1);
+        renderer->DrawGeometry(nullptr, triangle, indices, 0.0f, 0.0f);
+
+        const RenderCounters counters = renderer->TakeRenderCounters();
+        EXPECT_EQ(counters.textureUploadBytes, kWidth * kHeight * 4u);
+        constexpr uint64_t kBatchBytes = 2u * (kQuadVertices * sizeof(GeometryVertex) + kQuadIndices * sizeof(int));
+        EXPECT_EQ(counters.geometryUploadBytes, kBatchBytes + sizeof(triangle) + sizeof(indices));
     }
 
     /// Times the process's frame statistics, which Flush() writes to, with the fake clock
@@ -319,6 +399,7 @@ namespace BECore::Tests {
         ASSERT_EQ(renderer->calls.size(), 2u);
         EXPECT_EQ(renderer->calls[0].quads, kMaxBatchQuads);
         EXPECT_EQ(renderer->calls[1].quads, 1u);
+        EXPECT_EQ(renderer->PeekRenderCounters().GetBatchBreaks(BatchBreak::Full), 1u);
     }
 
     TEST(RendererBatchTest, TurningBatchingOffSubmitsTheOpenBatchAndDrawsImmediatelyAfter) {

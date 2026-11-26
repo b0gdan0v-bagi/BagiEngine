@@ -6,7 +6,7 @@
 Starts the game `--headless --manual-clock` on a free port, runs the `--call`s (method and JSON params, in order; a `step` follows each so
 the scene reacts), steps `--warmup` frames, then `--frames` frames in steps of at most `--chunk`, and prints **one JSON line**: the wall
 time of the measured steps (`framesPerSecond`, `wallMsPerFrame`) and the means of `frame_stats` over the measured frames (`cpuMs`, the
-stage times, `workMs` (the CPU time without the present, which headless is the software renderer's copy and most of the frame), draw calls, triangles, texture switches, allocations; the allocations are 0 without `ENGINE_PROFILER_ALLOC`). The frames
+stage times, `workMs` (the CPU time without the present, which headless is the software renderer's copy and most of the frame), draw calls, primitives, triangles, texture switches, allocations; the allocations are 0 without `ENGINE_PROFILER_ALLOC`; `gpuMs` over the frames that have a value, 0 when none, so 0 on the headless software renderer). The frames
 have `dt` 1/60 of game time, so animations run as in a real game; the wall time is the CPU of the frames, nothing waits for a display.
 `--trace FILE` passes `--trace=FILE` to the game (a profile build), recorded over the whole run; `MarkTraceStart` is not reachable from
 here, so the warm-up is in the trace too.
@@ -46,10 +46,13 @@ def summarize_frames(frames: list[dict]) -> dict:
         "cpuMs": mean(cpu),
         "cpuMsP95": percentile(cpu, 0.95),
         "drawCalls": mean([frame["drawCalls"] for frame in frames]),
+        "primitives": mean([frame["primitives"] for frame in frames]),
         "triangles": mean([frame["triangles"] for frame in frames]),
         "textureSwitches": mean([frame["textureSwitches"] for frame in frames]),
         "allocsPerFrame": mean([frame["allocCount"] for frame in frames]),
         "allocBytesPerFrame": mean([frame["allocBytes"] for frame in frames]),
+        # 0 is no value (no backend that times the GPU, or none for that frame)
+        "gpuMs": mean([frame["gpuMs"] for frame in frames if frame["gpuMs"] > 0.0]),
     }
     for stage in frames[0]["stagesMs"] if frames else {}:
         result[f"{stage}Ms"] = mean([frame["stagesMs"][stage] for frame in frames])

@@ -155,7 +155,7 @@ namespace BECore::Tests {
         }
 
         void DrawGeometry(ITexture* texture, Span<const GeometryVertex> vertices, Span<const int> indices, float translateX, float translateY) override {
-            Flush();
+            Flush(BatchBreak::Unbatched);
             if (IsClipEmpty() || vertices.empty()) {
                 return;
             }
@@ -184,6 +184,7 @@ namespace BECore::Tests {
             }
             call.rect = Rect{left, top, right - left, bottom - top};
             call.indices.assign(indices.begin(), indices.end());
+            CountGeometryUpload(GeometryBytes(call));
             calls.push_back(std::move(call));
             CountDraw(texture, indices.size() / kGeometryIndicesPerTriangle);
         }
@@ -193,6 +194,7 @@ namespace BECore::Tests {
                 return {};
             }
             ++texturesCreated;
+            CountTextureUpload(width, height);
             return New<RecordedTexture>(Vector<uint8_t>(rgba, rgba + static_cast<size_t>(width) * height * 4), width, height);
         }
 
@@ -267,6 +269,7 @@ namespace BECore::Tests {
                 bottom = std::max(bottom, vertex.y);
             }
             call.rect = Rect{left, top, right - left, bottom - top};
+            CountGeometryUpload(GeometryBytes(call));
             calls.push_back(std::move(call));
         }
 
@@ -276,6 +279,10 @@ namespace BECore::Tests {
         }
 
     private:
+        static uint64_t GeometryBytes(const DrawCall& call) {
+            return call.vertices.size() * sizeof(GeometryVertex) + call.indices.size() * sizeof(int);
+        }
+
         DrawCall MakeCallWithSpareStorage() {
             DrawCall call;
             if (!_spareGeometry.empty()) {

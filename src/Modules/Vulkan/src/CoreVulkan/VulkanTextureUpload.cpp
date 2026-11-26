@@ -247,6 +247,7 @@ namespace BECore {
         }
 
         texture->SetLoaded(path, vkDevice, allocation.pool, image, imageMemory, imageView, allocation.set, static_cast<float>(texWidth), static_cast<float>(texHeight));
+        backend.CountTextureUpload(texWidth, texHeight);
 
         LOG_INFO("VulkanTextureUpload: uploaded texture '{}' ({}x{})", path.ToStringView(), texWidth, texHeight);
         return texture;
