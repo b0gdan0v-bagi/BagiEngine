@@ -43,6 +43,9 @@ namespace BECore {
         /// Closes what is still open and the document's object; later calls are ignored until Restart
         void Finish();
 
+        using ISerializer::Write;
+        using ISerializer::WriteAttribute;
+
         void Write(StringView name, bool value) override;
         void Write(StringView name, int8_t value) override;
         void Write(StringView name, uint8_t value) override;

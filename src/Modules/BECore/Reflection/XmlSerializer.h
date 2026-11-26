@@ -34,6 +34,9 @@ namespace BECore {
 
         String SaveToString() const;
 
+        using ISerializer::Write;
+        using ISerializer::WriteAttribute;
+
         void Write(StringView name, bool value) override;
         void Write(StringView name, int8_t value) override;
         void Write(StringView name, uint8_t value) override;

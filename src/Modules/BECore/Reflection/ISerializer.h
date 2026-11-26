@@ -123,6 +123,18 @@ namespace BECore {
         virtual void WriteAttribute(StringView name, StringView value) = 0;
         virtual void WriteAttribute(StringView name, const PoolString& value) = 0;
 
+        // =================================================================
+        // Char pointers: a text. Without these a string literal picks `bool`. A null pointer is an empty text.
+        // A derived serializer brings them in with `using`, or its own overloads hide them.
+        // =================================================================
+
+        void Write(StringView name, const char* value) {
+            Write(name, StringView(value != nullptr ? value : ""));
+        }
+        void WriteAttribute(StringView name, const char* value) {
+            WriteAttribute(name, StringView(value != nullptr ? value : ""));
+        }
+
     protected:
         ISerializer() = default;
         ISerializer(const ISerializer&) = default;
