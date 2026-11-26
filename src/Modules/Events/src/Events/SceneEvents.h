@@ -5,6 +5,7 @@
 
 namespace BECore {
     class Scene;
+    class SceneNode;
 }  // namespace BECore
 
 namespace BECore::SceneEvents {
@@ -39,6 +40,19 @@ namespace BECore::SceneEvents {
 
         SceneViewChangedEvent() = default;
         SceneViewChangedEvent(const Scene* s, const ActiveSceneView& v) : scene(s), view(v) {}
+    };
+
+    /**
+     * @brief A client of the control API wrote a field of a component of `node` of `scene` (`scene_set`), which the component already shows.
+     *
+     * Sent after the write, for who keeps track of unsaved changes. Both are alive when it is sent.
+     */
+    struct SceneNodeEditedEvent : public EventBase<SceneNodeEditedEvent> {
+        const Scene* scene = nullptr;
+        const SceneNode* node = nullptr;
+
+        SceneNodeEditedEvent() = default;
+        SceneNodeEditedEvent(const Scene* s, const SceneNode* n) : scene(s), node(n) {}
     };
 
 }  // namespace BECore::SceneEvents

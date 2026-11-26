@@ -34,6 +34,13 @@ namespace BECore {
         }
     }
 
+    void SpriteRendererComponent::OnPropertyWritten(StringView field) {
+        // Any other field is read at draw time, and a reload would drop a texture of SetTexture()
+        if (field == "spriteId" || field == "texturePath") {
+            ReloadTexture();
+        }
+    }
+
     void SpriteRendererComponent::ReloadTexture() {
         _texture.Reset();
 

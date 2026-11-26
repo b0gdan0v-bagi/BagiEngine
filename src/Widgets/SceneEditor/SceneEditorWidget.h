@@ -25,6 +25,10 @@ namespace BECore {
 
     class UICanvasComponent;
 
+    namespace SceneEvents {
+        struct SceneNodeEditedEvent;
+    }  // namespace SceneEvents
+
     /**
      * @brief ImGui panel for live scene editing: the hierarchy tree on the left, the inspector of the selected node
      * and its components on the right. Edits apply at once, without staging. It is the `ISceneEditorHost` of the models of its panel assets.
@@ -91,6 +95,8 @@ namespace BECore {
         /// Answers the end of a gizmo drag: a Commit marks the scene as changed (Begin, Change and Cancel leave the nodes as the drag found them or put them back)
         void OnTransformEdit(const NodeTransformEditEvent& event);
         void OnSceneEdited(const SceneEditedEvent& event);
+        /// A field a control client wrote is unsaved like one the inspector edits, unless Save leaves its node out
+        void OnNodeEdited(const SceneEvents::SceneNodeEditedEvent& event);
 
         /// Answers the Add Node dialog: the scene is unsaved and the parent of the new node is revealed, when the scene is the active one
         void OnNodeAdded(const SceneNodeAddedEvent& event);

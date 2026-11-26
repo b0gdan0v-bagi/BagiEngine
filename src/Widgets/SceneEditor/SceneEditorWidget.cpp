@@ -8,6 +8,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <Events/SceneEvents.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
@@ -46,6 +47,7 @@ namespace BECore {
         Subscribe<ViewportBoxSelectEvent, &SceneEditorWidget::OnViewportBoxSelect>(this);
         Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
         Subscribe<SceneEditedEvent, &SceneEditorWidget::OnSceneEdited>(this);
+        Subscribe<SceneEvents::SceneNodeEditedEvent, &SceneEditorWidget::OnNodeEdited>(this);
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
@@ -205,6 +207,18 @@ namespace BECore {
         if (event.scene != nullptr && event.scene == CoreManager::GetSceneManager().GetActiveScene()) {
             _isDirty = true;
         }
+    }
+
+    void SceneEditorWidget::OnNodeEdited(const SceneEvents::SceneNodeEditedEvent& event) {
+        if (event.scene == nullptr || event.scene != CoreManager::GetSceneManager().GetActiveScene()) {
+            return;
+        }
+        for (const SceneNode* node = event.node; node != nullptr; node = node->GetParent()) {
+            if (node->IsGenerated()) {
+                return;
+            }
+        }
+        _isDirty = true;
     }
 
     void SceneEditorWidget::OnNodeAdded(const SceneNodeAddedEvent& event) {

@@ -26,7 +26,6 @@ The core of the external control API: a program or a model sends commands, the e
 | `JsonDeserializer` | `IDeserializer` that walks a tape: `Load(text)` / `Load(tape)` / `Load(JsonView)` (any value of a tape the caller keeps) serve many messages, always strict, with findings (`.claude/rules/json-tape.md`) |
 | `JsonViewOps` | `JsonEquals`, `WriteJson(writer, view)`, `WriteJsonSorted` (keys in byte order), `FindJsonPointer(view, ..)`: what the game layer does with a view |
 | `JsonMemberMap` | An object as sorted keys and the text of each value: unknown keys kept and written back, or an object made from `key=value`; files and typed commands, never a hot path |
-| `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
 
 ## Protocol
 
@@ -103,7 +102,7 @@ Off by default (`--control`, `control="true"`); the command line beats the attri
 | `BECore/Control/ControlWindow` | `set_window` (`{width, height, density?, userScale?, safeArea?}` on a headless window, answered after a frame; `not_headless` on a real one) and the `window` object of `status`; `.claude/rules/control-window-api.md` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `BECore/UI/UIControl` | answers are the reflected structs of `UIControlAnswers.h`; `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real click on a visible button, toggle or slider, `at` 0..1 also sets a slider; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `.claude/rules/ui-control-api.md`) |
-| `BECore/Scene/SceneControl` | `scene_tree`, `scene_get` (the active scene by node path; `.claude/rules/control-scene-api.md`) |
+| `BECore/Scene/SceneControl`, `SceneNodeControl` | `scene_tree`, `scene_get`, `scene_set`, `scene_set_node` (the active scene by node path; `.claude/rules/control-scene-api.md`) |
 | `BECore/Input/InputControl` | `click_at` (`{x, y, space?, button?, which?}`; `Input/CLAUDE.md`), `wheel_at` (`{x, y, dx?, dy?, flipped?, which?}`: a wheel event at an output pixel to `{consumed, x, y}`) |
 | `BECore/Input/ImGuiInputControl` | `imgui_input` (`{events, space?}` to `{events, frames, wantCapture*, wantTextInput}`: events into `ImGuiIO`, answered once ImGui took the queue and a frame reacted; `no_imgui`, `invalid_params`, `imgui_timeout`), `imgui_find` (`{label?, labelContains?, id?, window?, kind?, visibleOnly?, limit?}` to the matches with rects in output pixels; no filter lists the windows); `Input/CLAUDE.md`, `.claude/rules/control-imgui-api.md` |
 | `BECore/Clipboard/ClipboardControl` | `clipboard_set` (`{text}` to `{ok}`), `clipboard_get` (to `{status, text}`; answered after frames, `clipboard_timeout` after 600), `clipboard_paste` (to `{}` once the `PasteEvent` has been delivered, as Cmd+V gives it); `Clipboard/CLAUDE.md` |

@@ -4,6 +4,11 @@
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/JsonTape.h>
 #include <BECore/Control/JsonView.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneControl.h>
+#include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNodeControl.h>
 #include <Fuzz/FuzzProbeAccess.h>
 #include <Fuzz/FuzzTargets.h>
 #include <Games/GameControl.h>
@@ -18,6 +23,27 @@ namespace BECore::Fuzz {
         constexpr int kFramesToWait = 4;
 
         constexpr StringView kNullText = "null";
+
+        /// The scene the scene methods reach. Its components need no service when they are attached or written: namesakes, nested fields and a name field
+        constexpr const char* kScene = R"(<SceneManager><scenes><scene type="Scene" name="Fuzz"><nodes>
+  <node name="Board"><components>
+    <component type="TransformComponent" x="1" y="2" width="3" height="4"/>
+    <component type="QuadRendererComponent"><color r="1" g="2" b="3" a="4"/></component>
+  </components><children>
+    <node name="Cell"><components><component type="TransformComponent"/></components></node>
+    <node name="Cell"><components><component type="ChangeToRandomColorDebugComponent"/></components></node>
+  </children></node>
+  <node name="Sparks"><components><component type="ParticleEmitterComponent"/></components></node>
+</nodes></scene></scenes></SceneManager>)";
+
+        IntrusivePtr<SceneManager> MakeScene() {
+            XmlDeserializer deserializer;
+            FUZZ_CHECK(deserializer.LoadFromString(kScene));
+            IntrusivePtr<SceneManager> manager = New<SceneManager>();
+            manager->Deserialize(deserializer);
+            manager->Initialize();
+            return manager;
+        }
 
         /// The id the answer has to carry, as the text the request wrote it: the request's own when the request is an object with an integer or a string
         /// id, otherwise `null` (a request nested too deeply is refused before anything is read from it, the id included)
@@ -70,9 +96,18 @@ namespace BECore::Fuzz {
             text.resize(ControlService::kMaxRequestBytes + 1, ' ');
         }
 
+        IntrusivePtr<SceneManager> scenes;  // before the service: its handlers ask for it. Made on the first request that does
         ControlService service;
         RegisterControlBuiltins(service);
         RegisterGameControl(service);
+        const auto activeScene = [&scenes] {
+            if (!scenes) {
+                scenes = MakeScene();
+            }
+            return scenes->GetActiveScene();
+        };
+        RegisterSceneControl(service, activeScene);
+        RegisterSceneNodeControl(service, activeScene);
 
         // Real data for `get_property`, `set_property` and `call_method`; neither root allows interning, so a request cannot grow the pool
         ProbeState state = MakeFilledProbe();

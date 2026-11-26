@@ -87,6 +87,7 @@ namespace BECore {
 
         void Initialize() override;
         void OnAttached() override;
+        void OnPropertyWritten(StringView field) override;
         void OnDraw() override;
 
         bool OnMouseButtonDown(const SDL_MouseButtonEvent& event) override;

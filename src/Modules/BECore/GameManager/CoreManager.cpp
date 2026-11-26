@@ -33,6 +33,7 @@
 #include <BECore/Scene/SceneControl.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNodeControl.h>
 #include <BECore/Tests/TestManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/GamePause.h>
@@ -155,10 +156,12 @@ namespace BECore {
         _controlService->SetPause(_pause.get());
         RegisterControlBuiltins(*_controlService);
         RegisterUIControl(*_controlService);
-        RegisterSceneControl(*_controlService, [] {
+        const auto activeScene = [] {
             SceneManager* scenes = FindSceneManager();
             return scenes != nullptr ? scenes->GetActiveScene() : nullptr;
-        });
+        };
+        RegisterSceneControl(*_controlService, activeScene);
+        RegisterSceneNodeControl(*_controlService, activeScene);
         RegisterInputControl(*_controlService);
         RegisterImGuiInputControl(*_controlService);
         RegisterProfilerControl(*_controlService);

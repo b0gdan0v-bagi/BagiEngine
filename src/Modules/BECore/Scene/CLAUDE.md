@@ -91,8 +91,7 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`, a 
 
 The components are the truth: reflection, the XML and the inspector build on `SceneNode` + `IComponent`. Each subsystem keeps a dense list derived from them and rebuilt only when its key moved (`SceneUpdateList`, `SceneDrawList`, the particle pools).
 
-- It is **not** a pure ECS: component fields have no setter hooks, so a stored copy would be refreshed every frame, which costs the read it was meant to save.
-- The system still makes one `IRenderer` call per quad or sprite; the renderer batches them (`.claude/rules/rendering-module.md`).
+- It is **not** a pure ECS: component fields have no setter hooks, so a stored copy would be refreshed every frame, which costs the read it was meant to save. Only a write by name (`scene_set`) calls `IComponent::OnPropertyWritten(field)`, where a component remakes what it keeps from the field.
 
 ## View size
 

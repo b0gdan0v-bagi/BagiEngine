@@ -1,18 +1,29 @@
-// The control methods that reach the nodes of a scene by path: `scene_tree` and `scene_get`, over a scene loaded from a string.
+// The control methods that reach the nodes of a scene by path: `scene_tree`, `scene_get` and `scene_set`, over a scene loaded from a string.
 
+#include <BECore/Audio/AudioSourceComponent.h>
+#include <BECore/AudioTestSupport.h>
 #include <BECore/Control/ControlBuiltins.h>
+#include <BECore/FileSystem/FileSystem.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Renderer/RendererManager.h>
+#include <BECore/Resource/ResourceManager.h>
+#include <BECore/Scene/Components/ClickableComponent.h>
+#include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneControl.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNodePath.h>
+#include <BECore/UI/UICanvasComponent.h>
 #include <Common/ControlTestSupport.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/FreshText.h>
 #include <Common/Printers.h>
+#include <Common/RecordingRenderer.h>
 #include <Common/Require.h>
 #include <Common/SceneTestSupport.h>
+#include <Events/SceneEvents.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -43,8 +54,13 @@ namespace BECore::Tests {
             }
 
             void SetUp() override {
+                Load(kNodes);
+            }
+
+            /// The scene `Main` of @p nodes, given to the registered methods
+            void Load(StringView nodes) {
                 XmlDeserializer deserializer;
-                const String xml = SceneConfigText(kNodes);
+                const String xml = SceneConfigText(nodes);
                 ASSERT_TRUE(deserializer.LoadFromString(xml.c_str()));
                 _manager = New<SceneManager>();
                 _manager->Deserialize(deserializer);
@@ -226,6 +242,175 @@ namespace BECore::Tests {
         for (const String& text : {node, component, field}) {
             EXPECT_FALSE(PoolString::Find(StringView(text)).has_value()) << text.c_str();
         }
+    }
+
+    namespace {
+
+        constexpr const char* kAudioMount = "test_scene_control";
+        constexpr StringView kClip = "test_scene_control/stereo-tone.ogg";
+
+        // Fields of every kind, a component that keeps a loaded texture, one that keeps a loaded clip and a canvas
+        constexpr StringView kWritableNodes = R"(
+<node name="Thing"><components>
+  <component type="TransformComponent" x="1" y="2" width="3" height="4"/>
+  <component type="QuadRendererComponent"><color r="10" g="20" b="30" a="255"/></component>
+  <component type="TextComponent" text="before"/>
+  <component type="ParticleEmitterComponent"/>
+  <component type="ClickableComponent" actionName="SceneControlKnown"/>
+  <component type="SpriteRendererComponent"/>
+  <component type="AudioSourceComponent" clip="test_scene_control/stereo-tone.ogg" volume="0.5"/>
+  <component type="UICanvasComponent"><elements><element type="UIPanel" name="Plate"/></elements></component>
+</components></node>)";
+
+        class NodeEdits : public SubscriptionHolder {
+        public:
+            NodeEdits() {
+                Subscribe<SceneEvents::SceneNodeEditedEvent, &NodeEdits::OnEdited>(this);
+            }
+
+            Vector<Pair<const Scene*, const SceneNode*>> edits;
+
+        private:
+            void OnEdited(const SceneEvents::SceneNodeEditedEvent& event) {
+                edits.push_back({event.scene, event.node});
+            }
+        };
+
+        class SceneControlSetTest : public SceneControlTest {
+        protected:
+            void SetUp() override {
+                ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kAudioMount), AudioFixtureFolder()));
+                CoreManager::GetRendererManager().SetRenderer(New<RecordingRenderer>());
+                Load(kWritableNodes);
+            }
+
+            void TearDown() override {
+                _manager.Reset();
+                CoreManager::GetRendererManager().SetRenderer({});
+                CoreManager::GetResourceManager().ClearCache();
+                CoreManager::GetFileSystem().Unmount(PoolString::Intern(kAudioMount));
+            }
+
+            /// `scene_set` of `Thing`; @p value is a JSON value
+            ControlReply Set(StringView component, StringView path, StringView value) {
+                return Call("scene_set", Format(R"({{"node":"Thing","component":"{}","path":"{}","value":{}}})", component, path, value));
+            }
+
+            /// The text of the `value` that `scene_get` reads
+            String Read(StringView component, StringView path) {
+                return RawOf(Get("Thing", component, Format(",\"path\":\"{}\"", path)).Result(), "value");
+            }
+
+            template <typename T>
+            T& Component() {
+                return Require(Node("Thing").GetComponent<T>());
+            }
+        };
+
+    }  // namespace
+
+    TEST_F(SceneControlSetTest, EachKindOfValueIsWrittenAndAnsweredAsTheFieldHoldsIt) {
+        struct Write {
+            StringView component;
+            StringView path;
+            StringView value;
+            StringView held;
+        };
+        for (const Write& write : {Write{"ParticleEmitterComponent", "playOnStart", "false", "false"}, Write{"ParticleEmitterComponent", "effect.burstCount", "-3", "-3"},
+                                   Write{"ParticleEmitterComponent", "effect.seed", "4000000000", "4000000000"}, Write{"TransformComponent", "x", "-1.5", "-1.5"},
+                                   Write{"QuadRendererComponent", "color.r", "200", "200"}, Write{"TextComponent", "text", R"("a text nothing has seen")", R"("a text nothing has seen")"},
+                                   Write{"QuadRendererComponent", "blend", R"("Add")", R"("Add")"}, Write{"QuadRendererComponent", "blend", "2", R"("Multiply")"}}) {
+            const ControlReply reply = Set(write.component, write.path, write.value);
+
+            ASSERT_TRUE(reply.IsOk()) << String(write.path).c_str() << ": " << reply.ErrorMessage().c_str();
+            EXPECT_EQ(RawOf(reply.Result(), "value"), write.held) << String(write.path).c_str();
+            EXPECT_EQ(Read(write.component, write.path), write.held) << String(write.path).c_str();
+        }
+    }
+
+    TEST_F(SceneControlSetTest, ARefusedWriteChangesNothingAndReportsNothing) {
+        const NodeEdits edits;
+
+        EXPECT_EQ(Set("AudioSourceComponent", "volume", "2").ErrorCode(), "out_of_range");
+        EXPECT_EQ(Set("TransformComponent", "x", R"("wide")").ErrorCode(), "type_mismatch");
+        EXPECT_EQ(Set("QuadRendererComponent", "color.r", "300").ErrorCode(), "out_of_range");
+        EXPECT_EQ(Set("QuadRendererComponent", "color", "1").ErrorCode(), "not_a_value");
+        EXPECT_EQ(Set("QuadRendererComponent", "colour", "1").ErrorCode(), "not_found");
+        EXPECT_EQ(Set("TransformComponent", "x", "[1]").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("scene_set", R"({"node":"Thing","component":"TransformComponent","value":1})").ErrorCode(), "invalid_params");
+        EXPECT_EQ(Call("scene_set", R"({"node":"Thing","component":"TransformComponent","path":"x"})").ErrorCode(), "invalid_params");
+
+        EXPECT_EQ(Read("AudioSourceComponent", "volume"), "0.5");
+        EXPECT_EQ(Read("TransformComponent", "x"), "1.0");
+        EXPECT_EQ(Read("QuadRendererComponent", "color.r"), "10");
+        EXPECT_TRUE(edits.edits.empty());
+    }
+
+    TEST_F(SceneControlSetTest, ANameFieldTakesOnlyATextThePoolHolds) {
+        const String unknown = FreshText("sceneAction");
+
+        const ControlReply refused = Set("ClickableComponent", "actionName", Format("\"{}\"", unknown));
+
+        EXPECT_EQ(refused.ErrorCode(), "interning");
+        EXPECT_FALSE(PoolString::Find(StringView(unknown)).has_value());
+        EXPECT_EQ(Read("ClickableComponent", "actionName"), R"("SceneControlKnown")");
+
+        const PoolString known = PoolString::Intern(StringView(unknown));
+        EXPECT_TRUE(Set("ClickableComponent", "actionName", Format("\"{}\"", unknown)).IsOk());
+        EXPECT_EQ(Component<ClickableComponent>()._actionName, known);
+        EXPECT_TRUE(Set("ClickableComponent", "actionName", R"("")").IsOk());
+        EXPECT_TRUE(Component<ClickableComponent>()._actionName.Empty());
+    }
+
+    TEST_F(SceneControlSetTest, ASpriteReloadsItsTextureForTheFieldsThatNameItOnly) {
+        auto& sprite = Component<SpriteRendererComponent>();
+        constexpr uint8_t kPixels[2 * 2 * 4] = {};
+        sprite.SetTexture(CoreManager::GetRenderer()->CreateTexture(kPixels, 2, 2));
+        const ITexture* const own = sprite.GetTexture().Get();
+        ASSERT_NE(own, nullptr);
+
+        ASSERT_TRUE(Set("SpriteRendererComponent", "flipX", "true").IsOk());
+        EXPECT_EQ(sprite.GetTexture().Get(), own);
+
+        // No path and no sprite: the reload leaves the component with no texture
+        ASSERT_TRUE(Set("SpriteRendererComponent", "texturePath", R"("")").IsOk());
+        EXPECT_EQ(sprite.GetTexture().Get(), nullptr);
+    }
+
+    TEST_F(SceneControlSetTest, AnAudioSourceLoadsTheClipThatWasWritten) {
+        const auto& source = Component<AudioSourceComponent>();
+        ASSERT_NE(source.GetLoadedClip(), nullptr);
+
+        ASSERT_TRUE(Set("AudioSourceComponent", "clip", R"("")").IsOk());
+        EXPECT_EQ(source.GetLoadedClip(), nullptr);
+
+        ASSERT_TRUE(Set("AudioSourceComponent", "clip", Format("\"{}\"", kClip)).IsOk());
+        ASSERT_NE(source.GetLoadedClip(), nullptr);
+        EXPECT_EQ(source.GetLoadedClip()->GetState(), ResourceState::Loaded);
+    }
+
+    TEST_F(SceneControlSetTest, AWriteIntoTheElementsOfACanvasMakesItLayOutAgain) {
+        UICanvasLayout& layout = Component<UICanvasComponent>().GetLayout();
+        UILayoutContext context;
+        context.outputWidth = 800.0f;
+        context.outputHeight = 600.0f;
+        layout.Update(context);
+        ASSERT_TRUE(layout.IsValid());
+
+        ASSERT_TRUE(Set("UICanvasComponent", "elements[0].blocksInput", "true").IsOk());
+
+        EXPECT_FALSE(layout.IsValid());
+    }
+
+    TEST_F(SceneControlSetTest, AWriteIsAnEditOfTheNode) {
+        const NodeEdits edits;
+        const SceneNode& node = Node("Thing");
+
+        ASSERT_TRUE(Set("QuadRendererComponent", "color.g", "5").IsOk());
+
+        ASSERT_EQ(edits.edits.size(), 1u);
+        EXPECT_EQ(edits.edits[0].first, _scene);
+        EXPECT_EQ(edits.edits[0].second, &node);
     }
 
 }  // namespace BECore::Tests

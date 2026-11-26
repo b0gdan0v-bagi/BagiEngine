@@ -40,6 +40,7 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString _playAction;  ///< an InputEvents::ActionEvent of this name plays the clip; empty is none
 
         void OnAttached() override;
+        void OnPropertyWritten(StringView field) override;
 
         void Play();
         void Stop();
