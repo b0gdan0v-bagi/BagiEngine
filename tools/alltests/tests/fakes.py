@@ -3,7 +3,8 @@
 The environment steers them: FAKE_CALLS (a file every call appends its arguments to, one JSON list per line), FAKE_FAIL_STEP
 (`configure` or `build`: cmake fails there), FAKE_TESTS (the test names), FAKE_FAILING (fail in both runs), FAKE_FLAKY (fail only
 in the first run), FAKE_SKIPPED (skip, as exit 77 does), FAKE_SMOKE (labelled `smoke`), FAKE_STORE (the JSON file the fake todo CLI
-keeps its entries in)."""
+keeps its entries in), FAKE_TODO_DOWN (set: the todo CLI cannot use its store), FAKE_TODO_REFUSED (entry ids whose write the store
+refuses)."""
 
 import json
 import os
@@ -62,6 +63,13 @@ def todo(args: list[str]) -> int:
     if args[:1] == ["--actor"]:
         args = args[2:]
     command, entry, rest = args[0], args[1], args[2:]
+    if os.environ.get("FAKE_TODO_DOWN"):
+        print("todo loader: the service did not answer; running the last copy", file=sys.stderr)
+        print("todo: the todo service does not answer", file=sys.stderr)
+        return 1
+    if command in ("add", "edit") and entry in names("FAKE_TODO_REFUSED"):
+        print(f"todo: PUT /entries/{entry}: HTTP 409: refused", file=sys.stderr)
+        return STORE_REFUSED_EXIT
     store_file = Path(os.environ["FAKE_STORE"])
     store = json.loads(store_file.read_text(encoding="utf-8")) if store_file.is_file() else {}
     if command == "show":
