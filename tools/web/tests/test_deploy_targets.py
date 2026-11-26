@@ -10,6 +10,8 @@ import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
 import deploy_targets
 from deploy_targets import TargetsError
 
+ENGINE_DIR = Path(__file__).resolve().parents[3]
+
 GOOD = {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev"}
 
 
@@ -61,6 +63,17 @@ class LoadTest(TargetsFileTestCase):
             deploy_targets.find(self.project, "nope")
         self.assertIn("nope", str(caught.exception))
         self.assertIn("mahjong-editor", str(caught.exception))
+
+
+class ShippedTargetsTest(unittest.TestCase):
+    def test_every_target_of_the_engines_file_names_a_preset_that_can_be_configured_and_built(self):
+        presets = json.loads((ENGINE_DIR / "CMakePresets.json").read_text(encoding="utf-8"))
+        configurable = {preset["name"] for preset in presets["configurePresets"] if not preset.get("hidden")}
+        buildable = {preset["name"] for preset in presets["buildPresets"] if not preset.get("hidden")}
+        for name, target in deploy_targets.load(ENGINE_DIR).items():
+            with self.subTest(target=name):
+                self.assertIn(target.preset, configurable)
+                self.assertIn(target.preset, buildable)
 
 
 class RefusalTest(TargetsFileTestCase):

@@ -12,7 +12,7 @@ By hand without the script: `cmake --preset web-release`, `cmake --build --prese
 
 ## Targets: `<project>/web/targets.json`
 
-`--target NAME` reads the file next to the game's `web/app.json`, from the project that runs the script (not from the fetched checkout: the name is refused before any network use). The engine ships none; the game owns its file.
+`--target NAME` reads the file next to the game's `web/app.json`, from the project that runs the script (not from the fetched checkout: the name is refused before any network use). The engine ships one target, `engine-editor` (the editor page of its demo scene, `tools/demo/CLAUDE.md`); a game owns its own file.
 
 ```json
 {"format": 1, "targets": {"mahjong-editor": {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev"}}}
@@ -55,9 +55,9 @@ A JSON object rewritten whole, through a temp file and `os.replace`, at every ch
 `--preset web-editor` (by hand or in a target) builds the page with the editor and packages it into `<source>/build/web-editor-dist`; `dist/` is not touched. It is a debug build: tens of MB of `.wasm` (`CLAUDE.md`, "The package").
 
 ```bash
-python tools/web/build_and_deploy.py --game BagiStress --preset web-editor
+python tools/web/build_and_deploy.py --game BagiDemo --preset web-editor
 python tools/web/serve.py --root build/web-editor-dist --host 127.0.0.1      # this machine only, http://localhost:8080
-python tools/web/build_and_deploy.py --game BagiStress --preset web-editor --deploy --service <editor service>
+python tools/web/build_and_deploy.py --game BagiDemo --preset web-editor --deploy --service <editor service>
 ```
 
 - **Set the access first** (`ACCESS.md`): Basic, or sign-in with `SIGNIN_ALLOW`, on a service of its own. A hand `--deploy` without `--service` is exit 2, also with `--dry-run`; a package that says `editor` under another preset name needs `--service` too.

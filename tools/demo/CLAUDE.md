@@ -10,6 +10,8 @@ build/macos-debug/bin/BagiDemo            # Game mode (config/ApplicationConfig.
 build/macos-debug/bin/BagiDemo --editor   # the editor on the scene; Ctrl+Shift+E switches
 ```
 
+The editor page in a browser: `python3 tools/web/build_and_deploy.py --game BagiDemo --preset web-editor`, then `python3 tools/web/serve.py --root build/web-editor-dist --host 127.0.0.1`. `web/targets.json` names it as the target `engine-editor` (`tools/web/DEPLOY.md`).
+
 ## The scene
 
 A 1280 x 720 view. Each kind of thing sits under a group node (no components of its own), so the hierarchy reads as a list of features; the transforms of the children are scene positions, not offsets from the group.
