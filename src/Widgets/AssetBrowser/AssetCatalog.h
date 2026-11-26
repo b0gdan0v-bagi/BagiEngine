@@ -34,6 +34,9 @@ namespace BECore {
      */
     [[nodiscard]] AssetKind AssetKindOfName(StringView virtualPath);
 
+    /// Whether the file is the Generate panel's record beside a picture or a sound, `<name>.artgen.json`: part of that file, not an asset of its own
+    [[nodiscard]] bool IsAssetSidecar(StringView virtualPath);
+
     /**
      * @brief The content files of the asset mounts, their kinds and their folder tree, as of the last `Rebuild`
      *

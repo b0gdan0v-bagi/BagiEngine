@@ -39,3 +39,13 @@ The window is an asset, `config/panels/AssetBrowserPanel.xml` (`Asset Browser###
 - **Targets** name the kinds they take and no disabled item is one, so a read-only field and a locked node take nothing and show no highlight. A delivered payload is handed out as a copy: ImGui frees its bytes when the target ends.
 - **An inspector field** takes a file when it is a string marked `BE_FIELD_ATTRS(asset(<Kind>))` (a game's field the same way; `reflection-module.md`): `ImGuiPropertyVisitor` writes the virtual path. An unmarked string takes nothing, since a dropped path would silently spoil a free text. A custom inspector asks for the drop itself, as the sprite renderer's texture combo does (not while a sprite id locks it).
 - **The viewport** takes the kinds a scene makes a node of (`MakesSceneNode`: `Texture`, `Font`, `Sound`, `Node`; `widgets-module.md`, "Scene Editor Conventions"). The others have no one obvious component.
+
+## Who uses a file
+
+`FindAssetReferences` (`AssetReferences.{h,cpp}`, no ImGui; `AssetReferencesTest`) answers with (file, line) pairs, from the saved files only. A missed use lets the editor break content silently, so every doubt counts as a use.
+
+- **Sources.** The `.xml`, `.html`, `.rml`, `.css`, `.rcss` and `.json` files of the mounts `assets` and `config`, each as its top layer has it, and the `.json` files below `<GetRootPath()>/artgen/` (presets and sets, which name pictures from the content root). The asset itself and `*.artgen.json` sidecars (records of a generation) are no users.
+- **A use** is the whole virtual path standing on its own (never a piece of a longer path), ASCII case ignored and `\` read as `/`, because macOS and Windows open either; XML references and JSON escapes are decoded; a comment of markup or of a style sheet is not read. A path with `./` or `..` steps counts, and in HTML, RML and style files also a link relative to the file's folder.
+- **A node file** is also used by its reference: `ref="nodes/X"`, and, when the reference has a folder, the text `nodes/X` anywhere (a game's component may hold one).
+- **Could not be checked** (`unchecked`, never "unused"): a file that cannot be read or holds a zero byte (UTF-16), a folder that cannot be listed, and a linked folder, which no listing of content enters.
+- **Never seen:** names written or built in C++, cooked `.bin` content, files outside these roots, and a sprite id or a font family, which use the library's or `TextConfig`'s entry (that entry is the use of the file).

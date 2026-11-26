@@ -32,7 +32,6 @@ namespace BECore {
 
         constexpr StringView kXmlExtension = ".xml";
         constexpr StringView kUiXmlSuffix = ".ui.xml";
-        /// The settings the Generate panel keeps beside a picture: part of that picture, not an asset
         constexpr StringView kSidecarSuffix = ".artgen.json";
         /// The engine reads the scenes from the file of this name
         constexpr StringView kSceneFileName = "SceneConfig.xml";
@@ -77,9 +76,13 @@ namespace BECore {
         return {mounts.data(), mounts.size()};
     }
 
+    bool IsAssetSidecar(StringView virtualPath) {
+        return EndsWithIgnoreCase(PathFilename(virtualPath), kSidecarSuffix);
+    }
+
     AssetKind AssetKindOfName(StringView virtualPath) {
         const StringView name = PathFilename(virtualPath);
-        if (EndsWithIgnoreCase(name, kSidecarSuffix)) {
+        if (IsAssetSidecar(name)) {
             return AssetKind::None;
         }
         if (EndsWithIgnoreCase(name, kUiXmlSuffix)) {
