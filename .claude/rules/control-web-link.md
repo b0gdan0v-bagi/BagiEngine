@@ -44,13 +44,25 @@ The page retries after every close but 1008: after 1 s, doubling to 10 s, and fr
 
 ## The page's end
 
-`ControlLink` (`src/Application/`) is polled once a frame, before `ControlService::Drain()`, and runs on any `IRoomTransport`, so `ControlLinkTest` drives it on the desktop over the rooms' fake one.
+```
+?controlToken=<token>[&control=<port or ws:// address>][&controlClock=manual]
+```
+
+- **Only a web Debug build dials** (`web-debug`, `web-editor`; `BE_CONTROL_LINK`, `cmake/BagiPlatformOptions.cmake`). No option adds it to another build.
+- `controlToken` is the switch. Without `control` the page dials the bridge's default page port; `controlClock=manual` is what `--manual-clock` is to a desktop game, from the first frame on. Values are taken as written (no percent-decoding) and the first of a repeated parameter counts. A query that cannot be read is one warning: the page does not dial and keeps the real clock.
+
+`ControlLink` (`src/Application/`; the browser's half is `ControlLinkPage`) is polled once a frame, before `ControlService::Drain()`, the idle pass of the manual clock included, and runs on any `IRoomTransport`, so `ControlLinkTest` drives it on the desktop over the rooms' fake one.
 
 - An answer goes out only on the connection its request came on. A later reply is dropped, one after `Stop()` or the link's destruction too (`ControlService::Shutdown()` answers late): a restarted bridge counts its channels from 1 again, so an old answer would reach a stranger.
 - The link holds the service's event sink only while it is connected.
 - A message without a channel aborts the connection like a refused send (a script cannot close with 1002), and what the transport still holds of it does not run.
 - One Info line per outage, and the one Warning of a 1008: a QA run reads warnings as findings. The token is never logged.
 - `ControlLink::kTransportLimits` are the `RoomTransportLimits` the browser transport of a link takes; its defaults are those of the rooms, and the desktop transport takes none.
+
+**What a linked page does not do as a desktop game does:**
+
+- A hidden tab runs no frame: requests wait until it is shown again.
+- `record_start`, `replay` and `profiler_dump` answer `unsupported`: their files would be in the page's memory, where no client can reach them.
 
 ## The control side
 
@@ -63,6 +75,7 @@ The page retries after every close but 1008: after 1 s, doubling to 10 s, and fr
 The link gives whoever holds the other end the whole control API of the page's game.
 
 - Both listeners bind 127.0.0.1 only.
+- The page dials a loopback `ws://` address only (`localhost`, `127.0.0.1`, `[::1]`): anyone can craft a link to a hosted page, and it must not hand the game to their machine.
 - A page is linked only when all of these hold: `Host` names the loopback (DNS rebinding); `Origin` is there and is an `http(s)` page of the loopback or one named with `--origin` (scheme, host and port exact), else 403; the hello has the token, compared with `hmac.compare_digest`. `Origin` keeps foreign sites out, not programs, and any local development server is a loopback origin: the token is what makes it the page the person opened.
 - The token is random unless `--token` gives it. The bridge prints it once, in the page query, and logs it nowhere.
 - The control side has no token, as the desktop server: any local process may connect.

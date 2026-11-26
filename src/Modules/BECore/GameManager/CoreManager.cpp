@@ -245,9 +245,12 @@ namespace BECore {
         _fileWatcher->Update();                   // a native backend posts from its own thread: without a take the queue would grow while the clock stands still
         _controlService->Drain();
         _audioManager->Update(0.0f);  // the manual clock between steps: the music is still fed, its fades wait for game time
+#if !PLATFORM_WEB
+        // Not in a page: it posts its requests from this very thread, so a wait could not be woken and would only hold the page up
         if (!_controlService->IsStepDue()) {
             _controlService->WaitForRequests(kIdleWait);
         }
+#endif
     }
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {

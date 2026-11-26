@@ -63,4 +63,8 @@ namespace BECore {
         bool _stopped = false;
     };
 
+    /// Replaces `record_start`, `replay` and `profiler_dump` with a handler that fails with `unsupported`: in a page they would read or write its
+    /// own file system in memory, not a file of the client. After the modules have registered theirs
+    void RefuseHostFileMethods(ControlService& service);
+
 }  // namespace BECore

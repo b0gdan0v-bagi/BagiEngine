@@ -78,7 +78,7 @@ The two clocks differ in who runs the frames:
 |---|---|---|
 | Frames | run all the time; `Time::Tick` measures them | run only while the pause has a step due (`GamePause::IsStepDue()`, which `ControlService::IsStepDue()` mirrors); `Time::Advance(step seconds)` sets their length |
 | `step` | waits for `N` frames; `dt` is ignored (a game that is **paused** makes `N` stepped frames of `dt`) | makes `N` frames of `dt` seconds, then answers |
-| Between steps | | `Application::RunFrame` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`). The window stays alive and `quit` still works |
+| Between steps | | `Application::RunFrame` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`; not on the web). The window stays alive and `quit` still works |
 
 While a step runs it is the barrier too. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (`screenshot` asks for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down.
 
@@ -93,7 +93,7 @@ What the manual clock means for a client:
 
 ## Starting the API
 
-Off by default (`--control`, `control="true"`); the command line beats the attribute. Flags, config and status: `.claude/rules/control-startup.md`.
+Off by default (`--control`, `control="true"`); the command line beats the attribute. Flags, config and status: `.claude/rules/control-startup.md`. A web Debug page dials a bridge instead: `.claude/rules/control-web-link.md`.
 
 ## Methods
 

@@ -1,7 +1,9 @@
 #include "ControlLink.h"
 
+#include <BECore/Control/ControlCall.h>
 #include <BECore/Control/JsonWriter.h>
 #include <EASTL/algorithm.h>
+#include <Games/IControllableGame.h>
 
 namespace BECore {
 
@@ -11,6 +13,7 @@ namespace BECore {
         constexpr uint64_t kPushChannel = 0;  // every control client; the bridge counts the channels of requests from 1
         constexpr std::chrono::milliseconds kFirstRetry{1000};
         constexpr std::chrono::milliseconds kMaxRetry{10000};
+        constexpr Array<StringView, 3> kHostFileMethods = {"record_start", "replay", "profiler_dump"};
 
     }  // namespace
 
@@ -198,6 +201,13 @@ namespace BECore {
         if (!_outageReported) {
             _outageReported = true;
             LOG_INFO("Control link: no connection to {} ({}), retrying", _settings.address, why);
+        }
+    }
+
+    void RefuseHostFileMethods(ControlService& service) {
+        for (const StringView method : kHostFileMethods) {
+            service.RegisterHandler(
+                method, [](ControlCall& call) { call.Fail(GameControlErrors::kUnsupported, Format("'{}' needs a file, and a browser page cannot use files of the desktop", call.GetMethod())); });
         }
     }
 

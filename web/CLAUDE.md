@@ -4,6 +4,8 @@ The files the browser build links or packs in (`cmake/BagiWeb.cmake`); they name
 
 **Run mode.** The overlay's `ApplicationConfig.xml` replaces every game's file and says `mode="Game"`. A page built with the editor (preset `web-editor`) uses the same overlay and adds `--editor` to its arguments (`src/main.cpp`): a page has no command line, and a second overlay would replace a game's file twice. Its `LoggerConfig.xml` replaces a game's too, so it carries the `LogHistorySink` the editor's Console reads.
 
+**Control API.** A page cannot listen on a port, so a Debug page (`web-debug`, `web-editor`) dials `tools/control/bagi_bridge.py` on the same machine when its address asks for it: `?controlToken=<token>` (the bridge prints it; without it nothing is dialled), `control=<port or loopback ws:// address>` when the bridge is not on its default port, `controlClock=manual` for the manual clock. Clients then talk to the bridge as to a desktop game. A release page has no such code. Protocol, security and limits: `.claude/rules/control-web-link.md`.
+
 | File | What it is |
 |------|------------|
 | `shell.html` | The page around the wasm (`--shell-file`): canvas, WebGL test, loading bar, error messages, fullscreen, `window.bagiWebPost` (the page of the match upload) |

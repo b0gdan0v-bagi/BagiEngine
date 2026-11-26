@@ -1,5 +1,6 @@
 #include "Application.h"
 
+#include <Application/ControlLinkPage.h>
 #include <Application/ReplayRequest.h>
 #include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/ApplicationFabric.h>
@@ -164,9 +165,16 @@ namespace BECore {
             CoreManager::GetTaskManager().SetFrameBudget(std::chrono::duration_cast<TaskManager::Duration>(std::chrono::duration<double, std::milli>(load.config._taskFrameBudgetMs)));
         }
 
+        bool manualClock = controlSettings->manualClock;
+#if BE_CONTROL_LINK
+        // A page has an address instead of a command line: `controlClock=manual` is its --manual-clock
+        Optional<ControlLinkSettings> pageLink = ReadPageControlLinkSettings();
+        manualClock = manualClock || (pageLink && pageLink->manualClock);
+#endif
+
         // Before the first frame: the loop reads it from the start
-        CoreManager::GetControlService().SetManualClock(controlSettings->manualClock);
-        if (controlSettings->manualClock) {
+        CoreManager::GetControlService().SetManualClock(manualClock);
+        if (manualClock) {
             CoreManager::GetPause().SetPaused(true);  // a manual clock is a pause that only `step` advances
         }
 
@@ -201,6 +209,11 @@ namespace BECore {
 #if BE_WITH_REMOTE_CONTROL
         if (controlSettings->enabled && !StartControlServer(controlSettings->port)) {
             return false;
+        }
+#endif
+#if BE_CONTROL_LINK
+        if (pageLink) {
+            _controlLink = StartPageControlLink(CoreManager::GetControlService(), std::move(*pageLink));
         }
 #endif
 
@@ -241,6 +254,12 @@ namespace BECore {
     bool Application::RunFrame() {
 
         ControlService& control = CoreManager::GetControlService();
+#if BE_CONTROL_LINK
+        // Before either Drain() of a frame: the idle pass of the manual clock needs the requests too
+        if (_controlLink) {
+            _controlLink->Poll(std::chrono::steady_clock::now());
+        }
+#endif
 
         GamePause& pause = CoreManager::GetPause();
         Time& time = CoreManager::GetTime();
@@ -378,6 +397,9 @@ namespace BECore {
             _controlServer.reset();
             CoreManager::GetControlService().SetServerStatus({});
         }
+#endif
+#if BE_CONTROL_LINK
+        _controlLink.reset();  // as the server, before ControlService::Shutdown
 #endif
         GameManager::GetInstance().Shutdown();
         // The glyph pages, the box textures and the widgets own GPU objects (a texture, the viewport's target, ImGui's descriptors): they go before

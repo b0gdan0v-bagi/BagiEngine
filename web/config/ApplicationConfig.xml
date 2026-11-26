@@ -1,7 +1,8 @@
 <?xml version="1.0"?>
 <!--
     Web build overlay (the layer on top of the game's content, BAGI_WEB_ROOT; src/main.cpp).
-    The browser has no Vulkan: the SDL renderer draws (SDL3 opengles2 over WebGL). No control API.
+    The browser has no Vulkan: the SDL renderer draws (SDL3 opengles2 over WebGL). No control server: a page cannot listen, and only a Debug page
+    dials a bridge when its address asks for it (.claude/rules/control-web-link.md), so no attribute here switches that on.
     mode="Game" is the release page; a page built with the editor asks for Editor itself (src/main.cpp).
 -->
 <root

@@ -12,7 +12,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        using std::chrono::milliseconds;  //-NoStd: the clock of the link is the standard one
+        using std::chrono::milliseconds;
 
         constexpr StringView kToken = "secret_Token-1";
 
@@ -267,7 +267,7 @@ namespace BECore::Tests {
         _service.Shutdown();
         EXPECT_EQ(_transports.Last().sent.size(), 1u);
 
-        PollAfter(std::chrono::hours(1));  //-NoStd: the clock of the link is the standard one
+        PollAfter(std::chrono::hours(1));
         EXPECT_EQ(_transports.Count(), 1u);
     }
 
@@ -317,7 +317,7 @@ namespace BECore::Tests {
         Open();
         _transports.Last().PushClosed(kRoomTransportPolicyViolation, "bad_token");
         Poll();
-        PollAfter(std::chrono::hours(1));  //-NoStd: the clock of the link is the standard one
+        PollAfter(std::chrono::hours(1));
         EXPECT_EQ(_transports.Count(), 1u);
 
         LogEvent::Flush();
@@ -368,6 +368,27 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsListening());
         PollAfter(milliseconds(1000));
         EXPECT_EQ(_transports.Count(), 2u);
+    }
+
+    TEST_F(ControlLinkTest, RefusesTheMethodsThatUseFilesOfTheHost) {
+        const Array<StringView, 3> methods = {"record_start", "replay", "profiler_dump"};
+        for (const StringView method : methods) {
+            _service.RegisterHandler(method, [this](ControlCall& call) { call.Reply([this](JsonWriter& writer) { writer.Value(++_handled); }); });
+        }
+        RefuseHostFileMethods(_service);
+        Open();
+        for (const StringView method : methods) {
+            Receive(Format(R"(1 {{"id":1,"method":"{}","params":{{"path":"a.jsonl"}}}})", method));
+        }
+        Receive(R"(1 {"id":2,"method":"count"})");
+        _service.Drain();
+
+        const Vector<String>& sent = _transports.Last().sent;
+        ASSERT_EQ(sent.size(), methods.size() + 2);
+        for (size_t i = 1; i <= methods.size(); ++i) {
+            EXPECT_NE(sent[i].find(R"("code":"unsupported")"), String::npos) << sent[i].c_str();
+        }
+        EXPECT_EQ(sent.back(), R"(1 {"id":2,"ok":true,"result":1})");  // no handler of the three ran
     }
 
 }  // namespace BECore::Tests
