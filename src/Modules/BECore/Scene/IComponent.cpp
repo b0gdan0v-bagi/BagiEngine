@@ -6,12 +6,17 @@
 
 namespace BECore {
 
-    // The scene's update list holds no flag per component, so the class must not grow by a member; the bound is in pointers, so it holds on 32-bit too.
+    // Every component of every scene pays for each byte here, so a new member has to be worth it; the bound is in pointers, so it holds on 32-bit too.
     static_assert(sizeof(IComponent) <= 16 * sizeof(void*));
 
+    Scene* IComponent::TryGetScene() const {
+        return _node != nullptr ? _node->_scene : nullptr;
+    }
+
     Scene& IComponent::GetScene() const {
-        ASSERT(_scene != nullptr);
-        return *_scene;
+        Scene* const scene = TryGetScene();
+        ASSERT(scene != nullptr);
+        return *scene;
     }
 
     SceneNode& IComponent::GetNode() const {
@@ -20,12 +25,20 @@ namespace BECore {
     }
 
     bool IComponent::IsSceneActive() const {
-        return _scene != nullptr && _scene->IsActive();
+        const Scene* const scene = TryGetScene();
+        return scene != nullptr && scene->IsActive();
+    }
+
+    void IComponent::SetEnabled(bool enabled) {
+        if (_enabled == enabled) {
+            return;
+        }
+        _enabled = enabled;
+        OnEnabledChanged();
     }
 
     void IComponent::RegisterSceneUpdate(SceneUpdateKind kind, SceneUpdateInvoker invoke) {
-        ASSERT(_scene != nullptr);
-        _scene->AddUpdater(kind, *this, invoke, {});
+        GetScene().AddUpdater(kind, *this, invoke, {});
     }
 
 }  // namespace BECore

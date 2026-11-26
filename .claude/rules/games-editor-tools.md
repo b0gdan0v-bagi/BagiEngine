@@ -6,16 +6,18 @@ paths:
   - "tests/BECore/GameCommandForm*"
   - "tests/BECore/GameEditorCommands*"
   - "tests/BECore/GameEditorPanels*"
+  - "src/Widgets/EditorLayout/ComponentCategories*"
 ---
 
-# A game's editor commands and debug panels
+# A game's editor commands, debug panels and component categories
 
-A game adds cheat commands and debug panels to the editor without the engine knowing it: it overrides `IGame::RegisterEditorTools` and fills the `GameEditorTools` it is given (`Games/GameEditorTools.h`). `GameManager` owns that registry (`GetEditorTools()`), and the editor reads it. All of it, the hook included, exists only with `BE_WITH_EDITOR`.
+A game adds cheat commands, debug panels and component categories to the editor without the engine knowing it: it overrides `IGame::RegisterEditorTools` and fills the `GameEditorTools` it is given (`Games/GameEditorTools.h`). `GameManager` owns that registry (`GetEditorTools()`), and the editor reads it. All of it, the hook included, exists only with `BE_WITH_EDITOR`.
 
 ## What a game registers
 
 - **A command** (`GameToolCommand`): `name`, `title` (empty: the name), `summary`, parameters (`name`, `type`: `String`, `Integer`, `Number`, `Boolean` or `Json`, `required`, `description`) and the callback. The callback has the contract of `IControllableGame::PerformAction`: it writes exactly one value (`Null()` for nothing to say) and returns success, or returns an error and what it wrote is dropped.
 - **A panel** (`GameToolPanel`): `id`, `title` (empty: the id) and the draw callback. The registered entry adds `open`, true at first.
+- **A category** (`GameToolCategory`): `name` (`[a-z0-9-]+`, what its components write in `BE_CLASS(..., CATEGORY=<name>)`) and `color` (give the alpha too: a default `Color` is fully transparent). The editor tints the hierarchy icon and the selection outline of a node with it (`.claude/rules/widgets-module.md`, "Editor look"). A built-in name (`kBuiltInComponentCategories`) cannot be taken.
 
 ## The editor
 
@@ -23,7 +25,7 @@ The command palette lists `<Game>: <title>` for a command (one with parameters o
 
 ## Names
 
-A command is the control method `<prefix>.<name>`, listed by `list_methods` with its parameters, in every run mode of an editor build. The prefix is the game's name in ASCII lower case with every other byte outside `[a-z0-9_]` as `_`; no engine method has a dot, so a command cannot shadow one. Command names, panel ids and parameter names are `[A-Za-z0-9_]+`. A bad or repeated one, a missing callback, a game whose name is empty and a registration while no game is activated are refused with one error line, never an assert.
+A command is the control method `<prefix>.<name>`, listed by `list_methods` with its parameters, in every run mode of an editor build. The prefix is the game's name in ASCII lower case with every other byte outside `[a-z0-9_]` as `_`; no engine method has a dot, so a command cannot shadow one. Command names, panel ids and parameter names are `[A-Za-z0-9_]+`. A bad or repeated one, a missing callback, a game whose name is empty and a registration while no game is activated are refused with one error line, never an assert. A category needs no prefix, so it is accepted from a game with an empty name too.
 
 ## Arguments
 
@@ -69,8 +71,10 @@ The override is guarded as the declaration is, or a build without the editor doe
         hands.id = "hands";
         hands.draw = [this] { DrawHandsPanel(); };
         tools.AddPanel(std::move(hands));
+
+        tools.AddCategory({"cards", Color(220, 90, 90, 255)});
     }
 #endif
 ```
 
-Tests: `GameEditorToolsTest`, and for the editor `GameEditorCommandsTest`, `GameCommandFormTest` and `GameEditorPanelsTest` (all in `tests/BECore/`, over the hook of `FakeControllableGame`).
+Tests: `GameEditorToolsTest`, and for the editor `ComponentCategoriesTest`, `GameEditorCommandsTest`, `GameCommandFormTest` and `GameEditorPanelsTest` (all in `tests/BECore/`, over the hook of `FakeControllableGame`).

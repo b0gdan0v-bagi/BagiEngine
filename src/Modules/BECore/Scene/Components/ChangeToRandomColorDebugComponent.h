@@ -11,7 +11,7 @@ namespace BECore {
     }  // namespace InputEvents
 
     class ChangeToRandomColorDebugComponent : public IComponent {
-        BE_CLASS(ChangeToRandomColorDebugComponent, ICON = bug)
+        BE_CLASS(ChangeToRandomColorDebugComponent, ICON = bug, CATEGORY = logic)
     public:
         ChangeToRandomColorDebugComponent() = default;
         ~ChangeToRandomColorDebugComponent() override = default;

@@ -433,6 +433,20 @@ namespace BECore::Tests {
         EXPECT_EQ(ScenePick::SelectionOutlines(GetScene("Main"), GetScene("Main").GetRootNode()).count, 0u);
     }
 
+    TEST_F(ScenePickTest, ADisabledCanvasIsNeitherPickedNorOutlined) {
+        ASSERT_EQ(Pick(50.0f, 350.0f).element, _panel.Get());
+
+        _hud->SetEnabled(false);
+
+        const ScenePick::Hit hit = Pick(50.0f, 350.0f);
+        EXPECT_EQ(hit.node, &Node("Main", "Under")) << "what is below the canvas";
+        EXPECT_EQ(hit.element, nullptr);
+        for (const SceneNode* node : PickBox(0.0f, 0.0f, 800.0f, 600.0f)) {
+            EXPECT_NE(node, &Node("Main", "Hud"));
+        }
+        EXPECT_EQ(ScenePick::SelectionOutlines(GetScene("Main"), Node("Main", "Hud")).count, 0u);
+    }
+
     // ---- FindElement ------------------------------------------------------------------------------------------------------
 
     TEST_F(ScenePickTest, FindElementFindsALiveElementOfTheTree) {

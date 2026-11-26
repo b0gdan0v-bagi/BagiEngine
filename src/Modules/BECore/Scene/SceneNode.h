@@ -45,7 +45,8 @@ namespace BECore {
         using ComponentList = SmallVector<IntrusivePtr<IComponent>, kInlineComponents>;
         using ChildList = SmallVector<IntrusivePtr<SceneNode>, kInlineChildren>;
 
-        ~SceneNode() override = default;
+        /// Detaches the components and the children that still name this node: both may outlive it in somebody's hands
+        ~SceneNode() override;
 
         /**
          * @brief The number of this node at run time: from 1, unique in the process and never reused
@@ -73,6 +74,7 @@ namespace BECore {
         void RemoveChild(SceneNode* child);
 
         void AddComponent(IntrusivePtr<IComponent> component);
+        /// Takes the component of this type out and detaches it (IComponent::TryGetNode() is null afterwards)
         void RemoveComponent(PoolString typeName);
         IntrusivePtr<IComponent> GetComponent(StringView typeName) const;
 
@@ -129,8 +131,12 @@ namespace BECore {
 
     private:
         friend class Scene;
+        friend class IComponent;
 
         void WireToScene(Scene* scene, SceneNode* parent);
+
+        /// Clears the node of @p component unless it was attached to another node since it joined this one
+        void Detach(IComponent& component) const;
 
         /// The next id of GetRuntimeId(); any thread may make a node
         [[nodiscard]] static uint64_t NextRuntimeId();

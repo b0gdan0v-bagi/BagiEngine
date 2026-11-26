@@ -38,14 +38,15 @@ namespace BECore {
      */
     class UIElementEditSession {
     public:
-        /// Starts the drag of @p handle of @p element, pressed at @p pointer. False (nothing started) for UIDragHandle::None, an element that cannot be dragged or a node the editor locked
+        /// Starts the drag of @p handle of @p element, pressed at @p pointer. False (nothing started) for UIDragHandle::None, an element that cannot be dragged, a disabled canvas or a node the
+        /// editor locked
         bool BeginHandle(Scene& scene, SceneNode& node, UICanvasComponent& canvas, UIElement& element, UIDragHandle handle, const Vec2& pointer);
 
-        /// Starts the drag of @p corner of the anchor widget of @p element. False for an element that cannot be dragged, has no anchors or a locked node
+        /// Starts the drag of @p corner of the anchor widget of @p element. False for an element that cannot be dragged or has no anchors, a disabled canvas or a locked node
         bool BeginAnchor(Scene& scene, SceneNode& node, UICanvasComponent& canvas, UIElement& element, AnchorCorner corner);
 
-        /// True while the drag can go on in @p activeScene: it is the scene of the drag, the input mode is Edit, the node is in its tree and not locked, still has the canvas, and the element is in
-        /// its tree
+        /// True while the drag can go on in @p activeScene: it is the scene of the drag, the input mode is Edit, the node is in its tree and not locked, still has the canvas, which is enabled,
+        /// and the element is in its tree
         [[nodiscard]] bool CanContinue(Scene* activeScene, bool editMode) const;
 
         /// One frame, after CanContinue(). Writes `style.rect`, invalidates the canvas and tells @c Change when the spec differs from the last one

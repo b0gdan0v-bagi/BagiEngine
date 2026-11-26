@@ -7,6 +7,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/Utils/ScopeGuard.h>
 #include <Common/EngineEnvironment.h>
@@ -825,6 +826,46 @@ namespace BECore::Tests {
         input.DispatchMouseButtonUp(Button(120.0f, 120.0f, false));
         EXPECT_FALSE(input.DispatchMouseButtonDown(Button(700.0f, 50.0f, true)));
         EXPECT_EQ(game.downs, 1);
+    }
+
+    // ---- a disabled canvas ------------------------------------------------------------------------------------------------
+
+    TEST_F(UICanvasComponentTest, ADisabledCanvasForgetsItsHoverPressAndPopupsAndTakesNoInput) {
+        auto hud = Canvas("Main", "Hud");
+        auto probe = AddProbe(*hud, "Probe", 100.0f, 100.0f, 50.0f);
+        auto list = New<UIDropdown>();
+        list->style.rect.x = UILength::Px(400.0f);
+        list->style.rect.width = UILength::Px(100.0f);
+        list->style.rect.height = UILength::Px(40.0f);
+        hud->GetRoot().children.push_back(list);
+        hud->_modal = true;
+        Draw("Main");
+        UIInput& input = CoreManager::GetUIInput();
+        ASSERT_TRUE(input.DispatchMouseButtonDown(Button(120.0f, 120.0f, true)));
+        input.DispatchMouseMotion(Motion(120.0f, 120.0f, SDL_BUTTON_LMASK));
+        list->Open();  // by code: no draw has seen it
+        ASSERT_TRUE(probe->hovered && probe->pressed && hud->HoldsPress());
+        GameMouseRecorder game;
+
+        hud->SetEnabled(false);
+
+        EXPECT_FALSE(probe->hovered);
+        EXPECT_FALSE(probe->pressed);
+        EXPECT_FALSE(hud->HoldsPress());
+        EXPECT_FALSE(list->IsOpen());
+        EXPECT_FALSE(hud->TakesInput());
+        input.DispatchMouseButtonUp(Button(120.0f, 120.0f, false));
+        EXPECT_EQ(probe->clicks, 0);
+        EXPECT_EQ(game.ups, 0) << "the release of the press the canvas took is not the game's";
+        EXPECT_FALSE(input.DispatchMouseButtonDown(Button(120.0f, 120.0f, true)));
+        EXPECT_FALSE(input.DispatchMouseButtonUp(Button(120.0f, 120.0f, false)));
+        EXPECT_EQ(game.downs, 1);
+
+        hud->SetEnabled(true);
+        Draw("Main");
+        EXPECT_TRUE(input.DispatchMouseButtonDown(Button(120.0f, 120.0f, true)));
+        input.DispatchMouseButtonUp(Button(120.0f, 120.0f, false));
+        EXPECT_EQ(probe->clicks, 1);
     }
 
     // ---- the press and the drag of an element -----------------------------------------------------------------------------

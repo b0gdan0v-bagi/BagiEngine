@@ -11,7 +11,9 @@ session's and `tools/qa/bagi_qa_scene_file.py`'s):
   (the edits are there, nothing else of the scene changed: the findings `editor.*`). Then **reload**: the game is started again on the same overlay,
   so it reads the saved copy, and the hierarchy must show the renamed node. Sessions `<out>/edit` and `<out>/reload`.
 - **panels**: open every panel of the View menu, a rebindable chord closes and opens the Game panel, the command palette opens, filters and closes, the
-  `ui` scene is shown in the editor; a picture of each. Nothing is saved, so a write of the content file is the finding `editor.content_file_written`.
+  `ui` scene is shown in the editor, switch through the four workspaces (a panel of one that is not open is the finding
+  `editor.workspace_panel_missing`) and end on `Scene` after "Reset to Defaults", so the next run starts at the default layout; a picture of each.
+  Nothing is saved, so a write of the content file is the finding `editor.content_file_written`.
   The `ui` scene's `ui_tree` is not checked: the canvas of the `Screen` space takes the shape of the viewport panel while the stress grid
   fills a view of its own size, so the labels of the second column are `OutsideCanvas`: a property of the scene, not of the editor.
   Session `<out>/panels`.
@@ -91,6 +93,8 @@ NAME_RELOAD_NODE_MISSING = "editor.reload_node_missing"
 NAME_PANEL_MISSING = "editor.panel_missing"
 NAME_CHORD_NO_EFFECT = "editor.chord_no_effect"
 NAME_PALETTE_FILTER = "editor.palette_filter_wrong"
+NAME_WORKSPACE_PANEL = "editor.workspace_panel_missing"
+HOME_WORKSPACE = "Scene"  # the workspace a fresh editor is in: its ready layout is the default one
 
 
 @dataclass
@@ -204,7 +208,7 @@ def play_reload(exe: Path, out: Path, overlay: Path) -> Played:
 
 
 def play_panels(exe: Path, out: Path) -> Played:
-    """Every panel of the View menu, a chord, the palette and its filter: a picture of each, and the content file never written."""
+    """Every panel of the View menu, a chord, the palette and its filter, the workspaces: a picture of each, and the content file never written."""
     session = QaSession(out / SESSION_PANELS, PANELS_TEXT, INVARIANTS, ui_every=0)
     launch(session, exe, EDIT_FLAGS)
     try:
@@ -221,6 +225,7 @@ def play_panels(exe: Path, out: Path) -> Played:
         session.step(SETTLE_FRAMES)
         session.shot("ui-scene", EDITOR_SHOT_SIZE)
         session.note("the ui scene shown in the editor; its ui_tree is not checked (the canvas takes the shape of the viewport panel, see qa-project.md)")
+        workspaces(session)
     except SessionError as error:
         move_failed(session, error)
     except BaseException:
@@ -237,6 +242,24 @@ def chord(session: QaSession) -> None:
         if editor.panel_open(session, "Game Panel") != expected:
             session.flag(NAME_CHORD_NO_EFFECT, f"after Ctrl+Shift+G the Game panel is {'open' if not expected else 'closed'}, expected {'open' if expected else 'closed'}")
     session.shot("chord-game-panel", EDITOR_SHOT_SIZE)
+
+
+def workspaces(session: QaSession) -> None:
+    """Every workspace shows its panels; the way home and the reset leave the default layout in the editor's ini."""
+    for name in (*editor.WORKSPACE_PANELS, HOME_WORKSPACE):
+        editor.switch_workspace(session, name)
+        check_workspace(session, name)
+        session.shot(f"workspace-{name}", EDITOR_SHOT_SIZE)
+    editor.reset_layout(session)
+    check_workspace(session, HOME_WORKSPACE)
+    session.shot("workspace-reset", EDITOR_SHOT_SIZE)
+    session.note(f"switched through the workspaces {list(editor.WORKSPACE_PANELS)} and reset {HOME_WORKSPACE}")
+
+
+def check_workspace(session: QaSession, name: str) -> None:
+    closed = editor.closed_workspace_panels(session, name)
+    if closed:
+        session.flag(NAME_WORKSPACE_PANEL, f"the workspace {name} does not show the panels {closed}")
 
 
 def palette(session: QaSession) -> None:

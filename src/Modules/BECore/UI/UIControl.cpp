@@ -271,7 +271,7 @@ namespace BECore {
             UICanvasAnswer answer;
             answer.node = entry.node;
             answer.space = canvas._space;
-            answer.visible = canvas._visible;
+            answer.visible = canvas._visible && canvas.IsEnabled();
             answer.modal = canvas._modal;
             answer.inputEnabled = canvas._inputEnabled;
             answer.takesInput = canvas.TakesInput();
@@ -421,7 +421,10 @@ namespace BECore {
                     anyNamed = true;
                     ClickMiss miss = ClickMiss::None;
                     PoolString coveredBy;
-                    if (!entry.canvas->GetLayout().HasLayout()) {
+                    // A disabled canvas is never drawn: no step would lay it out
+                    if (!entry.canvas->IsEnabled()) {
+                        miss = ClickMiss::CanvasCannotTakeInput;
+                    } else if (!entry.canvas->GetLayout().HasLayout()) {
                         miss = ClickMiss::NotLaidOut;
                     } else if (!entry.canvas->TakesInput()) {
                         miss = ClickMiss::CanvasCannotTakeInput;
@@ -459,7 +462,7 @@ namespace BECore {
                 case ClickMiss::Covered:
                     return Format("'{}' is covered by '{}' in its canvas", text, target.coveredBy.ToStringView());
                 case ClickMiss::CanvasCannotTakeInput:
-                    return Format("the canvas '{}' of '{}' is hidden, has input off or is in a scene that is not active", target.canvasNode.ToStringView(), text);
+                    return Format("the canvas '{}' of '{}' is hidden or disabled, has input off or is in a scene that is not active", target.canvasNode.ToStringView(), text);
                 case ClickMiss::NotLaidOut:
                     return Format("the canvas '{}' of '{}' has not been drawn yet: step a frame first", target.canvasNode.ToStringView(), text);
                 case ClickMiss::None:

@@ -5,6 +5,7 @@
 #include <Widgets/EditorLayout/EditorPlayModel.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/EditorLayout/LayoutStore.h>
+#include <Widgets/EditorLayout/Workspaces.h>
 #include <cstdint>
 #include <expected>
 
@@ -30,6 +31,10 @@ namespace BECore {
         /// The state behind the main toolbar's buttons; null when the host has none. The host owns it and changes it by the commands `game.play`, `game.pause`
         /// and `game.step`, so a model only reads it
         [[nodiscard]] virtual const EditorPlayModel* GetPlayModel() const = 0;
+
+        /// The workspace the editor is in, also while it is still on its way to the screen; nothing when the host has none. The host changes it by the commands
+        /// `workspace.*`, so a model only reads it
+        [[nodiscard]] virtual Optional<EditorWorkspace> GetActiveWorkspace() const = 0;
 
         /// Writes the current dock layout under @p name. The error is a sentence for the dialog
         virtual std::expected<void, String> SaveCurrentLayoutAs(StringView name) = 0;

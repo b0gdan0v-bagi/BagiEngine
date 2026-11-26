@@ -15,7 +15,7 @@ from scenes import SceneError
 
 # What the engine's reader accepts and a strict parser would not (`--` in a comment), a `<scene` and a `>` where they are no markup
 GAME_CONFIG = """<?xml version="1.0"?>
-<SceneManager contentVersion="5">
+<SceneManager contentVersion="6">
   <!-- chosen by --start-scene; <scene name="Menu"> in a comment is none -->
   <scenes>
     <scene name="Menu" title="a &gt; b > c">

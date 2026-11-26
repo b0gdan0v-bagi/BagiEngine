@@ -21,11 +21,11 @@ namespace BECore {
             const TransformComponent* transform = nullptr;
             const QuadRendererComponent* quad = nullptr;
             const SpriteRendererComponent* sprite = nullptr;
-            bool hasClipRect = false;
+            const ClipRectComponent* clipRect = nullptr;
 
             // Whether the node clips its subtree: it has a ClipRectComponent and a TransformComponent.
             bool ClipsSubtree() const {
-                return hasClipRect && transform != nullptr;
+                return clipRect != nullptr && transform != nullptr;
             }
         };
 
@@ -40,8 +40,8 @@ namespace BECore {
                     parts.quad = static_cast<const QuadRendererComponent*>(component.Get());
                 } else if (!parts.sprite && typeName == SpriteRendererComponent::GetStaticTypeName()) {
                     parts.sprite = static_cast<const SpriteRendererComponent*>(component.Get());
-                } else if (typeName == ClipRectComponent::GetStaticTypeName()) {
-                    parts.hasClipRect = true;
+                } else if (!parts.clipRect && typeName == ClipRectComponent::GetStaticTypeName()) {
+                    parts.clipRect = static_cast<const ClipRectComponent*>(component.Get());
                 }
             }
             return parts;
@@ -96,7 +96,7 @@ namespace BECore {
             if (parts.ClipsSubtree()) {
                 clip = &node;
                 clipIndex = static_cast<int32_t>(clips.size());
-                clips.push_back(SceneClipOwner{parts.transform, ancestorClipIndex});
+                clips.push_back(SceneClipOwner{parts.transform, parts.clipRect, ancestorClipIndex});
             }
             items.push_back(SceneDrawItem{node.GetLayer(), order++, &node, hidden, clip, clipIndex});
             for (const auto& child : node.GetChildren()) {
@@ -131,13 +131,16 @@ namespace BECore {
 
         using ClipChain = FixedVector<int32_t, SceneDrawSystem::kMaxClipDepth>;
 
-        // The clip owners of @p owner and of the ones around it, outermost first. Past the depth limit the outermost owners are left out.
+        // The enabled clip owners of @p owner and of the ones around it, outermost first. Past the depth limit the outermost owners are left out.
         void CollectClipChain(const Vector<SceneClipOwner>& clips, int32_t owner, ClipChain& outermostFirst) {
             outermostFirst.clear();
             ClipChain nearestFirst;
             while (owner >= 0 && !nearestFirst.full()) {
-                nearestFirst.push_back(owner);
-                owner = clips[static_cast<size_t>(owner)].outer;
+                const SceneClipOwner& clip = clips[static_cast<size_t>(owner)];
+                if (clip.clipRect->IsEnabled()) {
+                    nearestFirst.push_back(owner);
+                }
+                owner = clip.outer;
             }
             outermostFirst.assign(nearestFirst.rbegin(), nearestFirst.rend());
         }
@@ -210,6 +213,10 @@ namespace BECore {
         const ViewTransform& view = scene.GetViewTransform();
         PushedClips clips;
         for (const SceneDrawEntry& entry : list.entries) {
+            // Read in every pass, like the clips, so enabling and disabling leave the list as it is
+            if (!entry.component->IsEnabled()) {
+                continue;
+            }
             if (renderer != nullptr) {
                 clips.Switch(*renderer, list.clips, view, entry.clip);
             }

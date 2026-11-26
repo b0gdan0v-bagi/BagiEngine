@@ -1,4 +1,7 @@
+#include <BECore/Config/XmlConfig.h>
 #include <BECore/Input/UIInput.h>
+#include <BECore/Scene/SceneLoader.h>
+#include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIInputClicker.h>
@@ -189,6 +192,19 @@ namespace BECore::Tests {
                 AppendFormat(line, "; checked={}", JsonFlag(element, "checked"));
             }
             return line;
+        }
+
+        /// The number of components of @p node and of the nodes below it; each one that sleeps is a failure
+        size_t CountAwakeComponents(const SceneNode& node) {
+            size_t count = 0;
+            for (const auto& component : node.GetComponents()) {
+                EXPECT_TRUE(component->IsEnabled()) << component->GetTypeMeta().typeName.data() << " on " << node.GetName().CStr();
+                ++count;
+            }
+            for (const auto& child : node.GetChildren()) {
+                count += CountAwakeComponents(*child);
+            }
+            return count;
         }
 
     }  // namespace
@@ -470,6 +486,27 @@ namespace BECore::Tests {
             clicker->disabled = false;
             Draw(kLargeWidth, kLargeHeight);
         }
+    }
+
+    class ContentMigrationEnabledTest : public Fixture {};
+
+    /// Step 5 (`component_enabled/`): before it a scene component ran whatever its `enabled` said, so every component of a migrated file is awake, inline, nested, from a node
+    /// file and under the override of a reference
+    TEST_F(ContentMigrationEnabledTest, EveryMigratedSceneComponentRunsAsBefore) {
+        const Path folder = FixtureFolder("component_enabled");
+        const XmlConfig config = XmlConfig::Create();
+        ASSERT_TRUE(config.LoadFromString(ReadFile(folder / "scene_config.after.xml")));
+        const NodeFileLoader loader = [&folder](StringView, pugi::xml_document& out, String&) { return static_cast<bool>(out.load_string(ReadFile(folder / "node_file.after.xml").c_str())); };
+        SceneLoadFindings findings;
+        _manager = LoadSceneManager(config.GetRoot(), loader, "component_enabled", &findings);
+        EXPECT_TRUE(findings.expansionErrors.empty());
+        EXPECT_TRUE(findings.errors.empty());
+        _manager->Initialize();
+        Scene* scene = _manager->GetSceneByName("Main"_intern);
+        ASSERT_NE(scene, nullptr);
+
+        // Box 4, its child 1, the node file with its override 3 and its child 1, the canvas 1
+        EXPECT_EQ(CountAwakeComponents(scene->GetRootNode()), 10u);
     }
 
     INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationAfterTest, ::testing::Range<size_t>(0, Expectations().size()), [](const ::testing::TestParamInfo<size_t>& info) {

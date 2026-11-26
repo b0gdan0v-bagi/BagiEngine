@@ -71,7 +71,7 @@ Plain C++ over `ParticleEffect`: `Update(effect, area, dt)`, `Burst(effect, cent
 </components></node>
 ```
 
-- **Time:** it updates on `SceneUpdateEvent` (`SubscribeInScene`, so a scene that is not active does nothing and draws nothing) by `deltaTime`; a held frame has 0 and moves nothing. `playOnStart` calls `Play()` when the component is attached; a one-shot effect fires at the first update.
+- **Time:** it updates on `SceneUpdateEvent` (`SubscribeInScene`, so a scene that is not active does nothing and draws nothing) by `deltaTime`; a held frame has 0 and moves nothing. `playOnStart` calls `Play()` when the component is attached; a one-shot effect fires at the first update. A disabled emitter is frozen and not drawn, its `NeedsFrames()` false, and such a one-shot fires once it is enabled.
 - **Code:** `Play`, `Stop`, `Clear`, `Burst(x, y, count, tint)` (scene units; `count` -1 is the effect's `burstCount`, `tint` multiplies the color of these particles only), `IsEmitting`, `GetLiveCount`, `NeedsFrames`, `GetSimulation`. **Action:** an `InputEvents::ActionEvent` named `burstAction` bursts `burstCount` at the center of the node's rect; empty is none.
 - **Edits take effect at once:** the effect is read on every update and at draw time, so an inspector edit needs no restart; a larger `maxParticles` reserves the pool and the geometry vectors again at the next update (the only allocation after the first).
 - **Sprite:** `spriteId` resolves through `TextureLibrary` (the part of the texture is its `srcRect`), else `texturePath` is the whole texture. An unknown sprite is one `LOG_ERROR` and plain squares. A change of either field loads the texture again. `SetTexture()` hands it a texture made from pixels (it lasts until the sprite or path changes).

@@ -37,6 +37,7 @@ namespace BECore {
     }  // namespace
 
     AssetPanelWidget::~AssetPanelWidget() {
+        _panelHandle.Reset();
         _barHandle.Reset();
         EndBarFrame();
         // The members are destroyed after this body, so the models can still be told
@@ -110,6 +111,21 @@ namespace BECore {
         }
         _interpreter.Prepare(_holder.Current());
         SyncModels();
+        SyncPanelRegistration(*asset);
+    }
+
+    void AssetPanelWidget::SyncPanelRegistration(const PanelAsset& asset) {
+        if (asset.window != PanelWindowKind::Docked) {
+            _panelHandle.Reset();
+        } else if (!_panelHandle || _panelId != asset.id) {
+            _panelId = asset.id;
+            _panelHandle = EditorPanelRegistry::GetInstance().Register(PoolString::Intern(StringView(_panelId)), *this);
+        }
+    }
+
+    void AssetPanelWidget::SetOpen(bool open) {
+        _open = open;
+        _fade.Snap(open);
     }
 
     void AssetPanelWidget::SyncModels() {

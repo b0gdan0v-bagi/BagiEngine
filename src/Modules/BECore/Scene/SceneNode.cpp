@@ -23,6 +23,17 @@ namespace BECore {
         return nullptr;
     }
 
+    SceneNode::~SceneNode() {
+        for (const auto& component : _components) {
+            Detach(*component);
+        }
+        for (const auto& child : _children) {
+            if (child->_parent == this) {
+                child->_parent = nullptr;
+            }
+        }
+    }
+
     SceneNode* SceneNode::GetParent() const {
         return _parent;
     }
@@ -73,7 +84,6 @@ namespace BECore {
         auto typeName = PoolString::Intern(component->GetTypeMeta().typeName);
         RemoveComponent(typeName);
 
-        component->_scene = _scene;
         component->_node = this;
         _components.push_back(component);
         if (_scene) {
@@ -91,6 +101,7 @@ namespace BECore {
             if (_scene) {
                 _scene->RemoveUpdaters(**it, {});
             }
+            Detach(**it);
             _components.erase(it);
             if (_scene) {
                 _scene->ComponentsChanged({});
@@ -112,13 +123,18 @@ namespace BECore {
         _parent = parent;
 
         for (auto& comp : _components) {
-            comp->_scene = scene;
             comp->_node = this;
             comp->OnAttached();
         }
 
         for (auto& child : _children) {
             child->WireToScene(scene, this);
+        }
+    }
+
+    void SceneNode::Detach(IComponent& component) const {
+        if (component._node == this) {
+            component._node = nullptr;
         }
     }
 

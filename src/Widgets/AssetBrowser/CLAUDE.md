@@ -2,7 +2,7 @@
 
 The editor's view of the content files. Editor only: the folder is in the `BE_WITH_EDITOR` regex of `src/CMakeLists.txt` (`.claude/rules/widgets-module.md`).
 
-The window is an asset, `config/panels/AssetBrowserPanel.xml` (`Asset Browser###AssetBrowser`, hidden at start and in no default dock, `view.assetBrowser`; the format: `src/Widgets/PanelAssets/CLAUDE.md`), over `AssetBrowserPanelModel` and the slots of `AssetBrowserSlots`: the toolbar, the line of the selected file and the empty state are the asset's, the folder tree (`assetFolders`) and the grid (`assetGrid`) are C++.
+The window is an asset, `config/panels/AssetBrowserPanel.xml` (`Asset Browser###AssetBrowser`, hidden at start, docked by the ready layouts of the UI and Animation workspaces, `view.assetBrowser`; the format: `src/Widgets/PanelAssets/CLAUDE.md`), over `AssetBrowserPanelModel` and the slots of `AssetBrowserSlots`: the toolbar, the line of the selected file and the empty state are the asset's, the folder tree (`assetFolders`) and the grid (`assetGrid`) are C++.
 
 ## Catalog
 

@@ -4,6 +4,7 @@
 
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonView.h>
+#include <BECore/Math/Color.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/RefCounted.h>
@@ -49,6 +50,15 @@ namespace BECore {
         MoveOnlyFunction<void()> draw;
     };
 
+    /// The component categories the editor has colours of its own for (`ComponentCategories`); a game's category takes none of these names
+    inline constexpr StringView kBuiltInComponentCategories[] = {"ui", "render", "animation", "audio", "logic"};
+
+    /// A component category as a game declares it (GameEditorTools::AddCategory)
+    struct GameToolCategory {
+        String name;  // what its components write in `BE_CLASS(..., CATEGORY=<name>)`
+        Color color;  // what the editor draws their nodes in
+    };
+
     /// A registered command. Whoever calls it holds it, because the call may take it out of the registry
     struct GameToolCommandEntry : public RefCounted {
         String method;  // the control method, `<prefix>.<name>`
@@ -62,7 +72,7 @@ namespace BECore {
     };
 
     /**
-     * @brief The editor commands and debug panels of the active game (IGame::RegisterEditorTools).
+     * @brief The editor commands, debug panels and component categories of the active game (IGame::RegisterEditorTools).
      *
      * GameManager owns the one instance, activates it for the game that became active and clears it before that game stops. A command is a control method
      * `<prefix>.<name>` while it is registered. The contract, the naming and the lifetime: `.claude/rules/games-editor-tools.md`. Main thread only.
@@ -91,6 +101,9 @@ namespace BECore {
         /// Registers a panel; refused as a command is, by its id and its draw callback
         void AddPanel(GameToolPanel panel);
 
+        /// Registers a category. Refused with one error line: no activated game, a name that is not `[a-z0-9-]+`, is repeated or is a built-in one
+        void AddCategory(GameToolCategory category);
+
         /// Checks @p arguments against the parameters of the command of @p method and runs it: unknown_method, invalid_params, else what the callback returns.
         /// Whether the callback wrote one complete value is the caller's check. The command may switch the game
         [[nodiscard]] std::expected<void, ControlError> Invoke(StringView method, JsonView arguments, JsonWriter& result);
@@ -106,6 +119,14 @@ namespace BECore {
         [[nodiscard]] const Vector<IntrusivePtr<GameToolPanelEntry>>& GetPanels() const {
             return _panels;
         }
+
+        /// In the order of registration
+        [[nodiscard]] const Vector<GameToolCategory>& GetCategories() const {
+            return _categories;
+        }
+
+        /// The category of @p name, or null; the pointer holds until the lists change
+        [[nodiscard]] const GameToolCategory* FindCategory(StringView name) const;
 
         /// The game name as the methods start with it; empty without an activated game
         [[nodiscard]] const String& GetPrefix() const {
@@ -128,6 +149,7 @@ namespace BECore {
         PoolString _gameName;
         Vector<IntrusivePtr<GameToolCommandEntry>> _commands;
         Vector<IntrusivePtr<GameToolPanelEntry>> _panels;
+        Vector<GameToolCategory> _categories;
         uint64_t _version = 0;
     };
 

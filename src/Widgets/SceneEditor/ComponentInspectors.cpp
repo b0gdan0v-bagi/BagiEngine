@@ -15,18 +15,44 @@
 #include <Widgets/Feedback/TouchFlashDraw.h>
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
-#include <Widgets/ImGuiFonts.h>
+#include <Widgets/SceneEditor/ComponentDefaults.h>
+#include <Widgets/SceneEditor/DefaultMarkDraw.h>
+#include <Widgets/SceneEditor/FieldTooltips.h>
 #include <Widgets/SceneEditor/ImGuiPropertyVisitor.h>
+#include <Widgets/SceneEditor/NumberField.h>
 #include <imgui.h>
 
 namespace BECore {
 
     namespace {
 
+        constexpr float kSourceRectFieldWidth = 60.0f;
+        /// Pixels of the source rect per pixel of mouse travel
+        constexpr double kSourceRectDragSpeed = 0.5;
+
         HashMap<uint64_t, InspectorFunc>& GetRegistry() {
             static HashMap<uint64_t, InspectorFunc> reg;
             return reg;
         }
+
+        /// The help of the component being inspected, for ShowFieldHelp: a custom inspector gets its component alone, so there is no argument to pass it by
+        const ComponentFieldHelp* _activeHelp = nullptr;
+
+        /// While it lives, ShowFieldHelp answers with @p help; null: with nothing
+        class ScopedActiveHelp {
+        public:
+            explicit ScopedActiveHelp(const ComponentFieldHelp* help) : _previous(_activeHelp) {
+                _activeHelp = help;
+            }
+            ~ScopedActiveHelp() {
+                _activeHelp = _previous;
+            }
+            ScopedActiveHelp(const ScopedActiveHelp&) = delete;
+            ScopedActiveHelp& operator=(const ScopedActiveHelp&) = delete;
+
+        private:
+            const ComponentFieldHelp* _previous;
+        };
 
         /// The marks of a component whose inspector does not draw field by field, each flashing with its field
         void DrawMarkLines(const ComponentTouches& touches) {
@@ -34,6 +60,30 @@ namespace BECore {
                 DrawTouchMark(client, field, field);
                 FillItemWithTouchFlash(touches.highlights.FieldAlpha(touches.nodeId, touches.component, field));
             });
+        }
+
+        /// The differences of a component whose inspector does not draw field by field, a line each; the field whose arrow was clicked, or empty
+        StringView DrawDifferenceLines(Span<const ComponentFieldDifference> differences) {
+            StringView clicked;
+            for (const ComponentFieldDifference& difference : differences) {
+                const float left = ImGui::GetCursorScreenPos().x;
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextDisabled("%.*s differs from the default", static_cast<int>(difference.field.size()), difference.field.data());
+                ShowFieldHelp(difference.field);
+                if (DrawDefaultMark(difference, left, ImGui::GetItemRectMin().y - ImGui::GetStyle().FramePadding.y, ImGui::GetItemRectMax().y)) {
+                    clicked = difference.field;
+                }
+            }
+            return clicked;
+        }
+
+        bool DrawSourceRectNumber(StringView name, const char* id, float& value) {
+            FieldPresentation::Presentation presentation = FieldPresentation::Describe(FieldAttributes{}, FieldPresentation::NumberKind::Float);
+            presentation.speed = kSourceRectDragSpeed;
+            if (_activeHelp != nullptr) {
+                presentation.tooltip = _activeHelp->Of("srcRect");
+            }
+            return DrawNumber(name, id, presentation, value, ImGuiDataType_Float);
         }
 
         bool InspectSpriteRenderer(SpriteRendererComponent& s) {
@@ -71,6 +121,7 @@ namespace BECore {
                 }
                 ImGui::EndCombo();
             }
+            ShowFieldHelp("spriteId");
 
             ImGui::Separator();
 
@@ -118,6 +169,7 @@ namespace BECore {
                 s.ReloadTexture();
                 changed = true;
             }
+            ShowFieldHelp("texturePath");
 
             ImGui::SameLine();
             if (IconButton(ICON_LC_REFRESH_CW, "Rescan the assets folder for textures", "tex_refresh")) {
@@ -125,29 +177,16 @@ namespace BECore {
             }
 
             ImGui::TextUnformatted("Source Rect:");
+            ShowFieldHelp("srcRect");
 
-            {
-                const ScopedMonoFont mono;
-                ImGui::PushItemWidth(60.0f);
-                if (ImGui::DragFloat("X##srcRect_x", &s._srcRect.x, 0.5f)) {
-                    changed = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::DragFloat("Y##srcRect_y", &s._srcRect.y, 0.5f)) {
-                    changed = true;
-                }
-                ImGui::PopItemWidth();
-
-                ImGui::PushItemWidth(60.0f);
-                if (ImGui::DragFloat("W##srcRect_w", &s._srcRect.w, 0.5f, 0.0f)) {
-                    changed = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::DragFloat("H##srcRect_h", &s._srcRect.h, 0.5f, 0.0f)) {
-                    changed = true;
-                }
-                ImGui::PopItemWidth();
-            }
+            ImGui::PushItemWidth(kSourceRectFieldWidth);
+            changed |= DrawSourceRectNumber("x", "srcRect_x", s._srcRect.x);
+            ImGui::SameLine();
+            changed |= DrawSourceRectNumber("y", "srcRect_y", s._srcRect.y);
+            changed |= DrawSourceRectNumber("w", "srcRect_w", s._srcRect.w);
+            ImGui::SameLine();
+            changed |= DrawSourceRectNumber("h", "srcRect_h", s._srcRect.h);
+            ImGui::PopItemWidth();
 
             if (lockedBySprite) {
                 ImGui::EndDisabled();
@@ -169,6 +208,7 @@ namespace BECore {
                 }
                 ImGui::EndCombo();
             }
+            ShowFieldHelp("fit");
 
             // Blend and flip are the node's choices too (the rotation is on the TransformComponent)
             const auto& blendNames = EnumUtils<BlendMode>::Names();
@@ -186,14 +226,17 @@ namespace BECore {
                 }
                 ImGui::EndCombo();
             }
+            ShowFieldHelp("blend");
 
             if (ImGui::Checkbox("Flip X##sprite_flip_x", &s._flipX)) {
                 changed = true;
             }
+            ShowFieldHelp("flipX");
             ImGui::SameLine();
             if (ImGui::Checkbox("Flip Y##sprite_flip_y", &s._flipY)) {
                 changed = true;
             }
+            ShowFieldHelp("flipY");
 
             return changed;
         }
@@ -205,7 +248,7 @@ namespace BECore {
 
         // Action combo; noneLabel is shown when current is empty ("(none)" / "(any)"), showAdd adds a text field and
         // a button to register a new action
-        bool ActionCombo(const char* label, PoolString& current, const char* noneLabel, bool showAdd) {
+        bool ActionCombo(const char* label, StringView field, PoolString& current, const char* noneLabel, bool showAdd) {
             const auto& entries = ActionsLibrary::GetInstance().GetAll();
             bool changed = false;
 
@@ -235,6 +278,7 @@ namespace BECore {
                 }
                 ImGui::EndCombo();
             }
+            ShowFieldHelp(field);
 
             if (showAdd) {
                 static char newActionBuf[128] = {};
@@ -252,7 +296,7 @@ namespace BECore {
         }
 
         bool InspectClickable(ClickableComponent& c) {
-            bool changed = ActionCombo("Action##clickable_action", c._actionName, "(none)", true);
+            bool changed = ActionCombo("Action##clickable_action", "actionName", c._actionName, "(none)", true);
 
             const auto& shapeNames = EnumUtils<ClickableShape>::Names();
             const auto& shapeValues = EnumUtils<ClickableShape>::Values();
@@ -269,10 +313,12 @@ namespace BECore {
                 }
                 ImGui::EndCombo();
             }
+            ShowFieldHelp("shape");
 
             if (ImGui::Checkbox("Blocks input##clickable_blocks_input", &c._blocksInput)) {
                 changed = true;
             }
+            ShowFieldHelp("blocksInput");
             return changed;
         }
 
@@ -282,7 +328,7 @@ namespace BECore {
         }();
 
         bool InspectChangeToRandomColor(ChangeToRandomColorDebugComponent& c) {
-            return ActionCombo("Filter##random_color_filter", c._actionFilter, "(any)", false);
+            return ActionCombo("Filter##random_color_filter", "actionFilter", c._actionFilter, "(any)", false);
         }
 
         const bool _registeredChangeToRandomColor = [] {
@@ -296,25 +342,51 @@ namespace BECore {
         GetRegistry()[typeHash] = eastl::move(func);
     }
 
-    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches) {
+    void ShowFieldHelp(StringView field) {
+        if (_activeHelp != nullptr) {
+            WrappedItemTooltip(_activeHelp->Of(field));
+        }
+    }
+
+    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches, ComponentDefaults* defaults, FieldTooltips* tooltips) {
         if (!component) {
             return false;
         }
 
+        Optional<ComponentFieldHelp> help;
+        if (tooltips) {
+            help.emplace(ComponentFieldHelp{*tooltips, *component});
+        }
+        const ComponentFieldHelp* const helpOfComponent = help ? &*help : nullptr;
+        const ScopedActiveHelp activeHelp(helpOfComponent);
+
+        const Span<const ComponentFieldDifference> differences = defaults ? defaults->Compare(*component) : Span<const ComponentFieldDifference>{};
+        StringView reset;
+        bool changed = false;
         const auto it = GetRegistry().find(component->GetTypeMeta().typeHash);
         if (it != GetRegistry().end()) {
             if (touches) {
                 DrawMarkLines(*touches);
             }
-            const bool changed = it->second(component);
+            reset = DrawDifferenceLines(differences);
+            changed = it->second(component);
             if (changed && touches) {
                 touches->highlights.DismissComponent(touches->nodeId, touches->component);
             }
-            return changed;
+        } else {
+            ImGuiPropertyVisitor visitor(touches, differences, helpOfComponent);
+            changed = component->AcceptPropertyVisitor(visitor);
+            reset = visitor.ResetRequest();
         }
 
-        ImGuiPropertyVisitor visitor(touches);
-        return component->AcceptPropertyVisitor(visitor);
+        // After the inspector has run, which reads the differences and may hold references into the fields
+        if (!reset.empty() && defaults->Reset(*component, reset)) {
+            changed = true;
+            if (touches) {
+                touches->highlights.Dismiss(touches->nodeId, touches->component, reset);
+            }
+        }
+        return changed;
     }
 
 }  // namespace BECore

@@ -1308,6 +1308,26 @@ namespace BECore::Tests {
         EXPECT_EQ(XmlText(FindSceneElement(ConfigRoot(), "Main")), expected);
     }
 
+    TEST_F(SceneEditorSaveTest, ADisabledComponentIsSavedAsEnabledFalseAndAnEnabledOneWithoutTheAttribute) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kCanonicalScenesXml));
+        Scene& main = GetScene("Main");
+        const auto transform = Require(FindTopLevelNode(main, "Hero"_intern)).GetComponent<TransformComponent>();
+        ASSERT_TRUE(transform);
+        transform->SetEnabled(false);
+        String expected = XmlText(FindSceneElement(ConfigRoot(), "Main"));
+        constexpr StringView kOldType = "type=\"TransformComponent\"";
+        const size_t at = expected.find(kOldType.data());
+        ASSERT_NE(at, String::npos);
+        expected.insert(at + kOldType.size(), " enabled=\"false\"");
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+
+        EXPECT_EQ(XmlText(FindSceneElement(ConfigRoot(), "Main")), expected);
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+        const SceneNode& hero = Require(FindTopLevelNode(Reloaded("Main"), "Hero"_intern));
+        EXPECT_FALSE(Require(hero.GetComponent<TransformComponent>()).IsEnabled());
+    }
+
     /// The unsaved mark of the Scene Editor itself, which needs the engine services
     class SceneEditorUnsavedTest : public SceneEditorSaveTest {
     protected:

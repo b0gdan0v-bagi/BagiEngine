@@ -11,6 +11,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <Events/ConfigEvents.h>
 #include <Events/SceneEvents.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -20,7 +21,10 @@
 #include <Widgets/Feedback/TouchHighlights.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/PanelAssets/PanelBars.h>
+#include <Widgets/SceneEditor/Breadcrumbs.h>
+#include <Widgets/SceneEditor/ComponentCard.h>
 #include <Widgets/SceneEditor/ComponentInspectors.h>
+#include <Widgets/SceneEditor/FieldHelpEvents.h>
 #include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <Widgets/SceneEditor/SceneAssetDrop.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
@@ -79,10 +83,24 @@ namespace BECore {
         Subscribe<SceneEvents::SceneNodeEditedEvent, &SceneEditorWidget::OnNodeEdited>(this);
         Subscribe<SceneNodeAddedEvent, &SceneEditorWidget::OnNodeAdded>(this);
         Subscribe<UIRectDragEvent, &SceneEditorWidget::OnUIRectDrag>(this);
+        Subscribe<ConfigEvents::ConfigChangedEvent, &SceneEditorWidget::OnConfigChanged>(this);
+        Subscribe<FieldHelpSavedEvent, &SceneEditorWidget::OnFieldHelpSaved>(this);
+        _fieldHelp.Reload();
         _documents = CoreManager::GetEditorDocuments().Add([this](Vector<EditorDocumentState>& out) { AppendDocuments(out); });
         _hostHandle = SceneEditorHostRegistry::GetInstance().Register(*this);
         _componentsSlot = PanelSlots::GetInstance().Register(kComponentsSlot, [this] { DrawComponents(); });
+        _panelHandle = EditorPanelRegistry::GetInstance().Register(EditorPanelIds::kSceneEditor, *this);
         return true;
+    }
+
+    void SceneEditorWidget::OnConfigChanged(const ConfigEvents::ConfigChangedEvent& event) {
+        if (FieldHelp::IsHelpConfig(event.name)) {
+            _fieldHelp.Reload();
+        }
+    }
+
+    void SceneEditorWidget::OnFieldHelpSaved(const FieldHelpSavedEvent& /*event*/) {
+        _fieldHelp.Reload();
     }
 
     SceneNode* SceneEditorWidget::FindInspected() const {
@@ -149,6 +167,36 @@ namespace BECore {
             if (node != nullptr && !node->HasEditorFlag(EditorFlags::Locked)) {
                 SceneAddComponentRequestEvent::Emit(_lastScene, node);
             }
+        }
+        if (event.commandId == EditorCommandIds::kSceneEditorSelectionBack) {
+            StepSelectionHistory(false);
+        }
+        if (event.commandId == EditorCommandIds::kSceneEditorSelectionForward) {
+            StepSelectionHistory(true);
+        }
+    }
+
+    void SceneEditorWidget::StepSelectionHistory(bool forward) {
+        SceneManager* const sceneManager = CoreManager::FindSceneManager();
+        Scene* const scene = sceneManager != nullptr ? sceneManager->GetActiveScene() : nullptr;
+        // The history of a replaced scene is cleared only by the next Update
+        if (scene == nullptr || scene != _lastScene) {
+            return;
+        }
+        SceneNode& root = scene->GetRootNode();
+        const SceneNode* const current = FindInspected();
+        const uint64_t selected = current != nullptr ? current->GetRuntimeId() : 0;
+        const auto isAlive = [&root](uint64_t id) { return FindNodeByRuntimeId(root, id) != nullptr; };
+        const uint64_t target = forward ? _selectionHistory.Forward(selected, isAlive) : _selectionHistory.Back(selected, isAlive);
+        if (const SceneNode* const node = FindNodeByRuntimeId(root, target)) {
+            _focusRequested = true;
+            SelectRevealed(*scene, node);
+        }
+    }
+
+    void SceneEditorWidget::SelectRevealed(Scene& scene, const SceneNode* node) {
+        if (HierarchyPanel::Reveal(scene, _hierarchy, &scene, node)) {
+            _selection.Set(_hierarchy.selected);
         }
     }
 
@@ -382,6 +430,7 @@ namespace BECore {
             // A replaced scene frees its nodes: the selection would dangle
             _hierarchy.Reset();
             _selection.Clear();
+            _selectionHistory.Clear();
             ResetUISelection();
             _uiFileSession.Clear();
             _lastScene = scene;
@@ -405,12 +454,14 @@ namespace BECore {
         ImGui::EndChild();
         SyncSelection(*scene);
         ApplyHierarchyAnswers(*scene);
+        _selectionHistory.Record(_hierarchy.selected != nullptr ? _hierarchy.selected->GetRuntimeId() : 0);
         AnnounceSelection(scene);
         AnnounceUIElement(scene);
 
         ImGui::SameLine();
         ImGui::BeginChild("##inspector", ImVec2(0.0f, 0.0f), true);
 
+        DrawSelectionPath(*scene);
         if (_hierarchy.selected != nullptr && _uiSelectionNode != _hierarchy.selected) {
             ResetUISelection();
             _uiSelectionNode = _hierarchy.selected;
@@ -422,6 +473,18 @@ namespace BECore {
         ImGui::EndChild();
 
         ImGui::End();
+    }
+
+    void SceneEditorWidget::DrawSelectionPath(Scene& scene) {
+        if (_hierarchy.selected == nullptr) {
+            return;
+        }
+        if (const SceneNode* const ancestor = DrawBreadcrumbs(*_hierarchy.selected, _pathAncestors)) {
+            SelectRevealed(scene, ancestor);
+            // Told in the frame of the click, like a click in the hierarchy, so a model drops the edit of the node that was left
+            AnnounceSelection(&scene);
+            AnnounceUIElement(&scene);
+        }
     }
 
     void SceneEditorWidget::Draw() {
@@ -509,34 +572,28 @@ namespace BECore {
 
         TouchHighlights& highlights = TouchHighlights::GetInstance();
         const uint64_t nodeId = _hierarchy.selected->GetRuntimeId();
+        const ComponentCardContext card{_componentDefaults, highlights, nodeId};
         const auto& components = _hierarchy.selected->GetComponents();
         PoolString componentToRemove;
         for (size_t i = 0; i < components.size(); ++i) {
             const auto& component = components[i];
             const auto& typeMeta = component->GetTypeMeta();
 
-            ImGui::PushID(static_cast<int>(i));
-
-            bool visible = true;
-            const bool isOpen = ImGui::CollapsingHeader(typeMeta.typeName.data(), &visible);
-            FillItemWithTouchFlash(highlights.ComponentAlpha(nodeId, typeMeta.typeName));
-
-            if (isOpen) {
-                ImGui::Indent();
+            const ComponentCardAnswer answer = DrawComponentCard(static_cast<int>(i), *component, card, [&]() -> bool {
+                bool changed = false;
                 if (typeMeta.typeHash == UICanvasComponent::GetStaticTypeMeta().typeHash && RenderUIElements(static_cast<UICanvasComponent&>(*component.Get()))) {
-                    _isDirty = true;
+                    changed = true;
                     highlights.Dismiss(nodeId, typeMeta.typeName, kCanvasElementsField);
                 }
                 const ComponentTouches touches{highlights, nodeId, typeMeta.typeName};
-                if (RenderComponentInspector(component.Get(), &touches)) {
-                    _isDirty = true;
-                }
-                ImGui::Unindent();
+                changed |= RenderComponentInspector(component.Get(), &touches, &_componentDefaults, &_fieldTooltips);
+                return changed;
+            });
+            if (answer.changed) {
+                _isDirty = true;
             }
 
-            ImGui::PopID();
-
-            if (!visible) {
+            if (answer.remove) {
                 componentToRemove = PoolString::Intern(typeMeta.typeName);
                 break;
             }

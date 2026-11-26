@@ -42,9 +42,17 @@ namespace BECore {
         inline constexpr auto kViewPreferences = "view.preferences"_intern;
         inline constexpr auto kViewResetLayout = "view.resetLayout"_intern;
         inline constexpr auto kViewSaveLayout = "view.saveLayout"_intern;
+        /// Each shows one workspace (Workspaces.h)
+        inline constexpr auto kWorkspaceScene = "workspace.scene"_intern;
+        inline constexpr auto kWorkspaceUI = "workspace.ui"_intern;
+        inline constexpr auto kWorkspaceAnimation = "workspace.animation"_intern;
+        inline constexpr auto kWorkspaceProfiling = "workspace.profiling"_intern;
         inline constexpr auto kSceneSave = "scene.save"_intern;
         /// The inspector's Add Component button: `SceneEditorWidget` asks for the Add Component dialog of the selected node (a locked one gets none)
         inline constexpr auto kSceneEditorAddComponent = "sceneEditor.addComponent"_intern;
+        /// Steps through the primary selections of the Scene Editor: `SceneEditorWidget` selects and reveals the node (SelectionHistory)
+        inline constexpr auto kSceneEditorSelectionBack = "sceneEditor.selectionBack"_intern;
+        inline constexpr auto kSceneEditorSelectionForward = "sceneEditor.selectionForward"_intern;
         inline constexpr auto kConfigSave = "config.save"_intern;
         inline constexpr auto kTextureSave = "texture.save"_intern;
         /// Play / Stop of the main toolbar: `EditorPlayModel::PressPlay`, then the pause of the model is written to the engine (state only until `editor-play-in-editor`)
@@ -135,6 +143,13 @@ namespace BECore {
         inline constexpr auto kActivityClear = "activity.clear"_intern;
         /// The button of a row of the Activity panel: ActivityPanelModel selects the node the argument names (its runtime id), only while its panel is open
         inline constexpr auto kActivitySelectNode = "activity.selectNode"_intern;
+        /// Show and hide the Field Help panel (the `command` of its asset); hidden at start, no default chord
+        inline constexpr auto kViewFieldHelp = "view.fieldHelp"_intern;
+        /// The Field Help panel's rows and buttons. FieldHelpPanelModel owns them and runs them only while its panel is open; select takes the name of a
+        /// field of the chosen class as the argument
+        inline constexpr auto kFieldHelpSelect = "fieldHelp.select"_intern;
+        inline constexpr auto kFieldHelpSave = "fieldHelp.save"_intern;
+        inline constexpr auto kFieldHelpRevert = "fieldHelp.revert"_intern;
         /// The Game panel's buttons (config/panels/GamePanel.xml names them). GamePanelAssetModel owns them and runs them only while its panel is open;
         /// perform and call take the index of a row of the actions or the methods as the argument, copyState and reset take none
         inline constexpr auto kGamePanelReset = "gamePanel.reset"_intern;

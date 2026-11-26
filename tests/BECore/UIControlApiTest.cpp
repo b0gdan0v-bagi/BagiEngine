@@ -790,6 +790,26 @@ namespace BECore::Tests {
         EXPECT_EQ(issues.Size(), 0u);
     }
 
+    TEST_F(UIControlApiTest, ADisabledCanvasIsNotVisibleAndCannotBeClickedAlsoWhenItWasNeverDrawn) {
+        _manager->SetActiveScene("Main"_intern);
+        Require(Canvas("Main", "Hud")).SetEnabled(false);
+
+        const ControlReply never = Call("ui_click", Click("Off"));
+        EXPECT_EQ(never.ErrorCode(), "not_clickable");
+        EXPECT_NE(never.ErrorMessage().find("disabled"), String::npos) << never.ErrorMessage().c_str();
+
+        Show("Main");
+        const ControlReply tree = Call("ui_tree");
+        ASSERT_TRUE(tree.IsOk()) << tree.ErrorMessage();
+        const JsonView hud = FindCanvas(tree.Result(), "Hud");
+        ASSERT_TRUE(hud.IsValid());
+        EXPECT_FALSE(BoolMember(hud, "visible"));
+        EXPECT_FALSE(BoolMember(hud, "takesInput"));
+        const ControlReply drawn = Call("ui_click", Click("Off"));
+        EXPECT_EQ(drawn.ErrorCode(), "not_clickable");
+        EXPECT_NE(drawn.ErrorMessage().find("disabled"), String::npos) << drawn.ErrorMessage().c_str();
+    }
+
     TEST_F(UIControlApiTest, ATreeReportsCanvasesElementsAndTheirRects) {
         Show("Main");
 

@@ -136,6 +136,33 @@ namespace BECore::Tests {
         EXPECT_EQ(CoreManager::GetAudio().GetPlayingCount(), 0u);
     }
 
+    TEST_F(AudioSourceComponentTest, DisablingStopsItsSoundAndEnablingDoesNotStartItAgain) {
+        auto source = Source("OnAction");
+        source->Play();
+        ASSERT_TRUE(source->IsPlaying());
+
+        source->SetEnabled(false);
+        EXPECT_FALSE(source->IsPlaying());
+        EXPECT_EQ(CoreManager::GetAudio().GetPlayingCount(), 0u);
+
+        source->SetEnabled(true);
+        Frame();
+        EXPECT_FALSE(source->IsPlaying());
+    }
+
+    TEST_F(AudioSourceComponentTest, PlayOnStartOfADisabledSourceWaitsForTheFirstUpdateOnceEnabled) {
+        auto source = Source("OnStart");
+        source->SetEnabled(false);
+        Frame();
+        EXPECT_TRUE(backend->starts.empty());
+
+        source->SetEnabled(true);
+        EXPECT_TRUE(backend->starts.empty()) << "not at the enabling itself";
+        Frame();
+        EXPECT_EQ(backend->starts.size(), 1u);
+        EXPECT_TRUE(source->IsPlaying());
+    }
+
     TEST_F(AudioSourceComponentTest, AClipThatDoesNotLoadPlaysNothingAndIsRecorded) {
         auto source = Source("Missing");
         ASSERT_NE(source->GetLoadedClip(), nullptr);

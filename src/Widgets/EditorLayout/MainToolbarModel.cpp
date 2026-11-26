@@ -11,9 +11,15 @@ namespace BECore {
 
     void MainToolbarModel::Update() {
         const IEditorLayoutHost* host = EditorLayoutHostRegistry::GetInstance().Get();
-        const EditorPlayModel* play = host != nullptr ? host->GetPlayModel() : nullptr;
+        _view = MainToolbarView{};
+        if (host == nullptr) {
+            return;
+        }
+        const Optional<EditorWorkspace> workspace = host->GetActiveWorkspace();
+        _view.hasWorkspace = workspace.has_value();
+        _view.workspace = workspace.value_or(EditorWorkspace::Scene);
+        const EditorPlayModel* play = host->GetPlayModel();
         if (play == nullptr) {
-            _view = MainToolbarView{};
             return;
         }
         const EditorPlayState state = play->GetState();

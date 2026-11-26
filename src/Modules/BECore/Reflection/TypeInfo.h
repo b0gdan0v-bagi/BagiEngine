@@ -118,6 +118,16 @@ namespace BECore {
         StringView factoryElementName{};
         size_t offset = 0;
         void* (*address)(void* object) = nullptr;
+        /// Writes the field of @p object (as `address` takes it) under `name`, as `Serialize` does; null for a type that cannot be written
+        void (*save)(const void* object, ISerializer& serializer) = nullptr;
+        /**
+         * @brief Replaces the field of @p object by what @p deserializer, which holds no error yet, has under `name`; null for a type that cannot be read
+         *
+         * The value is read into a default-made one and moved in only when no error came of it, so a refused read keeps the field and
+         * nothing of the old value survives an accepted one: a key that is not there (an empty `Optional`) gives the default-made value.
+         * A type that is not default constructible and movable is read in place.
+         */
+        void (*load)(void* object, IDeserializer& deserializer) = nullptr;
     };
 
     /**
@@ -239,6 +249,29 @@ namespace BECore {
         }
 
         template <typename T, size_t I>
+        void SaveFieldThunk(const void* object, ISerializer& serializer) {
+            constexpr auto info = std::get<I>(ReflectionTraits<T>::fields);
+            Ser::Save(serializer, static_cast<const T*>(object)->*(info.ptr), SerializedFieldName(info.name));
+        }
+
+        template <typename T, size_t I>
+        void LoadFieldThunk(void* object, IDeserializer& deserializer) {
+            constexpr auto info = std::get<I>(ReflectionTraits<T>::fields);
+            constexpr auto ptr = info.ptr;
+            using Member = typename MemberPointerTraits<std::remove_cv_t<decltype(ptr)>>::Member;
+            Member& field = static_cast<T*>(object)->*ptr;
+            if constexpr (std::is_default_constructible_v<Member> && std::is_move_assignable_v<Member>) {
+                Member read{};
+                Ser::Load(deserializer, read, SerializedFieldName(info.name));
+                if (!deserializer.HasErrors()) {
+                    field = std::move(read);
+                }
+            } else {
+                Ser::Load(deserializer, field, SerializedFieldName(info.name));
+            }
+        }
+
+        template <typename T, size_t I>
         FieldDesc MakeFieldDesc() {
             constexpr auto info = std::get<I>(ReflectionTraits<T>::fields);
             constexpr auto ptr = info.ptr;
@@ -253,6 +286,13 @@ namespace BECore {
             desc.factoryElementName = FactoryElementNameOf<Member>();
             desc.offset = SubobjectOffset<T>([](const T* object) { return static_cast<const void*>(std::addressof(object->*ptr)); });
             desc.address = &FieldAddress<T, ptr>;
+            if constexpr (Ser::HasDataAccessor<Member>) {
+                desc.save = &SaveFieldThunk<T, I>;
+                // A `TextView` is never read back (`DataAccessor<TextView>`), so a load into a default-made one would empty the field
+                if constexpr (!std::is_same_v<Member, TextView>) {
+                    desc.load = &LoadFieldThunk<T, I>;
+                }
+            }
             return desc;
         }
 

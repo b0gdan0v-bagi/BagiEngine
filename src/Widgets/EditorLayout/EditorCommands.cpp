@@ -17,6 +17,8 @@ namespace BECore {
         constexpr KeyChord kF6{ImGuiKey_F6, 0};
         constexpr KeyChord kF7{ImGuiKey_F7, 0};
         constexpr KeyChord kF8{ImGuiKey_F8, 0};
+        constexpr KeyChord kAltLeft{ImGuiKey_LeftArrow, kChordModAlt};
+        constexpr KeyChord kAltRight{ImGuiKey_RightArrow, kChordModAlt};
 
         const Vector<EditorCommand>& CommandTable() {
             using namespace EditorCommandIds;
@@ -26,8 +28,14 @@ namespace BECore {
                 {kViewPreferences, "Preferences", kCtrlComma, true},
                 {kViewResetLayout, "Reset Layout", std::nullopt, true},
                 {kViewSaveLayout, "Save Layout As", std::nullopt, true},
+                {kWorkspaceScene, "Workspace: Scene", std::nullopt, true},
+                {kWorkspaceUI, "Workspace: UI", std::nullopt, true},
+                {kWorkspaceAnimation, "Workspace: Animation", std::nullopt, true},
+                {kWorkspaceProfiling, "Workspace: Profiling", std::nullopt, true},
                 {kSceneSave, "Save Scene", kCtrlS, true},
                 {kSceneEditorAddComponent, "Add Component", std::nullopt, false},
+                {kSceneEditorSelectionBack, "Selection Back", kAltLeft, true},
+                {kSceneEditorSelectionForward, "Selection Forward", kAltRight, true},
                 {kConfigSave, "Save Config", kCtrlShiftS, true},
                 {kTextureSave, "Save Texture", std::nullopt, true},
                 {kGamePlay, "Play / Stop Game", std::nullopt, true},
@@ -82,6 +90,10 @@ namespace BECore {
                 {kViewActivity, "Activity", std::nullopt, true},
                 {kActivityClear, "Activity: Clear", std::nullopt, false},
                 {kActivitySelectNode, "Activity: Select Node", std::nullopt, false},
+                {kViewFieldHelp, "Field Help", std::nullopt, true},
+                {kFieldHelpSelect, "Field Help: Select Field", std::nullopt, false},
+                {kFieldHelpSave, "Field Help: Save", std::nullopt, false},
+                {kFieldHelpRevert, "Field Help: Revert", std::nullopt, false},
                 {kConsolePause, "Console: Pause / Resume", std::nullopt, true},
                 {kConsoleClear, "Console: Clear Log", std::nullopt, true},
                 {kConsoleClearOutput, "Console: Clear Output", std::nullopt, true},

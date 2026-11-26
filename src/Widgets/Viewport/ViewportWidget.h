@@ -12,6 +12,7 @@
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorPanelRegistry.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportInput.h>
@@ -45,7 +46,7 @@ namespace BECore {
     // image has an editor camera (ViewportCamera), a drag on empty ground draws a rubber band, and the gizmo
     // (ViewportGizmos) moves, turns and scales the selected nodes; its keys are read here and handed to the toolbar's model, which runs its commands.
     // The selected canvas element (UIElementSelectedEvent) gets eight handles and an anchor widget (ViewportUIGizmos): a drag writes its style.rect and tells UIRectDragEvent.
-    class ViewportWidget : public IWidget {
+    class ViewportWidget : public IWidget, public IEditorPanel {
         BE_CLASS(ViewportWidget)
     public:
         ViewportWidget() = default;
@@ -57,6 +58,13 @@ namespace BECore {
         bool Initialize(IDeserializer& deserializer) override;
         void Update() override;
         void Draw() override;
+
+        [[nodiscard]] bool IsOpen() const override {
+            return _open;
+        }
+        void SetOpen(bool open) override {
+            _open = open;
+        }
 
     private:
         bool _open = true;  // the window's close button and its `view.*` command; a closed panel is skipped like a hidden dock tab
@@ -91,8 +99,9 @@ namespace BECore {
         // The UI element the scene editor selected (UIElementSelectedEvent), for the handles and the anchor widget of ViewportUIGizmos
         void OnUIElementSelected(const UIElementSelectedEvent& event);
 
-        // The outline of every selected node (ScenePick::SelectionOutlines: its rect and, for a canvas, the canvas bounds) over the image, the primary (the last) in the accent colour and the
-        // others in its muted one, clipped to the panel. Nothing for no selection, another scene, or a node that is no longer in the tree of @p scene; a node hidden by the editor flag is outlined too
+        // The outline of every selected node (ScenePick::SelectionOutlines: its rect and, for a canvas, the canvas bounds) over the image, in the colour of the node's category or, without one, the
+        // accent colour; the primary (the last) in full, the others muted; clipped to the panel. Nothing for no selection, another scene, or a node that is no longer in the tree of @p scene; a node
+        // hidden by the editor flag is outlined too
         void DrawSelectionOutlines(Scene* scene, const ViewportFrame& frame) const;
 
         // A fading outline in the accent colour round every node of @p scene that a client of the control API touched a moment ago (TouchHighlights), in
@@ -139,6 +148,7 @@ namespace BECore {
         bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)
         ViewportBoxSelect _boxSelect;
         ViewportPointer _pointer;  // the held presses and where each goes
+        EditorPanelHandle _panelHandle;
     };
 
 }  // namespace BECore

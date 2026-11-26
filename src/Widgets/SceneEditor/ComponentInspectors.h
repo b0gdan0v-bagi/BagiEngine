@@ -5,7 +5,9 @@
 
 namespace BECore {
 
+    class ComponentDefaults;
     struct ComponentTouches;
+    class FieldTooltips;
 
     /**
      * @brief Inspector function type: renders ImGui widgets for a component
@@ -44,10 +46,26 @@ namespace BECore {
      * With @p touches the fields a client of the control API changed are marked, and an edit removes the mark: the generic inspector marks each field where
      * it stands, a custom one gets a line per mark at its top and an edit of anything removes them all. With no mark and no flash nothing differs.
      *
+     * With @p defaults the fields that differ from the default are marked and have a reset arrow (DrawDefaultMark): the generic inspector beside each field,
+     * a custom one in a line per field at its top. A click resets that field once the inspector has run and removes its touch mark; the answer is true then.
+     * A field at its default draws nothing more.
+     *
+     * With @p tooltips a top-level field of the generic inspector shows its help tooltip in place of the attribute's one, and a custom inspector gets the same
+     * tooltips through ShowFieldHelp.
+     *
      * @param component The component to inspect and edit (must not be null)
      * @param touches What TouchHighlights knows of this component; null draws it unmarked
+     * @param defaults What the component is compared with and reset by; null marks no difference
+     * @param tooltips The help of the fields; null draws no more than the attributes say
      * @return True if any field was changed
      */
-    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches = nullptr);
+    bool RenderComponentInspector(IComponent* component, const ComponentTouches* touches = nullptr, ComponentDefaults* defaults = nullptr, FieldTooltips* tooltips = nullptr);
+
+    /**
+     * @brief For a custom inspector: shows the help of the field of this serialized name while the item drawn last is hovered
+     *
+     * The field is one of the component RenderComponentInspector is drawing. Does nothing outside that call and when it got no tooltips.
+     */
+    void ShowFieldHelp(StringView field);
 
 }  // namespace BECore

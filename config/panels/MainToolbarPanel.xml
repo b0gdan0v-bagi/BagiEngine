@@ -6,6 +6,10 @@
   <elements>
     <element type="PanelRow" id="buttons" align="Center">
       <elements>
+        <element type="PanelButton" id="workspaceScene" text="Scene" enableWhen="play.hasWorkspace" fill="Muted" fillWhen="play.hasWorkspace and play.workspace == Scene" command="workspace.scene" tooltip="The Scene workspace: its own layout and panels"/>
+        <element type="PanelButton" id="workspaceUI" text="UI" enableWhen="play.hasWorkspace" fill="Muted" fillWhen="play.hasWorkspace and play.workspace == UI" command="workspace.ui" tooltip="The UI workspace: its own layout and panels"/>
+        <element type="PanelButton" id="workspaceAnimation" text="Animation" enableWhen="play.hasWorkspace" fill="Muted" fillWhen="play.hasWorkspace and play.workspace == Animation" command="workspace.animation" tooltip="The Animation workspace: its own layout and panels"/>
+        <element type="PanelButton" id="workspaceProfiling" text="Profiling" enableWhen="play.hasWorkspace" fill="Muted" fillWhen="play.hasWorkspace and play.workspace == Profiling" command="workspace.profiling" tooltip="The Profiling workspace: its own layout and panels"/>
         <element type="PanelButton" id="play" icon="play" visible="play.stopped" fill="Accent" command="game.play" tooltip="Play: the editor does not run the game from here yet"/>
         <element type="PanelButton" id="stop" icon="square" visible="!play.stopped" command="game.play" tooltip="Stop: the editor does not run the game from here yet"/>
         <element type="PanelButton" id="pause" icon="pause" enableWhen="play.canPause" fill="Muted" fillWhen="play.paused" command="game.pause" tooltip="Pause or resume the game"/>
