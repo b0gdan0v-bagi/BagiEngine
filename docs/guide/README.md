@@ -22,16 +22,17 @@ A guide for a person who is new to the engine. Each page is one task, done from 
 7. [Input actions](input-actions.md): make a click send a named action and an emitter listen for it with no C++, then read the C++ that listens and press the pad from a Python script.
 8. [A save](save-game.md): give a game a state class, a schema and a slot on disk, read it back into a temporary, and see what a refused file does.
 9. [The editor](editor.md): what each panel is for, one small task across four of them, the hotkeys, what a change does to the files, and how the editor differs in a browser.
+10. [The web build](web-build.md): build the demo for a browser, serve it on your own machine, and see why the page needs two headers and what the single-thread build changes.
 
-Planned, not written yet: the web build, the control API from Python, a test, working with agents, the C++ rules explained, where the data lives.
+Planned, not written yet: the control API from Python, a test, working with agents, the C++ rules explained, where the data lives.
 
 ## Where to start
 
-**You make scenes and screens (a designer, an artist).** Start with "Run the demo", then "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions" and "The editor". Planned next: the web build.
+**You make scenes and screens (a designer, an artist).** Start with "Run the demo", then "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions" and "The editor".
 
 **You write Python (tools, bots, tests).** "Run the demo" shows the game you will drive. Planned next: the control API from Python, a test, and where the data lives.
 
-**You work with coding agents.** "Run the demo", "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "A save" and "The editor" show what an agent changes when it edits content or adds a component. Planned next: working with agents, and the C++ rules explained.
+**You work with coding agents.** "Run the demo", "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "A save", "The editor" and "The web build" show what an agent changes when it edits content or adds a component. Planned next: working with agents, and the C++ rules explained.
 
 ## A game of your own
 

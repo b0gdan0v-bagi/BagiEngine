@@ -154,13 +154,6 @@ import sys
 sys.path.insert(0, "tools/control")
 from bagi_session import GameSession
 
-session = GameSession()
-session.launch(exe="build/macos-debug/bin/BagiDemo", content_overlay=os.path.expanduser("~/bagi-ui-screen"))
-session.step(3)
-print(session.call("ui_click", {"name": "Sound"}))
-session.step(3)
-
-
 def find(element, name):
     if element.get("name") == name:
         return element
@@ -169,9 +162,16 @@ def find(element, name):
             return found
 
 
-canvas = next(c for c in session.call("ui_tree")["canvases"] if c["node"] == "Settings")
-print("checked:", find(canvas["elements"][0], "Sound")["checked"])
-session.close()
+session = GameSession()
+try:
+    session.launch(exe="build/macos-debug/bin/BagiDemo", content_overlay=os.path.expanduser("~/bagi-ui-screen"))
+    session.step(3)
+    print(session.call("ui_click", {"name": "Sound"}))
+    session.step(3)
+    canvas = next(c for c in session.call("ui_tree")["canvases"] if c["node"] == "Settings")
+    print("checked:", find(canvas["elements"][0], "Sound")["checked"])
+finally:
+    session.close()
 ```
 
 Save it as a file and run it from the root of the repository with `python3`. It prints:

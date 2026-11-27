@@ -82,18 +82,20 @@ The `Edit` and `Play` of the viewport matter when you click on it: in `Edit` a c
 
 ## 6. In a browser
 
-The same editor runs in a web page when the game is built for it with the editor (the next page, the web build, tells how the page is made; a build of the page is what you need, and there is no install). The live demo that the [README](../../README.md) links is the game, and the editor is a build of its own.
+The same editor runs in a web page when the game is built for it with the editor ([the web build](web-build.md) tells how the page is made). The live demo that the [README](../../README.md) links is the game, and the editor is a build of its own.
 
-What is different, from the docs (`src/Widgets/EditorLayout/CLAUDE.md`, "The editor in a browser"). Not observed: the browser editor was not run for this page; each line below is read from the code and its notes.
+What is different. The writer built the page (`web-editor`) and drove it in a headless Chromium on a Mac, so the first four lines are seen; the rest is read from the code and its notes (`src/Widgets/EditorLayout/CLAUDE.md`, "The editor in a browser") and **not observed**.
 
-- **A page opens once with a notice**: a window says that nothing you change is kept, and a reload brings back the content the page came with.
-- **Where an edit lives.** The page has a file system in memory. Save writes into it, so the scene is saved for as long as the page lives; the editor's own layout and preferences are kept there too. A reload empties it. Nothing in the docs offers a download, so to keep a change in a browser you copy it out by hand.
+- **A notice opens with the page**: a window says `Nothing you change here is kept: a reload brings back the content the page came with`, with an OK button. Seen.
+- **Where an edit lives.** The page has a file system in memory. Seen: a node added in the hierarchy made the Scene Editor say `(unsaved changes)`; the Save button wrote `Scene saved` and cleared it; after a reload the node was gone. Nothing in the docs offers a download, so to keep a change from a browser you copy it out by hand. The editor's own layout and preferences live in the same memory.
+- **The game runs live.** Seen: there is no `Paused` mark on the viewport and the tweens move, so you can watch an edit work without pressing anything.
+- **The same panels** of the `Scene` workspace, in a page 1600 pixels wide. Seen: the Scene Editor is narrow there and its Inspector is cut off at the right; drag the border between the panels to give it room.
 - **Hidden:** Generate, Export, File changes and the Profiler's Chrome trace, because each needs a program or a folder that a page does not have. Attach is hidden as well: a page opens no link to another program. Preferences has no "Open files with".
-- **The keys.** `Ctrl` or `Cmd` with `S`, `P`, `,` and the other chords of the table above work, and the page stops the browser's own reaction to them (so `Cmd+S` does not open the browser's save dialog). `Ctrl+C`, `V` and `X` are left to the browser, because it allows the clipboard only after a gesture of yours. `Ctrl+W`, `T`, `N` and `Q` belong to the browser and cannot be hotkeys. On a Mac, `Cmd` is the editor's `Ctrl`.
+- **The keys.** `Ctrl` or `Cmd` with `S`, `P`, `,` and the other chords of the table above work, and the page stops the browser's own reaction to them (so `Cmd+S` does not open the browser's save dialog). On a Mac page `Cmd` is the editor's `Ctrl`: in the run, a press of `Control+S` did nothing, and the Save button worked. `Ctrl+C`, `V` and `X` are left to the browser, because it allows the clipboard only after a gesture of yours. `Ctrl+W`, `T`, `N` and `Q` belong to the browser and cannot be hotkeys.
 - **File > Quit** ends the game and leaves the page stopped until you reload it. A phone is not a target.
 
 ## What you did
 
 You looked at what each panel is for, changed a number in one panel and found the effect in two others, saved, and asked the engine what was unsaved. You know where the chords are and what a change does before Save and after it.
 
-Next: The web build builds the demo for a browser and serves it on your machine.
+Next: [The web build](web-build.md) builds the demo for a browser and serves it on your machine.
