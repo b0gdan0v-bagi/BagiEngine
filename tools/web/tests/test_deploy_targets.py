@@ -13,11 +13,17 @@ from deploy_targets import TargetsError
 ENGINE_DIR = Path(__file__).resolve().parents[3]
 
 GOOD = {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev"}
+GOOD_SITE = {"game": "BagiDemo", "preset": "web-editor", "site": "engine.bagiz.dev", "page": "demo"}
 
 
 def document(**target_changes) -> dict:
     entry = {**GOOD, **target_changes}
     return {"format": 1, "targets": {"mahjong-editor": {key: value for key, value in entry.items() if value is not None}}}
+
+
+def site_document(**target_changes) -> dict:
+    entry = {**GOOD_SITE, **target_changes}
+    return {"format": 1, "targets": {"engine-demo": {key: value for key, value in entry.items() if value is not None}}}
 
 
 class TargetsFileTestCase(unittest.TestCase):
@@ -48,6 +54,20 @@ class LoadTest(TargetsFileTestCase):
         self.assertEqual(target, deploy_targets.Target("mahjong-editor", "BagiMahjong", "web-editor", "studio-mahjong",
                                                        "studio-mahjong.bagiz.dev", "main", "engine"))
 
+    def test_a_site_page_target_has_the_defaults_and_no_service(self):
+        self.write({"format": 1, "targets": {"engine-demo": GOOD_SITE}})
+        target = deploy_targets.load(self.project)["engine-demo"]
+        self.assertEqual(target, deploy_targets.Target("engine-demo", "BagiDemo", "web-editor", site="engine.bagiz.dev", page="demo"))
+        self.assertEqual((target.kind, target.service, target.address, target.base, target.area), ("site", None, None, "main", "engine"))
+
+    def test_a_railway_target_is_of_the_kind_service(self):
+        self.write(document())
+        self.assertEqual(deploy_targets.load(self.project)["mahjong-editor"].kind, "service")
+
+    def test_both_kinds_can_be_in_one_file(self):
+        self.write({"format": 1, "targets": {"a": GOOD_SITE, "b": GOOD}})
+        self.assertEqual([target.kind for target in deploy_targets.load(self.project).values()], ["site", "service"])
+
     def test_base_and_area_can_be_given(self):
         self.write(document(base="release/1.2", area="mahjong"))
         target = deploy_targets.load(self.project)["mahjong-editor"]
@@ -74,6 +94,13 @@ class ShippedTargetsTest(unittest.TestCase):
             with self.subTest(target=name):
                 self.assertIn(target.preset, configurable)
                 self.assertIn(target.preset, buildable)
+
+
+    def test_the_engine_ships_the_demo_page_and_no_editor_service(self):
+        targets = deploy_targets.load(ENGINE_DIR)
+        self.assertEqual(targets["engine-demo"].kind, "site")
+        self.assertEqual((targets["engine-demo"].game, targets["engine-demo"].site, targets["engine-demo"].page), ("BagiDemo", "engine.bagiz.dev", "demo"))
+        self.assertNotIn("engine-editor", targets)
 
 
 class RefusalTest(TargetsFileTestCase):
@@ -117,9 +144,25 @@ class RefusalTest(TargetsFileTestCase):
         self.assertRefused(document(servce="x"), "servce")
 
     def test_each_required_key_is_needed(self):
-        for key in deploy_targets.REQUIRED_KEYS:
+        for key in deploy_targets.REQUIRED_KEYS + deploy_targets.SERVICE_KEYS:
             with self.subTest(key=key):
-                self.assertRefused(document(**{key: None}), key)
+                self.assertRefused(document(**{key: None}), key, "missing")
+        for key in deploy_targets.REQUIRED_KEYS + deploy_targets.SITE_KEYS:
+            with self.subTest(key=key):
+                self.assertRefused(site_document(**{key: None}), key, "missing")
+
+    def test_keys_of_both_kinds_in_one_target_are_refused_naming_them(self):
+        self.assertRefused(document(site="engine.bagiz.dev"), "'service'", "'site'", "cannot be in one target")
+        self.assertRefused(document(address="h.dev", page="demo"), "'address'", "'page'", "cannot be in one target")
+        self.assertRefused(site_document(service="studio-x"), "'site'", "'service'", "cannot be in one target")
+
+    def test_half_a_pair_is_refused_naming_the_missing_key(self):
+        self.assertRefused(site_document(page=None), "'page'", "missing")
+        self.assertRefused(site_document(site=None), "'site'", "missing")
+        self.assertRefused(document(address=None), "'address'", "missing")
+
+    def test_a_target_with_none_of_the_pairs_is_refused_naming_all_four_keys(self):
+        self.assertRefused(site_document(site=None, page=None), "'service'", "'address'", "'site'", "'page'")
 
     def test_a_target_that_is_not_an_object_or_has_a_bad_name(self):
         self.assertRefused({"format": 1, "targets": {"a": []}}, "object")
@@ -135,6 +178,18 @@ class RefusalTest(TargetsFileTestCase):
             "base": ["--x", "-b", "a b", "a..b", "/a", "a*"],
             "area": ["--x", "Engine", "a b", "1a", ""],
         }
+        site_bad = {
+            "site": ["https://engine.bagiz.dev", "engine.bagiz.dev:443", "engine.bagiz.dev/demo", "Engine.dev", "-site", "a..b", ""],
+            "page": ["Demo", "de/mo", "-demo", "de mo", "../x", "", "demo/"],
+        }
+        for key, values in site_bad.items():
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    path = self.write({"format": 1, "targets": {"t": {**GOOD_SITE, key: value}}})
+                    with self.assertRaises(TargetsError) as caught:
+                        deploy_targets.load(self.project)
+                    self.assertIn(key, str(caught.exception))
+                    self.assertIn(str(path), str(caught.exception))
         for key, values in bad.items():
             for value in values:
                 with self.subTest(key=key, value=value):

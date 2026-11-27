@@ -1,11 +1,11 @@
 {
   "format": 1,
   "targets": {
-    "engine-editor": {
+    "engine-demo": {
       "game": "BagiDemo",
       "preset": "web-editor",
-      "service": "studio-engine",
-      "address": "studio-engine.bagiz.dev"
+      "site": "engine.bagiz.dev",
+      "page": "demo"
     }
   }
 }

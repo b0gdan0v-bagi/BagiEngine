@@ -1,6 +1,6 @@
 # Deploying a web build
 
-`build_and_deploy.py` builds a game for the web, packages it and uploads it to a Railway service. Two ways to start it: by hand in a working copy, and by a named **target** (`--target`), which builds in a checkout of its own at `origin/<base>` and is what an agent of the studio page starts. Nothing in the tests or the loop deploys anything.
+`build_and_deploy.py` builds a game for the web, packages it and uploads it to a Railway service or to a page of a site ("A site page"). Two ways to start it: by hand in a working copy, and by a named **target** (`--target`), which builds in a checkout of its own at `origin/<base>` and is what an agent of the studio page starts. Nothing in the tests or the loop deploys anything.
 
 ## A hand run
 
@@ -12,16 +12,18 @@ By hand without the script: `cmake --preset web-release`, `cmake --build --prese
 
 ## Targets: `<project>/web/targets.json`
 
-`--target NAME` reads the file next to the game's `web/app.json`, from the project that runs the script (not from the fetched checkout: the name is refused before any network use). The engine ships one target, `engine-editor` (the editor page of its demo scene, `tools/demo/CLAUDE.md`); a game owns its own file.
+`--target NAME` reads the file next to the game's `web/app.json`, from the project that runs the script (not from the fetched checkout: the name is refused before any network use). The engine ships one target, `engine-demo` (the editor page of its demo scene, a page of the engine's site, `tools/demo/CLAUDE.md`); a game owns its own file. A target is of one of two kinds: a **Railway service** (`service` and `address`) or a **page of a site** (`site` and `page`); keys of both kinds in one target are refused.
 
 ```json
-{"format": 1, "targets": {"mahjong-editor": {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev"}}}
+{"format": 1, "targets": {
+  "mahjong-editor": {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev"},
+  "engine-demo": {"game": "BagiDemo", "preset": "web-editor", "site": "engine.bagiz.dev", "page": "demo"}}}
 ```
 
-- **Required:** `game` (`[A-Za-z0-9_]+`, the CMake target), `preset` (`web-[a-z0-9-]+`; a `-single-thread` suffix keeps its meaning), `service` (`[a-z0-9][a-z0-9-]*`, the Railway service), `address` (a lower-case host name: no scheme, port or path). **Optional:** `base` (the branch the checkout is cut from, default `main`), `area` (the todo area passed to `alltests.py --area`, default `engine`). Target names are `[a-z0-9][a-z0-9-]*`.
+- **Required in both kinds:** `game` (`[A-Za-z0-9_]+`, the CMake target), `preset` (`web-[a-z0-9-]+`; a `-single-thread` suffix keeps its meaning). **A Railway service:** `service` (`[a-z0-9][a-z0-9-]*`, the Railway service), `address` (a lower-case host name: no scheme, port or path). **A site page:** `site` (a host name like `address`), `page` (`[a-z0-9][a-z0-9-]*`, a page the site lists). **Optional:** `base` (the branch the checkout is cut from, default `main`), `area` (the todo area passed to `alltests.py --area`, default `engine`). Target names are `[a-z0-9][a-z0-9-]*`.
 - **Strict on purpose:** unknown keys, duplicate keys, a file over 64 KiB and any value that does not match its pattern are exit 2 before anything runs. Every value reaches a command as one argument, never through a shell, and none can start with `-`.
 - **`--target` takes no free options.** `--game`, `--preset`, `--service`, `--single-thread`, `--build-dir`, `--app`, `--dist`, `--stage-dir`, `--skip-alltests` and `--alltests-results` together with it are exit 2: the target is the whole description of a deploy, so whoever starts it cannot add arguments, and the gate cannot be skipped. Allowed: `--deploy`, `--dry-run`, `--source-dir`, `--status-file`, `--checkout-dir`. `--target` implies `--fetch`.
-- A dry run prints `target <name>: <game>, <preset>, <service>, <address>` and the steps.
+- A dry run prints `target <name>: <game>, <preset>, <service>, <address>` (a site page: `<game>, <preset>, site <site>, page <page>`) and the steps; a site page's steps end with the lines of "A site page".
 
 ## The checkout (`--fetch`, implied by `--target`)
 
@@ -44,11 +46,19 @@ A JSON object rewritten whole, through a temp file and `os.replace`, at every ch
 
 ```json
 {"format": 1, "target", "stages": ["fetch","tests","build","package","deploy"], "stage", "state": "running|done|failed",
- "commit", "engineCommit", "service", "address", "url", "failedTests", "error", "startedAt", "updatedAt"}
+ "commit", "engineCommit", "service", "address", "url", "answer", "failedTests", "error", "startedAt", "updatedAt"}
 ```
 
 - `stages` lists what this run goes through: `fetch` only in checkout mode, `tests` there with `--deploy` (and no `--skip-alltests`), `deploy` only with `--deploy`; configure and build are stage `build`, `package.py` is `package`, the staging and `railway up` are `deploy`.
-- `state: failed` carries the `stage` it stopped in and a one-line `error` (and `failedTests` after a red run). **`done` at the stage `deploy` means `railway up --detach` accepted the upload, not that the page is live;** `url` is `https://<address>`, set from the target.
+- `state: failed` carries the `stage` it stopped in and a one-line `error` (and `failedTests` after a red run). **`done` at the stage `deploy` means `railway up --detach` accepted the upload, not that the page is live;** `url` is `https://<address>`, set from the target. **For a site page** `done` means the site answered 200 and has switched the page; `service` is null, `address` is the site, `url` is `https://<site>/<page>/` and `answer` is the site's JSON object (only its documented keys `page`, `game`, `threads`, `editor`, `commits`, `uploadedAt`, `bytes`; null otherwise).
+
+## A site page
+
+A target with `site` and `page` sends the package to the site's `PUT https://<site>/api/v1/builds/<page>` (the contract is the site's `docs/builds.md`; `site_upload.py`). The gate, the fetch, the build and the packaging are those of every target; the Railway CLI, the staging and the access check of "The editor page" are not used, because the site owns the rule of the page. The skill `deploy-editor` runs this on the owner's word.
+
+- **The upload:** the package folder becomes one uncompressed tar made with `tarfile` (files at its root; no `._*` or `.DS_Store`; a link or another kind of file is refused), in a temp folder that is removed in every case. The run prints the files, bytes and sha256, the `PUT` line and the site's answer. The body is streamed with a known `Content-Length`; the timeout counts each socket operation (`UPLOAD_TIMEOUT_SECONDS` of `site_upload.py`), not the whole upload. A redirect is not followed, so the token goes only to the site named by the target.
+- **The token** is `ENGINE_SITE_UPLOAD_TOKEN` in the environment, else in `<project>/.env` (the project that runs the script, not the fetched checkout; `.env.example` has the block). A real `--deploy` looks for it before the fetch and the build, since a build takes minutes; a dry run reads none and names the variable and the file. It goes into one header and is in no output, status file, error text or command.
+- **The answers:** 200 is the switch (`done`). Otherwise exit 2 with the status and the site's `detail`: 400 the body or its sha256 is wrong; 401 the token is missing or not the site's; 404 the site has no such page (a commit in the site's `service/pages.py`); 408 the body stopped for 60 s; 409 another upload runs, try again; 411 no `Content-Length`; 413 above `BUILD_UPLOAD_MAX_MB` of the site; 422 the package does not agree with its `manifest.json` (the detail names the file); 503 the site has no token set; 507 its volume cannot be written. A broken connection, a timeout and a refused TLS name their error type only.
 
 ## The editor page
 
@@ -70,4 +80,4 @@ python tools/web/build_and_deploy.py --game BagiDemo --preset web-editor --deplo
 
 ## What stays the owner's
 
-The Railway services and domains, `railway login` or `RAILWAY_TOKEN` and the first `setup_emsdk.py` install on the machine that deploys, the game's own `web/targets.json`, and the studio hub's access to the page's `manifest.json` when the service is behind Basic or sign-in (`ACCESS.md`): it needs a credential for that read. One manual check once a targets file exists: `python tools/web/build_and_deploy.py --target <name> --deploy --dry-run`.
+The upload token of the site and its list of pages (`BUILD_UPLOAD_TOKEN`, `service/pages.py`, `BUILD_UPLOAD_MAX_MB` live in the site's repository), the Railway services and domains, `railway login` or `RAILWAY_TOKEN` and the first `setup_emsdk.py` install on the machine that deploys, the game's own `web/targets.json`, and the studio hub's access to the page's `manifest.json` when the service is behind Basic or sign-in (`ACCESS.md`): it needs a credential for that read. One manual check once a targets file exists: `python tools/web/build_and_deploy.py --target <name> --deploy --dry-run`.

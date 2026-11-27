@@ -5,6 +5,7 @@
     python tools/web/build_and_deploy.py --game BagiStress --single-thread       # the page without threads (no COOP / COEP needed)
     python tools/web/build_and_deploy.py --game BagiStress --deploy --service bagi-web
     python tools/web/build_and_deploy.py --target mahjong-editor --dry-run       # game, preset and service of web/targets.json
+    python tools/web/build_and_deploy.py --target engine-demo --deploy           # a page of a site: the package goes up as one tar
     python tools/web/build_and_deploy.py --game BagiStress --preset web-editor   # the editor page, into build/web-editor-dist
 
 Run it from the root of the project that has the web presets (the engine, or a game that carries it); `--source-dir` names another.
@@ -18,6 +19,10 @@ The steps, in order:
      dist/ in one folder and run `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
      `railway link`, or RAILWAY_TOKEN of the project; the service must exist and its settings (builder Dockerfile, health check
      /healthz) come from the game's Railway IaC file, not from the upload: tools/web/CLAUDE.md).
+     A target that names a `site` and a `page` has no Railway step: the deploy gate as above, then the package folder is written as one
+     tar and `PUT https://<site>/api/v1/builds/<page>` sends it (site_upload.py) with the token ENGINE_SITE_UPLOAD_TOKEN of the
+     environment or of <source>/.env. The token is checked before the fetch and the build, since a build takes minutes; a dry run reads
+     none and sends nothing. The site decides who may open the page, so there is no access check here.
 An editor page (a web-editor* preset, or a package whose manifest.json says `editor`) can change everything: a web-editor* preset
 packages into build/web-editor-dist, --deploy of an editor page needs the service named (--service or the target), and before the
 staging `railway variable list` of that service must show Basic auth or sign-in with SIGNIN_ALLOW (serve.editor_door). An answer that
@@ -31,10 +36,12 @@ the ones that travel with the page, a missing SDK is installed there, and with -
 tools/alltests/alltests.py started here (a hand run without --fetch only says how). --alltests-results does not go with --fetch: that
 run records into the default results file.
 --status-file FILE is rewritten at every stage (fetch, tests, build, package, deploy) with the state, the commits and the error
-(deploy_status.py); `done` at deploy means railway accepted the upload, not that the page is live. A dry run writes nothing.
+(deploy_status.py); `done` at deploy means railway accepted the upload, not that the page is live (for a site page: the site answered
+200 and switched it; the file then holds `url` and the site's `answer`). A dry run writes nothing.
 package.py gets --commit engine=<sha> --commit game=<sha> when git answers, so the deployed manifest.json names its commits.
 tools/web/DEPLOY.md has the whole story.
-Standard library only. Nothing here writes a secret; the variables of an editor service are read for that check and dropped.
+Standard library only. Nothing here writes a secret; the variables of an editor service are read for that check and dropped, and the
+upload token goes into one header of the upload.
 """
 
 import argparse
@@ -45,6 +52,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import NamedTuple
 
@@ -55,6 +63,7 @@ import alltests_results  # noqa: E402
 import deploy_checkout  # noqa: E402
 import deploy_status  # noqa: E402
 import deploy_targets  # noqa: E402
+import site_upload  # noqa: E402
 import serve  # noqa: E402  (the access rule of an editor page is the server's own)
 
 PACKAGE_SCRIPT = "package.py"
@@ -93,6 +102,8 @@ REFUSED_WITH_TARGET = {
 }
 # The game's own web app settings (package.py --app); the file is optional
 APP_FILE = Path("web") / "app.json"
+# What the site says about a switched page (docs/builds.md of the site); nothing else of its answer is printed or recorded
+ANSWER_KEYS = ("page", "game", "threads", "editor", "commits", "uploadedAt", "bytes")
 # A folder with this file is a package of tools/export (its MARKER_NAME): an export's default output lies in dist/
 EXPORT_MARKER_NAME = "bagi-package.txt"
 
@@ -126,6 +137,9 @@ class Step(NamedTuple):
 def resolve_target(args: argparse.Namespace, source_dir: Path) -> None:
     """Fills game, preset and service: from the target of --target (refusing the free options), else from the options and defaults."""
     args.target_info = None
+    args.site = args.page = None
+    # The project that runs the script owns the .env with the upload token, not the fetched checkout
+    args.env_dir = source_dir
     # The default service is the page the testers play, so an editor page goes only to a service somebody named
     args.service_named = bool(args.service) or args.target is not None
     if args.target is None:
@@ -142,6 +156,10 @@ def resolve_target(args: argparse.Namespace, source_dir: Path) -> None:
     args.game, args.preset, args.service = target.game, target.preset, target.service
     args.fetch = True
     args.target_info = target
+    if target.kind == deploy_targets.KIND_SITE:
+        args.site, args.page = target.site, target.page
+        print(f"target {target.name}: {target.game}, {target.preset}, site {target.site}, page {target.page}", flush=True)
+        return
     print(f"target {target.name}: {target.game}, {target.preset}, {target.service}, {target.address}", flush=True)
 
 
@@ -203,7 +221,7 @@ def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_
         Step(["cmake", "--build", "--preset", preset, "--target", args.game], source_dir),
         Step(package_command, source_dir, stage="package"),
     ]
-    if args.deploy:
+    if args.deploy and not args.site:
         steps.append(Step(["railway", "up", str(stage_dir), "--path-as-root", "--service", args.service, "--detach"], stage_dir, True, "deploy"))
     return steps
 
@@ -236,7 +254,7 @@ def check_environment(args: argparse.Namespace, emsdk_dir: Path, which) -> None:
 
 
 def check_railway(args: argparse.Namespace, which) -> None:
-    if args.deploy and not which("railway"):
+    if args.deploy and not args.site and not which("railway"):
         raise DeployError("--deploy needs the Railway CLI (`railway`) on PATH: https://docs.railway.com/guides/cli")
 
 
@@ -306,6 +324,43 @@ def editor_access(service: str, stage_dir: Path, which, runner) -> str:
     return door
 
 
+def page_url(args: argparse.Namespace) -> str | None:
+    return f"https://{args.site}/{args.page}/" if args.site else None
+
+
+def preflight_token(args: argparse.Namespace) -> None:
+    """A real deploy of a site page needs the upload token, and a build takes minutes: look for it first. The value is read and dropped."""
+    if args.site and args.deploy and not args.dry_run:
+        site_upload.read_token(args.env_dir)
+
+
+def deploy_site(args: argparse.Namespace, dist: Path, status: deploy_status.Status, upload) -> int | None:
+    """The deploy stage of a site page: the package folder as one tar in a temp folder (removed in every case), the sha256, the upload.
+    None on success (the caller ends the status), else the exit code. A dry run says what would go where and reads no token."""
+    status.enter("deploy")
+    endpoint = f"https://{args.site}{site_upload.BUILDS_PATH}{args.page}"
+    if args.dry_run:
+        print(f"deploy: the files of {dist} would be written as one tar and sent: PUT {endpoint} (the count, bytes and sha256 are known after the build)", flush=True)
+        print(f"deploy: the token would be read from {site_upload.ENV_VARIABLE} of the environment or of {args.env_dir / site_upload.ENV_FILE}; nothing is sent", flush=True)
+        return None
+    with tempfile.TemporaryDirectory(prefix="bagi-site-upload-") as folder:
+        tar_path = Path(folder) / "package.tar"
+        try:
+            count = site_upload.build_tar(dist, tar_path)
+            size = tar_path.stat().st_size
+            sha256 = site_upload.file_sha256(tar_path)
+            print(f"package: {count} files, {size} bytes, sha256 {sha256}", flush=True)
+            print(f"PUT {endpoint}", flush=True)
+            answer = upload(args.site, args.page, tar_path, sha256, site_upload.read_token(args.env_dir))
+        except (site_upload.UploadError, OSError) as error:
+            return fail(status, str(error), 2)
+    shown = {key: answer[key] for key in ANSWER_KEYS if key in answer}
+    status.set(answer=shown)
+    print(f"the site answered 200: {json.dumps(shown, sort_keys=True)}", flush=True)
+    print(f"page: {page_url(args)}", flush=True)
+    return None
+
+
 def fail(status: deploy_status.Status, message: str, code: int) -> int:
     print(f"build_and_deploy.py: {message}", file=sys.stderr)
     status.fail(message)
@@ -313,9 +368,9 @@ def fail(status: deploy_status.Status, message: str, code: int) -> int:
 
 
 def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run, gate=alltests_results.check,
-        checkout=deploy_checkout.prepare, changes=alltests_results.uncommitted) -> int:
-    parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to Railway.")
-    parser.add_argument("--target", help="a named target of <source>/web/targets.json: game, preset and service come from it, and no free option is allowed")
+        checkout=deploy_checkout.prepare, changes=alltests_results.uncommitted, upload=site_upload.upload) -> int:
+    parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to a Railway service or a page of a site.")
+    parser.add_argument("--target", help="a named target of <source>/web/targets.json: game, preset and the Railway service or the site page come from it, and no free option is allowed")
     parser.add_argument("--game", help=f"the game target (default: {DEFAULT_GAME})")
     parser.add_argument("--preset", help=f"the web preset (default: {DEFAULT_PRESET})")
     parser.add_argument("--source-dir", type=Path, help="the project with CMakePresets.json (default: the current folder)")
@@ -324,7 +379,7 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     parser.add_argument("--app", type=Path, help=f"the game's web app settings for package.py (default: <source>/{APP_FILE.as_posix()} when it exists)")
     parser.add_argument("--dist", type=Path, help=f"the packaged folder (default: <source>/{DIST_FOLDER.as_posix()}, of a {EDITOR_PRESET_PREFIX}* preset <source>/{EDITOR_DIST_FOLDER.as_posix()})")
     parser.add_argument("--stage-dir", type=Path, help=f"the folder `railway up` runs in (default: <source>/{STAGE_FOLDER.as_posix()})")
-    parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`")
+    parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`, or for a site page upload the package to it")
     parser.add_argument("--service", help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE}; an editor page has no default)")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and run nothing")
     parser.add_argument("--skip-alltests", action="store_true", help="deploy even when HEAD of the source has no green full test run or the tree has uncommitted changes (tools/alltests)")
@@ -342,13 +397,18 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
         return 2
 
     target = args.target_info
-    status = deploy_status.Status(None if args.dry_run else args.status_file, args.target, stages_of(args), target and target.address, args.service)
+    status = deploy_status.Status(None if args.dry_run else args.status_file, args.target, stages_of(args), target and (target.address or target.site), args.service,
+                                  url=page_url(args))
+    try:
+        preflight_token(args)
+    except site_upload.UploadError as error:
+        return fail(status, str(error), 2)
     if not args.fetch:
         try:
             check_environment(args, emsdk_dir, which)
         except DeployError as error:
             return fail(status, str(error), 2)
-        return build_and_package(args, source_dir, TOOLS_DIR, status, which, runner, gate)
+        return build_and_package(args, source_dir, TOOLS_DIR, status, which, runner, gate, upload=upload)
 
     try:
         check_railway(args, which)
@@ -369,7 +429,7 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
         plan = CheckoutPlan(None if is_sdk_installed(fetched.engine_dir / EMSDK_RELATIVE) else fetched.engine_dir / SETUP_EMSDK_SCRIPT,
                             f"alltests gate: asked after the fetch, on origin/{base}", fetched.engine_dir / alltests_results.SCRIPT,
                             target.area if target else deploy_targets.DEFAULT_AREA)
-        return build_and_package(args, fetched.path, fetched.engine_dir / "tools" / "web", status, which, runner, gate, plan, changes)
+        return build_and_package(args, fetched.path, fetched.engine_dir / "tools" / "web", status, which, runner, gate, plan, changes, upload)
 
 
 def recorded_result(results_file: Path | None, project: Path, commit: str) -> dict | None:
@@ -421,7 +481,7 @@ def gate_with_tests(args: argparse.Namespace, project: Path, dist: Path, stage_d
 
 
 def build_and_package(args: argparse.Namespace, project: Path, tools_dir: Path, status: deploy_status.Status, which, runner, gate,
-                      plan: CheckoutPlan | None = None, changes=alltests_results.uncommitted) -> int:
+                      plan: CheckoutPlan | None = None, changes=alltests_results.uncommitted, upload=site_upload.upload) -> int:
     """Everything after the project is known: `project` is the folder that is built (the checkout in checkout mode) and `tools_dir` the folder of
     package.py, serve.py and the Dockerfile that travel with it. In checkout mode the gate runs after the fetch, so a dry run says
     so instead of asking it about a checkout that does not exist."""
@@ -476,6 +536,10 @@ def build_and_package(args: argparse.Namespace, project: Path, tools_dir: Path, 
             return fail(status, f"cannot start `{command[0]}`: {error}", 2)
         if completed.returncode != 0:
             return fail(status, f"`{program}` failed with exit code {completed.returncode}", completed.returncode or 1)
+    if args.site and args.deploy:
+        code = deploy_site(args, dist, status, upload)
+        if code is not None:
+            return code
     status.done()
     return 0
 

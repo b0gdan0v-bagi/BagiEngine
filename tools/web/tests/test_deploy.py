@@ -3,6 +3,8 @@ commands are printed (--dry-run) or handed to a fake runner. Run: python -m unit
 
 import contextlib
 import functools
+import hashlib
+import http.client
 import io
 import json
 import os
@@ -10,7 +12,9 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
+import threading
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -20,6 +24,8 @@ import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
 
 import build_and_deploy
 import deploy_checkout
+import site_upload
+from test_site_upload import RecordingServer
 
 TOOLS_WEB = Path(build_and_deploy.__file__).resolve().parent
 ENGINE_DIR = TOOLS_WEB.parents[1]
@@ -234,6 +240,16 @@ class TargetTest(DeployTestCase):
         self.assertIn("cmake --preset web-editor", lines[0])
         self.assertIn("cmake --build --preset web-editor --target BagiMahjong", lines[1])
         self.assertIn("--game BagiMahjong", lines[2])
+        self.assertEqual(runner.calls, [])
+
+    def test_a_dry_run_of_a_site_page_names_the_site_and_the_page(self):
+        path = self.source / "web" / "targets.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"format": 1, "targets": {"engine-demo": {"game": "BagiDemo", "preset": "web-editor", "site": "engine.example.dev", "page": "demo"}}}),
+                        encoding="utf-8")
+        code, out, err, runner = self.run_script("--target", "engine-demo", "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("target engine-demo: BagiDemo, web-editor, site engine.example.dev, page demo", out)
         self.assertEqual(runner.calls, [])
 
     def test_with_deploy_railway_up_names_the_service_of_the_target(self):
@@ -1084,6 +1100,229 @@ class EditorPageTest(DeployTestCase):
         self.assertIn("studio-mahjong", runner.calls[-2][0])
         self.assertTrue((self.checkout_dir / "build" / "web-editor-dist" / "manifest.json").is_file())
         self.assertFalse((self.checkout_dir / "dist").exists())
+
+
+class SiteRunner(FakeRunner):
+    """The runner of a site page: the package step writes a small package folder into its output, as package.py would."""
+
+    def __call__(self, command, cwd, check, **options):
+        completed = super().__call__(command, cwd, check)
+        if len(command) > 3 and command[1].endswith(build_and_deploy.PACKAGE_SCRIPT):
+            dist = Path(command[3])
+            (dist / "icons").mkdir(parents=True, exist_ok=True)
+            (dist / "index.html").write_bytes(b"<html></html>")
+            (dist / "manifest.json").write_text(json.dumps({"game": "BagiDemo", "editor": True}), encoding="utf-8")
+            (dist / "icons" / "icon.png").write_bytes(b"png")
+        return completed
+
+
+class FakeUpload:
+    """Stands in for site_upload.upload: records the arguments and reads the tar while it exists; `failure` is raised as an UploadError."""
+
+    def __init__(self, events: list, answer=None, failure: str | None = None):
+        self.events = events
+        self.answer = answer if answer is not None else {"page": "demo", "game": "BagiDemo", "threads": True, "editor": True, "commits": {},
+                                                          "uploadedAt": "2026-01-01T00:00:00Z", "bytes": 13, "internal": "not documented"}
+        self.failure = failure
+        self.calls: list[dict] = []
+
+    def __call__(self, site, page, tar_path, sha256, token):
+        self.events.append("upload")
+        with tarfile.open(tar_path) as tar:
+            names = sorted(tar.getnames())
+        self.calls.append({"site": site, "page": page, "tar_path": Path(tar_path), "sha256": sha256, "token": token, "names": names,
+                           "tar_sha256": hashlib.sha256(Path(tar_path).read_bytes()).hexdigest()})
+        if self.failure:
+            raise site_upload.UploadError(self.failure)
+        return self.answer
+
+
+SITE_TOKEN = "SITETOKENMARKER-9d41"
+
+
+class SitePageTest(DeployTestCase):
+    """--target of a page of a site: no Railway, no staging; the package goes up as one tar through `upload`."""
+
+    def setUp(self):
+        super().setUp()
+        (self.source / "web").mkdir()
+        (self.source / "web" / "targets.json").write_text(json.dumps({"format": 1, "targets": {"engine-demo": {
+            "game": "BagiDemo", "preset": "web-editor", "site": "engine.example.dev", "page": "demo"}}}), encoding="utf-8")
+        self.status_file = self.source / "status.json"
+        self.events: list[str] = []
+        environment = unittest.mock.patch.dict(os.environ, {site_upload.ENV_VARIABLE: SITE_TOKEN})
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.upload = FakeUpload(self.events)
+
+    def gate(self, project, results, ignored=()):
+        self.events.append("gate")
+        return green_gate(project, results)
+
+    def checkout(self, *args, **kwargs):
+        self.events.append("fetch")
+        return self.fake_checkout(*args, **kwargs)
+
+    def deploy(self, *extra, runner=None, upload=None, gate=None, environment_token: str | None = SITE_TOKEN):
+        runner = runner or SiteRunner()
+        if environment_token is None:
+            os.environ.pop(site_upload.ENV_VARIABLE, None)
+        out, err = io.StringIO(), io.StringIO()
+        arguments = ["--source-dir", str(self.source), "--target", "engine-demo", "--checkout-dir", str(self.checkout_dir), *extra]
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = build_and_deploy.run(arguments, emsdk_dir=self.emsdk, which=no_tools, runner=runner, gate=gate or self.gate,
+                                        checkout=self.checkout, changes=lambda *_: [], upload=upload or self.upload)
+        return code, out.getvalue(), err.getvalue(), runner
+
+    def status(self) -> dict:
+        return json.loads(self.status_file.read_text(encoding="utf-8"))
+
+    def assert_no_token(self, *texts: str, runner: FakeRunner | None = None):
+        for text in texts:
+            self.assertNotIn(SITE_TOKEN, text)
+        if runner:
+            self.assertNotIn(SITE_TOKEN, repr(runner.calls))
+
+    def test_the_package_goes_up_after_fetch_gate_build_and_package(self):
+        runner = SiteRunner()
+        code, out, err, _ = self.deploy("--deploy", "--status-file", str(self.status_file), runner=runner)
+        self.assertEqual(code, 0, err)
+        steps = [command[0] if command[0] != "cmake" else " ".join(command[:2]) for command, _ in runner.calls]
+        self.assertEqual(steps[:2], ["cmake --preset", "cmake --build"])
+        self.assertEqual(len(steps), 3, steps)
+        self.assertEqual(self.events, ["fetch", "gate", "upload"])
+        (call,) = self.upload.calls
+        self.assertEqual((call["site"], call["page"], call["token"]), ("engine.example.dev", "demo", SITE_TOKEN))
+        self.assertEqual(call["names"], ["icons", "icons/icon.png", "index.html", "manifest.json"])
+        self.assertEqual(call["sha256"], call["tar_sha256"])
+        self.assertIn(f"sha256 {call['sha256']}", out)
+        self.assertIn("package: 3 files", out)
+        self.assertIn("PUT https://engine.example.dev/api/v1/builds/demo", out)
+        self.assertFalse(call["tar_path"].exists(), "the temp tar is removed")
+        self.assertFalse(call["tar_path"].parent.exists())
+
+    def test_no_railway_is_asked_and_nothing_is_staged(self):
+        runner = SiteRunner()
+        code, _, err, _ = self.deploy("--deploy", runner=runner)
+        self.assertEqual(code, 0, err)
+        self.assertEqual([command for command, _ in runner.calls if "railway" in command[0]], [])
+        self.assertNotIn("variable", [part for command, _ in runner.calls for part in command])
+        self.assertFalse((self.checkout_dir / build_and_deploy.STAGE_FOLDER).exists())
+
+    def test_the_status_ends_done_at_deploy_with_the_url_and_the_documented_answer(self):
+        code, out, err, _ = self.deploy("--deploy", "--status-file", str(self.status_file))
+        self.assertEqual(code, 0, err)
+        status = self.status()
+        self.assertEqual((status["stage"], status["state"], status["error"]), ("deploy", "done", None))
+        self.assertEqual((status["url"], status["service"], status["address"]), ("https://engine.example.dev/demo/", None, "engine.example.dev"))
+        self.assertEqual(status["answer"], {key: value for key, value in self.upload.answer.items() if key != "internal"})
+        self.assertIn("https://engine.example.dev/demo/", out)
+        self.assertNotIn("not documented", out)
+
+    def test_the_real_upload_reaches_a_local_server_with_the_tar_of_the_package(self):
+        server = RecordingServer()
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        self.addCleanup(lambda: (server.shutdown(), server.server_close(), thread.join(5)))
+        server.answers(200, {"page": "demo", "game": "BagiDemo", "bytes": 13})
+        connect = lambda host, timeout: http.client.HTTPConnection("127.0.0.1", server.port, timeout=timeout)  # noqa: E731
+        upload = functools.partial(site_upload.upload, connect=connect)
+        code, out, err, _ = self.deploy("--deploy", "--status-file", str(self.status_file), upload=upload)
+        self.assertEqual(code, 0, err)
+        (request,) = server.requests
+        self.assertEqual((request["method"], request["path"]), ("PUT", "/api/v1/builds/demo"))
+        self.assertEqual(request["headers"]["authorization"], f"Bearer {SITE_TOKEN}")
+        self.assertEqual(hashlib.sha256(request["body"]).hexdigest(), request["headers"]["x-content-sha256"])
+        with tarfile.open(fileobj=io.BytesIO(request["body"])) as tar:
+            self.assertIn("index.html", tar.getnames())
+        self.assertEqual(self.status()["answer"], {"page": "demo", "game": "BagiDemo", "bytes": 13})
+        self.assert_no_token(out, err, self.status_file.read_text(encoding="utf-8"))
+
+    def test_the_token_is_in_no_output_status_or_command(self):
+        runner = SiteRunner()
+        code, out, err, _ = self.deploy("--deploy", "--status-file", str(self.status_file), runner=runner)
+        self.assertEqual(code, 0, err)
+        self.assert_no_token(out, err, self.status_file.read_text(encoding="utf-8"), runner=runner)
+
+    def test_the_env_file_of_the_project_is_read_not_the_one_of_the_checkout(self):
+        (self.source / ".env").write_text(f"{site_upload.ENV_VARIABLE}=from-the-project\n", encoding="utf-8")
+        self.checkout_dir.mkdir(parents=True, exist_ok=True)
+        (self.checkout_dir / ".env").write_text(f"{site_upload.ENV_VARIABLE}=from-the-checkout\n", encoding="utf-8")
+        code, _, err, _ = self.deploy("--deploy", environment_token=None)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.upload.calls[0]["token"], "from-the-project")
+
+    def test_a_missing_token_stops_before_any_step_and_names_the_variable_and_the_file(self):
+        runner = SiteRunner()
+        code, out, err, _ = self.deploy("--deploy", "--status-file", str(self.status_file), runner=runner, environment_token=None)
+        self.assertEqual(code, 2)
+        self.assertIn(site_upload.ENV_VARIABLE, err)
+        self.assertIn(str(self.source / ".env"), err)
+        self.assertEqual(runner.calls, [])
+        self.assertEqual((self.events, self.fake_checkout.calls, self.upload.calls), ([], [], []))
+        self.assertEqual(self.status()["state"], "failed")
+
+    def test_an_unusable_token_is_refused_the_same_way_without_quoting_it(self):
+        os.environ[site_upload.ENV_VARIABLE] = f"{SITE_TOKEN} with a space"
+        runner = SiteRunner()
+        code, out, err, _ = self.deploy("--deploy", "--status-file", str(self.status_file), runner=runner)
+        self.assertEqual(code, 2)
+        self.assertEqual(runner.calls, [])
+        self.assert_no_token(out, err, self.status_file.read_text(encoding="utf-8"))
+
+    def test_a_dry_run_says_what_would_go_where_and_sends_and_reads_nothing(self):
+        runner = SiteRunner()
+        code, out, err, _ = self.deploy("--deploy", "--dry-run", "--status-file", str(self.status_file), runner=runner, environment_token=None)
+        self.assertEqual(code, 0, err)
+        self.assertIn("PUT https://engine.example.dev/api/v1/builds/demo", out)
+        self.assertIn(site_upload.ENV_VARIABLE, out)
+        self.assertIn(str(self.source / ".env"), out)
+        self.assertEqual((runner.calls, self.upload.calls), ([], []))
+        self.assertFalse(self.status_file.exists())
+
+    def test_a_refusal_of_the_site_is_exit_2_with_its_detail_and_failed_at_deploy(self):
+        upload = FakeUpload(self.events, failure="the site refused the upload (422): manifest.json lists BagiDemo.wasm, which is missing")
+        code, out, err, _ = self.deploy("--deploy", "--status-file", str(self.status_file), upload=upload)
+        self.assertEqual(code, 2)
+        self.assertIn("422", err)
+        self.assertIn("BagiDemo.wasm", err)
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("failed", "deploy"))
+        self.assertIn("BagiDemo.wasm", self.status()["error"])
+        self.assertIsNone(self.status()["answer"])
+        self.assertFalse(upload.calls[0]["tar_path"].parent.exists(), "the temp folder is removed after a failure too")
+
+    def test_a_red_gate_stops_before_the_build_and_the_upload(self):
+        runner = SiteRunner()
+        code, _, err, _ = self.deploy("--deploy", runner=runner,
+                                      gate=lambda *_: alltests_results.Verdict(False, "", "the tests are red"))
+        self.assertEqual(code, 2)
+        self.assertEqual((runner.calls, self.upload.calls), ([], []))
+
+    def test_a_failed_build_stops_before_the_upload(self):
+        runner = SiteRunner(fail_on="cmake")
+        code, _, _, _ = self.deploy("--deploy", "--status-file", str(self.status_file), runner=runner)
+        self.assertEqual(code, 3)
+        self.assertEqual(self.upload.calls, [])
+        self.assertEqual((self.status()["state"], self.status()["stage"]), ("failed", "build"))
+
+    def test_a_failed_package_step_stops_before_the_upload(self):
+        runner = SiteRunner(fail_on=sys.executable)
+        code, _, _, _ = self.deploy("--deploy", runner=runner)
+        self.assertEqual(code, 3)
+        self.assertEqual(self.upload.calls, [])
+
+    def test_without_deploy_nothing_is_sent_and_no_token_is_needed(self):
+        runner = SiteRunner()
+        code, out, err, _ = self.deploy(runner=runner, environment_token=None)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(len(runner.calls), 3)
+        self.assertEqual(self.upload.calls, [])
+        self.assertNotIn("PUT ", out)
+
+    def test_a_service_option_is_still_refused_with_a_target(self):
+        code, _, err, _ = self.deploy("--service", "x")
+        self.assertEqual(code, 2)
+        self.assertIn("--service", err)
 
 
 class DeployFilesTest(unittest.TestCase):
