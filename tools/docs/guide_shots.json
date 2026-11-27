@@ -162,6 +162,18 @@
       ],
       "about": "The Console opened with Ctrl+Shift+L over the editor: the filter field holds Control so two log lines are left, and the command line has answered ping and status",
       "maxSize": 1280
+    },
+    {
+      "name": "control-api-title",
+      "exe": "BagiDemo",
+      "steps": [
+        ["step", {"frames": 30, "dt": 0.016666667}],
+        ["scene_set", {"node": "Text/Title", "component": "TextComponent", "path": "text", "value": "Hello from Python"}],
+        ["ui_click", {"name": "Burst"}],
+        ["step", {"frames": 1, "dt": 0.016666667}]
+      ],
+      "about": "BagiDemo after the calls of the control page's script: the title text written by scene_set, then a click on Burst and one frame",
+      "maxSize": 400
     }
   ]
 }
