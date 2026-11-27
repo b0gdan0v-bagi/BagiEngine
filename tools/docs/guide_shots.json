@@ -90,6 +90,36 @@
         ["step", {"frames": 126, "dt": 0.016}]
       ],
       "about": "the same scene at frame 126, two seconds after the runs started: the slider is at the far end of its way and the turner at 180 degrees, the bobber is half way back"
+    },
+    {
+      "name": "reflection-inspector",
+      "exe": "BagiDemo",
+      "editor": true,
+      "window": "1600x900",
+      "contentOverlay": "docs/guide/examples/tween",
+      "steps": [
+        ["step", {"frames": 60, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 86, "y": 78}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 86, "y": 78}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 34, "y": 241}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 34, "y": 241}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 125, "y": 334}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 125, "y": 334}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 343, "y": 355}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 343, "y": 355}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 500, "y": 386}]}],
+        ["step", {"frames": 300, "dt": 0.016}]
+      ],
+      "about": "BagiDemo in the editor on the tween example, the Slider node selected (four clicks at fixed points of the 1600x900 layout): the inspector shows the fields of its DemoTweenComponent",
+      "maxSize": 1280
     }
   ]
 }

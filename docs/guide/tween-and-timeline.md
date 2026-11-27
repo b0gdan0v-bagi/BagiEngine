@@ -68,7 +68,7 @@ From `docs/guide/examples/tween/config/SceneConfig.xml`. The fields of the compo
 - `delay`: the seconds before the first move of a run. The bobber waits half a second and then moves.
 - `ease`: the curve of one way.
 
-The editor shows the same fields. Open the demo with `--editor`, select a node with this component, and the inspector has a row for each field, with the same limits and a hint on hover. Where those rows come from is the subject of a later page, config and reflection (planned).
+The editor shows the same fields. Open the demo with `--editor`, select a node with this component, and the inspector has a row for each field, with the same limits and a hint on hover. Where those rows come from is the subject of [Config and reflection](config-and-reflection.md).
 
 ## Change how they move
 
@@ -208,4 +208,4 @@ The slider is half way at one second (480 is 160 plus half of 640), at the far e
 
 You put three nodes on a scene, gave each a `DemoTweenComponent`, and saw them slide, turn and bob after a wait. You changed the curve, the time and the delay by editing the file, saw that a node you move by hand keeps your move, and read the one function that starts a run. Then you read a timeline in C++, a fade and a move together, a pause and a call, and why it is better than a chain of callbacks.
 
-Next (planned): config and reflection, how a class and its fields reach the XML, the inspector and the control API.
+Next: [Config and reflection](config-and-reflection.md), how a class and its fields reach the XML, the inspector and the control API.

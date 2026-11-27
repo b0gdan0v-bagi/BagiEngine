@@ -42,5 +42,5 @@ The contract of each is on its class.
 
 ## Tests
 
-- `DemoTests` (`tests/`): `DemoSceneFixture.h` is the shipped scene and sprite library on a `RecordingRenderer` the size of the view, with clicks on the panel through `UIInput`; the configs are checked here and not in `BagiEngineTests`, which does not link the demo's classes.
+- `DemoTests` (`tests/`): `DemoSceneFixture.h` is the shipped scene and sprite library on a `RecordingRenderer` the size of the view, with clicks on the panel through `UIInput`; the configs are checked here and not in `BagiEngineTests`, which does not link the demo's classes. `DemoGuideTweenTest` loads the example scene of the tween page (`docs/guide/examples/tween/`) and pins where its three movers are after a fixed time.
 - `BagiDemoControlSmoke` is the engine's generic control smoke (`tools/control/tests/smoke.py`), `BagiDemoCookVerify` cooks the demo's content.
