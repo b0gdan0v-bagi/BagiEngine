@@ -61,7 +61,15 @@ fi
 
 LOGIN_FILE="${TODO_LOGIN_FILE:-${HOME:-}/.config/bagitodo/login.json}"
 # Only the existence of the sign-in file and the key name in .env are tested: neither is opened for its value or printed.
-if [ -e "$LOGIN_FILE" ] || [ -n "${TODO_API_URL:-}" ] || grep -q '^TODO_API_URL=.' "$ROOT/.env" 2> /dev/null; then
+# In a game this checkout is its engine/ submodule, and the game root's .env counts too.
+SUPERPROJECT="$(git -C "$ROOT" rev-parse --show-superproject-working-tree 2> /dev/null || true)"
+HAS_ENV_URL=0
+for env_dir in "$ROOT" "$SUPERPROJECT"; do
+    if [ -n "$env_dir" ] && grep -q '^TODO_API_URL=.' "$env_dir/.env" 2> /dev/null; then
+        HAS_ENV_URL=1
+    fi
+done
+if [ -e "$LOGIN_FILE" ] || [ -n "${TODO_API_URL:-}" ] || [ "$HAS_ENV_URL" -eq 1 ]; then
     echo "[OK] todo: signed in"
     echo "[OK] Virtual environment ready"
     exit 0

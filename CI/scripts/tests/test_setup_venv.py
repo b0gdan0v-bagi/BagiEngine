@@ -84,7 +84,7 @@ class Tree:
             self._fake("uv")
         (self.bin / "fake_venv_python").write_text(FAKE_VENV_PYTHON.format(python=sys.executable))
         # Only these real tools are reachable, so a uv of the machine can not leak into the no-uv cases.
-        for tool in ("bash", "dirname", "grep", "cat"):
+        for tool in ("bash", "dirname", "grep", "cat", "git"):
             (self.bin / tool).symlink_to(self._real(tool))
 
     def _fake(self, name: str):
@@ -179,6 +179,23 @@ def test_the_sign_in_is_skipped_when_it_exists_or_is_not_wanted(tree):
 
     assert "[OK] todo: signed in" in tree.run(TODO_API_URL="http://todo.invalid").stdout
     assert "todo:" not in tree.run("--no-login").stdout
+
+
+def test_the_env_of_the_superproject_counts_when_the_checkout_is_its_submodule(tree):
+    # A game carries the engine as engine/, and its .env sits in the game root, not in the engine.
+    super_root = tree.root.parent
+    git = ["git", "-c", "user.name=t", "-c", "user.email=t@invalid", "-c", "commit.gpgsign=false"]
+    subprocess.run(["git", "init", "-q", str(super_root)], check=True)
+    subprocess.run(["git", "init", "-q", str(tree.root)], check=True)
+    subprocess.run([*git, "-C", str(tree.root), "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+    head = subprocess.run(["git", "-C", str(tree.root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+    subprocess.run(["git", "-C", str(super_root), "update-index", "--add", "--cacheinfo", f"160000,{head},{tree.root.name}"], check=True)
+
+    assert "login https://" in tree.run().stdout
+    (super_root / ".env").write_text("TODO_API_URL=\n")
+    assert "login https://" in tree.run().stdout
+    (super_root / ".env").write_text("TODO_API_URL=x\n")
+    assert "[OK] todo: signed in" in tree.run().stdout
 
 
 def test_a_token_is_never_read_printed_or_passed_on(tree):

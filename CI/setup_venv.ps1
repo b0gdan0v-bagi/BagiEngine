@@ -57,10 +57,19 @@ Write-Host "[OK] reflection generator: jinja2 $JinjaVersion" -ForegroundColor Gr
 if (-not $NoLogin) {
     $HomeDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
     $LoginFile = if ($env:TODO_LOGIN_FILE) { $env:TODO_LOGIN_FILE } else { Join-Path $HomeDir ".config\bagitodo\login.json" }
-    $EnvFile = Join-Path $Root ".env"
     # Only the existence of the sign-in file and the key name in .env are tested: neither is printed.
-    $SignedIn = (Test-Path $LoginFile) -or $env:TODO_API_URL -or
-        ((Test-Path $EnvFile) -and (Select-String -Path $EnvFile -Pattern '^TODO_API_URL=.' -Quiet))
+    # In a game this checkout is its engine/ submodule, and the game root's .env counts too.
+    $EnvDirs = @($Root)
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        $Superproject = git -C $Root rev-parse --show-superproject-working-tree 2>$null
+        if ($Superproject) { $EnvDirs += $Superproject }
+    }
+    $HasEnvUrl = $false
+    foreach ($EnvDir in $EnvDirs) {
+        $EnvFile = Join-Path $EnvDir ".env"
+        if ((Test-Path $EnvFile) -and (Select-String -Path $EnvFile -Pattern '^TODO_API_URL=.' -Quiet)) { $HasEnvUrl = $true }
+    }
+    $SignedIn = (Test-Path $LoginFile) -or $env:TODO_API_URL -or $HasEnvUrl
     if ($SignedIn) {
         Write-Host "[OK] todo: signed in" -ForegroundColor Green
     } else {
