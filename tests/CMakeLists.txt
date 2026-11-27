@@ -94,6 +94,9 @@ if(Python3_FOUND)
     # the fragments of changelog/, CHANGELOG.md and the version header agree (tools/changelog/CLAUDE.md)
     add_test(NAME BagiChangelogCheck
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/changelog/changelog.py check --root ${BAGI_ENGINE_DIR})
+    # the pages of docs/guide/ against the tree: snippets are excerpts of real files, commands and paths exist, links resolve (tools/docs/CLAUDE.md); cheap, so in the everyday run
+    add_test(NAME BagiGuideCheck
+        COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/docs/check_guide.py --root ${BAGI_ENGINE_DIR})
     # a quoted include is allowed only for a source file's own header; every other include is <...> from an include root
     add_test(NAME BagiIncludeStyle
         COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_includes.py --root ${BAGI_ENGINE_DIR})
