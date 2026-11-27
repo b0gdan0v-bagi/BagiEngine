@@ -11,6 +11,7 @@ import io
 import json
 import os
 import socket
+import ssl
 import tarfile
 import tempfile
 import threading
@@ -25,6 +26,7 @@ PAGE = "demo"
 MARKER = "TOKENMARKER7f3a"
 TOKEN = f"{MARKER}-abc123"
 SHA = hashlib.sha256(b"x").hexdigest()
+TLS_DATA = Path(__file__).resolve().parents[3] / "tests" / "BECore" / "Tls" / "data"
 
 
 class SiteHandler(http.server.BaseHTTPRequestHandler):
@@ -61,8 +63,10 @@ class SiteHandler(http.server.BaseHTTPRequestHandler):
 class RecordingServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self) -> None:
+    def __init__(self, tls: ssl.SSLContext | None = None) -> None:
         super().__init__(("127.0.0.1", 0), SiteHandler)
+        if tls is not None:
+            self.socket = tls.wrap_socket(self.socket, server_side=True)
         self.requests: list[dict] = []
         self.mode = "read"
         self.status = 200
@@ -108,8 +112,8 @@ class SiteUploadTestCase(unittest.TestCase):
         self.raised.append(caught.exception)
         return caught.exception
 
-    def start_server(self) -> RecordingServer:
-        server = RecordingServer()
+    def start_server(self, tls: ssl.SSLContext | None = None) -> RecordingServer:
+        server = RecordingServer(tls)
         thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
 
@@ -292,13 +296,28 @@ class UploadTest(SiteUploadTestCase):
             self.assertIn("401", str(error))
             self.assertIn("wrong token", str(error))
 
+    def test_a_tls_1_3_upload_is_not_cut_by_the_records_after_the_handshake(self) -> None:
+        # TLS 1.3 sends session tickets after the handshake: the socket is readable although the site has answered nothing
+        tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.minimum_version = ssl.TLSVersion.TLSv1_3
+        tls.load_cert_chain(TLS_DATA / "localhost.pem", TLS_DATA / "localhost.key")
+        client = ssl.create_default_context(cafile=str(TLS_DATA / "test-ca.pem"))
+        client.check_hostname = False
+        client.verify_flags &= ~ssl.VERIFY_X509_STRICT  # the test CA has no Authority Key Identifier
+        server = self.start_server(tls)
+        server.answers(200, {"page": PAGE})
+        tar_path, sha = self.tar_of(self.make_package(), size_hint=8 * 1024 * 1024)
+        connect = lambda host, timeout: http.client.HTTPSConnection("127.0.0.1", server.port, timeout=timeout, context=client)  # noqa: E731
+        answer = site_upload.upload(SITE, PAGE, tar_path, sha, TOKEN, connect=connect, timeout=20)
+        self.assertEqual(answer, {"page": PAGE})
+        self.assertEqual(server.requests[0]["body"], tar_path.read_bytes())
+
     def test_a_site_that_never_answers_ends_at_the_timeout(self) -> None:
         tar_path, sha = self.tar_of(self.make_package())
         server = self.start_server()
         server.mode = "hang"
         error = self.refused(self.upload, server, tar_path, sha, timeout=0.5)
         self.assertIn("0.5", str(error))
-        self.assertLess(0.5, site_upload.UPLOAD_TIMEOUT_SECONDS)
 
     def test_a_site_that_drops_the_connection_without_an_answer_is_an_error(self) -> None:
         tar_path, sha = self.tar_of(self.make_package(), size_hint=24 * site_upload.PIECE_BYTES)

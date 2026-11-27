@@ -16,7 +16,6 @@ import http.client
 import json
 import os
 import re
-import select
 import tarfile
 from pathlib import Path
 
@@ -137,7 +136,7 @@ def build_tar(dist: Path, tar_path: Path) -> int:
         # USTAR refuses a name that does not fit its fields
         raise UploadError(f"cannot write the tar of {dist}: {error}") from None
     except OSError as error:
-        raise UploadError(f"cannot write the tar of {dist}: {_socket_error(error)}") from None
+        raise UploadError(f"cannot write the tar of {dist}: {_error_text(error)}") from None
 
 
 def file_sha256(path: Path) -> str:
@@ -148,8 +147,8 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _socket_error(error: BaseException) -> str:
-    """A socket or TLS error by its type and `strerror`, nothing else: an exception text may quote what was sent or received."""
+def _error_text(error: BaseException) -> str:
+    """An OS, socket or TLS error by its type and `strerror`, nothing else: an exception text may quote what was sent or received."""
     reason = getattr(error, "strerror", None) or getattr(error, "reason", None)
     return f"{type(error).__name__}: {_clean_line(str(reason))}" if reason else type(error).__name__
 
@@ -175,18 +174,7 @@ def _answer(connection: http.client.HTTPConnection, site: str, token: str, timeo
     except TimeoutError:
         raise UploadError(f"{site} did not answer within {timeout:g} s") from None
     except (OSError, http.client.HTTPException) as error:
-        raise UploadError(f"no answer from {site}: {_socket_error(error)}") from None
-
-
-def _early_answer_waits(connection: http.client.HTTPConnection) -> bool:
-    """True when the site has written something while the body is still going out (401, 409 and 413 arrive before the body ends)."""
-    sock = connection.sock
-    if sock is None:
-        return False
-    try:
-        return bool(select.select([sock], [], [], 0)[0])
-    except (OSError, ValueError):
-        return False
+        raise UploadError(f"no answer from {site}: {_error_text(error)}") from None
 
 
 def upload(site: str, page: str, tar_path: Path, sha256: str, token: str, *, connect=http.client.HTTPSConnection,
@@ -219,7 +207,7 @@ def upload(site: str, page: str, tar_path: Path, sha256: str, token: str, *, con
             connection.endheaders()
             sent = 0
             with tar_path.open("rb") as handle:
-                while sent < size and not _early_answer_waits(connection):
+                while sent < size:
                     piece = handle.read(PIECE_BYTES)
                     if not piece:
                         break
@@ -229,13 +217,14 @@ def upload(site: str, page: str, tar_path: Path, sha256: str, token: str, *, con
         except TimeoutError:
             raise UploadError(f"sending to {site} stopped: no progress within {timeout:g} s") from None
         except OSError as error:
-            # The site may have answered before the body ended and closed: that answer says why, a broken pipe does not
+            # The site may have answered before the body ended (401, 409 and 413 do) and closed: that answer says why, a broken pipe
+            # does not. Socket readability is no sign of an answer: TLS 1.3 sends session tickets after the handshake.
             if connection.sock is None:
-                raise UploadError(f"cannot connect to {site}: {_socket_error(error)}") from None
+                raise UploadError(f"cannot connect to {site}: {_error_text(error)}") from None
             try:
                 status, body = _answer(connection, site, token, timeout)
             except UploadError:
-                raise UploadError(f"the connection to {site} broke while sending: {_socket_error(error)}") from None
+                raise UploadError(f"the connection to {site} broke while sending: {_error_text(error)}") from None
             raise UploadError(f"the site refused the upload ({status}): {_detail(body, token)}") from None
 
         status, body = _answer(connection, site, token, timeout)

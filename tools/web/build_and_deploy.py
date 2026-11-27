@@ -369,8 +369,8 @@ def fail(status: deploy_status.Status, message: str, code: int) -> int:
 
 def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run, gate=alltests_results.check,
         checkout=deploy_checkout.prepare, changes=alltests_results.uncommitted, upload=site_upload.upload) -> int:
-    parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to Railway.")
-    parser.add_argument("--target", help="a named target of <source>/web/targets.json: game, preset and service come from it, and no free option is allowed")
+    parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to a Railway service or a page of a site.")
+    parser.add_argument("--target", help="a named target of <source>/web/targets.json: game, preset and the Railway service or the site page come from it, and no free option is allowed")
     parser.add_argument("--game", help=f"the game target (default: {DEFAULT_GAME})")
     parser.add_argument("--preset", help=f"the web preset (default: {DEFAULT_PRESET})")
     parser.add_argument("--source-dir", type=Path, help="the project with CMakePresets.json (default: the current folder)")
@@ -379,7 +379,7 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     parser.add_argument("--app", type=Path, help=f"the game's web app settings for package.py (default: <source>/{APP_FILE.as_posix()} when it exists)")
     parser.add_argument("--dist", type=Path, help=f"the packaged folder (default: <source>/{DIST_FOLDER.as_posix()}, of a {EDITOR_PRESET_PREFIX}* preset <source>/{EDITOR_DIST_FOLDER.as_posix()})")
     parser.add_argument("--stage-dir", type=Path, help=f"the folder `railway up` runs in (default: <source>/{STAGE_FOLDER.as_posix()})")
-    parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`")
+    parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`, or for a site page upload the package to it")
     parser.add_argument("--service", help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE}; an editor page has no default)")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and run nothing")
     parser.add_argument("--skip-alltests", action="store_true", help="deploy even when HEAD of the source has no green full test run or the tree has uncommitted changes (tools/alltests)")
