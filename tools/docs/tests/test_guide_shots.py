@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import guide_shots
 import pytest
@@ -91,3 +92,70 @@ def test_a_bad_manifest_is_exit_1(tmp_path, rows):
 def test_the_shipped_manifest_is_valid():
     rows = guide_shots.load_rows(guide_shots.MANIFEST)
     assert {item["name"] for item in rows} >= {"demo-game", "demo-editor"}
+
+
+def overlay_tree(tmp_path, monkeypatch):
+    """A fake repository root with the folder `examples/one` (a file `config/Marker.txt`) that a row can name."""
+    root = tmp_path / "repository"
+    (root / "examples" / "one" / "config").mkdir(parents=True)
+    (root / "examples" / "one" / "config" / "Marker.txt").write_text("marker")
+    monkeypatch.setattr(guide_shots, "REPOSITORY_ROOT", root)
+    return root
+
+
+def test_a_content_overlay_is_a_copy_the_game_may_write_into_and_it_is_removed_after(tmp_path, fake_bin, monkeypatch):
+    root = overlay_tree(tmp_path, monkeypatch)
+    seen = {}
+    launch = guide_shots.GameSession.launch
+    call = guide_shots.GameSession.call
+
+    def recording_launch(self, *args, **kwargs):
+        seen["overlay"] = kwargs.get("content_overlay")
+        return launch(self, *args, **kwargs)
+
+    def writing_call(self, method, params=None, timeout=None):
+        if method == "screenshot":
+            copy = Path(seen["overlay"])
+            seen["marker"] = (copy / "config" / "Marker.txt").read_text()
+            (copy / "config" / "Written.txt").write_text("by the game")
+        return call(self, method, params, timeout)
+
+    monkeypatch.setattr(guide_shots.GameSession, "launch", recording_launch)
+    monkeypatch.setattr(guide_shots.GameSession, "call", writing_call)
+    manifest = write_manifest(tmp_path, [row(contentOverlay="examples/one")])
+    assert guide_shots.main(["--manifest", str(manifest), "--out", str(tmp_path / "img"), "--bin", str(fake_bin)]) == 0
+    assert seen["marker"] == "marker"
+    assert Path(seen["overlay"]) != root / "examples" / "one"
+    assert not Path(seen["overlay"]).exists()
+    assert sorted(path.name for path in (root / "examples" / "one" / "config").iterdir()) == ["Marker.txt"]
+
+
+def test_a_row_without_a_content_overlay_passes_none(tmp_path, fake_bin, monkeypatch):
+    seen = []
+    launch = guide_shots.GameSession.launch
+
+    def recording_launch(self, *args, **kwargs):
+        seen.append(kwargs.get("content_overlay", "absent"))
+        return launch(self, *args, **kwargs)
+
+    monkeypatch.setattr(guide_shots.GameSession, "launch", recording_launch)
+    manifest = write_manifest(tmp_path, [row()])
+    assert guide_shots.main(["--manifest", str(manifest), "--out", str(tmp_path / "img"), "--bin", str(fake_bin)]) == 0
+    assert seen == [None]
+
+
+@pytest.mark.parametrize("overlay", ["examples/missing", "examples/one/config/Marker.txt"])
+def test_a_content_overlay_that_is_no_folder_is_exit_1_naming_the_row(tmp_path, fake_bin, monkeypatch, capsys, overlay):
+    overlay_tree(tmp_path, monkeypatch)
+    manifest = write_manifest(tmp_path, [row(name="shot-row", contentOverlay=overlay)])
+    assert guide_shots.main(["--manifest", str(manifest), "--out", str(tmp_path / "img"), "--bin", str(fake_bin)]) == 1
+    assert "shot-row" in capsys.readouterr().err
+    assert not (tmp_path / "img").exists()
+
+
+@pytest.mark.parametrize("overlay", ["../outside", "examples/../../outside", "/etc", "C:/temp", "..", 7, ""])
+def test_a_content_overlay_that_leaves_the_repository_is_exit_1_naming_the_row(tmp_path, monkeypatch, capsys, overlay):
+    overlay_tree(tmp_path, monkeypatch)
+    manifest = write_manifest(tmp_path, [row(name="shot-row", contentOverlay=overlay)])
+    assert guide_shots.main(["--manifest", str(manifest), "--out", str(tmp_path / "img"), "--bin", str(tmp_path)]) == 1
+    assert "shot-row" in capsys.readouterr().err

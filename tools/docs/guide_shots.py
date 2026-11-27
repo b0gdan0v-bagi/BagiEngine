@@ -3,9 +3,10 @@
 
     python3 tools/docs/guide_shots.py [--only NAME[,NAME...]] [--preset P] [--bin DIR] [--out DIR]
 
-One row of guide_shots.json is one picture: the game is started headless on the manual clock (`GameSession`), the steps of the row are
-called, the control API `screenshot` is written as `<out>/<name>.png`. Exit 0 done, 1 an error, 77 an executable is missing (build the
-preset first). Standard library only, Python 3.10+; the rules are in tools/docs/CLAUDE.md.
+One row of guide_shots.json is one picture: the game is started headless on the manual clock (`GameSession`; with a `contentOverlay`,
+on a temporary copy of that repository folder as its content overlay), the steps of the row are called, the control API `screenshot` is
+written as `<out>/<name>.png`. Exit 0 done, 1 an error, 77 an executable is missing (build the preset first). Standard library only,
+Python 3.10+; the rules are in tools/docs/CLAUDE.md.
 """
 
 from __future__ import annotations
@@ -13,8 +14,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
-from pathlib import Path
+import tempfile
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -52,10 +55,32 @@ def load_rows(manifest: Path) -> list[dict[str, Any]]:
         names.add(name)
         if not isinstance(row.get("exe"), str):
             raise ShotError(f"{manifest}: row {name} needs `exe`, the target name of the game")
+        if "contentOverlay" in row:
+            overlay_folder(row)
         for step in row.get("steps", []):
             if not (isinstance(step, list) and len(step) == 2 and isinstance(step[0], str) and isinstance(step[1], dict)):
                 raise ShotError(f"{manifest}: row {name}: a step is [method, params], not {step!r}")
     return rows
+
+
+def overlay_folder(row: dict[str, Any]) -> Path:
+    """The folder of the row's `contentOverlay` in the repository; a path that could leave it is refused."""
+    value = row["contentOverlay"]
+    if not isinstance(value, str) or not value:
+        raise ShotError(f"row {row['name']}: `contentOverlay` is a folder path relative to the repository root")
+    parts = PureWindowsPath(value).parts + PurePosixPath(value).parts
+    if PurePosixPath(value).is_absolute() or PureWindowsPath(value).anchor or ".." in parts:
+        raise ShotError(f"row {row['name']}: `contentOverlay` {value!r} has to stay inside the repository (relative, no `..`)")
+    return REPOSITORY_ROOT / value
+
+
+def copy_overlay(row: dict[str, Any], target: Path) -> Path:
+    """Copies the row's folder to `target`: a game writes into its overlay, and the repository must never change."""
+    source = overlay_folder(row)
+    if not source.is_dir():
+        raise ShotError(f"row {row['name']}: `contentOverlay` {row['contentOverlay']!r} is not a folder of the repository")
+    shutil.copytree(source, target)
+    return target
 
 
 def select_rows(rows: list[dict[str, Any]], only: str | None) -> list[dict[str, Any]]:
@@ -82,17 +107,25 @@ def executable_of(row: dict[str, Any], preset: str, bin_dir: Path | None) -> Pat
 
 
 def take(row: dict[str, Any], exe: Path, out: Path) -> Path:
-    """Starts the game of the row, runs its steps and writes the picture; the game is closed whatever happens."""
-    session = GameSession(client_name="guide_shots")
-    try:
-        description = session.launch(exe=str(exe), window=row.get("window"), density=row.get("density"), editor=bool(row.get("editor")))
-        if row.get("editor") and description["status"].get("runMode") != EDITOR_RUN_MODE:
-            raise ShotError(f"row {row['name']}: the build has no editor (status.runMode is {description['status'].get('runMode')!r})")
-        for method, params in row.get("steps", []):
-            session.call(method, params)
-        png, _ = session.screenshot(row.get("maxSize", DEFAULT_MAX_SIZE))
-    finally:
-        session.close()
+    """Starts the game of the row, runs its steps and writes the picture; the game is closed, and the copy of the overlay removed, whatever happens."""
+    with tempfile.TemporaryDirectory(prefix="bagi-guide-shot-") as scratch:
+        overlay = copy_overlay(row, Path(scratch) / "content") if "contentOverlay" in row else None
+        session = GameSession(client_name="guide_shots")
+        try:
+            description = session.launch(
+                exe=str(exe),
+                window=row.get("window"),
+                density=row.get("density"),
+                editor=bool(row.get("editor")),
+                content_overlay=None if overlay is None else str(overlay),
+            )
+            if row.get("editor") and description["status"].get("runMode") != EDITOR_RUN_MODE:
+                raise ShotError(f"row {row['name']}: the build has no editor (status.runMode is {description['status'].get('runMode')!r})")
+            for method, params in row.get("steps", []):
+                session.call(method, params)
+            png, _ = session.screenshot(row.get("maxSize", DEFAULT_MAX_SIZE))
+        finally:
+            session.close()
     target = out / f"{row['name']}.png"
     out.mkdir(parents=True, exist_ok=True)
     target.write_bytes(png)

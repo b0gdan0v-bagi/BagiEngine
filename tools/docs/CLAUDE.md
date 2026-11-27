@@ -36,9 +36,12 @@ No capture mechanism of its own: it starts a built game through `GameSession` (`
 | `exe` | the target name in `build/<preset>/bin` |
 | `preset` | optional; `--preset` wins, then this, then `macos-debug` on macOS, else an error |
 | `window`, `density` | optional start size (`WxH`, window units) and density of the headless window |
+| `contentOverlay` | optional folder of the repository (relative, no `..`): copied to a temporary folder outside it, which is the game's content overlay (a game writes there, and `GameSession` refuses an overlay inside a git work tree); removed after the picture, the source never changes; a missing folder is an error naming the row |
 | `editor` | start with `--editor`; a build without the editor is an error, not a Game picture |
 | `steps` | `[method, params]` control calls before the picture (`step`, `imgui_input`, ...); a click on an editor panel is a `move`, a few frames, then the `click`, at a point of that window size |
 | `maxSize` | the longer side of the picture, 640 by default |
 | `about` | one line: what it shows |
+
+`docs/guide/examples/<page>/` holds the real content files a page needs (a scene, a screen, strings, themes, a node file) in a game's layout, `config/` and `assets/`: the single copy, which the page excerpts (`<!-- source: ... -->`) and the rows copy (`contentOverlay`). `python3 tools/migrate/migrate.py --root .` finds its content files, so a content migration moves them with the demo's; `GuideExamplesTest` (`tests/BECore/`) loads them and runs the screen on the size matrix.
 
 Exit 0 done, 1 an error (a bad row, a failed call), 77 an executable is missing (nothing is written then). It writes only into `--out`. The pictures are of the headless software render of the machine that took them; the editor's frame-rate readout differs between runs, so a retake is a different file even when nothing changed.
