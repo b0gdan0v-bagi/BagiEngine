@@ -37,7 +37,7 @@ Or press `Ctrl+Shift+E` in a running game to switch between the game and the edi
 The three parts you need now:
 
 - **Hierarchy** (top left, in the tab Scene Editor): the tree of the scene. `Root` is the top of it, and under it are the groups of the demo: `Background`, `Text`, `Sprites` and so on.
-- **Viewport** (middle): the scene as the game draws it. It starts paused, so the shapes and sparks do not move until you press play in the toolbar at the top.
+- **Viewport** (middle): the scene as the game draws it. The game runs live there, so the shapes and sparks move.
 - **Inspector** (next to the hierarchy): the fields of the picked node.
 
 ## 3. Pick a node and change a field
@@ -72,7 +72,7 @@ You will see one changed file, `tools/demo/config/SceneConfig.xml`, and more cha
 
 The picture is the same; the text of the file is a normalised form of it. This is also why the editor is for changing a scene and a text editor is for writing one (the next page does that).
 
-One more thing to know. The tweens of the demo (`SlidingStar`, `TurningRing`, `BobbingArrow`) move their node by changing its position. If you press play and save while one is moving, the saved position is the one at that moment. Switch `Animate` off first.
+One more thing to know. The tweens of the demo (`SlidingStar`, `TurningRing`, `BobbingArrow`) move their node by changing its position. If you save while one is moving, the saved position is the one at that moment. Switch `Animate` off first.
 
 To throw your change away:
 

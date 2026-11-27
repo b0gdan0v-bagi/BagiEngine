@@ -113,7 +113,7 @@ python3 tools/web/build_and_deploy.py --game BagiDemo --preset web-editor
 
 The preset `web-editor` is the Debug build with the editor, so it takes longer and its `.wasm` is much larger. The package is written to `build/web-editor-dist` (and not to `dist/`), and the page starts in the editor, as `--editor` does on the desktop. [The editor page](editor.md) says what is different in it.
 
-An editor can change everything, so `serve.py` will not start an editor page for others to reach. It starts on a loopback address only, which `--host 127.0.0.1` is:
+An editor can change everything, so `serve.py` will not start an editor page for others to reach. Without `--host` it refuses:
 
 <!-- command -->
 ```bash
@@ -125,7 +125,14 @@ python3 tools/web/serve.py --root build/web-editor-dist
 serve.py: build/web-editor-dist holds an editor page, which needs access control: ... Without it the page is served to this machine only: --host 127.0.0.1 ...
 ```
 
-With `--host 127.0.0.1` it starts and says `access: open`. The page is slow to start: the Debug `.wasm` is about 138 MB, and it took about half a minute here before the editor was drawn. It then asks you to confirm that nothing you change in it is kept.
+Give it a loopback address and it starts:
+
+<!-- command -->
+```bash
+python3 tools/web/serve.py --root build/web-editor-dist --host 127.0.0.1
+```
+
+It says `access: open`. The page is slow to start: the Debug `.wasm` is about 138 MB, and it took about half a minute here before the editor was drawn. It then asks you to confirm that nothing you change in it is kept.
 
 ## 7. Saves in the browser
 

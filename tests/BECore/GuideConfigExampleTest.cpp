@@ -38,7 +38,7 @@ namespace BECore::Tests {
             WriteFile(ConfigPath(), ReadFile(ExampleFile()));
         }
 
-        void PostAndSettle() {
+        void PostConfigAndSettle() {
             ConfigReloadFixture::PostAndSettle(ConfigPath());
         }
 
@@ -97,7 +97,7 @@ namespace BECore::Tests {
         ASSERT_EQ(settings.Get()._count, kExampleCount);
 
         ASSERT_NO_FATAL_FAILURE(WriteExampleWith("count=\"8\"", "count=\"12\""));
-        PostAndSettle();
+        PostConfigAndSettle();
 
         ASSERT_EQ(changes.causes.size(), 1u);
         EXPECT_EQ(changes.causes[0], ConfigEvents::ConfigChangeCause::Reloaded);
@@ -112,7 +112,7 @@ namespace BECore::Tests {
         FailureRecorder failures;
 
         WriteFile(ConfigPath(), "<GuideSpawnerConfig count=\"12\"");
-        PostAndSettle();
+        PostConfigAndSettle();
 
         EXPECT_EQ(failures.names.size(), 1u);
         EXPECT_TRUE(changes.causes.empty());
@@ -132,7 +132,7 @@ namespace BECore::Tests {
         EXPECT_EQ(changes.causes.size(), 1u) << "the save";
         EXPECT_EQ(settings.Get()._count, kSavedCount);
 
-        PostAndSettle();
+        PostConfigAndSettle();
         EXPECT_EQ(changes.causes.size(), 1u) << "the echo of the save";
     }
 

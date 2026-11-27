@@ -157,7 +157,7 @@
         ["imgui_input", {"events": [{"type": "text", "text": "status"}, {"type": "key", "key": "Enter"}]}],
         ["imgui_input", {"events": [{"type": "click", "x": 700, "y": 126}]}],
         ["imgui_input", {"events": [{"type": "text", "text": "Control"}]}],
-        ["imgui_input", {"events": [{"type": "move", "x": 60, "y": 880}]}],
+        ["imgui_input", {"events": [{"type": "move", "x": 900, "y": 500}]}],
         ["step", {"frames": 30, "dt": 0.016}]
       ],
       "about": "The Console opened with Ctrl+Shift+L over the editor: the filter field holds Control so two log lines are left, and the command line has answered ping and status",

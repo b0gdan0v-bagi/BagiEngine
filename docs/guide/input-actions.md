@@ -2,7 +2,7 @@
 
 You will make a click do something with no C++: a round pad on a scene that, when pressed, sends the name `Pop`, and a burst of sparks that waits for that name. Then you will read the few lines of C++ that listen to the same name, and press the pad from a Python script. Every block below is an excerpt of a real file: the example folder `docs/guide/examples/input-actions/`, the demo's own source, or a file that a test runs.
 
-You need the build from [Run the demo](run-the-demo.md) and the overlay folder of [Your first scene](first-scene.md). The first half is data.
+You need the build from [Run the demo](run-the-demo.md). The first half is data.
 
 ## What an action is
 
@@ -83,7 +83,7 @@ The event comes in the first stage of the frame (`src/Modules/BECore/CLAUDE.md`,
 
 ## Raw input
 
-The action is not the first thing that happens. A mouse press first goes to the things that can take it, topmost first: a UI screen, then a `ClickableComponent`. The first that wants it consumes it, and only a press that nobody consumed reaches game code, as a raw mouse event (`SDLEvents::MouseButtonDownEvent`, in output pixels). So a click on a button does not also hit the board under it. A `ClickableComponent` with `blocksInput="true"` is a shield: it takes the press and sends nothing, to keep what is drawn below it from reacting.
+The action is not the first thing that happens. A mouse press first goes to the things that can take it, topmost first: a UI screen, then a `ClickableComponent`. The first that wants it consumes it, and only a press that nobody consumed reaches game code, as a raw mouse event (`SDLEvents::MouseButtonDownEvent`, in output pixels). So a click on a button does not also hit the board under it. A `ClickableComponent` with `blocksInput="true"` and no `actionName` is a shield: it takes the press and sends nothing, to keep what is drawn below it from reacting.
 
 A key is raw too. The engine has no table that binds a key to an action: a key arrives as `SDLEvents::KeyDownEvent`, and a game that wants "Escape closes the panel" subscribes to it and, if it likes, sends the `ActionEvent` itself, so that the rest of the game listens by name as before.
 
