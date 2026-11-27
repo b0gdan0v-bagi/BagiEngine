@@ -70,6 +70,26 @@
         ["step", {"frames": 5, "dt": 0.016}]
       ],
       "about": "BagiDemo on the example of the prefab page (docs/guide/examples/prefab): three instances of one node file, each with its own text, and the third in another colour"
+    },
+    {
+      "name": "tween-start",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/tween",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "BagiDemo on the example of the tween page (docs/guide/examples/tween) at frame 5: the three movers are at their authored places, the bobber has not started its delay"
+    },
+    {
+      "name": "tween-far",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/tween",
+      "steps": [
+        ["step", {"frames": 126, "dt": 0.016}]
+      ],
+      "about": "the same scene at frame 126, two seconds after the runs started: the slider is at the far end of its way and the turner at 180 degrees, the bobber is half way back"
     }
   ]
 }

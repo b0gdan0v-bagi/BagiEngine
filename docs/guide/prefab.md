@@ -165,4 +165,4 @@ A release build does not read these files at run time. The cook expands every `<
 
 You wrote a node once, used it three times, and said only what differs: a place and a word each, and a colour for the third. You changed the file and saw the instances follow, you broke an override and saw the engine drop that one instance and keep going, and you saw Save write back only the differences.
 
-Next (planned): a tween and a timeline, which move and fade a node like these bars.
+Next: [A tween and a timeline](tween-and-timeline.md), which move and fade a node like these bars.
