@@ -1,7 +1,14 @@
 #include <BECore/Config/XmlConfig.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Scene/Components/QuadRendererComponent.h>
+#include <BECore/Scene/Components/TransformComponent.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneLoader.h>
+#include <BECore/Scene/SceneManager.h>
+#include <BECore/Text/TextComponent.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIThemes.h>
@@ -38,6 +45,10 @@ namespace BECore::Tests {
 
         Path UiScreenFolder() {
             return EngineRoot() / "docs" / "guide" / "examples" / "ui-screen";
+        }
+
+        Path PrefabFolder() {
+            return EngineRoot() / "docs" / "guide" / "examples" / "prefab";
         }
 
         String ReadUiScreen(const char* relativePath) {
@@ -115,6 +126,28 @@ namespace BECore::Tests {
             LoadUiScreen((UiScreenFolder() / kScreenSource).View());
         }
 
+        /// The prefab example's scene text @p sceneText with its `<node ref>` expanded from the folder's `config/nodes/` (a game's file system is not mounted: the directory loader)
+        void LoadPrefabScene(const String& sceneText) {
+            ASSERT_TRUE(_sceneDocument.load_string(sceneText.c_str()));
+            _manager = LoadSceneManager(XmlNode{_sceneDocument.document_element()}, MakeDirectoryNodeLoader(PrefabFolder() / "config"));
+            ASSERT_NE(_manager, nullptr);
+            _manager->Initialize();
+        }
+
+        /// The node @p name of the scene `DemoScene`, null when it is not there
+        SceneNode* PrefabNode(PoolString name) const {
+            Scene* scene = _manager ? _manager->GetSceneByName("DemoScene"_intern) : nullptr;
+            if (scene == nullptr) {
+                return nullptr;
+            }
+            for (const auto& child : scene->GetRootNode().GetChildren()) {
+                if (child->GetName() == name) {
+                    return child.Get();
+                }
+            }
+            return nullptr;
+        }
+
         /// What is wrong with the canvas on every case of the size matrix, in every language of the strings: the first lines of the first cases that have anything. The validator's
         /// issues come first, then `Problems()` (a word its control cuts, a control that takes a press and is under 56 units high)
         String ProblemsOnMatrix() {
@@ -148,6 +181,8 @@ namespace BECore::Tests {
             layout.Invalidate();
             return report;
         }
+
+        pugi::xml_document _sceneDocument;
     };
 
     TEST_F(GuideExamplesTest, TheUiScreenCompilesWithAnEmptyReport) {
@@ -206,6 +241,45 @@ namespace BECore::Tests {
         ExpectContentFilesAtCurrentVersion(EngineRoot() / "docs" / "guide" / "examples");
     }
 
+    TEST_F(GuideExamplesTest, ThePrefabExampleGivesThreeInstancesWithTheirOwnOverrides) {
+        LogRecorder log;
+        ASSERT_NO_FATAL_FAILURE(LoadPrefabScene(ReadFile(PrefabFolder() / "config" / "SceneConfig.xml")));
+        LogEvent::Flush();
+        EXPECT_EQ(log.Count(LogLevel::Warning, {}), 0u);
+        EXPECT_EQ(log.Count(LogLevel::Error, {}), 0u);
+
+        SceneNode* sky = PrefabNode("Sky"_intern);
+        SceneNode* one = PrefabNode("BadgeOne"_intern);
+        SceneNode* two = PrefabNode("BadgeTwo"_intern);
+        SceneNode* three = PrefabNode("BadgeThree"_intern);
+        ASSERT_TRUE(sky != nullptr && one != nullptr && two != nullptr && three != nullptr);
+        EXPECT_TRUE(sky->GetSourceRef().Empty());
+        for (const SceneNode* badge : {one, two, three}) {
+            EXPECT_EQ(badge->GetSourceRef(), "nodes/Badge"_intern) << badge->GetName().CStr();
+            EXPECT_EQ(badge->GetComponents().size(), 3u) << "the prefab's Transform, Quad and Text, an override adds none";
+        }
+
+        // what an instance names changes; what it leaves out is the prefab's
+        const auto oneTransform = one->GetComponent<TransformComponent>();
+        const auto oneText = one->GetComponent<TextComponent>();
+        ASSERT_TRUE(oneTransform && oneText);
+        EXPECT_FLOAT_EQ(oneTransform->_x, 100.0f);
+        EXPECT_FLOAT_EQ(oneTransform->_width, 220.0f);
+        EXPECT_EQ(oneText->_text, "One");
+        EXPECT_FLOAT_EQ(oneText->_fontSize, 32.0f);
+
+        const auto twoText = two->GetComponent<TextComponent>();
+        ASSERT_TRUE(twoText);
+        EXPECT_EQ(twoText->_text, "Two");
+
+        const Color prefabColor = one->GetComponent<QuadRendererComponent>()->_color;
+        EXPECT_PRED2(ColorsEqual, two->GetComponent<QuadRendererComponent>()->_color, prefabColor);
+        const Color threeColor = three->GetComponent<QuadRendererComponent>()->_color;
+        EXPECT_PRED2(ColorsEqual, threeColor, Color(200, 110, 40, 255));
+        EXPECT_FALSE(ColorsEqual(threeColor, prefabColor));
+        EXPECT_EQ(three->GetComponent<TextComponent>()->_text, "Three");
+    }
+
     // ---- broken copies: the cases above see a mistake -------------------------------------------------------------------
 
     TEST_F(GuideExamplesTest, ABrokenSheetWithJustifyContentIsInTheReport) {
@@ -227,6 +301,21 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadUiScreen(screen));
         const String problems = ProblemsOnMatrix();
         EXPECT_NE(problems.find("Volume"), String::npos) << problems.c_str();
+    }
+
+    TEST_F(GuideExamplesTest, AnOverrideOfAComponentThePrefabLacksDropsTheWholeInstance) {
+        String scene = ReadFile(PrefabFolder() / "config" / "SceneConfig.xml");
+        ASSERT_NO_FATAL_FAILURE(Replace(scene, "<component type=\"TextComponent\" text=\"One\" />", "<component type=\"SpriteRendererComponent\" spriteId=\"None\" />"));
+        LogRecorder log;
+        ASSERT_NO_FATAL_FAILURE(LoadPrefabScene(scene));
+        LogEvent::Flush();
+
+        const Vector<String> errors = log.Messages(LogLevel::Error, {});
+        ASSERT_EQ(errors.size(), 1u) << (errors.empty() ? "" : errors[0].c_str());
+        EXPECT_EQ(PrefabNode("BadgeOne"_intern), nullptr);
+        EXPECT_NE(PrefabNode("Sky"_intern), nullptr);
+        EXPECT_NE(PrefabNode("BadgeTwo"_intern), nullptr);
+        EXPECT_NE(PrefabNode("BadgeThree"_intern), nullptr) << "the rest of the scene loads";
     }
 
 }  // namespace BECore::Tests
