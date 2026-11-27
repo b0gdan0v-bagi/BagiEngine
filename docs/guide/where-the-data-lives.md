@@ -37,7 +37,7 @@ The three example paths are folders laid out like a game's content, so the scree
 
 A **content root** is a folder with `config/` and `assets/` in it. A game has the engine's root, and its own root on top of it (`src/Modules/BECore/FileSystem/CLAUDE.md`, "Content roots and layers"). In a browser there is a third root on top, the engine's `web/` folder with a few files for the page (`web/config/`).
 
-A file is looked up from the top root down, and **a file of the same name in a higher root replaces the whole file**. It is not merged. A file that exists in one root only is used as it is. The consequence: to change one value of the engine's `SceneConfig.xml`, a game copies the whole file and changes the value. The log names the winner of each file (the run below shows it).
+A file is looked up from the top root down, and **a file of the same name in a higher root replaces the whole file**. It is not merged. A file that exists in one root only is used as it is. The consequence: to change one value of the engine's `SceneConfig.xml`, a game copies the whole file and changes the value. For a config file (a file of `config/` that a config type reads) the log names the winner (the run below shows it); for other files it says nothing.
 
 Then there is the **overlay**. `--content-overlay=<folder>` makes a folder the top root, and every file the editor saves goes into it. So a try never touches a file that git tracks. Here is a made-up picture of the three folders, and which file wins:
 
@@ -74,7 +74,7 @@ build/macos-debug/bin/BagiDemo --content-overlay=$HOME/bagi-data
 
 The title in the window reads `Title from the overlay`; every other node is as it was, because your file is a copy of the whole scene. Take the overlay away (run without the flag) and the title is the demo's again: the file in `tools/demo/` was never changed.
 
-The log of this run names the winner of every file that exists in two roots. `engine.log` lies in the folder you started the demo from (its name is in `LoggerConfig.xml`, and git ignores it). The two lines of the scene, from the writer's run (the paths of the machine are shortened to `<repo>` and `<overlay>`):
+The log of this run names the winner of every config file that exists in two roots (`ConfigManager` writes the lines; an asset that two roots have is not logged). `engine.log` lies in the folder you started the demo from (its name is in `LoggerConfig.xml`, and git ignores it). The two lines of the scene, from the writer's run (the paths of the machine are shortened to `<repo>` and `<overlay>`):
 
 <!-- illustration: the lines the config manager logged when the demo started with an overlay; the time of day is whenever you run it and the folders are yours -->
 ```text
