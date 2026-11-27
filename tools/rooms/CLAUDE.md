@@ -8,6 +8,8 @@ The same scenarios run in the gtest executable against the server in its own pro
 
 With `--probe <BagiRoomClientProbe>` (`ctest` passes it when the target is built; `--preset` finds it next to the server) it also runs the C++ client of `RoomClient` from a process of its own. Without a probe those scenarios are skipped with a line.
 
+Hosting the server (the image, the settings, Railway) is the operator's text in `README.md` of this folder; this file holds the contracts of the tools.
+
 ## Running
 
 ```bash

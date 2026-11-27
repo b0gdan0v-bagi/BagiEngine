@@ -87,7 +87,7 @@ In public mode (`policy.loopbackOnly = false`) `Origin` keeps foreign **web page
 
 ## For later slices
 
-- **Hosting** is the Docker image of `tools/rooms/Dockerfile` (a Linux build of the target, `nobody`, no `CMD`) and the platform notes (the variables in a table, Railway's settings) in the README, "Hosting the room server"; `tools/rooms/docker_check.py` is its check. A game reuses the file with `--build-arg SERVER_TARGET`. The image sets `BAGI_ROOMS_BIND=any` and `BAGI_ROOMS_MAX_PER_ADDRESS=0`.
+- **Hosting** is the Docker image of `tools/rooms/Dockerfile` (a Linux build of the target, `nobody`, no `CMD`) and the platform notes (the variables in a table, Railway's settings) in `tools/rooms/README.md`; `tools/rooms/docker_check.py` is its check. A game reuses the file with `--build-arg SERVER_TARGET`. The image sets `BAGI_ROOMS_BIND=any` and `BAGI_ROOMS_MAX_PER_ADDRESS=0`.
 - **TLS is not here**: the server speaks plain `ws://`; `wss://` is the proxy's job (a hosting platform terminates it). Behind a proxy every client has the proxy's address, so the image keeps `--max-per-address 0` and `--trusted-proxy-hops 0` (a header any client can send is a lie unless the proxy is known to set it): the owner turns the per-address rules on with `BAGI_ROOMS_TRUSTED_PROXY_HOPS` once the platform is known to append the real client as the last entry.
 - IPv4 only (`Socket`). Linux is built and run in the Docker image (`docker_check.py`; the gtest executables are not built there, so the stuck-client shutdown tests rely on macOS socket buffer sizes and are unchecked on Linux). Windows is not run: the Winsock branch of `Socket.cpp` is written and unchecked.
 
