@@ -8,7 +8,7 @@ A C++23 game engine on a scene graph of `SceneNode` + components. It runs on SDL
 - **Its own in-game UI**, adaptive to the window size, the aspect and the safe area, with a validator that checks every screen on a matrix of devices (`src/Modules/BECore/UI/CLAUDE.md`).
 - **An editor** on desktop and in the browser (`BE_WITH_EDITOR`, the `web-editor` preset: `cmake/CLAUDE.md`).
 - **Reflection and hot reload.** `BE_CLASS` and `BE_REFLECT_FIELD` generate the serialization; a changed config file is read again while the game runs (`src/Modules/BECore/Config/CLAUDE.md`).
-- **Tweens and timelines, particles, audio and saves** in the core (`src/Modules/BECore/{Animation,Particles,Audio,Save}/`).
+- **Tweens and timelines, particles, audio and saves** in the core (`Animation`, `Particles`, `Audio` and `Save` under `src/Modules/BECore/`, each with its own `CLAUDE.md`).
 - **Online rooms** with a headless room server over WebSocket (`src/Modules/RoomServer/CLAUDE.md`).
 - **A control API** over WebSocket with Python tools, to drive a running game from a script or a model (`tools/control/CLAUDE.md`).
 - **Development with coding agents.** The contracts of every module are written in the `CLAUDE.md` files next to the code.
@@ -22,7 +22,7 @@ A C++23 game engine on a scene graph of `SceneNode` + components. It runs on SDL
 
 ## Build it
 
-You need CMake 3.31 or newer, Ninja, Clang, Git, Python 3 (the reflection code is generated at configure) and `glslc` from the Vulkan SDK, on the `PATH` or in `VULKAN_SDK`. On Windows also Visual Studio with the C++ tools.
+You need CMake 3.31 or newer, Ninja, Clang, Git, Python 3 with Jinja2 (the reflection code is generated at configure) and `glslc` from the Vulkan SDK, on the `PATH` or in `VULKAN_SDK`. On Windows also Visual Studio with the C++ tools.
 
 ```bash
 git clone --recurse-submodules https://github.com/b0gdan0v-bagi/BagiEngine.git
@@ -30,6 +30,8 @@ cd BagiEngine
 ```
 
 After a plain clone run `git submodule update --init --recursive`.
+
+Configure fails without Jinja2. `CI/setup_venv.sh` (Windows: `CI\setup_venv.bat`; needs `uv`) makes `.venv`, which configure uses on its own; or run `python3 -m pip install jinja2`.
 
 macOS:
 
@@ -54,7 +56,7 @@ Tests: `ctest --preset macos-debug` (or `windows-clang-debug`). Every preset: `c
 
 - The demo in the browser: https://engine.bagiz.dev/demo/
 - A step-by-step guide is being written under `docs/guide/`.
-- A game of your own: `NEW_GAME.md`.
-- The architecture and the contracts of every module: `CLAUDE.md`.
-- Changes: `CHANGELOG.md`.
-- Licence: Beerware (`LICENSE`); the libraries it carries are in `THIRD_PARTY_NOTICES.md`.
+- A game of your own: [NEW_GAME.md](NEW_GAME.md).
+- The architecture and the contracts of every module: [CLAUDE.md](CLAUDE.md).
+- Changes: [CHANGELOG.md](CHANGELOG.md).
+- Licence: Beerware ([LICENSE](LICENSE)); the libraries it carries are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
