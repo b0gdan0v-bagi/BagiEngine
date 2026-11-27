@@ -45,7 +45,8 @@ namespace BECore::Demo::Tests {
             return Path(BagiContentRoots::kEngine) / "tools" / "demo";
         }
 
-        void LoadScene() {
+        /// @p sceneFile is the scene file to load, the demo's own when empty (a page of the guide runs its example folder through it)
+        void LoadScene(const Path& sceneFile = Path()) {
             _renderer = New<BECore::Tests::RecordingRenderer>();
             _renderer->width = kOutputWidth;
             _renderer->height = kOutputHeight;
@@ -54,7 +55,7 @@ namespace BECore::Demo::Tests {
             LoadSpriteLibrary(CoreManager::GetTextureLibrary());
 
             XmlDeserializer deserializer;
-            const Path file = DemoRoot() / "config" / "SceneConfig.xml";
+            const Path file = sceneFile.Empty() ? DemoRoot() / "config" / "SceneConfig.xml" : sceneFile;
             ASSERT_TRUE(deserializer.LoadFromFile(file)) << file.CStr();
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
