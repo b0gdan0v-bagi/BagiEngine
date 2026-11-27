@@ -55,7 +55,7 @@ Tests: `ctest --preset macos-debug` (or `windows-clang-debug`). Every preset: `c
 ## More
 
 - The demo in the browser: https://engine.bagiz.dev/demo/
-- A step-by-step guide is being written under `docs/guide/`.
+- A guide for people, one task per page: [docs/guide/README.md](docs/guide/README.md).
 - A game of your own: [NEW_GAME.md](NEW_GAME.md).
 - The architecture and the contracts of every module: [CLAUDE.md](CLAUDE.md).
 - Changes: [CHANGELOG.md](CHANGELOG.md).
