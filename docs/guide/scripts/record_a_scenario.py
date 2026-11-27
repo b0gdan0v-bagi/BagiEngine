@@ -4,7 +4,7 @@ Run by ctest as BagiDemoGuideScript.record_a_scenario.
 
     python3 docs/guide/scripts/record_a_scenario.py [path of BagiDemo] [--cleanup]
 
-The scenario goes into a temporary folder, because a recording refuses a folder inside a git work tree; the folder is kept for the reader and its name printed, unless `--cleanup` (what ctest passes) removes it.
+The scenario goes into a temporary folder, because a recording refuses a folder inside a git work tree; the folder is kept for the reader and its name printed; `--cleanup` (what ctest passes) removes it only after a pass, so a failed run leaves the pictures to look at.
 The pictures of a failed play go into the same folder (`--failures`), so two runs never share one.
 Exit code: 0 every claim held, 1 one did not (an assert), 77 the game is not built (ctest reads it as skipped).
 Standard library only; Python 3.10 or later.
@@ -62,11 +62,10 @@ def main() -> int:
 
     folder = Path(tempfile.mkdtemp(prefix="bagi-guide-"))
     print("folder:", folder.name)
-    try:
-        return record_and_play(exe, folder)
-    finally:
-        if CLEANUP_FLAG in sys.argv:
-            shutil.rmtree(folder, ignore_errors=True)
+    code = record_and_play(exe, folder)
+    if CLEANUP_FLAG in sys.argv:
+        shutil.rmtree(folder, ignore_errors=True)
+    return code
 
 
 def record_and_play(exe: Path, folder: Path) -> int:
