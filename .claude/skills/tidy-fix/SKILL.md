@@ -53,7 +53,7 @@ Recommended order:
 
 ## Requirements
 
-- **clang-tidy** on `PATH`, or **LIBCLANG_PATH** set to the LLVM bin directory (same as for clang-format and Meta Generator).
+- **clang-tidy** on `PATH`, or **LIBCLANG_PATH** set to the LLVM bin directory (same as for clang-format).
 - **compile_commands.json**: requires at least one CMake configuration (`cmake -B build/...`). The script finds `build/*/compile_commands.json` automatically.
 - Script: [CI/scripts/tidy_fix.py](CI/scripts/tidy_fix.py).
 - Config: [.clang-tidy](.clang-tidy) in the project root.

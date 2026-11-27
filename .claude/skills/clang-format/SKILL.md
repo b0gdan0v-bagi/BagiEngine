@@ -33,7 +33,7 @@ The script uses only the Python standard library: no venv is needed to run it (`
 ## Requirements
 
 - The script is `<engine>/CI/scripts/format_sources.py`. Config: `.clang-format` in the root of `<R>`. Ignore list: `.clang-format-ignore` in the root of `<R>` (required; the script stops when it is missing).
-- `clang-format` is looked up in this order: `PATH`; `LIBCLANG_PATH` (the LLVM directory, its `bin/`, or `../bin` when it points at `lib/`, same as for Meta Generator); the `.venv` of `<R>` and of the engine (pip package from `requirements.txt`); on macOS Homebrew LLVM (`/opt/homebrew/opt/llvm`, keg-only, so it is not on `PATH`) and then Xcode (`xcrun --find clang-format`). The script prints which binary and version it uses.
+- `clang-format` is looked up in this order: `PATH`; `LIBCLANG_PATH` (the LLVM directory, its `bin/`, or `../bin` when it points at `lib/`); the `.venv` of `<R>` and of the engine (pip package from `requirements.txt`); on macOS Homebrew LLVM (`/opt/homebrew/opt/llvm`, keg-only, so it is not on `PATH`) and then Xcode (`xcrun --find clang-format`). The script prints which binary and version it uses.
 
 ## Scope
 
