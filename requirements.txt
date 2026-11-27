@@ -1,5 +1,4 @@
-PyQt6>=6.5.0
+# Build and CI: the reflection generator (Jinja2), the tests of CI/ and tools/ (pytest), the formatter (clang-format).
 pytest>=7.0.0
 clang-format>=14.0.0
-python-dotenv>=1.0.0
 Jinja2>=3.0.0
