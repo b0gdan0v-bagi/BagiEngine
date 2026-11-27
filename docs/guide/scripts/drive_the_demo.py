@@ -37,6 +37,9 @@ def main() -> int:
     session = GameSession()
     try:
         session.launch(exe=str(exe))
+        status = session.call("status")
+        print("manual clock:", status["manualClock"], "frame:", status["frame"])
+        assert status["manualClock"] and status["frame"] == 0
         print("frame", session.step(30, FRAME_SECONDS)["frame"])
 
         title = {"node": TITLE_NODE, "component": TITLE_COMPONENT, "path": "text"}

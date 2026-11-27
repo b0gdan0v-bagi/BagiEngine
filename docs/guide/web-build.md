@@ -144,4 +144,4 @@ Putting a page on a server for other people is a separate step that the owner of
 
 You installed a compiler into the checkout, built the demo for the web, looked at what the page is made of, served it on your own machine and saw why a threaded page needs two headers and how the single-thread build avoids them.
 
-Next (planned): the control API from Python.
+Next: [The control API from Python](control-api.md), how a script starts the demo, drives it and records what it did as a test.
