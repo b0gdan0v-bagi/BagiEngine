@@ -6,7 +6,7 @@ You need an entry in `review` ([The todo loop](todo-loop.md)) and a checkout whe
 
 ## Where the work waits
 
-The entry is in `review`, and the note of its status says what was done and how it was checked. The branch `todo/<id>` is checked out in the worker folder that did the work, or you switch to it in your main checkout; every branch is visible from every folder, because they share one `.git`.
+The entry is in `review`, and the note of its status says what was done and how it was checked. The branch `todo/<id>` is checked out in the worker folder that did the work, or, when no worker folder holds it (`git worktree list` shows), you switch to it in your main checkout; every branch is visible from every folder, because they share one `.git`.
 
 <!-- command -->
 ```bash
@@ -74,7 +74,7 @@ The plan's section `Left for the owner` lists what the agents could not check: a
 
 ## Red flags
 
-The reviewer looks for these too. You look because it is your branch.
+The reviewer looks for most of these too. You look because it is your branch.
 
 - **A test changed or loosened so the change passes.** The test was the promise; a change that edits it has no promise left.
 - **A reference picture retaken with `--update`, or a tolerance raised, with no reason given.** The picture is what the scenario compares against, so retaking it hides a change instead of checking it ([The control API from Python](control-api.md), [Test a game](test-a-game.md)).
@@ -91,7 +91,7 @@ The reviewer looks for these too. You look because it is your branch.
 
 You can merge, send it back, or leave it.
 
-**Merge.** `/todo-merge` shows a report (the entry, the branch, what was done and how it was checked, the commits and the files, the review's notes and what is left for you), then asks once: merge, close and delete the branch; merge only; or no. On the full answer it merges with a merge commit, closes the entry (or sets it back to `open` when the slice did not finish it), files the review's follow-ups, writes the changelog fragment and a version when the repository asks for them, and deletes the branch. It never pushes.
+**Merge.** `/todo-merge` shows a report (the entry, the branch, what was done and how it was checked, the commits and the files, the review's notes and what is left for you), then asks whether to merge: merge, close and delete the branch; merge only; or no. Merge only merges and leaves the entry and the branch as they are. On the full answer it asks which version bump (when the repository keeps a changelog), merges with a merge commit, closes the entry (or sets it back to `open` when the slice did not finish it), files the review's follow-ups, writes the changelog fragment and a version when the repository asks for them, and deletes the branch; it may then ask whether to run the fast perf set. It never pushes.
 
 <!-- illustration: the skill todo-merge; shown, not run on this page, because it merges into the base and writes to the store -->
 ```text

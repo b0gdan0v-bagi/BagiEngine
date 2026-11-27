@@ -43,7 +43,7 @@ The skill writes the body with these lines, and so should you:
 - **What is missing** is what the engine cannot do now, as an outcome you could check afterwards: not "improve", but "a game can do X and sees Y". The store takes the summary of the entry from this paragraph.
 - **A fix has to cover** lists the cases the change must handle, one per line. It is how you say what done looks like.
 
-Two more things make an entry workable. **Name what you assume is already there**: a key binding, a class, a file. An agent checks it before it starts, and an entry whose premise is missing stops with a question (the architect's text calls it `BLOCKED`, `.claude/agents/todo-architect.md`, "Gate"). And **one subject per entry**: two ideas in one entry are done together or not at all. When an entry cannot start before another is done, that is a link between the two entries (`todo.py dep add`, which `/todo-add` can make when you say so), not a sentence "waits for X" in the body.
+Two more things make an entry workable. **Name what you assume is already there**: a key binding, a class, a file. An agent checks it before it starts, and an entry whose premise is missing is parked as `BLOCKED` (only a `BLOCKED: question:` becomes a question for you; `.claude/agents/todo-architect.md`, "Gate"). And **one subject per entry**: two ideas in one entry are done together or not at all. When an entry cannot start before another is done, that is a link between the two entries (`todo.py dep add`, which `/todo-add` can make when you say so), not a sentence "waits for X" in the body.
 
 Here is a request in the two shapes, made up for this page; nothing is filed.
 
@@ -79,7 +79,7 @@ The opposite case: a game's entry that needs a facility the engine does not have
 The classifier (`.claude/agents/todo-classifier.md`) skips an entry for one of three kinds of reason, and says which:
 
 - **It is vague:** `needs detail`, or `too large` when no first slice can be named.
-- **It is yours to decide or do:** `owner decision`, `owner step` (a hosting console, a check on production, a deploy) or `needs platform` (a system, a graphics backend or a device this machine lacks).
+- **It is yours to decide or do:** `owner decision`, `owner step` (a hosting console, a check on production) or `needs platform` (a system, a graphics backend or a device this machine lacks).
 - **It waits:** `blocked by <id>` (a link), `waits for <ids>` (named in the body with no link), or `umbrella` (the entry only gathers others; the work is in its children).
 
 A question for you is never only a line in a chat. The loop files it as an entry of the area `owner`, with the lines `**Question:**`, `**Recommendation:**` (the agent's own choice and why) and `**Blocks:**` (the entries waiting), and parks the entry that asked (`.claude/skills/todo-loop/SKILL.md`, "Owner steps"). A small reversible choice, such as a name or where a file goes, is not a question: the agent takes it and writes it in a list you read at the review.

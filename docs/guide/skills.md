@@ -6,7 +6,7 @@ You have read [Ask for a change](ask-for-a-change.md) and [The todo loop](todo-l
 
 ## What a skill is and how you start one
 
-A skill is a text file, `.claude/skills/<name>/SKILL.md`, that a coding agent reads and follows. You start one in a Claude Code session opened in the repository, in either of two ways: type `/<name>` with its arguments, or describe the task in your own words and the session picks the skill whose `description` fits. The first line of a `SKILL.md` is that description; the first paragraph says what the skill is for and what it never does.
+A skill is a text file, `.claude/skills/<name>/SKILL.md`, that a coding agent reads and follows. You start one in a Claude Code session opened in the repository, in either of two ways: type `/<name>` with its arguments, or describe the task in your own words and the session picks the skill whose `description` fits. The `description:` line in the header of a `SKILL.md` is that description.
 
 A game keeps no copy of the skills. It links the engine's by symlink, as [NEW_GAME.md](../../NEW_GAME.md) (section 4) shows. That page links seven: `build`, `clang-format`, `strip-pch-includes`, `todo-loop`, `todo-merge`, `todo-add` and `todo-db`. Any other skill is linked the same way. A skill is changed in the engine, never through the link in a game, because the link points at the engine's file.
 
