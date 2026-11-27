@@ -204,4 +204,4 @@ ctest --preset macos-debug -L unit -j1
 
 You read a test of a scene that runs without a window and advances the game by hand, broke an example on purpose and read the failure, ran the smoke of the real program and a scenario with a reference picture, and saw how `ctest` runs them eight at a time and what that asks of a test. A test of your own game has the same three kinds, and the demo's files are the ones to copy.
 
-Next (planned): working with agents, how a coding agent reads and edits the same content and runs the same tests.
+Next: [Ask for a change](ask-for-a-change.md)

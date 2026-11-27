@@ -79,7 +79,7 @@ A stop is a `todo stop`: the status stays `in progress` and the note says why. T
 
 The agents never `git push`, never `git fetch`, never merge into the base branch, never edit a vendored folder or the base itself, and never decide a licence, a product question or a change of a public format that the entry did not ask for. When one of those comes up, the loop stops and files a question for you (the list is the loop's `Forbidden` section and "Small decisions"). Yours are:
 
-- the **review** of the branch (the page "What to review in an agent's work", planned), and trying it live;
+- the **review** of the branch (the page [What to review in an agent's work](review-agent-work.md)), and trying it live;
 - the **merge**: `/todo-merge` prints a report, asks you once (`Merge + close + delete branch`, `Merge only`, or `No`), merges with a merge commit, and after the full answer closes the entry, files the review's follow-ups and deletes the branch; it never pushes;
 - the **push**, the **access** to the store and the **priorities**.
 

@@ -68,4 +68,4 @@ Open its `SKILL.md`. The first paragraph says what it is for and what it never d
 
 You learned what a skill is and the two ways to start one, how a game links the engine's skills and why a skill is edited only in the engine, and which skill to reach for to keep the tree tidy, to ask for work, to find problems, to write and to look after the agents' docs.
 
-Next (planned): What to review in an agent's work
+Next: [What to review in an agent's work](review-agent-work.md)
