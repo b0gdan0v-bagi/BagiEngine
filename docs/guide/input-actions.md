@@ -157,4 +157,4 @@ DemoBurst '' element
 
 You made a pad send a name and an emitter listen for it, in two nodes and two words, and saw that a press beside the pad sends nothing. You read what else sends a name (a button, a toggle, a slider, a choice), why a widget holds no state, how a component listens in C++, and where raw mouse and key events fit. You pressed the pad from a script.
 
-Next: A save, how a game writes what the player did to a file and reads it back.
+Next: [A save](save-game.md), how a game writes what the player did to a file and reads it back.
