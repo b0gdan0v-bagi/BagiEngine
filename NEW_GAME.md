@@ -131,7 +131,7 @@ The store holds only the todo entries, their plans and reviews. A game made from
 ## 6. Build and check
 
 ```bash
-CI/setup_venv.sh                               # Windows: CI\setup_venv.bat or .ps1
+CI/setup_venv.sh                               # Windows: CI\setup_venv.bat or .ps1; a game may carry its own !start.* wrapper
 export PATH="$PWD/engine/.venv/bin:$PATH"      # the reflection generator needs jinja2
 cmake --preset macos-debug                     # cmake --list-presets=build
 cmake --build --preset macos-debug

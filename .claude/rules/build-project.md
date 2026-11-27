@@ -285,11 +285,11 @@ The decision (`include-hygiene`, slice 4): the script stays, for `.cpp` only, an
 
 ## Setup
 
-`CI/setup_venv.sh` (macOS, Linux), `CI/setup_venv.ps1` and `CI/setup_venv.bat` (Windows; the `.bat` only starts the `.ps1`) make a checkout ready. Idempotent, in this order:
+`CI/setup_venv.sh` (macOS, Linux), `CI/setup_venv.ps1` and `CI/setup_venv.bat` (Windows; the `.bat` only starts the `.ps1`) make a checkout ready. `!start.command` and `!start.cmd` in the root are the double-click entries: thin wrappers that run the script with the same arguments and keep the window open. Idempotent, in this order:
 
 1. `.venv` when it is missing (`uv venv` when `uv` is installed, else `python3 -m venv`); an existing one is left as it is.
 2. `requirements.txt` and `tools/control/requirements.txt` into it (`uv pip` or `pip`).
 3. A check that `jinja2`, the only import of the reflection generator, works in the venv; the script fails otherwise.
-4. The todo sign-in offer: nothing when a sign-in file, `TODO_API_URL` in the environment or a `TODO_API_URL` line in `.env` exists; else it prints the `todo.py login` command and, on a terminal only, asks for the address and runs it.
+4. The todo sign-in offer: nothing when a sign-in file, `TODO_API_URL` in the environment or a `TODO_API_URL` line in `.env` (the engine's, in a game also the game root's) exists; else it prints the `todo.py login` command and, on a terminal only, asks for the address and runs it.
 
-`--no-login` (`-NoLogin` in the `.ps1`) skips step 4. The script never asks for, reads, prints or stores a token and never writes `.env`. A game's own `CI/setup_venv.*` calls the engine's script (`NEW_GAME.md`). The `PyQt6` of the meta-generator GUI is not installed by it: `CI/meta_generator/requirements.txt` by hand.
+`--no-login` (the `.ps1` also takes `-NoLogin`) skips step 4. The script never asks for, reads, prints or stores a token and never writes `.env`. A game's own `CI/setup_venv.*` calls the engine's script (`NEW_GAME.md`). The `PyQt6` of the meta-generator GUI is not installed by it: `CI/meta_generator/requirements.txt` by hand.
