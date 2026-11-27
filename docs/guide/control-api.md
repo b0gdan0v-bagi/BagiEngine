@@ -267,4 +267,4 @@ The tools mirror the session's calls: `launch_game`, `step`, `screenshot`, `scen
 
 You started the demo from a script on a clock that stands still, read and changed a node's text, saw the game refuse a write and read why, pressed a button, took a picture and closed the game in a `finally`. You connected to a game started by hand and saw why its clock makes it less repeatable. You recorded the session as a scenario, gave it a reference picture, played it green and then red, and read the two pictures a failure leaves.
 
-Next: Test a game, the same calls as a test of your own game.
+Next: [Test a game](test-a-game.md), the same calls as a test of your own game.
