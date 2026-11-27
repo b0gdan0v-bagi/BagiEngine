@@ -55,6 +55,11 @@ def test_no_guide_folder_is_not_a_finding(tmp_path):
     assert "nothing to check" in result.stdout
 
 
+def test_pictures_without_a_page_are_no_guide_yet(tmp_path):
+    write(tmp_path, "docs/guide/img/orphan.png", "png")
+    assert messages(tmp_path) == []
+
+
 def test_main_exits_one_with_a_line_per_finding(tmp_path):
     make_repo(tmp_path)
     page(tmp_path, "a.md", "```\nx\n```\n")

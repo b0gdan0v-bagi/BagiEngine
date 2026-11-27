@@ -72,5 +72,6 @@ tools/            Python and helper tools (tools/CLAUDE.md)
 ## Docs, rules and skills
 
 - **Docs budget:** this file loads into every session: under 12k characters; a nested `CLAUDE.md` under 20k. Put a fact in the nested file of its folder; write contracts and reasons, not what a test checks, constant values, measurements or history. `python3 CI/scripts/check_doc_budget.py --root .`
+- `docs/guide/` is the guide for people, in its own rules (`.claude/rules/guide-docs.md`): no `CLAUDE.md`, outside this budget, checked by ctest `BagiGuideCheck`.
 - `.claude/rules/`: path-scoped guidance; `build-project.md`, `todo-project.md`, `perf-project.md`, `qa-project.md` are read by the skills.
 - `.claude/skills/` and `.claude/agents/` are shared with games by symlink; the per-repository part is in those four rules files. `sync-engine` is the owner's command only and never pushes.

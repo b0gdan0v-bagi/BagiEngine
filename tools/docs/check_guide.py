@@ -3,7 +3,7 @@
 
     python3 tools/docs/check_guide.py [--root DIR]
 
-Exit 0 when clean (also when there is no docs/guide/ folder: a game that carries the engine), 1 with one line per
+Exit 0 when clean (also when docs/guide/ has no page: a game that carries the engine), 1 with one line per
 finding, `<page>:<line>: <message>`. Standard library only, Python 3.10+. The rules are in tools/docs/CLAUDE.md.
 """
 
@@ -313,11 +313,11 @@ def check_tree(root: Path, guide: Path, pages: list[Path]) -> list[Finding]:
 def run(root: Path) -> tuple[list[Finding], int, bool]:
     """The findings, the number of illustration blocks and whether docs/guide/ exists."""
     guide = root / GUIDE_DIR
-    if not guide.is_dir():
-        return [], 0, False
+    pages = sorted(guide.rglob("*.md")) if guide.is_dir() else []
+    if not pages:
+        return [], 0, False  # pictures alone (the picture tool ran before the first page) are no guide yet
     entries = top_level_entries(root)
     presets = preset_names(root)
-    pages = sorted(guide.rglob("*.md"))
     findings = check_tree(root, guide, pages)
     illustrations = 0
     for page_path in pages:
@@ -345,7 +345,7 @@ def main() -> int:
 
     findings, illustrations, present = run(root)
     if not present:
-        print(f"no {GUIDE_DIR}/ folder: nothing to check")
+        print(f"no page under {GUIDE_DIR}/: nothing to check")
         return 0
     for finding in findings:
         print(finding)

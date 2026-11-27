@@ -5,7 +5,8 @@ The tools of the guide for people, `docs/guide/` (rules for its authors: `.claud
 | File | Purpose |
 |------|---------|
 | `check_guide.py` | the page check; `check(root) -> list[Finding]` and `main` |
-| `tests/` | pytest on temp trees (`.venv/bin/python -m pytest tools/docs/tests`) |
+| `guide_shots.py`, `guide_shots.json` | the picture tool and its rows |
+| `tests/` | pytest: temp trees for the check, the control tests' fake game for the picture tool (`.venv/bin/python -m pytest tools/docs/tests`) |
 
 ## The page check
 
@@ -13,10 +14,31 @@ The tools of the guide for people, `docs/guide/` (rules for its authors: `.claud
 python3 tools/docs/check_guide.py [--root DIR]
 ```
 
-Run by the ctest `BagiGuideCheck` in the everyday `ctest --preset <p>`: it reads a few Markdown files and writes nothing. Exit 0 clean, 1 with one line per finding, `<page>:<line>: <message>`. No `docs/guide/` folder (a game that carries the engine): exit 0 with a note.
+Run by the ctest `BagiGuideCheck` in the everyday `ctest --preset <p>`: it reads a few Markdown files and writes nothing. Exit 0 clean, 1 with one line per finding, `<page>:<line>: <message>`. No page under `docs/guide/` (a game that carries the engine, or the pictures taken before the first page): exit 0 with a note.
 
 A page that drifts from the code teaches a wrong thing to a reader who cannot tell, so what can be checked by a file name is checked:
 
 - **Every fenced block has a marker** as the nearest non-blank line before it. `<!-- source: <path> -->`: an excerpt. The block split at lines that are only `...` is a list of segments; each segment's lines (blank ones ignored, indentation ignored) are a contiguous run of that file's lines, the segments in order. Excerpts of the engine's own content, not copies, so a content migration moves the page with the file. `<!-- command -->`: a shell block; a token whose first path part is a top-level entry of the repository (not `build`, not `.venv`) must exist, and `--preset`, `--build` and `--test-dir build/X` name a preset of `CMakePresets.json`. `<!-- illustration: <reason> -->`: an output, a diagram or text that exists in no file; the reason is mandatory and the run prints how many there are.
 - **Links and images** (relative, anchors not checked) resolve. **A backticked path** that starts with a top-level entry and has a `/` and an extension or a trailing `/` exists; a word with `<`, `*`, `{`, `$` or `...` is a placeholder and skipped.
 - **The index** `docs/guide/README.md` links every other page. **Every `docs/guide/img/*.png` has a row** in `guide_shots.json`: a picture that cannot be taken again is a bug. No `CLAUDE.md` under `docs/guide/`. The repository `README.md` links the index.
+
+## The pictures
+
+```bash
+python3 tools/docs/guide_shots.py [--only NAME[,NAME...]] [--preset P] [--bin DIR] [--out DIR]
+```
+
+No capture mechanism of its own: it starts a built game through `GameSession` (`tools/control/CLAUDE.md`, headless, manual clock), calls the steps of a row and writes the control API `screenshot` as `docs/guide/img/<name>.png`. Unlike `tools/shots` (before / after pictures that are never committed) these are committed, so the page and the picture stay one commit apart and a changed UI is one command away from a new picture. `guide_shots.json` is `{"shots": [row, ...]}`; a row:
+
+| Key | Meaning |
+|-----|---------|
+| `name` | lower case, digits, dashes: the file name and the key the page check looks for |
+| `exe` | the target name in `build/<preset>/bin` |
+| `preset` | optional; `--preset` wins, then this, then `macos-debug` on macOS, else an error |
+| `window`, `density` | optional start size (`WxH`, window units) and density of the headless window |
+| `editor` | start with `--editor`; a build without the editor is an error, not a Game picture |
+| `steps` | `[method, params]` control calls before the picture (`step`, `imgui_input`, ...); a click on an editor panel is a `move`, a few frames, then the `click`, at a point of that window size |
+| `maxSize` | the longer side of the picture, 640 by default |
+| `about` | one line: what it shows |
+
+Exit 0 done, 1 an error (a bad row, a failed call), 77 an executable is missing (nothing is written then). It writes only into `--out`. The pictures are of the headless software render of the machine that took them; the editor's frame-rate readout differs between runs, so a retake is a different file even when nothing changed.
