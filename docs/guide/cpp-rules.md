@@ -267,4 +267,4 @@ Each of these six says it is Python 3.10 or later, and all but `tools/control` a
 
 You read the engine's C++ rules with their reasons, saw each obeyed in code that a test runs, and found where your Python goes.
 
-Next (planned): where the data lives
+Next: [Where the data lives](where-the-data-lives.md)

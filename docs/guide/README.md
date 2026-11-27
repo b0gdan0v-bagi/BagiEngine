@@ -30,14 +30,13 @@ A guide for a person who is new to the engine. Each page is one task, done from 
 15. [The skills](skills.md): what a skill is and how you start one, and a map of the engine's skills by what you want done, one line and a link each.
 16. [What to review in an agent's work](review-agent-work.md): where a finished branch waits, the order to read in, the review report line by line, the decisions list, the red flags, and how to merge, send back or leave it.
 17. [The C++ rules](cpp-rules.md): the rules a C++ file of the engine follows, each with its reason and the code that obeys it, and where your Python goes next to the C++.
-
-Planned, not written yet: where the data lives.
+18. [Where the data lives](where-the-data-lives.md): where each kind of file is, which file wins when two have the same name, how to change data without code, how a mistake in a file shows, and what the cook does for a release.
 
 ## Where to start
 
-**You make scenes and screens (a designer, an artist).** Start with "Run the demo", then "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions" and "The editor".
+**You make scenes and screens (a designer, an artist).** Start with "Run the demo", then "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "The editor" and "Where the data lives".
 
-**You write Python (tools, bots, tests).** "Run the demo" shows the game you will drive, then "Config and reflection", "Input actions", "The control API from Python" and "Test a game". Then "The C++ rules" for the code you will read. Planned next: where the data lives.
+**You write Python (tools, bots, tests).** "Run the demo" shows the game you will drive, then "Config and reflection", "Input actions", "The control API from Python" and "Test a game". Then "The C++ rules" for the code you will read, and "Where the data lives" when you touch content.
 
 **You work with coding agents.** "Run the demo", "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "A save", "The editor" and "The web build" show what an agent changes when it edits content or adds a component; "The control API from Python" ends with the server an agent drives a game through, and "Test a game" shows the tests it runs. Then "Ask for a change", "The todo loop", "The skills" and "What to review in an agent's work" show how you work with the agent itself. "The C++ rules" explains the code an agent writes. 
 
