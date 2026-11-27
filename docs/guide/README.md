@@ -27,6 +27,7 @@ A guide for a person who is new to the engine. Each page is one task, done from 
 12. [Test a game](test-a-game.md): read a test of the demo's scene and break it on purpose, then the smoke of the real program and a scenario file with a reference picture, and how `ctest` runs them.
 13. [Ask for a change](ask-for-a-change.md): file a request for the engine as an entry of the todo store, write it so an agent can take it, and see what the loop leaves to you.
 14. [The todo loop](todo-loop.md): the roles of the loop and what each leaves behind, the life of an entry, big entries and workers, when it stops, and what is only yours: the review, the merge and the push.
+15. [The skills](skills.md): what a skill is and how you start one, and a map of the engine's skills by what you want done, one line and a link each.
 
 Planned, not written yet: working with agents, the C++ rules explained, where the data lives.
 

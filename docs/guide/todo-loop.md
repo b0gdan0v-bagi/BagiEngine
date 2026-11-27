@@ -109,4 +109,4 @@ The same is the panel's "Return with remarks". The entry becomes `in progress` a
 
 You saw the roles of the loop and what each leaves behind, the statuses an entry goes through and the commands that show them, how a big entry is cut and how workers run several loops at once, what a park and a pause are, and which steps are only yours: the review, the merge, the push, the access and the priorities.
 
-Next (planned): The skills
+Next: [The skills](skills.md)
