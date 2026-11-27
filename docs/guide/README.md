@@ -13,8 +13,9 @@ A guide for a person who is new to the engine. Each page is one task, done from 
 ## Pages
 
 1. [Run the demo](run-the-demo.md): build once, run `BagiDemo`, open the editor, change a field, save, and see what changed on disk.
+2. [Your first scene](first-scene.md): write a scene file by hand, a background, a title and a sprite, and see it in the editor.
 
-Planned, not written yet: your first scene (a scene file by hand), a UI screen, a prefab, a tween and a timeline, config and reflection, input actions, save games, the editor in depth, the web build, the control API from Python, a test, working with agents, the C++ rules explained, where the data lives.
+Planned, not written yet: a UI screen, a prefab, a tween and a timeline, config and reflection, input actions, save games, the editor in depth, the web build, the control API from Python, a test, working with agents, the C++ rules explained, where the data lives.
 
 ## Where to start
 

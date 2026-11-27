@@ -70,7 +70,7 @@ You will see one changed file, `tools/demo/config/SceneConfig.xml`, and more cha
 - attributes may come in another order;
 - a sprite is saved with the texture file and the rectangle that its sprite id stands for.
 
-The picture is the same; the text of the file is a normalised form of it. This is also why the editor is for changing a scene and a text editor is for writing one (a planned page does that).
+The picture is the same; the text of the file is a normalised form of it. This is also why the editor is for changing a scene and a text editor is for writing one (the next page does that).
 
 One more thing to know. The tweens of the demo (`SlidingStar`, `TurningRing`, `BobbingArrow`) move their node by changing its position. If you press play and save while one is moving, the saved position is the one at that moment. Switch `Animate` off first.
 
@@ -96,4 +96,4 @@ After a Save, the scene is in `$HOME/bagi-scratch/config/SceneConfig.xml`, and `
 
 You ran a game, switched to the editor, changed data on a node, and saved it as XML. The scene is a tree of nodes, a node holds components, and a component is plain data in a file; the editor and the file are two views of the same thing.
 
-Next (planned): your first scene, which writes such a file by hand.
+Next: [Your first scene](first-scene.md) writes such a file by hand.
