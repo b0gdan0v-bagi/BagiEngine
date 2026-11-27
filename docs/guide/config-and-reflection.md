@@ -120,7 +120,7 @@ The write of 300 returns the value read back, and the slider now moves 300 to th
 
 ## A config file of your own
 
-A **config** is a file `config/<Name>.xml` of a game, read by name. The engine's own settings are such files (`ApplicationConfig.xml`, `UIStrings.xml`), and a game adds its own. The recipe: a reflected struct, a file, one line to read it.
+A **config** is a file `config/<Name>.xml` of a game, read by name. The engine's own settings are such files (`ApplicationConfig.xml`, `AudioConfig.xml`), and a game adds its own. The recipe: a reflected struct, a file, one line to read it.
 
 The struct. It is a plain reflected class: the attributes of the file's root element are its fields.
 

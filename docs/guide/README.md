@@ -5,9 +5,9 @@ A guide for a person who is new to the engine. Each page is one task, done from 
 ## How to read a page
 
 - Every page is a task. Do the steps in order; each step says why it is there.
-- A code or XML block is an excerpt of a real file of the repository, and the line under it names the file. So it is the same text the engine runs, and it stays right when the file changes. A block with `...` on a line of its own leaves lines out.
-- The files a page edits live in an example folder, `docs/guide/examples/<page>/`, laid out like a game's content. You copy it into a folder of your own, so the repository stays as it is.
-- A block of shell commands is meant to be typed as it stands, from the root of the repository.
+- A code or XML block is an excerpt of a real file of the repository, and the line under it names the file. So it is the same text the engine runs, and it stays right when the file changes. A block with `...` on a line of its own leaves lines out. What is not an excerpt (what a command printed on the writer's machine, a sketch made up for the page, a line shown as the wrong way) is introduced as that in the text before it.
+- A page that edits files keeps them in an example folder, `docs/guide/examples/<page>/`, laid out like a game's content. You copy it into a folder of your own, so the repository stays as it is.
+- A block of shell commands is meant to be typed as it stands, from the root of the repository, unless the text before it says it is only shown.
 - The pictures are taken by the engine itself, from a running game, not drawn.
 - The pages of the engine's own contracts live next to the code, in the `CLAUDE.md` files. They are written for coding agents, and they are the place to look up an exact rule.
 
@@ -36,9 +36,9 @@ A guide for a person who is new to the engine. Each page is one task, done from 
 
 **You make scenes and screens (a designer, an artist).** Start with "Run the demo", then "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "The editor" and "Where the data lives".
 
-**You write Python (tools, bots, tests).** "Run the demo" shows the game you will drive, then "Config and reflection", "Input actions", "The control API from Python" and "Test a game". Then "The C++ rules" for the code you will read, and "Where the data lives" when you touch content.
+**You write Python (tools, bots, tests).** "Run the demo" shows the game you will drive, then "The C++ rules" for the code you will read next to it, then "Config and reflection", "Input actions", "The control API from Python" and "Test a game", and "Where the data lives" when you touch content.
 
-**You work with coding agents.** "Run the demo", "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "A save", "The editor" and "The web build" show what an agent changes when it edits content or adds a component; "The control API from Python" ends with the server an agent drives a game through, and "Test a game" shows the tests it runs. Then "Ask for a change", "The todo loop", "The skills" and "What to review in an agent's work" show how you work with the agent itself. "The C++ rules" explains the code an agent writes. 
+**You work with coding agents.** "Run the demo", "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "A save", "The editor" and "The web build" show what an agent changes when it edits content or adds a component; "The control API from Python" ends with the server an agent drives a game through, and "Test a game" shows the tests it runs. Then "Ask for a change", "The todo loop", "The skills" and "What to review in an agent's work" show how you work with the agent itself. "The C++ rules" explains the code an agent writes.
 
 ## A game of your own
 
