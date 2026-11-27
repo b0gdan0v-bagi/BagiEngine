@@ -12,8 +12,8 @@ import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
 import deploy_status
 
 STAGES = ["fetch", "tests", "build", "package", "deploy"]
-FIELDS = {"format", "target", "stages", "stage", "state", "commit", "engineCommit", "service", "address", "url", "failedTests", "error",
-          "startedAt", "updatedAt"}
+FIELDS = {"format", "target", "stages", "stage", "state", "commit", "engineCommit", "service", "address", "url", "answer", "failedTests",
+          "error", "startedAt", "updatedAt"}
 
 
 class StatusTest(unittest.TestCase):
@@ -43,6 +43,7 @@ class StatusTest(unittest.TestCase):
                          (1, "mahjong-editor", STAGES, None, "running"))
         self.assertEqual((data["service"], data["address"], data["url"]), ("studio-mahjong", "studio.example.dev", "https://studio.example.dev"))
         self.assertEqual((data["commit"], data["engineCommit"], data["failedTests"], data["error"]), (None, None, [], None))
+        self.assertIsNone(data["answer"])
 
     def test_each_stage_and_field_is_written_at_once(self):
         status = self.make()
@@ -54,6 +55,16 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(self.read()["stage"], "build")
         status.set(failedTests=["A", "B"])
         self.assertEqual(self.read()["failedTests"], ["A", "B"])
+
+    def test_a_page_of_a_site_has_a_url_of_its_own_no_service_and_keeps_the_answer(self):
+        status = deploy_status.Status(self.path, "engine-demo", STAGES, "engine.example.dev", None, clock=self.clock,
+                                      url="https://engine.example.dev/demo/")
+        status.enter("deploy")
+        status.set(answer={"page": "demo", "bytes": 5})
+        status.done()
+        data = self.read()
+        self.assertEqual((data["service"], data["address"], data["url"]), (None, "engine.example.dev", "https://engine.example.dev/demo/"))
+        self.assertEqual((data["answer"], data["state"], data["format"]), ({"page": "demo", "bytes": 5}, "done", 1))
 
     def test_done_marks_the_last_stage_done_and_the_times_move(self):
         status = self.make()

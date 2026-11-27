@@ -2,10 +2,11 @@
 studio hub) sees the stage the run is in without parsing the output of cmake and ctest.
 
     {"format": 1, "target", "stages": ["fetch", "tests", "build", "package", "deploy"], "stage", "state": "running|done|failed",
-     "commit", "engineCommit", "service", "address", "url", "failedTests", "error", "startedAt", "updatedAt"}
+     "commit", "engineCommit", "service", "address", "url", "answer", "failedTests", "error", "startedAt", "updatedAt"}
 
-`done` at the stage `deploy` means `railway up --detach` accepted the upload, not that the page is live. Only these fields are
-written (never an environment value or a secret); `error` is one line. Standard library only.
+`done` at the stage `deploy` means `railway up --detach` accepted the upload, not that the page is live; for a page of a site (`service`
+null, `address` the site, `url` the page) it means the site answered 200 and has switched the page, and `answer` is its JSON object (null
+otherwise). Only these fields are written (never an environment value or a secret); `error` is one line. Standard library only.
 """
 
 import json
@@ -17,7 +18,7 @@ from pathlib import Path
 FORMAT_VERSION = 1
 ALL_STAGES = ("fetch", "tests", "build", "package", "deploy")
 STATE_RUNNING, STATE_DONE, STATE_FAILED = "running", "done", "failed"
-SETTABLE_FIELDS = ("commit", "engineCommit", "failedTests")
+SETTABLE_FIELDS = ("commit", "engineCommit", "failedTests", "answer")
 
 
 def _timestamp() -> str:
@@ -26,9 +27,11 @@ def _timestamp() -> str:
 
 class Status:
     """The state of one run. `path` None writes nothing (no --status-file, or a dry run); a file that cannot be written is reported
-    once on stderr and then left alone, because the progress report must not stop a deploy."""
+    once on stderr and then left alone, because the progress report must not stop a deploy. `url` names the page when it is not the
+    host of `address` itself (a page of a site)."""
 
-    def __init__(self, path: Path | None, target: str | None, stages: list[str], address: str | None, service: str | None, clock=_timestamp):
+    def __init__(self, path: Path | None, target: str | None, stages: list[str], address: str | None, service: str | None, clock=_timestamp,
+                 url: str | None = None):
         unknown = [stage for stage in stages if stage not in ALL_STAGES]
         if unknown:
             raise ValueError(f"unknown stage {unknown[0]!r}")
@@ -38,7 +41,7 @@ class Status:
         self._fields: dict = {
             "format": FORMAT_VERSION, "target": target, "stages": list(stages), "stage": None, "state": STATE_RUNNING,
             "commit": None, "engineCommit": None, "service": service, "address": address,
-            "url": f"https://{address}" if address else None, "failedTests": [], "error": None, "startedAt": started, "updatedAt": started,
+            "url": url or (f"https://{address}" if address else None), "answer": None, "failedTests": [], "error": None, "startedAt": started, "updatedAt": started,
         }
         self._write()
 
