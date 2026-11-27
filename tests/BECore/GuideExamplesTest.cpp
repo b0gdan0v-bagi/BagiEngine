@@ -17,6 +17,7 @@
 #include <Common/ContentFilesCheck.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
+#include <Common/Require.h>
 #include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Common/UIScreenTestSupport.h>
@@ -148,37 +149,18 @@ namespace BECore::Tests {
             return nullptr;
         }
 
-        /// What is wrong with the canvas on every case of the size matrix, in every language of the strings: the first lines of the first cases that have anything. The validator's
-        /// issues come first, then `Problems()` (a word its control cuts, a control that takes a press and is under 56 units high)
+        /// What is wrong with the canvas on every case of the size matrix, in every language of the strings: the validator's issues first, then `Problems()` (a word its control
+        /// cuts, a control that takes a press and is under 56 units high)
         String ProblemsOnMatrix() {
             UICanvasLayout& layout = _canvas->GetLayout();
-            UILayoutValidatorOptions options;
-            options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
+            const UILayoutContext view;
+            const auto keep = [](StringView label) { return !label.ends_with(kLargeUserScale); };
+            const Vector<UIMatrixFailure> failures = ValidateOnMatrixInEveryLanguage(layout, view, keep);
             String report;
-            size_t reported = 0;
-            ForEachLanguage([&](PoolString language) {
-                for (const UIMatrixFailure& failure : ValidateOnMatrix(layout, options)) {
-                    if (StringView(failure.label).ends_with(kLargeUserScale)) {
-                        continue;
-                    }
-                    if (reported++ < kReportedCases) {
-                        report +=
-                            Format("[{}] {}: {} issues, the first on '{}'\n", language.ToStringView(), failure.label.c_str(), failure.issues.size(), failure.issues.front().element.ToStringView());
-                    }
-                }
-                for (const UIMatrixCase& matrixCase : UILayoutMatrix()) {
-                    UILayoutContext context;
-                    context.outputWidth = matrixCase.context.outputWidth;
-                    context.outputHeight = matrixCase.context.outputHeight;
-                    context.safeArea = matrixCase.context.safeArea;
-                    layout.Update(context);
-                    const String problems = Problems(layout);
-                    if (!problems.empty() && reported++ < kReportedCases) {
-                        report += Format("[{}] {}:\n{}", language.ToStringView(), matrixCase.label.c_str(), problems.c_str());
-                    }
-                }
-            });
-            layout.Invalidate();
+            if (!failures.empty()) {
+                report = DescribeMatrixFailures(failures, kReportedCases);
+            }
+            report += ProblemsInEveryLanguage(layout, view);
             return report;
         }
 
@@ -223,7 +205,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(tokens.empty());
         for (const PoolString theme : themes.GetThemes()) {
             for (const String& token : tokens) {
-                EXPECT_TRUE(themes.HasToken(theme, token)) << "the sheet reads '" << token.c_str() << "', theme '" << theme.ToStringView().data() << "' lacks it";
+                EXPECT_TRUE(themes.HasToken(theme, token)) << "the sheet reads '" << token.c_str() << "', theme '" << theme.CStr() << "' lacks it";
             }
         }
     }
@@ -272,12 +254,12 @@ namespace BECore::Tests {
         ASSERT_TRUE(twoText);
         EXPECT_EQ(twoText->_text, "Two");
 
-        const Color prefabColor = one->GetComponent<QuadRendererComponent>()->_color;
-        EXPECT_PRED2(ColorsEqual, two->GetComponent<QuadRendererComponent>()->_color, prefabColor);
-        const Color threeColor = three->GetComponent<QuadRendererComponent>()->_color;
+        const Color prefabColor = Require(one->GetComponent<QuadRendererComponent>())._color;
+        EXPECT_PRED2(ColorsEqual, Require(two->GetComponent<QuadRendererComponent>())._color, prefabColor);
+        const Color threeColor = Require(three->GetComponent<QuadRendererComponent>())._color;
         EXPECT_PRED2(ColorsEqual, threeColor, Color(200, 110, 40, 255));
         EXPECT_FALSE(ColorsEqual(threeColor, prefabColor));
-        EXPECT_EQ(three->GetComponent<TextComponent>()->_text, "Three");
+        EXPECT_EQ(Require(three->GetComponent<TextComponent>())._text, "Three");
     }
 
     // ---- broken copies: the cases above see a mistake -------------------------------------------------------------------

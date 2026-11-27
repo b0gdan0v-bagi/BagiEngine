@@ -82,6 +82,65 @@ namespace BECore::Tests {
         return problems;
     }
 
+    /// Runs @p check once per language of the table (ForEachLanguage), or once with no language when the table is empty
+    template <typename Check>
+    void ForEachShownLanguage(Check&& check) {
+        if (CoreManager::GetUIStrings().GetLanguages().empty()) {
+            check(PoolString{});
+            return;
+        }
+        ForEachLanguage(check);
+    }
+
+    /// "[<language>] " before a label of a case, nothing with no language
+    inline String LanguageTag(PoolString language) {
+        return language.ToStringView().empty() ? String() : Format("[{}] ", language.ToStringView());
+    }
+
+    inline bool EveryMatrixCase(StringView) {
+        return true;
+    }
+
+    /// @p layout on the whole matrix with the options of the game, in every language: the findings of the validator, each case named with its language. @p view holds what the
+    /// matrix does not set (the scene view size); @p keep is asked the label of a case of ValidateOnMatrix and says whether it counts (a case a screen is known not to fit is left out)
+    [[nodiscard]] inline Vector<UIMatrixFailure> ValidateOnMatrixInEveryLanguage(UICanvasLayout& layout, const UILayoutContext& view, FunctionRef<bool(StringView)> keep = EveryMatrixCase) {
+        UILayoutValidatorOptions options;
+        options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
+        Vector<UIMatrixFailure> all;
+        ForEachShownLanguage([&](PoolString language) {
+            for (UIMatrixFailure& failure : ValidateOnMatrix(layout, options, view)) {
+                if (!keep(StringView(failure.label))) {
+                    continue;
+                }
+                failure.label = Format("{}{}", LanguageTag(language).c_str(), failure.label.c_str());
+                all.push_back(std::move(failure));
+            }
+        });
+        return all;
+    }
+
+    /// Problems() of @p layout on every case of the matrix, in every language: the first lines of the first cases that have any
+    [[nodiscard]] inline String ProblemsInEveryLanguage(UICanvasLayout& layout, const UILayoutContext& view) {
+        constexpr size_t kReported = 4;
+        String report;
+        size_t reported = 0;
+        ForEachShownLanguage([&](PoolString language) {
+            for (const UIMatrixCase& matrixCase : UILayoutMatrix()) {
+                UILayoutContext context = view;
+                context.outputWidth = matrixCase.context.outputWidth;
+                context.outputHeight = matrixCase.context.outputHeight;
+                context.safeArea = matrixCase.context.safeArea;
+                layout.Update(context);
+                const String problems = Problems(layout);
+                if (!problems.empty() && reported++ < kReported) {
+                    report += Format("{}{}:\n{}", LanguageTag(language).c_str(), matrixCase.label.c_str(), problems.c_str());
+                }
+            }
+        });
+        layout.Invalidate();
+        return report;
+    }
+
     /// What a press and its release were taken for; true when both were
     struct UIClick {
         bool pressed = false;
@@ -174,56 +233,14 @@ namespace BECore::Tests {
             return ClickAt(x, y);
         }
 
-        /// Runs @p check once per language of the table (ForEachLanguage), or once with no language when the table is empty
-        template <typename Check>
-        static void ForEachShownLanguage(Check&& check) {
-            if (CoreManager::GetUIStrings().GetLanguages().empty()) {
-                check(PoolString{});
-                return;
-            }
-            ForEachLanguage(check);
-        }
-
-        /// "[<language>] " before a label of a case, nothing with no language
-        static String LanguageTag(PoolString language) {
-            return language.ToStringView().empty() ? String() : Format("[{}] ", language.ToStringView());
-        }
-
         /// The canvas on the whole matrix with the options of the game, in every language: the findings of the validator, each case named with its language
         Vector<UIMatrixFailure> ValidatePanel(UICanvasComponent& canvas) const {
-            UILayoutValidatorOptions options;
-            options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            Vector<UIMatrixFailure> all;
-            ForEachShownLanguage([&](PoolString language) {
-                for (UIMatrixFailure& failure : ValidateOnMatrix(canvas.GetLayout(), options, ViewContext())) {
-                    failure.label = Format("{}{}", LanguageTag(language).c_str(), failure.label.c_str());
-                    all.push_back(std::move(failure));
-                }
-            });
-            return all;
+            return ValidateOnMatrixInEveryLanguage(canvas.GetLayout(), ViewContext());
         }
 
         /// Problems() on every case of the matrix, in every language: the first lines of the first cases that have any
         String ProblemsOnMatrix(UICanvasComponent& canvas) const {
-            constexpr size_t kReported = 4;
-            String report;
-            size_t reported = 0;
-            UICanvasLayout& layout = canvas.GetLayout();
-            ForEachShownLanguage([&](PoolString language) {
-                for (const UIMatrixCase& matrixCase : UILayoutMatrix()) {
-                    UILayoutContext context = ViewContext();
-                    context.outputWidth = matrixCase.context.outputWidth;
-                    context.outputHeight = matrixCase.context.outputHeight;
-                    context.safeArea = matrixCase.context.safeArea;
-                    layout.Update(context);
-                    const String problems = Problems(layout);
-                    if (!problems.empty() && reported++ < kReported) {
-                        report += Format("{}{}:\n{}", LanguageTag(language).c_str(), matrixCase.label.c_str(), problems.c_str());
-                    }
-                }
-            });
-            layout.Invalidate();
-            return report;
+            return ProblemsInEveryLanguage(canvas.GetLayout(), ViewContext());
         }
 
         /// The canvas in the narrowest window of the matrix, alone: kNarrowestWidth px wide with the side insets of a phone held sideways
