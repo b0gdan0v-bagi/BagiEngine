@@ -70,7 +70,7 @@ Copy them from BagiEngine-Chess and replace the names:
 | `.clang-format-ignore` | `engine/`, `build/`, `.venv/` (the format scripts run with `--root .`) |
 | `.gitignore` | `/build/`, `/out/`, `/.cmake/`, IDE folders, `.venv/`, `__pycache__/`, `.env`, `CMakeUserPresets.json`, `.claude/settings.local.json`, `config/imgui.ini`, `engine.log`, local config overrides (`config/*.local.xml`), `.DS_Store`, and the todo guard: `.claude/plans/`, `*.plan.md`, `todo-export/` |
 | `.env.example` | the keys of the todo CLI (step 5), with an empty token |
-| `CI/setup_venv.{sh,bat,ps1}` | fetch `engine/` if it is missing, run the engine's `CI/setup_venv.*` (the venv is `engine/.venv`), install the game's `requirements.txt` when there is one |
+| `CI/setup_venv.{sh,bat,ps1}` | fetch `engine/` if it is missing, run the engine's `CI/setup_venv.*` (the venv is `engine/.venv`), install the game's `requirements.txt` when there is one; the engine's script also installs `tools/control/requirements.txt` and offers the todo sign-in (a game that calls it from a non-interactive place passes `--no-login` / `-NoLogin`; without a terminal nothing is asked anyway) |
 | `CI/Bagi<Name>.code-workspace` | the VS Code workspace (CMake Tools on the presets, launch configurations, build tasks) |
 | `config/ApplicationConfig.xml` | the engine's file with `mode="Game"` |
 | `config/SceneConfig.xml`, `config/TextureLibrary.xml` | every scene the game uses (it replaces the engine's file) |
@@ -120,7 +120,7 @@ The store holds only the todo entries, their plans and reviews. A game made from
    TODO_API_TOKEN=
    ```
    `.env` (git-ignored): the address of the service and the game's own token, limited to its areas (the game's and `engine`), both from the owner. Do not print the token or write it anywhere else.
-   A person the owner approved in BagiTodo needs no `.env`: `python3 engine/tools/todo/todo.py login https://<todo address>` (the address from the owner) saves a sign-in for the machine ([tools/todo/CLAUDE.md](tools/todo/CLAUDE.md), "A new contributor"); a `.env` with `TODO_API_URL` still comes first.
+   A person the owner approved in BagiTodo needs no `.env`: `python3 engine/tools/todo/todo.py login https://<todo address>` (the address from the owner) saves a sign-in for the machine ([tools/todo/CLAUDE.md](tools/todo/CLAUDE.md), "A new contributor"); a `.env` with `TODO_API_URL` still comes first. `CI/setup_venv.*` offers this `login` at the end of its run.
 2. `python3 engine/tools/todo/todo.py ping` must answer.
 3. The area is the owner's step in the store (with the token that may reach it). Check it is there:
    ```bash
@@ -131,7 +131,7 @@ The store holds only the todo entries, their plans and reviews. A game made from
 ## 6. Build and check
 
 ```bash
-CI/setup_venv.sh                               # Windows: CI\setup_venv.bat or .ps1
+CI/setup_venv.sh                               # Windows: CI\setup_venv.bat or .ps1; a game may carry its own !start.* wrapper
 export PATH="$PWD/engine/.venv/bin:$PATH"      # the reflection generator needs jinja2
 cmake --preset macos-debug                     # cmake --list-presets=build
 cmake --build --preset macos-debug

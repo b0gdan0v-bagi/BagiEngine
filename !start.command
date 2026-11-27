@@ -1,29 +1,9 @@
 #!/bin/bash
-# BagiEngine Launcher (macOS/Linux)
-
-cd "$(dirname "$0")"
-
-# Setup meta-generator environment first
-echo "[INFO] Setting up Meta-Generator environment..."
-source CI/meta_generator/setup_env.sh
-if [ $? -ne 0 ]; then
-    echo "[WARNING] Meta-Generator setup had issues, continuing..."
+# The double-click entry for CI/setup_venv.sh (macOS, Linux); arguments go on to it.
+cd "$(dirname "$0")" || exit 1
+CI/setup_venv.sh "$@"
+STATUS=$?
+if [ -t 0 ]; then
+    read -r -p "Press Enter to close..."
 fi
-
-# Setup venv if needed
-if [ ! -f ".venv/bin/python" ]; then
-    echo "[INFO] Setting up Python virtual environment..."
-    source CI/setup_venv.sh
-    if [ $? -ne 0 ]; then
-        echo "[ERROR] Failed to setup virtual environment"
-        read -p "Press any key to continue..."
-        exit 1
-    fi
-fi
-
-# Run launcher in background (detached from terminal)
-echo "[INFO] Starting BagiEngine Launcher..."
-nohup .venv/bin/python -m CI.launcher.main > /dev/null 2>&1 &
-echo "[INFO] Launcher started in background (PID: $!)"
-echo "[INFO] You can close this terminal window."
-sleep 2
+exit "$STATUS"

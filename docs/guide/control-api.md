@@ -249,10 +249,9 @@ A coding agent can drive a game through the same calls, as an MCP server: `tools
 <!-- command -->
 ```bash
 CI/setup_venv.sh
-uv pip install --python .venv/bin/python -r tools/control/requirements.txt
 ```
 
-`CI/setup_venv.sh` needs `uv` and makes `.venv`; the second line adds the `mcp` package to it.
+It makes `.venv` and installs the `mcp` package among the rest (Windows: `CI\setup_venv.bat`).
 
 and the agent is told where it is, once, with its own tool (the line is written for Claude Code; it edits that tool's configuration, so it is shown and not run here):
 

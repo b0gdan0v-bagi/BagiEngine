@@ -30,7 +30,7 @@ python3 tools/todo/todo.py login https://<todo address>   # the address from the
 python3 tools/todo/todo.py ping
 ```
 
-`login` prints a page and a code (and opens the browser; `--no-browser` does not): sign in with Google there and allow the code. The address and the token are saved in `~/.config/bagitodo/login.json` for every checkout of this machine; `todo.py logout` revokes the token and forgets it. `login` is run by the loader itself, before any download.
+`CI/setup_venv.*` offers this `login` at the end of its run (it never handles the token). `login` prints a page and a code (and opens the browser; `--no-browser` does not): sign in with Google there and allow the code. The address and the token are saved in `~/.config/bagitodo/login.json` for every checkout of this machine; `todo.py logout` revokes the token and forgets it. `login` is run by the loader itself, before any download.
 - `BAGITODO_CACHE`: the cache of the downloaded versions (default `~/.cache/bagitodo`, readable by its owner only: it holds code that runs).
 - `TODO_ACTOR` (or `--actor`) names the writer in the history (`todo-loop`, `owner`, ...; default `cli`).
 - Every accepted write also rewrites the signal file `TODO_CHANGED_FILE` (default `~/.claude/todo/changed.json`), so a viewer (the Todo Workers panel) reads the store again at once.

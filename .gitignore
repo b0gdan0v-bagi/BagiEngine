@@ -29,9 +29,13 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Launcher config (user-specific)
+# Launcher config (user-specific; the launcher is gone, older checkouts still hold the file)
 launcher_config.json
+
+# Meta-generator GUI settings (user-specific)
 meta_generator_settings.json
+
+# CMake user presets (user-specific)
 CMakeUserPresets.json
 
 # ImGui layout (user-specific, generated at runtime; config/ of the engine, BagiStress and any game root, and the
