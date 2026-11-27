@@ -19,6 +19,9 @@ A C++23 game engine on a scene graph of `SceneNode` + components. It runs on SDL
 - **The engine knows no game.** A game is a repository of its own that carries the engine as the submodule `engine/` (`NEW_GAME.md`).
 - **Data apart from code.** Scenes, UI, text and settings are XML under `config/` and `assets/`; a game's file of the same name wins, and a release build reads the cooked `.bin` files (`src/Modules/BECore/Cook/CLAUDE.md`, `src/Modules/BECore/FileSystem/CLAUDE.md`).
 - **Content has a version.** A change of what a content file may say comes with a migration step that brings a game's files up to date (`tools/migrate/CLAUDE.md`).
+- **Everything a game reflects is reachable from outside.** The access code is generated from `BE_CLASS` / `BE_REFLECT_FIELD`: every reflected field under a root such as `game` is read and written by name and every reflected method is called over the control API (`get_property`, `set_property`, `call_method`, `schema`), so a new field needs no glue; the UI is driven by real clicks (`ui_click`), as a player would (`src/Modules/BECore/Control/CLAUDE.md`, `src/Modules/BECore/Reflection/CLAUDE.md`, `.claude/rules/ui-control-api.md`).
+- **Headless and deterministic.** The game and the editor run with no window (`--headless`, a software renderer that still takes screenshots), on a manual clock that moves only on `step`, in any window size, density and safe area (`set_window`). Smoke tests, scenarios with reference pictures and coding agents drive it the same way (`tools/control/CLAUDE.md`, `.claude/rules/control-window-api.md`).
+- **Data errors are visible.** An unknown key, a missing required field or a value out of range in a config is a warning in the log (an error with `--strict-config`), never silence; the release cook fails on any such finding, so a release is built from clean files (`src/Modules/BECore/Config/CLAUDE.md`, `src/Modules/BECore/Cook/CLAUDE.md`).
 
 ## Build it
 
