@@ -78,7 +78,7 @@ namespace BECore::Tests {
     TEST(GuideCppRulesExampleTest, ALabelRebuildsItsTextOnlyWhenTheScoreMovedAndAnUnchangedScoreAllocatesNothing) {
         ScoreLabel label;
         const String& first = label.Text(7);
-        EXPECT_EQ(first, "Score: 7");
+        EXPECT_EQ(first, "Your best score so far: 7");
 
         ExpectNoAllocations([&] {
             for (int32_t frame = 0; frame < kSteadyFrames; ++frame) {
@@ -86,7 +86,13 @@ namespace BECore::Tests {
             }
         });
 
-        EXPECT_EQ(label.Text(8), "Score: 8");
+        // The check above passes for a counter that never counts: a moved score must show as an allocation
+        if constexpr (AllocTracker::kEnabled) {
+            const AllocCount moved = CountAllocations([&] { EXPECT_EQ(label.Text(8), "Your best score so far: 8"); });
+            EXPECT_GT(moved.count, 0u) << "a moved score builds a new text, and the tracker must count it";
+        } else {
+            EXPECT_EQ(label.Text(8), "Your best score so far: 8");
+        }
     }
 
 }  // namespace BECore::Tests

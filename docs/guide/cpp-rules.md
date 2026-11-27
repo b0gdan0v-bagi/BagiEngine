@@ -29,7 +29,7 @@ cmake --build --preset macos-debug --target BagiEngineTests
 | a value or `None` | `Optional<T>` | the "nothing" case is `std::nullopt` |
 | the only owner of an object | `UniquePtr<T>` | made with `MakeUnique<T>(...)` |
 
-The rule: engine and game code write these names, not `eastl::` or `std::`. The reason is in `src/Modules/BECore/Types/CLAUDE.md`: each name is a `using` of a library type, so the library and the allocator are chosen in one place. The owning types (`String`, `Vector`, the maps) take the engine's allocator, so `String` is not the library's own string, and the two never convert except by copy. A line that must keep a `std::` type for a standard or third-party API says why with a comment, `//-NoStd: <why>`. The test `BagiTypesCheck` finds the rest.
+The rule: engine and game code write these names, not `eastl::` or `std::`. The reason is in `src/Modules/BECore/Types/CLAUDE.md`: each name is a `using` of a type of EASTL (a library of containers that the engine uses in place of the standard ones; `Optional` is the `std::` one, which other libraries speak), so the library and the allocator are chosen in one place. The owning types (`String`, `Vector`, the maps) take the engine's allocator, so `String` is not EASTL's own `eastl::string`, and the two never convert except by copy. A line that must keep a `std::` type for a standard or third-party API says why with a comment, `//-NoStd: <why>`. The test `BagiTypesCheck` finds the rest.
 
 A map keyed by `String` has one more trick, from the same file ("Strings as keys"): `find` takes a `StringView` or a literal and makes no `String` to ask. The lookup of the example:
 
@@ -139,15 +139,17 @@ CORE_ENUM(ParseError, uint8_t, Empty, NotANumber, OutOfRange)
 }
 ```
 
-From `tests/BECore/GuideCppRulesExample.h`. The engine's own `Load` of [A save](save-game.md) does the same: it logs a refusal once and leaves the live state untouched.
+From `tests/BECore/GuideCppRulesExample.h`. The `Load` of [A save](save-game.md) does the same: it logs a refusal once and leaves the live state untouched.
 
 **A bug is an `ASSERT`.** A caller that breaks a contract is a mistake in the code, not an input, and it stops a debug build with the line:
 
 <!-- source: tests/BECore/GuideCppRulesExample.h -->
 ```cpp
+constexpr int32_t kPercentScale = 100;
+...
 [[nodiscard]] inline int32_t PercentOf(int32_t part, int32_t whole) {
     ASSERT(whole > 0, "PercentOf needs a positive whole");
-    return part * 100 / whole;
+    return part * kPercentScale / whole;
 }
 ```
 
@@ -160,7 +162,7 @@ ASSERT(queue.PopFront());  // wrong: in a Release build the pop never happens
 
 ## `CORE_ENUM`: an enum that knows its names
 
-`enum class` is not used. `CORE_ENUM(Name, type, values...)` makes an enum whose values have names the engine can read: a value formats as its name in a log line (`Format/CLAUDE.md`), a field of such an enum is read and written by name (`src/Modules/BECore/Reflection/CLAUDE.md`, "`GetProperty` / `SetProperty`"), and `EnumUtils<E>` converts a name back (`src/Modules/BECore/Utils/EnumUtils.h`). The enum of the example is the first line of the previous section. A person reading the log sees `NotANumber`, not `1`; this is the text the test pins:
+`enum class` is not used. `CORE_ENUM(Name, type, values...)` makes an enum whose values have names the engine can read: a value formats as its name in a log line (`Format/CLAUDE.md`), a field of such an enum is read and written by name (`src/Modules/BECore/Reflection/CLAUDE.md`, the bullet "`GetProperty` / `SetProperty`"), and `EnumUtils<E>` converts a name back (`src/Modules/BECore/Utils/EnumUtils.h`). The enum of the example is the first line of the previous section. A person reading the log sees `NotANumber`, not `1`; this is the text the test pins:
 
 <!-- illustration: the text of the warning that LevelOrFirst("seven") logs -->
 ```text
@@ -169,7 +171,7 @@ Cannot read level 'seven': NotANumber
 
 ## `Format` and the log macros
 
-`Format("{} has {} coins", name, coins)` is the engine's `f"{name} has {coins} coins"`: the string is a literal checked when the code compiles, so a wrong count of `{}` does not build. `AppendFormat` writes into a `String` you keep:
+`Format("{} has {} coins", name, coins)` is the engine's `f"{name} has {coins} coins"`: the string is a literal checked when the code compiles, so a `{}` with no argument does not build (an extra argument is ignored: `src/Modules/BECore/Logger/CLAUDE.md`). `AppendFormat` writes into a `String` you keep:
 
 <!-- source: tests/BECore/GuideCppRulesExample.h -->
 ```cpp
@@ -194,8 +196,7 @@ class ScoreLabel {
 public:
     [[nodiscard]] const String& Text(int32_t score) {
         if (_shown != score) {
-            _text.clear();
-            AppendFormat(_text, "Score: {}", score);
+            _text = Format("Your best score so far: {}", score);
             _shown = score;
         }
         return _text;
@@ -207,7 +208,7 @@ private:
 };
 ```
 
-From `tests/BECore/GuideCppRulesExample.h`. The case of the test asks for the text of one score a hundred times and checks that every answer is the same member and that none of them allocated. **You can see an allocation only in the profile preset**, which counts them (`macos-profile`: `cmake/CLAUDE.md`; what the tracker counts is `src/Modules/BECore/Profiler/Alloc/CLAUDE.md`). In every other preset the case still runs its other checks and is **skipped, with its reason**, as in the output at the top, so a build that cannot count does not report "allocates nothing". To see it count (the writer saw all 8 cases pass there):
+From `tests/BECore/GuideCppRulesExample.h`. The text is longer than a `String` keeps inside itself, so every build of it takes memory from the heap: that is what the guard saves. The case of the test asks for the text of one score a hundred times and checks that every answer is the same member and that none of them allocated, and that a moved score does allocate, so a counter that counts nothing cannot pass it. **You can see an allocation only in the profile preset**, which counts them (`macos-profile`: `cmake/CLAUDE.md`; what the tracker counts is `src/Modules/BECore/Profiler/Alloc/CLAUDE.md`). In every other preset the case still runs its other checks and is **skipped, with its reason**, as in the output at the top, so a build that cannot count does not report "allocates nothing". To see it count (the writer saw all 8 cases pass there):
 
 <!-- command -->
 ```bash

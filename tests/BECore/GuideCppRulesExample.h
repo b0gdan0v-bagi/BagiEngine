@@ -111,10 +111,12 @@ namespace BECore::Tests {
             return *level;
         }
 
+        constexpr int32_t kPercentScale = 100;
+
         /// A zero whole is a bug of the caller, not an input: it stops a debug build and costs nothing in a release one
         [[nodiscard]] inline int32_t PercentOf(int32_t part, int32_t whole) {
             ASSERT(whole > 0, "PercentOf needs a positive whole");
-            return part * 100 / whole;
+            return part * kPercentScale / whole;
         }
 
         [[nodiscard]] inline String DescribeCoins(StringView name, int32_t coins) {
@@ -126,13 +128,13 @@ namespace BECore::Tests {
             AppendFormat(text, "{} has {} coins", name, coins);
         }
 
-        /// The score as text for a label drawn every frame. The text is a member and is rebuilt only when the score moved
+        /// The score as text for a label drawn every frame. The text is a member and is rebuilt only when the score moved: building it
+        /// takes a heap `String` (the text is longer than a `String` keeps inside itself), which a steady frame must not pay
         class ScoreLabel {
         public:
             [[nodiscard]] const String& Text(int32_t score) {
                 if (_shown != score) {
-                    _text.clear();
-                    AppendFormat(_text, "Score: {}", score);
+                    _text = Format("Your best score so far: {}", score);
                     _shown = score;
                 }
                 return _text;
