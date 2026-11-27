@@ -12,7 +12,7 @@ Terms: `<engine>` is `.` in the engine and `engine` in a game. `<root>` is the r
 ## Steps
 
 1. **Pick the target.** List the entries of `<root>/web/targets.json` that have both `site` and `page`. None: say so and stop. One: take it. Several: ask which (in Russian), unless the owner named one.
-2. **Dry run:** `python3 <engine>/tools/web/build_and_deploy.py --target <name> --dry-run`. Show the plan in short: the site, the page, what would be uploaded, the variable and the `.env` the token comes from. The commit and the size come from the real run.
+2. **Dry run:** `python3 <engine>/tools/web/build_and_deploy.py --target <name> --deploy --dry-run` (without `--deploy` the dry run prints only the git and cmake steps, none of the upload; with both nothing is run, sent or read). Show the plan in short: the site, the page, what would be uploaded, the variable and the `.env` the token comes from. The commit and the size come from the real run.
 3. **Deploy in the background** (`run_in_background`):
    `python3 <engine>/tools/web/build_and_deploy.py --target <name> --deploy --status-file <scratchpad>/deploy-<name>.json > <scratchpad>/deploy-<name>.log 2>&1`.
    The first run builds a checkout and may install the SDK (minutes, about 2 GB): say so before you start. A gate that has no green full run for the commit starts one (`alltests`), which takes longer. Do not poll; wait for the notice.
