@@ -1,0 +1,20 @@
+<UIStrings default="en">
+  <language id="en">
+    <string key="settings.title" text="Settings"/>
+    <string key="settings.sound" text="Sound"/>
+    <string key="settings.music" text="Music volume"/>
+    <string key="settings.language" text="Language"/>
+    <string key="settings.ok" text="OK"/>
+    <string key="lang.en" text="English"/>
+    <string key="lang.ru" text="Русский"/>
+  </language>
+  <language id="ru">
+    <string key="settings.title" text="Настройки"/>
+    <string key="settings.sound" text="Звук"/>
+    <string key="settings.music" text="Громкость музыки"/>
+    <string key="settings.language" text="Язык"/>
+    <string key="settings.ok" text="Готово"/>
+    <string key="lang.en" text="English"/>
+    <string key="lang.ru" text="Русский"/>
+  </language>
+</UIStrings>

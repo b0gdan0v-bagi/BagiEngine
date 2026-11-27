@@ -1,0 +1,17 @@
+<link rel="stylesheet" href="settings.css">
+<div id="Plate">
+  <span id="Title">{#settings.title}</span>
+  <div id="Sound" data-widget="toggle" data-bind="soundOn" data-action="SettingsSound">{#settings.sound}</div>
+  <div id="MusicRow" class="row centered">
+    <span id="MusicCaption" class="caption">{#settings.music}</span>
+    <div id="Volume" data-widget="slider" data-bind="volume" data-action="SettingsVolume" data-min="0" data-max="1" data-step="0.1"></div>
+  </div>
+  <div id="LanguageRow" class="row">
+    <span id="LanguageCaption" class="caption">{#settings.language}</span>
+    <div id="Language" class="group" data-widget="segmented" data-bind="language">
+      <button id="LanguageEn" data-action="SettingsLanguage" data-value="en">{#lang.en}</button>
+      <button id="LanguageRu" data-action="SettingsLanguage" data-value="ru">{#lang.ru}</button>
+    </div>
+  </div>
+  <button id="Ok" data-action="SettingsClose">{#settings.ok}</button>
+</div>
