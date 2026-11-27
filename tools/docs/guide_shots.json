@@ -92,6 +92,28 @@
       "about": "the same scene at frame 126, two seconds after the runs started: the slider is at the far end of its way and the turner at 180 degrees, the bobber is half way back"
     },
     {
+      "name": "input-before",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/input-actions",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "BagiDemo on the example of the input page (docs/guide/examples/input-actions) at frame 5: the title and the round pad, no sparks yet"
+    },
+    {
+      "name": "input-clicked",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/input-actions",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}],
+        ["click_at", {"x": 640, "y": 360, "space": "scene"}],
+        ["step", {"frames": 40, "dt": 0.016}]
+      ],
+      "about": "the same scene 40 frames after a click_at on the middle of the pad: the Pop action has made the burst, the sparks fly out of the pad"
+    },
+    {
       "name": "reflection-inspector",
       "exe": "BagiDemo",
       "editor": true,

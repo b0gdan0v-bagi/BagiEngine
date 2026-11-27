@@ -19,16 +19,17 @@ A guide for a person who is new to the engine. Each page is one task, done from 
 4. [A prefab and its overrides](prefab.md): write a node once as a node file, use it three times with their own changes, and see Save write back only what differs.
 5. [A tween and a timeline](tween-and-timeline.md): make three nodes move from data, change the curve and the delay, then read the C++ that starts a run and a timeline that fades, moves and calls back.
 6. [Config and reflection](config-and-reflection.md): follow one field from its C++ class to the file, the inspector and the control API, write a config file of your own, and change one while the game runs.
+7. [Input actions](input-actions.md): make a click send a named action and an emitter listen for it with no C++, then read the C++ that listens and press the pad from a Python script.
 
-Planned, not written yet: input actions, save games, the editor in depth, the web build, the control API from Python, a test, working with agents, the C++ rules explained, where the data lives.
+Planned, not written yet: save games, the editor in depth, the web build, the control API from Python, a test, working with agents, the C++ rules explained, where the data lives.
 
 ## Where to start
 
-**You make scenes and screens (a designer, an artist).** Start with "Run the demo", then "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline" and "Config and reflection". Planned next: the editor in depth.
+**You make scenes and screens (a designer, an artist).** Start with "Run the demo", then "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection" and "Input actions". Planned next: the editor in depth.
 
 **You write Python (tools, bots, tests).** "Run the demo" shows the game you will drive. Planned next: the control API from Python, a test, and where the data lives.
 
-**You work with coding agents.** "Run the demo", "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline" and "Config and reflection" show what an agent changes when it edits content or adds a component. Planned next: working with agents, and the C++ rules explained.
+**You work with coding agents.** "Run the demo", "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection" and "Input actions" show what an agent changes when it edits content or adds a component. Planned next: working with agents, and the C++ rules explained.
 
 ## A game of your own
 

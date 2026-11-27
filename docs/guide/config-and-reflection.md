@@ -228,4 +228,4 @@ From `tests/BECore/GuideConfigExample.h`. `GuideConfigExampleTest` changes the f
 
 You followed `offsetX` from its `BE_REFLECT_FIELD` to the attribute of the scene file, the row of the inspector and the path of the control API, and saw that the `range` is one rule in all three. You read the three parts of a config of your own, a struct, a file and a read by name, and the warning of a typo. You changed a config while the game ran, and saw what the engine does for a good file (reads it, tells you, leaves the running scene alone) and for a broken one (keeps the old one and tells you), and how a class of yours follows.
 
-Next (planned): input actions, how a key or a touch becomes a named action that the game answers.
+Next: [Input actions](input-actions.md), how a press becomes a named action that the game answers.
