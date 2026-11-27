@@ -1,6 +1,6 @@
 # Your first scene
 
-You will write a scene file by hand, from an empty one to a scene with a background, a title and a sprite, and run it. Every block below is an excerpt of the engine's demo scene, `tools/demo/config/SceneConfig.xml`, so you can open that file next to this page and find the same lines.
+You will write a scene file by hand, from an empty one to a scene with a background, a title and a sprite, and run it. Every block below is an excerpt of the finished scene, `docs/guide/examples/first-scene/config/SceneConfig.xml`, so you can open that file next to this page and find the same lines. Its nodes are the demo's own: the demo's `tools/demo/config/SceneConfig.xml` is the bigger scene they are cut from.
 
 You need the build from [Run the demo](run-the-demo.md). No C++ is written here: a scene is data.
 
@@ -18,11 +18,19 @@ build/macos-debug/bin/BagiDemo --content-overlay=$HOME/bagi-first-scene
 
 Until your file exists, the demo shows its own scene. As soon as `$HOME/bagi-first-scene/config/SceneConfig.xml` exists, it wins. Run the second line again after each step below to see the step.
 
+If a step went wrong and you want the finished scene, copy the example folder and run it:
+
+<!-- command -->
+```bash
+cp -r docs/guide/examples/first-scene/config $HOME/bagi-first-scene/
+build/macos-debug/bin/BagiDemo --content-overlay=$HOME/bagi-first-scene
+```
+
 ## 1. An empty scene
 
 Make `$HOME/bagi-first-scene/config/SceneConfig.xml`. Write the skeleton; where the excerpt has `...`, leave the space between `<nodes>` and `</nodes>` empty:
 
-<!-- source: tools/demo/config/SceneConfig.xml -->
+<!-- source: docs/guide/examples/first-scene/config/SceneConfig.xml -->
 ```xml
 <?xml version="1.0"?>
 <SceneManager contentVersion="6">
@@ -37,22 +45,22 @@ Make `$HOME/bagi-first-scene/config/SceneConfig.xml`. Write the skeleton; where 
 </SceneManager>
 ```
 
-From `tools/demo/config/SceneConfig.xml`.
+From `docs/guide/examples/first-scene/config/SceneConfig.xml`.
 
 Run it. The window is plain dark grey: a scene with no nodes draws nothing.
 
 What the lines say:
 
-- `SceneManager` holds the scenes of the game. The first one is the one that runs.
+- `SceneManager` holds the scenes of the game. The first one is active when the game starts; the game then asks for a scene by name, and the demo asks for `DemoScene`.
 - `contentVersion` is the version of the format of content files. Copy the number from the demo's file; when the format changes, a tool in `tools/migrate/` brings a game's files up to date.
 - `viewWidth` and `viewHeight` give the scene its own size in view units. Every position and size below is in these units, and the engine scales the whole view to the window. So the scene looks the same in a small and in a large window.
-- `name` is yours; the demo calls its scene `DemoScene`.
+- `name` identifies the scene. Keep `DemoScene` for the demo: with another name the log says `SceneManager: scene 'DemoScene' not found` (the scene still shows, as the first one). A game names its scene in its own `IGame`.
 
 ## 2. A background
 
 A node is a named thing in the scene with components on it. A component is data: this one says where the node is, that one says how it is drawn. Put this node between `<nodes>` and `</nodes>`:
 
-<!-- source: tools/demo/config/SceneConfig.xml -->
+<!-- source: docs/guide/examples/first-scene/config/SceneConfig.xml -->
 ```xml
 <node name="Sky" layer="-1">
   <components>
@@ -64,7 +72,7 @@ A node is a named thing in the scene with components on it. A component is data:
 </node>
 ```
 
-From `tools/demo/config/SceneConfig.xml`. (There it sits inside a group node called `Background`; here it goes straight into `<nodes>`.)
+From `docs/guide/examples/first-scene/config/SceneConfig.xml`. (In the demo's file it sits inside a group node called `Background`; here it goes straight into `<nodes>`.)
 
 Run it: the window is a dark blue now.
 
@@ -78,7 +86,7 @@ To see why, cut the `Sky` node, paste it after the last node you will write in s
 
 Add this node after `Sky`:
 
-<!-- source: tools/demo/config/SceneConfig.xml -->
+<!-- source: docs/guide/examples/first-scene/config/SceneConfig.xml -->
 ```xml
 <node name="Title">
   <components>
@@ -92,7 +100,7 @@ Add this node after `Sky`:
 </node>
 ```
 
-From `tools/demo/config/SceneConfig.xml`.
+From `docs/guide/examples/first-scene/config/SceneConfig.xml`.
 
 Run it: a yellow title with a dark outline and a shadow appears at the top.
 
@@ -105,7 +113,7 @@ Run it: a yellow title with a dark outline and a shadow appears at the top.
 
 A sprite is a part of a picture that has a name:
 
-<!-- source: tools/demo/config/SceneConfig.xml -->
+<!-- source: docs/guide/examples/first-scene/config/SceneConfig.xml -->
 ```xml
 <node name="Gem">
   <components>
@@ -115,7 +123,7 @@ A sprite is a part of a picture that has a name:
 </node>
 ```
 
-From `tools/demo/config/SceneConfig.xml`. Add it after `Title` and run: a blue gem appears at the left.
+From `docs/guide/examples/first-scene/config/SceneConfig.xml`. Add it after `Title` and run: a blue gem appears at the left.
 
 `spriteId` is not a file name. It is the name of an entry of the sprite library, the file `TextureLibrary.xml` in `config/`, which says which picture the sprite is cut from and which rectangle of it. The demo's entry for this one:
 
@@ -130,16 +138,20 @@ From `tools/demo/config/TextureLibrary.xml`. A game keeps its own `TextureLibrar
 
 `fit` says what to do when the picture and the box are not the same shape: `Contain` keeps the proportions of the picture and centres it in the box, `Stretch` (the default) fills the box.
 
+The scene of the four steps, as the demo draws it:
+
+![The finished scene: a dark blue background, the yellow title BagiEngine demo scene at the top and a blue gem at the left](img/first-scene.png)
+
 ## 5. When you make a mistake
 
 The engine does not stop at a typo in a file; it starts and tells you in the log. Add `fontsize="46"` to the `TextComponent` of the title, next to the real `fontSize`, and run again. The terminal where you started the demo shows:
 
-<!-- illustration: the warning the engine writes for an unknown attribute; the numbers show where it is (scenes[0], the second node, its second component) -->
+<!-- illustration: the warning the engine writes for an unknown attribute; the time of day is whenever you run it, the numbers show where the mistake is (scenes[0], the second node, its second component) -->
 ```text
-[Warning] Config 'SceneConfig': scenes[0].nodes[1].components[1].fontsize: Unknown attribute 'fontsize', did you mean 'fontSize'?
+[Warning] [12:00:00.000] Config 'SceneConfig': scenes[0].nodes[1].components[1].fontsize: Unknown attribute 'fontsize', did you mean 'fontSize'?
 ```
 
-Read it from the left: the file (`SceneConfig`), the path to the place (the first scene, the second node, the second component) and the attribute. The title looks the same, because the engine did not know the key and skipped it. Start with `--strict-config` and the same findings are written as errors.
+Read it from the left: the level (`Warning`), the time of day (the second bracket; yours differs), the file (`SceneConfig`), the path to the place (the first scene, the second node, the second component) and the attribute. The title looks the same, because the engine did not know the key and skipped it. Start with `--strict-config` and the same findings are written as errors.
 
 ## 6. See it in the editor
 

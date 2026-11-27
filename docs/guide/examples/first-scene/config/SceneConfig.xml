@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<SceneManager contentVersion="6">
+  <scenes>
+    <scene type="Scene" name="DemoScene" viewWidth="1280" viewHeight="720">
+      <nodes>
+        <node name="Sky" layer="-1">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="1280" height="720" />
+            <component type="QuadRendererComponent">
+              <color r="24" g="30" b="50" a="255" />
+            </component>
+          </components>
+        </node>
+        <node name="Title">
+          <components>
+            <component type="TransformComponent" x="24" y="14" width="912" height="62" />
+            <component type="TextComponent" text="BagiEngine demo scene" fontFamily="Russo One" fontSize="46" align="Center" wrap="false" overflow="AutoFit" outlineWidth="2" shadowOffsetX="3" shadowOffsetY="4">
+              <color r="255" g="226" b="140" a="255" />
+              <outlineColor r="90" g="45" b="10" a="255" />
+              <shadowColor r="0" g="0" b="0" a="150" />
+            </component>
+          </components>
+        </node>
+        <node name="Gem">
+          <components>
+            <component type="TransformComponent" x="88" y="150" width="120" height="112" />
+            <component type="SpriteRendererComponent" spriteId="DemoGem" fit="Contain" />
+          </components>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>
