@@ -106,4 +106,4 @@ You can merge, send it back, or leave it.
 
 You learned where a branch in `review` waits and how to try it, the order to read what the loop wrote, what each line of the review report means, what a decisions list should and should not hold, which signs in a diff to be suspicious of, and how a merge, a send-back and a wait differ.
 
-Next (planned): the C++ rules of the engine explained, and where the data lives
+Next: [The C++ rules](cpp-rules.md)

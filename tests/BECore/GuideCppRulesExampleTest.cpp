@@ -33,7 +33,7 @@ namespace BECore::Tests {
 
     TEST(GuideCppRulesExampleTest, TwoOwnersShareOneObjectAndItDiesWithTheLastOne) {
         bool destroyed = false;
-        IntrusivePtr<Treasure> treasure = New<Treasure>(destroyed);
+        IntrusivePtr<Treasure> treasure = DigUp(destroyed);
         auto pouch = MakeUnique<Pouch>(treasure);
         EXPECT_EQ(treasure->GetRefCount(), 2);
 

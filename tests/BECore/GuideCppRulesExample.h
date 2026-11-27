@@ -67,6 +67,11 @@ namespace BECore::Tests {
             bool& _destroyed;
         };
 
+        /// The first owner of a new treasure: `New` makes the object and returns the pointer that holds it
+        [[nodiscard]] inline IntrusivePtr<Treasure> DigUp(bool& destroyed) {
+            return New<Treasure>(destroyed);
+        }
+
         /// Owns a share of a treasure: the pointer keeps it alive. A function that only looks takes `const Treasure&` and owns nothing
         class Pouch {
         public:
