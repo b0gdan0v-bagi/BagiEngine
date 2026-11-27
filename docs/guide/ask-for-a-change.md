@@ -6,7 +6,7 @@ You need the repository checked out, a Claude Code session open in it, and acces
 
 ## What an entry is
 
-An entry is a record in the **todo store**, a service the owner runs: an `id`, a `title`, a `body` in markdown and a status, in one **area** (one todo list: the engine has one, and each game has its own). The store is the only copy. No entry is a file in git, so a branch never carries one, and the agents' plans and reviews live there too. A loop of agents takes an entry that is `open`, works on it in its own branch and leaves it for you to review (the next page, planned).
+An entry is a record in the **todo store**, a service the owner runs: an `id`, a `title`, a `body` in markdown and a status, in one **area** (one todo list: the engine has one, and each game has its own). The store is the only copy. No entry is a file in git, so a branch never carries one, and the agents' plans and reviews live there too. A loop of agents takes an entry that is `open`, works on it in its own branch and leaves it for you to review ([The todo loop](todo-loop.md)).
 
 ## File it
 
@@ -99,4 +99,4 @@ python3 tools/todo/todo.py history <id>
 
 You learned what an entry is and that it lives in the store and not in git, filed an idea with `/todo-add` or by hand, wrote it with a place, an outcome and the things it assumes, chose the area it belongs to, and saw why the loop leaves an entry to you and how to look at it.
 
-Next (planned): The todo loop
+Next: [The todo loop](todo-loop.md)

@@ -26,6 +26,7 @@ A guide for a person who is new to the engine. Each page is one task, done from 
 11. [The control API from Python](control-api.md): start the demo from a script, read and change a node, press a button, take a picture, then record the session as a scenario with a reference picture and see it fail.
 12. [Test a game](test-a-game.md): read a test of the demo's scene and break it on purpose, then the smoke of the real program and a scenario file with a reference picture, and how `ctest` runs them.
 13. [Ask for a change](ask-for-a-change.md): file a request for the engine as an entry of the todo store, write it so an agent can take it, and see what the loop leaves to you.
+14. [The todo loop](todo-loop.md): the roles of the loop and what each leaves behind, the life of an entry, big entries and workers, when it stops, and what is only yours: the review, the merge and the push.
 
 Planned, not written yet: working with agents, the C++ rules explained, where the data lives.
 
