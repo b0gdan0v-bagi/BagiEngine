@@ -1,0 +1,45 @@
+# BagiEngine guide
+
+A guide for a person who is new to the engine. Each page is one task, done from start to end, with the commands you type and what you should see. The [README of the repository](../../README.md) says what the engine is and how to build it; start there if you have not built it yet.
+
+## How to read a page
+
+- Every page is a task. Do the steps in order; each step says why it is there.
+- A code or XML block is an excerpt of a real file of the repository, and the line under it names the file. So it is the same text the engine runs, and it stays right when the file changes. A block with `...` on a line of its own leaves lines out. What is not an excerpt (what a command printed on the writer's machine, a sketch made up for the page, a line shown as the wrong way) is introduced as that in the text before it.
+- A page that edits files keeps them in an example folder, `docs/guide/examples/<page>/`, laid out like a game's content. You copy it into a folder of your own, so the repository stays as it is.
+- A block of shell commands is meant to be typed as it stands, from the root of the repository, unless the text before it says it is only shown.
+- The pictures are taken by the engine itself, from a running game, not drawn.
+- The pages of the engine's own contracts live next to the code, in the `CLAUDE.md` files. They are written for coding agents, and they are the place to look up an exact rule.
+
+## Pages
+
+1. [Run the demo](run-the-demo.md): build once, run `BagiDemo`, open the editor, change a field, save, and see what changed on disk.
+2. [Your first scene](first-scene.md): write a scene file by hand, a background, a title and a sprite, and see it in the editor.
+3. [A UI screen](ui-screen.md): a settings screen in HTML and CSS on the engine's own canvas, with strings and themes, checked on a phone-shaped window.
+4. [A prefab and its overrides](prefab.md): write a node once as a node file, use it three times with their own changes, and see Save write back only what differs.
+5. [A tween and a timeline](tween-and-timeline.md): make three nodes move from data, change the curve and the delay, then read the C++ that starts a run and a timeline that fades, moves and calls back.
+6. [Config and reflection](config-and-reflection.md): follow one field from its C++ class to the file, the inspector and the control API, write a config file of your own, and change one while the game runs.
+7. [Input actions](input-actions.md): make a click send a named action and an emitter listen for it with no C++, then read the C++ that listens and press the pad from a Python script.
+8. [A save](save-game.md): give a game a state class, a schema and a slot on disk, read it back into a temporary, and see what a refused file does.
+9. [The editor](editor.md): what each panel is for, one small task across four of them, the hotkeys, what a change does to the files, and how the editor differs in a browser.
+10. [The web build](web-build.md): build the demo for a browser, serve it on your own machine, and see why the page needs two headers and what the single-thread build changes.
+11. [The control API from Python](control-api.md): start the demo from a script, read and change a node, press a button, take a picture, then record the session as a scenario with a reference picture and see it fail.
+12. [Test a game](test-a-game.md): read a test of the demo's scene and break it on purpose, then the smoke of the real program and a scenario file with a reference picture, and how `ctest` runs them.
+13. [Ask for a change](ask-for-a-change.md): file a request for the engine as an entry of the todo store, write it so an agent can take it, and see what the loop leaves to you.
+14. [The todo loop](todo-loop.md): the roles of the loop and what each leaves behind, the life of an entry, big entries and workers, when it stops, and what is only yours: the review, the merge and the push.
+15. [The skills](skills.md): what a skill is and how you start one, and a map of the engine's skills by what you want done, one line and a link each.
+16. [What to review in an agent's work](review-agent-work.md): where a finished branch waits, the order to read in, the review report line by line, the decisions list, the red flags, and how to merge, send back or leave it.
+17. [The C++ rules](cpp-rules.md): the rules a C++ file of the engine follows, each with its reason and the code that obeys it, and where your Python goes next to the C++.
+18. [Where the data lives](where-the-data-lives.md): where each kind of file is, which file wins when two have the same name, how to change data without code, how a mistake in a file shows, and what the cook does for a release.
+
+## Where to start
+
+**You make scenes and screens (a designer, an artist).** Start with "Run the demo", then "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "The editor" and "Where the data lives".
+
+**You write Python (tools, bots, tests).** "Run the demo" shows the game you will drive, then "The C++ rules" for the code you will read next to it, then "Config and reflection", "Input actions", "The control API from Python" and "Test a game", and "Where the data lives" when you touch content.
+
+**You work with coding agents.** "Run the demo", "Your first scene", "A UI screen", "A prefab and its overrides", "A tween and a timeline", "Config and reflection", "Input actions", "A save", "The editor" and "The web build" show what an agent changes when it edits content or adds a component; "The control API from Python" ends with the server an agent drives a game through, and "Test a game" shows the tests it runs. Then "Ask for a change", "The todo loop", "The skills" and "What to review in an agent's work" show how you work with the agent itself. "The C++ rules" explains the code an agent writes.
+
+## A game of your own
+
+The engine knows no game. A game is a repository of its own that carries the engine as a submodule: see [NEW_GAME.md](../../NEW_GAME.md). The pages here use the engine's own demo, `BagiDemo`, so nothing needs a game repository.

@@ -12,6 +12,7 @@ Each tool has its own `CLAUDE.md`; Python tools have pytest suites outside ctest
 | `stress` | `BagiStress`, the 2D stress app: benchmarks and a control smoke |
 | `demo` | `BagiDemo`, the demo scene of the engine's components, to look at and edit |
 | `shots` | before / after pictures of scenes, PNG diff |
+| `docs` | the check of the guide for people (`docs/guide/`, ctest `BagiGuideCheck`) and the tool that takes its pictures |
 | `sync` | helper of the `sync-engine` skill |
 | `alltests` | the full test run on demand (skill `alltests`, the deploy gate, `sync-engine`); a failure files `alltests-<test>` |
 | `changelog` | engine version and changelog fragments |

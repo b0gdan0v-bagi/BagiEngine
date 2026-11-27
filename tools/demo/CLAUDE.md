@@ -42,5 +42,6 @@ The contract of each is on its class.
 
 ## Tests
 
-- `DemoTests` (`tests/`): `DemoSceneFixture.h` is the shipped scene and sprite library on a `RecordingRenderer` the size of the view, with clicks on the panel through `UIInput`; the configs are checked here and not in `BagiEngineTests`, which does not link the demo's classes.
+- `DemoTests` (`tests/`): `DemoSceneFixture.h` is the shipped scene and sprite library on a `RecordingRenderer` the size of the view, with clicks on the panel through `UIInput`; the configs are checked here and not in `BagiEngineTests`, which does not link the demo's classes. `DemoGuideTweenTest` loads the example scene of the tween page (`docs/guide/examples/tween/`) and pins where its three movers are after a fixed time. `DemoGuideActionTest` loads the example of the input page (`docs/guide/examples/input-actions/`): a press on its pad bursts the emitter, one beside the pad does not.
 - `BagiDemoControlSmoke` is the engine's generic control smoke (`tools/control/tests/smoke.py`), `BagiDemoCookVerify` cooks the demo's content.
+- `BagiDemoScenario.title` (`tests/scenarios/title.jsonl`) pins the title text written over `scene_set` and what the first frames draw: the screenshot is compared with `references/title.png` at `threshold` 24 and `maxShare` 0.2%, chosen to absorb another machine's anti-aliasing (taken and checked on macOS only) and to fail a changed word; `bagi_play.py <exe> <file> --update` retakes it and the PNG is reviewed like code. `BagiDemoGuideScript.<name>` run the Python of the guide (`docs/guide/scripts/`).

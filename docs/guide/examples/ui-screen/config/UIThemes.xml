@@ -1,0 +1,10 @@
+<UIThemes default="night">
+  <theme id="night">
+    <color name="plate" value="36,40,52,255"/>
+    <color name="ok" value="40,90,60,255"/>
+  </theme>
+  <theme id="day">
+    <color name="plate" value="62,92,140,255"/>
+    <color name="ok" value="46,125,80,255"/>
+  </theme>
+</UIThemes>

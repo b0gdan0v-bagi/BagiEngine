@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<SceneManager contentVersion="6">
+  <scenes>
+    <scene type="Scene" name="DemoScene" viewWidth="1280" viewHeight="720">
+      <nodes>
+        <node name="Sky" layer="-1">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="1280" height="720" />
+            <component type="QuadRendererComponent">
+              <color r="24" g="30" b="50" a="255" />
+            </component>
+          </components>
+        </node>
+        <node ref="nodes/Badge" name="BadgeOne">
+          <components>
+            <component type="TransformComponent" x="100" y="100" />
+            <component type="TextComponent" text="One" />
+          </components>
+        </node>
+        <node ref="nodes/Badge" name="BadgeTwo">
+          <components>
+            <component type="TransformComponent" x="100" y="180" />
+            <component type="TextComponent" text="Two" />
+          </components>
+        </node>
+        <node ref="nodes/Badge" name="BadgeThree">
+          <components>
+            <component type="TransformComponent" x="100" y="260" />
+            <component type="TextComponent" text="Three" />
+            <component type="QuadRendererComponent">
+              <color r="200" g="110" b="40" a="255" />
+            </component>
+          </components>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>

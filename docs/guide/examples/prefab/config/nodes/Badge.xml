@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<node contentVersion="6" name="Badge">
+  <components>
+    <component type="TransformComponent" x="0" y="0" width="220" height="44" />
+    <component type="QuadRendererComponent">
+      <color r="70" g="110" b="190" a="255" />
+    </component>
+    <component type="TextComponent" text="Badge" fontSize="32" align="Center" wrap="false">
+      <color r="255" g="255" b="255" a="255" />
+    </component>
+  </components>
+</node>

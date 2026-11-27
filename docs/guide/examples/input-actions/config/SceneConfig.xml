@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<SceneManager contentVersion="6">
+  <scenes>
+    <scene type="Scene" name="DemoScene" viewWidth="1280" viewHeight="720">
+      <nodes>
+        <node name="Sky" layer="-1">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="1280" height="720" />
+            <component type="QuadRendererComponent">
+              <color r="24" g="30" b="50" a="255" />
+            </component>
+          </components>
+        </node>
+        <node name="Title">
+          <components>
+            <component type="TransformComponent" x="24" y="14" width="1232" height="62" />
+            <component type="TextComponent" text="Click the pad" fontFamily="Russo One" fontSize="46" align="Center" wrap="false" overflow="AutoFit" outlineWidth="2" shadowOffsetX="3" shadowOffsetY="4">
+              <color r="255" g="226" b="140" a="255" />
+              <outlineColor r="90" g="45" b="10" a="255" />
+              <shadowColor r="0" g="0" b="0" a="150" />
+            </component>
+          </components>
+        </node>
+        <node name="Pad">
+          <components>
+            <component type="TransformComponent" x="540" y="260" width="200" height="200" />
+            <component type="SpriteRendererComponent" spriteId="DemoRing" />
+            <component type="ClickableComponent" actionName="Pop" shape="Ellipse" />
+          </components>
+        </node>
+        <node name="Burst">
+          <components>
+            <component type="TransformComponent" x="640" y="360" width="0" height="0" />
+            <component type="ParticleEmitterComponent" playOnStart="false" burstAction="Pop">
+              <effect burstCount="48" maxParticles="96" seed="5" lifetimeMin="0.8" lifetimeMax="1.4" speedMin="80" speedMax="220" gravityY="90" sizeJitter="0.4" rotationJitter="180" spriteId="DemoStar" frameClass="FiniteEffect">
+                <size from="28" to="6" />
+                <rotation from="0" to="180" />
+                <color ease="QuadIn">
+                  <from r="255" g="255" b="255" a="255" />
+                  <to r="255" g="255" b="255" a="0" />
+                </color>
+              </effect>
+            </component>
+          </components>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>

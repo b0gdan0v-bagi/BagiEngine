@@ -24,7 +24,7 @@ The link protocol, its security rules and the command line: `.claude/rules/contr
 
 ## Running
 
-The repository venv (`CI/setup_venv.*`; Windows `.venv\Scripts\python`, needs `uv`), once `.venv/bin/pip install -r tools/control/requirements.txt` (`mcp` 2.x, `pytest`). Tests: `.venv/bin/python -m pytest tools/control/tests`.
+The repository venv (`CI/setup_venv.*`; Windows `.venv\Scripts\python`, needs `uv`), once `uv pip install --python .venv/bin/python -r tools/control/requirements.txt` (`mcp` 2.x, `pytest`). Tests: `.venv/bin/python -m pytest tools/control/tests`.
 
 ## Client names
 

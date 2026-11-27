@@ -1,0 +1,179 @@
+{
+  "shots": [
+    {
+      "name": "demo-game",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "steps": [
+        ["step", {"frames": 60, "dt": 0.016}]
+      ],
+      "about": "BagiDemo in Game mode after one second: the scene, with the fountain running"
+    },
+    {
+      "name": "demo-editor",
+      "exe": "BagiDemo",
+      "editor": true,
+      "window": "1600x900",
+      "steps": [
+        ["step", {"frames": 60, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 86, "y": 78}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 86, "y": 78}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 34, "y": 234}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 34, "y": 234}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 1000, "y": 800}]}],
+        ["step", {"frames": 300, "dt": 0.016}]
+      ],
+      "about": "BagiDemo in the editor, Scene Editor tab in front and the Root node open (two clicks at fixed points of the 1600x900 layout): hierarchy, viewport, sprite library",
+      "maxSize": 1280
+    },
+    {
+      "name": "first-scene",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/first-scene",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "BagiDemo on the finished scene of the first-scene page (docs/guide/examples/first-scene): sky, title and the gem"
+    },
+    {
+      "name": "ui-screen",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/ui-screen",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "BagiDemo on the example screen of the ui-screen page (docs/guide/examples/ui-screen) in a desktop window: the settings plate in its landscape form"
+    },
+    {
+      "name": "ui-screen-phone",
+      "exe": "BagiDemo",
+      "window": "540x960",
+      "density": 1,
+      "contentOverlay": "docs/guide/examples/ui-screen",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "the same screen in a portrait window: the Language row has its caption above the buttons (the portrait variant of the sheet)"
+    },
+    {
+      "name": "prefab",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/prefab",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "BagiDemo on the example of the prefab page (docs/guide/examples/prefab): three instances of one node file, each with its own text, and the third in another colour"
+    },
+    {
+      "name": "tween-start",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/tween",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "BagiDemo on the example of the tween page (docs/guide/examples/tween) at frame 5: the star (slider) and the arrow (turner) have just started their first leg, and the gem (bobber) is still waiting out its delay"
+    },
+    {
+      "name": "tween-far",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/tween",
+      "steps": [
+        ["step", {"frames": 126, "dt": 0.016}]
+      ],
+      "about": "the same scene at frame 126, two seconds after the runs started: the slider is at the far end of its way and the turner at 180 degrees, the bobber is half way back"
+    },
+    {
+      "name": "input-before",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/input-actions",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "BagiDemo on the example of the input page (docs/guide/examples/input-actions) at frame 5: the title and the round pad, no sparks yet"
+    },
+    {
+      "name": "input-clicked",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/input-actions",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}],
+        ["click_at", {"x": 640, "y": 360, "space": "scene"}],
+        ["step", {"frames": 40, "dt": 0.016}]
+      ],
+      "about": "the same scene 40 frames after a click_at on the middle of the pad: the Pop action has made the burst, the sparks fly out of the pad"
+    },
+    {
+      "name": "reflection-inspector",
+      "exe": "BagiDemo",
+      "editor": true,
+      "window": "1600x900",
+      "contentOverlay": "docs/guide/examples/tween",
+      "steps": [
+        ["step", {"frames": 60, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 86, "y": 78}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 86, "y": 78}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 34, "y": 234}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 34, "y": 234}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 150, "y": 323}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 150, "y": 323}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 420, "y": 343}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 420, "y": 343}]}],
+        ["step", {"frames": 3, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "move", "x": 500, "y": 373}]}],
+        ["step", {"frames": 300, "dt": 0.016}]
+      ],
+      "about": "BagiDemo in the editor on the tween example, the Slider node selected (four clicks at fixed points of the 1600x900 layout): the inspector shows the fields of its DemoTweenComponent",
+      "maxSize": 1280
+    },
+    {
+      "name": "editor-console",
+      "exe": "BagiDemo",
+      "editor": true,
+      "window": "1600x900",
+      "steps": [
+        ["step", {"frames": 60, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "key", "key": "L", "mods": ["ctrl", "shift"]}]}],
+        ["step", {"frames": 20, "dt": 0.016}],
+        ["imgui_input", {"events": [{"type": "click", "x": 673, "y": 746}]}],
+        ["imgui_input", {"events": [{"type": "text", "text": "ping"}, {"type": "key", "key": "Enter"}]}],
+        ["imgui_input", {"events": [{"type": "text", "text": "status"}, {"type": "key", "key": "Enter"}]}],
+        ["imgui_input", {"events": [{"type": "click", "x": 700, "y": 126}]}],
+        ["imgui_input", {"events": [{"type": "text", "text": "Control"}]}],
+        ["imgui_input", {"events": [{"type": "move", "x": 900, "y": 500}]}],
+        ["step", {"frames": 30, "dt": 0.016}]
+      ],
+      "about": "The Console opened with Ctrl+Shift+L over the editor: the filter field holds Control so two log lines are left, and the command line has answered ping and status",
+      "maxSize": 1280
+    },
+    {
+      "name": "control-api-title",
+      "exe": "BagiDemo",
+      "steps": [
+        ["step", {"frames": 30, "dt": 0.016666667}],
+        ["scene_set", {"node": "Text/Title", "component": "TextComponent", "path": "text", "value": "Hello from Python"}],
+        ["ui_click", {"name": "Burst"}],
+        ["step", {"frames": 1, "dt": 0.016666667}]
+      ],
+      "about": "BagiDemo after the calls of the control page's script: the title text written by scene_set, then a click on Burst and one frame",
+      "maxSize": 400
+    }
+  ]
+}
