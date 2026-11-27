@@ -1,7 +1,7 @@
 # Makes a checkout ready (Windows): the venv, what CI/ and tools/ need, the reflection generator's import, then the todo
-# sign-in offer. Idempotent; no arguments needed. -NoLogin skips the sign-in offer. Exits non-zero when a step before the
-# offer fails. The script never asks for, reads, prints or stores a token and never writes .env.
-param([switch]$NoLogin)
+# sign-in offer. Idempotent; no arguments needed. -NoLogin or --no-login skips the sign-in offer. Exits non-zero when a
+# step before the offer fails. The script never asks for, reads, prints or stores a token and never writes .env.
+# No param block: PowerShell would not bind the "--no-login" the README and the .sh show to a switch.
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent $ScriptDir
@@ -12,6 +12,12 @@ $HasUv = [bool](Get-Command uv -ErrorAction SilentlyContinue)
 function Fail($Message) {
     Write-Host "[ERROR] $Message" -ForegroundColor Red
     exit 1
+}
+
+$NoLogin = $false
+foreach ($Arg in $args) {
+    if ($Arg -eq "-NoLogin" -or $Arg -eq "--no-login") { $NoLogin = $true }
+    else { Fail "unknown argument: $Arg (only --no-login)" }
 }
 
 # 1. The venv. An existing one is left as it is.
