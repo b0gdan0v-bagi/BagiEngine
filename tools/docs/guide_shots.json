@@ -39,6 +39,27 @@
         ["step", {"frames": 5, "dt": 0.016}]
       ],
       "about": "BagiDemo on the finished scene of the first-scene page (docs/guide/examples/first-scene): sky, title and the gem"
+    },
+    {
+      "name": "ui-screen",
+      "exe": "BagiDemo",
+      "window": "1280x720",
+      "contentOverlay": "docs/guide/examples/ui-screen",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "BagiDemo on the example screen of the ui-screen page (docs/guide/examples/ui-screen) in a desktop window: the settings plate in its landscape form"
+    },
+    {
+      "name": "ui-screen-phone",
+      "exe": "BagiDemo",
+      "window": "540x960",
+      "density": 1,
+      "contentOverlay": "docs/guide/examples/ui-screen",
+      "steps": [
+        ["step", {"frames": 5, "dt": 0.016}]
+      ],
+      "about": "the same screen in a portrait window: the Language row has its caption above the buttons (the portrait variant of the sheet)"
     }
   ]
 }
