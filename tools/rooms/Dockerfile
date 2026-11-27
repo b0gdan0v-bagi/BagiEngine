@@ -1,8 +1,8 @@
-# The room server (tools/rooms/CLAUDE.md, README.md "Hosting the room server"). Build from the root of the engine, or of a game that carries it:
+# The room server (tools/rooms/CLAUDE.md, tools/rooms/README.md). Build from the root of the engine, or of a game that carries it:
 #   docker build -f tools/rooms/Dockerfile -t bagi-room-server .
 # A game reuses this file with its own server target and a preset of its own that includes the engine's (then -f engine/tools/rooms/Dockerfile):
 #   --build-arg SERVER_TARGET=<target> --build-arg PRESET=<preset>
-# The platform sets PORT; the rest of the settings are the BAGI_ROOMS_* variables (README.md). TLS is the platform's proxy's job.
+# The platform sets PORT; the rest of the settings are the BAGI_ROOMS_* variables (tools/rooms/README.md). TLS is the platform's proxy's job.
 
 FROM debian:trixie-slim AS build
 ARG PRESET=linux-server-release
