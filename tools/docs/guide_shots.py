@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
@@ -28,6 +29,9 @@ from bagi_session import GameSession, SessionError  # noqa: E402
 from game_process import preset_executable  # noqa: E402
 
 MANIFEST = REPOSITORY_ROOT / "tools" / "docs" / "guide_shots.json"
+# The editor reads its layout and preferences from the per-user folder this variable names: a picture of it must not depend on, or write into, the
+# folder of whoever takes it
+EDITOR_DIRECTORY_VARIABLE = "BAGI_EDITOR_DIR"
 DEFAULT_OUT = REPOSITORY_ROOT / "docs" / "guide" / "img"
 DEFAULT_MAC_PRESET = "macos-debug"
 DEFAULT_MAX_SIZE = 640
@@ -111,6 +115,8 @@ def take(row: dict[str, Any], exe: Path, out: Path) -> Path:
     with tempfile.TemporaryDirectory(prefix="bagi-guide-shot-") as scratch:
         overlay = copy_overlay(row, Path(scratch) / "content") if "contentOverlay" in row else None
         session = GameSession(client_name="guide_shots")
+        previous_editor_directory = os.environ.get(EDITOR_DIRECTORY_VARIABLE)
+        os.environ[EDITOR_DIRECTORY_VARIABLE] = str(Path(scratch) / "editor")
         try:
             description = session.launch(
                 exe=str(exe),
@@ -126,6 +132,10 @@ def take(row: dict[str, Any], exe: Path, out: Path) -> Path:
             png, _ = session.screenshot(row.get("maxSize", DEFAULT_MAX_SIZE))
         finally:
             session.close()
+            if previous_editor_directory is None:
+                os.environ.pop(EDITOR_DIRECTORY_VARIABLE, None)
+            else:
+                os.environ[EDITOR_DIRECTORY_VARIABLE] = previous_editor_directory
     target = out / f"{row['name']}.png"
     out.mkdir(parents=True, exist_ok=True)
     target.write_bytes(png)

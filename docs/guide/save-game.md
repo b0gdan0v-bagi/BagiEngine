@@ -152,4 +152,4 @@ You gave a game a state class, a schema and two calls, saw that a file is a slot
 
 The engine keeps one slot of its own in a game's folder, `audio`, with the player's sound levels; a game does not name a slot so. The exact rules of the service are in `src/Modules/BECore/Save/CLAUDE.md`, written for coding agents.
 
-Next: The editor, where each panel lives and what it is for (planned).
+Next: [The editor](editor.md), where each panel lives and what it is for.
