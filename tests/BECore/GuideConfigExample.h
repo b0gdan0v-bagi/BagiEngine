@@ -9,6 +9,7 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Types/Types.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Values/ValueLinkScope.h>
 #include <Events/ConfigEvents.h>
 #include <Events/SubscriptionHolder.h>
 #include <cstdint>
@@ -45,8 +46,11 @@ namespace BECore::Tests {
         inline IntrusivePtr<GuideSpawnerConfig> ReadGuideSpawnerConfig(const ConfigManager& configs) {
             auto config = New<GuideSpawnerConfig>();
             if (auto deserializer = configs.CreateDeserializer(GuideSpawnerNames::config)) {
-                config->Deserialize(*deserializer);
-                deserializer->FinishLoad();
+                {
+                    const ValueLinkScope scope(GuideSpawnerNames::config.View());
+                    config->Deserialize(*deserializer);
+                    deserializer->FinishLoad();
+                }
                 LogDeserializeErrors(GuideSpawnerNames::config.View(), *deserializer);
             }
             return config;

@@ -35,7 +35,7 @@ From `tools/demo/src/Demo/Components/DemoTweenComponent.h`. What each mark does:
 - `BE_REFLECT_FIELD`, on the same line as the field, makes it a part of the class's data. A field without it is not saved, not shown and not found by name.
 - `BE_FIELD_ATTRS(...)` is what you tell the tools about the field: `range(min, max)` limits the value (the inspector's slider, and a write over the control API outside it is refused), `step(s)` is the slider's step, `tooltip("...")` is the hint. There are also the flags `readonly`, `hidden` and `required`.
 - **The name drops the underscore.** A private member is `_offsetX`, and its name in the file and in the control API is `offsetX`. The file of the tween page has `offsetX="640"` and no `_offsetX`.
-- A field may be a number, a `bool`, a text (`String`, `PoolString`), an enum declared with `CORE_ENUM` (the file holds its value's name, `ease="QuadInOut"`), another reflected class, or a `Vector` or `HashMap` of these. Other containers do not compile when marked: the list is in `.claude/rules/reflection-module.md` ("Serialization").
+- A field may be a number, a `bool`, a text (`String`, `PoolString`), an enum declared with `CORE_ENUM` (the file holds its value's name, `ease="QuadInOut"`), another reflected class, or a `Vector` or `HashMap` of these. The other containers (`Optional`, `Variant`, the fixed ones, the other maps) follow their own rules, and a few have none: the table is in `.claude/rules/reflection-module.md` ("Serialization").
 
 After you add or change a `BE_CLASS` or a field, run the configure step again. The generator runs there, and the sources of the build are found by a glob, so a new file needs it too:
 
@@ -147,15 +147,18 @@ From `tests/BECore/GuideConfigExample.h`. The code of this and the next two bloc
 <GuideSpawnerConfig interval="0.5" count="8" enabled="true" shape="Line" label="first wave"/>
 ```
 
-The read. In a game it is one line, `MakeFromConfig<GuideSpawnerConfig>("GuideSpawnerConfig")`, which finds the file by its name, reads the fields and logs what is odd. The example spells the same steps out over a manager that you pass in, so that a test can point it at a folder of its own:
+The read. In a game it is one line, `MakeFromConfig<GuideSpawnerConfig>("GuideSpawnerConfig")`, which finds the file by its name, reads the fields and logs what is odd. The example spells the same steps out, down to the scope that `Value` fields of a config read under, over a manager that you pass in, so that a test can point it at a folder of its own:
 
 <!-- source: tests/BECore/GuideConfigExample.h -->
 ```cpp
 inline IntrusivePtr<GuideSpawnerConfig> ReadGuideSpawnerConfig(const ConfigManager& configs) {
     auto config = New<GuideSpawnerConfig>();
     if (auto deserializer = configs.CreateDeserializer(GuideSpawnerNames::config)) {
-        config->Deserialize(*deserializer);
-        deserializer->FinishLoad();
+        {
+            const ValueLinkScope scope(GuideSpawnerNames::config.View());
+            config->Deserialize(*deserializer);
+            deserializer->FinishLoad();
+        }
         LogDeserializeErrors(GuideSpawnerNames::config.View(), *deserializer);
     }
     return config;

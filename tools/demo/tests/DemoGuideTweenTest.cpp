@@ -14,7 +14,6 @@ namespace BECore::Demo::Tests {
         constexpr const char* kBobber = "Bobber";
         // The first Update starts a run (the tweens advance before the scene update, CoreManager::OnGameCycle), so a run has advanced one frame fewer than the Updates
         constexpr int kStartingFrame = 1;
-        constexpr int kFramesOfTwoSeconds = 64;  // kFrame is 1/32
         constexpr int kFramesOfTheStart = 4;
         constexpr float kTolerance = 1e-3f;
 
@@ -41,6 +40,8 @@ namespace BECore::Demo::Tests {
 
     class DemoGuideTweenTest : public DemoSceneFixture {
     protected:
+        static constexpr int kFramesOfTwoSeconds = static_cast<int>(2.0 / kFrame);
+
         void SetUp() override {
             ASSERT_NO_FATAL_FAILURE(LoadScene(ExampleScene()));
         }

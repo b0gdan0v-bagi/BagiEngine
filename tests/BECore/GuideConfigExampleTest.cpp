@@ -1,18 +1,11 @@
 #include <BECore/Config/ConfigManager.h>
-#include <BECore/FileSystem/FakeFileWatchBackend.h>
-#include <BECore/FileSystem/FileSystem.h>
-#include <BECore/FileSystem/FileWatcher.h>
-#include <BECore/FileSystem/MountPoints.h>
 #include <BECore/GuideConfigExample.h>
-#include <BECore/RefCounted/New.h>
-#include <Common/EngineEnvironment.h>
+#include <Common/ConfigReloadSupport.h>
 #include <Common/LogRecorder.h>
 #include <Common/Printers.h>
 #include <Common/Require.h>
-#include <Common/TempPath.h>
 #include <Common/TestFiles.h>
 #include <Events/ConfigEvents.h>
-#include <Events/SubscriptionHolder.h>
 #include <Generated/GuideConfigExample.gen.hpp>
 #include <gtest/gtest.h>
 
@@ -23,7 +16,6 @@ namespace BECore::Tests {
         using namespace GuideConfigExample;
 
         constexpr StringView kFileName = "GuideSpawnerConfig.xml";
-        constexpr double kSettle = kFileWatchSettleSeconds;
         constexpr float kExampleInterval = 0.5f;
         constexpr int32_t kExampleCount = 8;
         constexpr int32_t kChangedCount = 12;
@@ -33,69 +25,21 @@ namespace BECore::Tests {
             return Path(__FILE__).Parent().Parent().Parent() / "docs" / "guide" / "examples" / "config" / "config" / kFileName;
         }
 
-        class ChangeRecorder : public SubscriptionHolder {
-        public:
-            ChangeRecorder() {
-                Subscribe<ConfigEvents::ConfigChangedEvent, &ChangeRecorder::OnChanged>(this);
-            }
-
-            Vector<ConfigEvents::ConfigChangeCause> causes;
-
-        private:
-            void OnChanged(const ConfigEvents::ConfigChangedEvent& event) {
-                causes.push_back(event.cause);
-            }
-        };
-
-        class FailureRecorder : public SubscriptionHolder {
-        public:
-            FailureRecorder() {
-                Subscribe<ConfigEvents::ConfigReloadFailedEvent, &FailureRecorder::OnFailed>(this);
-            }
-
-            size_t count = 0;
-
-        private:
-            void OnFailed(const ConfigEvents::ConfigReloadFailedEvent&) {
-                ++count;
-            }
-        };
-
     }  // namespace
 
     /// A manager of its own over a `config` folder of a temporary directory that holds the example file; the engine's own `config/` is never written
-    class GuideConfigExampleTest : public ::testing::Test {
+    class GuideConfigExampleTest : public ConfigReloadFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
+        const char* TempPrefix() const override {
+            return "guide_cfg";
         }
 
-        void SetUp() override {
-            _dir = TestTempDirectory("guide_cfg");
-            MakeEmptyDirectory(_dir);
+        void WriteConfigFiles() override {
             WriteFile(ConfigPath(), ReadFile(ExampleFile()));
-            ASSERT_TRUE(_fileSystem.Mount(MountPoints::config, _dir));
-            _manager.Initialize();
         }
 
-        void TearDown() override {
-            _manager.StopWatching();
-            _watcher.Stop();
-            RemoveDirectory(_dir);
-        }
-
-        void StartOnFake() {
-            _fake = New<FakeFileWatchBackend>();
-            _watcher.Start(IntrusivePtr<IFileWatchBackend>(_fake));
-            _manager.StartWatching(_watcher);
-        }
-
-        /// Posts the config file and lets the settle window pass
         void PostAndSettle() {
-            Require(_fake).Emit(ConfigPath());
-            _watcher.Update(_now);
-            _now += 2.0 * kSettle;
-            _watcher.Update(_now);
+            ConfigReloadFixture::PostAndSettle(ConfigPath());
         }
 
         Path ConfigPath() const {
@@ -110,13 +54,6 @@ namespace BECore::Tests {
             text.replace(at, from.size(), to.data(), to.size());
             WriteFile(ConfigPath(), text);
         }
-
-        Path _dir;
-        FileSystem _fileSystem;
-        ConfigManager _manager{_fileSystem};
-        FileWatcher _watcher{_fileSystem};
-        IntrusivePtr<FakeFileWatchBackend> _fake;
-        double _now = 0.0;
     };
 
     TEST_F(GuideConfigExampleTest, TheFileIsReadByNameIntoTheFields) {
@@ -177,7 +114,7 @@ namespace BECore::Tests {
         WriteFile(ConfigPath(), "<GuideSpawnerConfig count=\"12\"");
         PostAndSettle();
 
-        EXPECT_EQ(failures.count, 1u);
+        EXPECT_EQ(failures.names.size(), 1u);
         EXPECT_TRUE(changes.causes.empty());
         EXPECT_EQ(settings.Get()._count, kExampleCount);
     }

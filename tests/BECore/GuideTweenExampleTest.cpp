@@ -73,14 +73,12 @@ namespace BECore::Tests {
             TweenManager tweens;
             int done = 0;
             int pingsWhenDone = -1;
-            const Appear* seen = nullptr;
             Appear appear{tweens, [this] {
                               ++done;
-                              pingsWhenDone = seen ? seen->GetPings() : -1;
+                              pingsWhenDone = appear.GetPings();
                           }};
 
             Fixture() {
-                seen = &appear;
                 appear.Play(kStart, kEnd);
             }
         };
