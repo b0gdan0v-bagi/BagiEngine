@@ -10,7 +10,7 @@ build/macos-debug/bin/BagiDemo            # Game mode (config/ApplicationConfig.
 build/macos-debug/bin/BagiDemo --editor   # the editor on the scene; Ctrl+Shift+E switches
 ```
 
-The editor page in a browser: `python3 tools/web/build_and_deploy.py --game BagiDemo --preset web-editor`, then `python3 tools/web/serve.py --root build/web-editor-dist --host 127.0.0.1`. `web/targets.json` names it as the target `engine-editor` (`tools/web/DEPLOY.md`).
+The editor page in a browser: `python3 tools/web/build_and_deploy.py --game BagiDemo --preset web-editor`, then `python3 tools/web/serve.py --root build/web-editor-dist --host 127.0.0.1`. `web/targets.json` names it as the target `engine-demo`, the page `demo` of the engine's site (`tools/web/DEPLOY.md`).
 
 ## The scene
 

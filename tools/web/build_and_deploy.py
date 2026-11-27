@@ -142,6 +142,12 @@ def resolve_target(args: argparse.Namespace, source_dir: Path) -> None:
     args.game, args.preset, args.service = target.game, target.preset, target.service
     args.fetch = True
     args.target_info = target
+    if target.kind == deploy_targets.KIND_SITE:
+        # The upload to a site page is a later step; until it exists --deploy must not fall through to `railway up --service None`
+        if args.deploy:
+            raise DeployError(f"target {target.name} is a page of the site {target.site}: --deploy of a site page is not available yet")
+        print(f"target {target.name}: {target.game}, {target.preset}, site {target.site}, page {target.page}", flush=True)
+        return
     print(f"target {target.name}: {target.game}, {target.preset}, {target.service}, {target.address}", flush=True)
 
 
@@ -342,7 +348,7 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
         return 2
 
     target = args.target_info
-    status = deploy_status.Status(None if args.dry_run else args.status_file, args.target, stages_of(args), target and target.address, args.service)
+    status = deploy_status.Status(None if args.dry_run else args.status_file, args.target, stages_of(args), target and (target.address or target.site), args.service)
     if not args.fetch:
         try:
             check_environment(args, emsdk_dir, which)

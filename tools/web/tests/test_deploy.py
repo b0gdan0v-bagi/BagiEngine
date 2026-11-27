@@ -236,6 +236,16 @@ class TargetTest(DeployTestCase):
         self.assertIn("--game BagiMahjong", lines[2])
         self.assertEqual(runner.calls, [])
 
+    def test_a_dry_run_of_a_site_page_names_the_site_and_the_page(self):
+        path = self.source / "web" / "targets.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({"format": 1, "targets": {"engine-demo": {"game": "BagiDemo", "preset": "web-editor", "site": "engine.example.dev", "page": "demo"}}}),
+                        encoding="utf-8")
+        code, out, err, runner = self.run_script("--target", "engine-demo", "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("target engine-demo: BagiDemo, web-editor, site engine.example.dev, page demo", out)
+        self.assertEqual(runner.calls, [])
+
     def test_with_deploy_railway_up_names_the_service_of_the_target(self):
         self.write_targets()
         code, out, err, _ = self.run_script("--target", "mahjong-editor", "--dry-run", "--deploy", which=have_railway)

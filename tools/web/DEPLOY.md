@@ -12,16 +12,18 @@ By hand without the script: `cmake --preset web-release`, `cmake --build --prese
 
 ## Targets: `<project>/web/targets.json`
 
-`--target NAME` reads the file next to the game's `web/app.json`, from the project that runs the script (not from the fetched checkout: the name is refused before any network use). The engine ships one target, `engine-editor` (the editor page of its demo scene, `tools/demo/CLAUDE.md`); a game owns its own file.
+`--target NAME` reads the file next to the game's `web/app.json`, from the project that runs the script (not from the fetched checkout: the name is refused before any network use). The engine ships one target, `engine-demo` (the editor page of its demo scene, a page of the engine's site, `tools/demo/CLAUDE.md`); a game owns its own file. A target is of one of two kinds: a **Railway service** (`service` and `address`) or a **page of a site** (`site` and `page`); keys of both kinds in one target are refused.
 
 ```json
-{"format": 1, "targets": {"mahjong-editor": {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev"}}}
+{"format": 1, "targets": {
+  "mahjong-editor": {"game": "BagiMahjong", "preset": "web-editor", "service": "studio-mahjong", "address": "studio-mahjong.bagiz.dev"},
+  "engine-demo": {"game": "BagiDemo", "preset": "web-editor", "site": "engine.bagiz.dev", "page": "demo"}}}
 ```
 
-- **Required:** `game` (`[A-Za-z0-9_]+`, the CMake target), `preset` (`web-[a-z0-9-]+`; a `-single-thread` suffix keeps its meaning), `service` (`[a-z0-9][a-z0-9-]*`, the Railway service), `address` (a lower-case host name: no scheme, port or path). **Optional:** `base` (the branch the checkout is cut from, default `main`), `area` (the todo area passed to `alltests.py --area`, default `engine`). Target names are `[a-z0-9][a-z0-9-]*`.
+- **Required in both kinds:** `game` (`[A-Za-z0-9_]+`, the CMake target), `preset` (`web-[a-z0-9-]+`; a `-single-thread` suffix keeps its meaning). **A Railway service:** `service` (`[a-z0-9][a-z0-9-]*`, the Railway service), `address` (a lower-case host name: no scheme, port or path). **A site page:** `site` (a host name like `address`), `page` (`[a-z0-9][a-z0-9-]*`, a page the site lists). **Optional:** `base` (the branch the checkout is cut from, default `main`), `area` (the todo area passed to `alltests.py --area`, default `engine`). Target names are `[a-z0-9][a-z0-9-]*`.
 - **Strict on purpose:** unknown keys, duplicate keys, a file over 64 KiB and any value that does not match its pattern are exit 2 before anything runs. Every value reaches a command as one argument, never through a shell, and none can start with `-`.
 - **`--target` takes no free options.** `--game`, `--preset`, `--service`, `--single-thread`, `--build-dir`, `--app`, `--dist`, `--stage-dir`, `--skip-alltests` and `--alltests-results` together with it are exit 2: the target is the whole description of a deploy, so whoever starts it cannot add arguments, and the gate cannot be skipped. Allowed: `--deploy`, `--dry-run`, `--source-dir`, `--status-file`, `--checkout-dir`. `--target` implies `--fetch`.
-- A dry run prints `target <name>: <game>, <preset>, <service>, <address>` and the steps.
+- A dry run prints `target <name>: <game>, <preset>, <service>, <address>` (a site page: `<game>, <preset>, site <site>, page <page>`) and the steps. The upload of a site page is not wired yet: its `--deploy` is exit 2.
 
 ## The checkout (`--fetch`, implied by `--target`)
 
