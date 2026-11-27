@@ -230,7 +230,7 @@ Fields the `clang-format` skill reads (the `strip-pch-includes` skill uses `Pyth
 | Format scope | the folders `--all` covers (also for `strip-pch-includes`) | `src/`, `config/`, `tools/stress/`, `tools/demo/`. The engine's own `tests/` is **not** covered by `--all` (`--changed` formats it) |
 | Ignore file | the `.clang-format-ignore` in the root of `<R>`: required, one path or prefix per line, `#` comments, not merged with a default | `external/`, `build/`, `.venv/`, the vendored modules under `src/Modules/` (EABase, fmt, imgui, pugixml, RmlUi, tracy, Vulkan), `src/Modules/BECore/pch.h`, `src/Modules/BECore/Assert/StackTrace.cpp`. `BECore` itself is project code and is formatted |
 | `--root` | never left out where it matters | a default in the engine repository; **required in a game**, because without it the scripts format the engine |
-| Launcher | whether a GUI runs the same scripts | yes, see "Launcher" |
+| Setup | the script that makes a checkout ready | `CI/setup_venv.sh`, `.ps1`, `.bat`, see "Setup" |
 
 The commands, written with the engine values (run from the repository root):
 
@@ -283,11 +283,13 @@ The decision (`include-hygiene`, slice 4): the script stays, for `.cpp` only, an
 
 `clang-format` leaves the own header first and sorts the rest as one block.
 
-## Launcher
+## Setup
 
-Engine only. A game has no launcher: it fills the heading with "none".
+`CI/setup_venv.sh` (macOS, Linux), `CI/setup_venv.ps1` and `CI/setup_venv.bat` (Windows; the `.bat` only starts the `.ps1`) make a checkout ready. Idempotent, in this order:
 
-The engine launcher (`!start.cmd` on Windows, `!start.command` on macOS) is a GUI over the same scripts, for a person at the keyboard (an agent runs the commands above). **Quick Actions** has two buttons:
+1. `.venv` when it is missing (`uv venv` when `uv` is installed, else `python3 -m venv`); an existing one is left as it is.
+2. `requirements.txt` and `tools/control/requirements.txt` into it (`uv pip` or `pip`).
+3. A check that `jinja2`, the only import of the reflection generator, works in the venv; the script fails otherwise.
+4. The todo sign-in offer: nothing when a sign-in file, `TODO_API_URL` in the environment or a `TODO_API_URL` line in `.env` exists; else it prints the `todo.py login` command and, on a terminal only, asks for the address and runs it.
 
-- **Clang-Format**: scope **Only changed files (git)** or **All files (src/, config/)**, then **Run**. The output goes to the launcher log.
-- **Strip PCH includes**: **Limit to folder** (**All (src/, config/)** or **Choose folder...**, for example `src/Widgets` or `src/Modules/BECore`), **Scope** (**Only changed files (git)** or **All files**), the checkbox **Dry run** (report only), then **OK**. The output goes to the launcher log.
+`--no-login` (`-NoLogin` in the `.ps1`) skips step 4. The script never asks for, reads, prints or stores a token and never writes `.env`. A game's own `CI/setup_venv.*` calls the engine's script (`NEW_GAME.md`). The `PyQt6` of the meta-generator GUI is not installed by it: `CI/meta_generator/requirements.txt` by hand.

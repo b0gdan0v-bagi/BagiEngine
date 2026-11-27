@@ -14,13 +14,6 @@ Runs `clang-tidy readability-braces-around-statements --fix` on project sources 
 
 ## How to Run
 
-### From the Launcher (GUI)
-
-1. Open the BagiEngine launcher (`!start.cmd` / `!start.command`).
-2. Click **Tidy Fix** in Quick Actions.
-3. Choose scope: **Only changed files (git)** or **All files**.
-4. Click **OK**. Output appears in the launcher log.
-
 ### From Terminal or Agent
 
 From the **project root**:

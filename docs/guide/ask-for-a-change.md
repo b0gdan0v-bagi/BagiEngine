@@ -2,7 +2,7 @@
 
 You will file a request for the engine as an entry of the todo store, write it so that a coding agent can take it without asking you anything, and learn which entries the agents leave to you and where to look at yours afterwards. Nothing here starts work: filing only writes down the idea.
 
-You need the repository checked out, a Claude Code session open in it, and access to the store from the owner. The owner gives you a sign-in (`python3 tools/todo/todo.py login` with the address the owner hands out) or a token for a git-ignored `.env` file in the checkout. An address or a token is never written on a page, in an entry or in a chat. Without the store everything else still works: configure, build and test never call it (`tools/todo/CLAUDE.md`, "Without the store"), you just cannot file or read entries.
+You need the repository checked out, a Claude Code session open in it, and access to the store from the owner. The owner gives you a sign-in (`python3 tools/todo/todo.py login` with the address the owner hands out; `CI/setup_venv.sh` offers that sign-in) or a token for a git-ignored `.env` file in the checkout. An address or a token is never written on a page, in an entry or in a chat. Without the store everything else still works: configure, build and test never call it (`tools/todo/CLAUDE.md`, "Without the store"), you just cannot file or read entries.
 
 ## What an entry is
 

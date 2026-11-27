@@ -205,7 +205,7 @@ def main() -> int:
         print(
             "Error: compile_commands.json not found.\n"
             f"{hint}\n"
-            "  Run CMake configuration first (e.g. via the launcher or cmake -B build/...).",
+            "  Run CMake configuration first (e.g. cmake --preset macos-debug).",
             file=sys.stderr,
         )
         return 1

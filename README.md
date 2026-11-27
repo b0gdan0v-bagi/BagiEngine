@@ -34,7 +34,7 @@ cd BagiEngine
 
 After a plain clone run `git submodule update --init --recursive`.
 
-Configure fails without Jinja2. `CI/setup_venv.sh` (Windows: `CI\setup_venv.bat`; needs `uv`) makes `.venv`, which configure uses on its own; or run `python3 -m pip install jinja2`.
+`CI/setup_venv.sh` (Windows: `CI\setup_venv.bat`) is the setup step: it makes `.venv` (with `uv`, or with Python's own `venv` without it), installs what `CI/` and `tools/` need (Jinja2 for the reflection generator among it), which configure then uses on its own, and offers the todo sign-in (`--no-login` skips it). To build only, `python3 -m pip install jinja2` is enough.
 
 macOS:
 
