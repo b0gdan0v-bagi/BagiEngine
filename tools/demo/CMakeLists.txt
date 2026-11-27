@@ -23,6 +23,9 @@ if(ENGINE_BUILD_TESTS)
     )
     be_add_game_control_tests(BagiDemo)
     be_add_game_cook_test(BagiDemo)
+    # BagiDemoScenario.title: sets the title text over the control API and compares the picture with references/title.png
+    # (tolerance in the scenario file), the model of a scenario with a reference picture that guide/test-a-game.md excerpts.
+    be_add_game_scenario_tests(BagiDemo DIR tests/scenarios)
 
     # The Python of the guide for people (docs/guide/scripts/, excerpted by the pages) must keep running: one entry per script,
     # BagiDemoGuideScript.<name>, with the lock of every test that starts a game. The path is the engine checkout, which holds the guide.
