@@ -219,9 +219,9 @@ play after the change: exit 1
       actual: 2.473% changed (2226 of 90000 px), box [39, 7, 262, 21]; actual picture: title.actual.png; difference map: title.diff.png
 ```
 
-The failure names the line, the rule (a picture taken with `--update` has no tolerance: not one pixel may differ), how much changed and where (`box` is the rectangle of the changed pixels, a strip at the top of the picture where the title is), and two files: the picture the game made and a map of the difference. They go into a folder of their own in the system's temporary folder, `bagi-reference`, and never into a git work tree. A scenario of your own may allow a tolerance, `threshold` and `maxShare` in the `reference` line, for a picture that differs a little between machines.
+The failure names the line, the rule (this reference line has no `threshold` and no `maxShare`, so not one pixel may differ), how much changed and where (`box` is the rectangle of the changed pixels, a strip at the top of the picture where the title is), and two files: the picture the game made and a map of the difference. `bagi_play.py` writes them to `<temp>/bagi-reference/<scenario name>/` unless `--failures DIR` names another folder (the script passes the `failures/` folder next to its scenario), and never into a git work tree. A scenario of your own may allow a tolerance, `threshold` and `maxShare` in the `reference` line, for a picture that differs a little between machines; `--update` only writes the picture and does not change the line.
 
-Use `--update` when you changed the game on purpose and the new picture is the right one. The PNG and the lines it rewrites are files of your repository, so review them like code: a green test that was updated without a look proves nothing. The script keeps its temporary folder so you can open the files; `ctest` removes it.
+Use `--update` when you changed the game on purpose and the new picture is the right one. The PNG and the lines it rewrites are files of your repository, so review them like code: a green test that was updated without a look proves nothing. The script keeps its temporary folder so you can open the files (it prints the folder's name, which the command below needs); `ctest` removes it when the run passes.
 
 <!-- command -->
 ```bash
@@ -234,13 +234,13 @@ python3 docs/guide/scripts/record_a_scenario.py
 
 <!-- illustration: the command and its output on the machine of the writer, the scenario being the one above -->
 ```text
-$ python3 tools/control/bagi_backends.py build/macos-debug/bin/BagiDemo title.jsonl --out backends
-software: 1 pictures in backends/software
+$ python3 tools/control/bagi_backends.py build/macos-debug/bin/BagiDemo <folder>/title.jsonl --out <folder>/backends
+software: 1 pictures in <folder>/backends/software
 window: not available: screenshot failed: capture_failed: this renderer backend cannot read its output back
 1 backend available: there is nothing to compare (a missing backend is not a failure)
 ```
 
-The `software` renderer of a headless game always works; a window renderer that cannot read its picture back is "not available", so there was nothing to compare here. The comparison needs a second renderer that can capture.
+`<folder>` is the full path of the folder whose name the script printed (it is in the system's temporary folder): `--out` is refused inside a git work tree. The `software` renderer of a headless game always works; a window renderer that cannot read its picture back is "not available", so there was nothing to compare here. The comparison needs a second renderer that can capture.
 
 ## For an agent: the MCP server
 
@@ -249,7 +249,7 @@ A coding agent can drive a game through the same calls, as an MCP server: `tools
 <!-- command -->
 ```bash
 CI/setup_venv.sh
-.venv/bin/pip install -r tools/control/requirements.txt
+uv pip install --python .venv/bin/python -r tools/control/requirements.txt
 ```
 
 `CI/setup_venv.sh` needs `uv` and makes `.venv`; the second line adds the `mcp` package to it.

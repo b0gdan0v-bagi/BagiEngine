@@ -29,7 +29,7 @@ if(ENGINE_BUILD_TESTS)
 
     # The Python of the guide for people (docs/guide/scripts/, excerpted by the pages) must keep running: one entry per script,
     # BagiDemoGuideScript.<name>, with the lock of every test that starts a game. The path is the engine checkout, which holds the guide.
-    # A new script needs no CMake edit. --cleanup removes the scenario folder the record script makes.
+    # A new script needs no CMake edit. A script takes the game's path first and accepts --cleanup (every globbed script is called so); the record script removes its scenario folder with it.
     file(GLOB GUIDE_SCRIPTS CONFIGURE_DEPENDS "${BAGI_ENGINE_DIR}/docs/guide/scripts/*.py")
     if(NOT Python3_FOUND)
         set(GUIDE_SCRIPTS "")

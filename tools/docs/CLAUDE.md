@@ -6,7 +6,7 @@ The tools of the guide for people, `docs/guide/` (rules for its authors: `.claud
 |------|---------|
 | `check_guide.py` | the page check; `check(root) -> list[Finding]` and `main` |
 | `guide_shots.py`, `guide_shots.json` | the picture tool and its rows |
-| `docs/guide/scripts/*.py` | the Python a page owns: excerpted by the page, self-checking with `assert`, one ctest `BagiDemoGuideScript.<name>` each (registered in `tools/demo/CMakeLists.txt` by a glob, the lock of the game-starting tests, skipped with 77 when `BagiDemo` is not built; the game's path is the first argument) |
+| `docs/guide/scripts/*.py` | the Python a page owns: excerpted by the page, self-checking with `assert`, one ctest `BagiDemoGuideScript.<name>` each (registered in `tools/demo/CMakeLists.txt` by a glob, the lock of the game-starting tests, skipped with 77 when `BagiDemo` is not built; the game's path is the first argument, and `--cleanup` is passed to every script, so each accepts it) |
 | `tests/` | pytest: temp trees for the check, the control tests' fake game for the picture tool (`.venv/bin/python -m pytest tools/docs/tests`) |
 
 ## The page check

@@ -166,7 +166,7 @@ A scenario is a recorded session replayed as a test ([how to record one](control
 {"method": "screenshot", "params": {"maxSize": 400}, "expect": {"reference": {"png": "references/title.png", "threshold": 24, "maxShare": 0.002}}}
 ```
 
-It sets the title text, steps two frames and compares the picture with `references/title.png`, next to the file. `threshold` is how far one colour channel may differ before a pixel counts as changed, and `maxShare` is the share of changed pixels allowed, so another machine's anti-aliasing of the letters passes and a changed word does not. The line `be_add_game_scenario_tests(BagiDemo DIR tests/scenarios)` of the CMake excerpt above makes every `*.jsonl` of the folder an entry, `BagiDemoScenario.title` here; a new file needs no CMake edit.
+It sets the title text, steps two frames and compares the picture with `references/title.png`, next to the file. `threshold` is how far one colour channel may differ before a pixel counts as changed, and `maxShare` is the share of changed pixels allowed, so the values are chosen to let another machine's anti-aliasing of the letters pass and to fail a changed word (taken and checked on macOS only). The line `be_add_game_scenario_tests(BagiDemo DIR tests/scenarios)` of the CMake excerpt above makes every `*.jsonl` of the folder an entry, `BagiDemoScenario.title` here; a new file needs no CMake edit.
 
 Play it by hand with the player, outside ctest:
 
