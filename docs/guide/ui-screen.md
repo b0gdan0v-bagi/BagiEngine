@@ -206,7 +206,7 @@ Every text on the screen is a `{#key}`. The table of words is a file of the game
 
 From `docs/guide/examples/ui-screen/config/UIStrings.xml`. The file has a second `language`, `ru`, with the same keys. `default` is the language the screen starts in, and the one it falls back to for a key that another language lacks. The names of the languages are written in themselves in both, so a player who has the wrong language on can still find the right button.
 
-In your copy, change `default="en"` to `default="ru"` and run: the title is `Настройки`, the sound is `Звук`, OK is `Готово`. A game changes the language while it runs (`UIStrings::SetLanguage`, which the language buttons ask for with their action `SettingsLanguage`); the file only decides where it starts.
+In your copy, change `default="en"` to `default="ru"` and run: the title is `Настройки`, the sound is `Звук`, OK is `Готово`. A game changes the language while it runs (`UIStrings::SetLanguage`, which the language buttons ask for with their action `SettingsLanguage`); the file only decides where it starts. Nothing in this example answers `SettingsLanguage`, so its two language buttons do nothing here.
 
 A key that no language has is shown as the key, and the engine says so. Change `{#settings.ok}` in `settings.ui.html` to `{#settings.okay}` and run: the button reads `settings.okay`, and the log has
 
@@ -291,4 +291,4 @@ The line names the screen, the style sheet, the line in it and the property. The
 
 You ran a screen of the engine's own canvas, written in HTML and CSS, from a folder of content: the same tree the XML spells, which is why the tools can read and check it. You saw that a control reports an action and the game answers it, changed the words and the colours of the screen by changing two files, and asked the engine whether it fits a phone, a notch and a high density, and why one size does not.
 
-Next (planned): a prefab, a scene node written once and used many times with changes of its own.
+Next: [A prefab and its overrides](prefab.md), a scene node written once and used many times with changes of its own.

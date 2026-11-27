@@ -42,6 +42,6 @@ No capture mechanism of its own: it starts a built game through `GameSession` (`
 | `maxSize` | the longer side of the picture, 640 by default |
 | `about` | one line: what it shows |
 
-`docs/guide/examples/<page>/` holds the real content files a page needs (a scene, a screen, strings, themes, a node file) in a game's layout, `config/` and `assets/`: the single copy, which the page excerpts (`<!-- source: ... -->`) and the rows copy (`contentOverlay`). `python3 tools/migrate/migrate.py --root .` finds its content files, so a content migration moves them with the demo's; `GuideExamplesTest` (`tests/BECore/`) loads them and runs the screen on the size matrix.
+`docs/guide/examples/<page>/` holds the real content files a page needs (a scene, a screen, strings, themes, a node file) in a game's layout, `config/` and `assets/`: the single copy, which the page excerpts (`<!-- source: ... -->`) and the rows copy (`contentOverlay`). `python3 tools/migrate/migrate.py --root .` finds its content files, so a content migration moves them with the demo's; `GuideExamplesTest` (`tests/BECore/`) loads them, runs the screen on the size matrix and checks that the prefab example gives its three instances with their own overrides.
 
 Exit 0 done, 1 an error (a bad row, a failed call), 77 an executable is missing (nothing is written then). It writes only into `--out`. The pictures are of the headless software render of the machine that took them; the editor's frame-rate readout differs between runs, so a retake is a different file even when nothing changed.

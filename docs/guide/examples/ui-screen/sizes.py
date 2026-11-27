@@ -31,11 +31,13 @@ arguments = parser.parse_args()
 with tempfile.TemporaryDirectory(prefix="bagi-ui-screen-") as scratch:  # the game writes into its overlay, so it gets a copy
     overlay = shutil.copytree(arguments.folder, Path(scratch) / "content", ignore=shutil.ignore_patterns("sizes.py"))
     session = GameSession(client_name="ui-screen-sizes")
-    session.launch(exe=arguments.exe, content_overlay=str(overlay))
-    for name, width, height, density, safe_area in SIZES:
-        session.set_window(width, height, density=density, safe_area=safe_area)
-        session.step(2, 0.016)
-        canvas = next(c for c in session.call("ui_tree")["canvases"] if c["node"] == "Settings")
-        issues = [f"{issue['kind']} {issue['element']}" for issue in canvas["issues"]]
-        print(f"{name:16} {width}x{height} @{density}  scale {canvas['scale']:.2f}  issues: {', '.join(issues) or 'none'}")
-    session.close()
+    try:
+        session.launch(exe=arguments.exe, content_overlay=str(overlay))
+        for name, width, height, density, safe_area in SIZES:
+            session.set_window(width, height, density=density, safe_area=safe_area)
+            session.step(2, 0.016)
+            canvas = next(c for c in session.call("ui_tree")["canvases"] if c["node"] == "Settings")
+            issues = [f"{issue['kind']} {issue['element']}" for issue in canvas["issues"]]
+            print(f"{name:16} {width}x{height} @{density}  scale {canvas['scale']:.2f}  issues: {', '.join(issues) or 'none'}")
+    finally:
+        session.close()

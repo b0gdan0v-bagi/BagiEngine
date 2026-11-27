@@ -168,4 +168,4 @@ Open `Root` in the hierarchy of the Scene Editor tab: `Sky`, `Title` and `Gem` a
 
 You wrote the data of a scene: nodes with a rectangle, and a quad, a text or a sprite on each. The layer sets the order, the view units make it independent of the window, and a game's own `config/` files replace the engine's of the same name.
 
-Next (planned): a UI screen, which uses the same nodes for buttons and panels.
+Next: [A UI screen](ui-screen.md), which uses the same nodes for buttons and panels.
